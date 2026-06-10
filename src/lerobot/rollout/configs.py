@@ -233,7 +233,7 @@ class RolloutConfig:
     # Whether to display compressed images in Rerun
     display_compressed_images: bool = False
     # Use vocal synthesis to read events
-    play_sounds: bool = True
+    play_sounds: bool = False
     resume: bool = False
     # Rename map for mapping robot/dataset observation keys to policy keys
     rename_map: dict[str, str] = field(default_factory=dict)

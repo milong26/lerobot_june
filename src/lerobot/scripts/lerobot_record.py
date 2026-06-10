@@ -177,7 +177,7 @@ class RecordConfig:
     # Whether to  display compressed images in Rerun
     display_compressed_images: bool = False
     # Use vocal synthesis to read events.
-    play_sounds: bool = True
+    play_sounds: bool = False
     # Resume recording on an existing dataset.
     resume: bool = False
 

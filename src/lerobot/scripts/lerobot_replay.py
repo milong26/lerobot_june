@@ -95,7 +95,7 @@ class ReplayConfig:
     robot: RobotConfig
     dataset: DatasetReplayConfig
     # Use vocal synthesis to read events.
-    play_sounds: bool = True
+    play_sounds: bool = False
 
 
 @parser.wrap()

@@ -40,9 +40,9 @@ FPS = 30
 def main():
     # Initialize the robot and teleoperator config
     follower_config = SO100FollowerConfig(
-        port="/dev/ttyACM0", id="start_new_heihei_2", use_degrees=True
+        port="/dev/ttyACM3", id="start_new_heihei_2", use_degrees=True
     )
-    leader_config = SO100LeaderConfig(port="/dev/tty.usbmodem5A460819811", id="my_awesome_leader_arm")
+    leader_config = SO100LeaderConfig(port="/dev/ttyACM4", id="start_new_leader_heihei")
 
     # Initialize the robot and teleoperator
     follower = SO100Follower(follower_config)
