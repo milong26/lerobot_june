@@ -88,7 +88,7 @@ lerobot-record \\
 
 import logging
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 # ai写的，不知道有没有用
 # from dataclasses import field
 # import numpy as np
@@ -155,7 +155,7 @@ from lerobot.teleoperators import (  # noqa: F401
     unitree_g1,
 )
 from lerobot.teleoperators.keyboard import KeyboardTeleop
-from lerobot.utils.constants import ACTION, OBS_STR
+from lerobot.utils.constants import ACTION, OBS_FORCE, OBS_STR
 from lerobot.utils.feature_utils import build_dataset_frame, combine_feature_dicts
 from lerobot.utils.import_utils import register_third_party_plugins
 from lerobot.utils.robot_utils import precise_sleep
@@ -164,11 +164,7 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
-# from lerobot.utils.wowskin import (
-#     AnySkinProcess,
-#     wowskin_force_feature_spec,
-#     wowskin_sample_to_values,
-# )
+from lerobot.utils.wowskin import AnySkinProcess, wowskin_force_feature_spec, wowskin_sample_to_values
 
 
 # @dataclass
@@ -193,13 +189,25 @@ from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
 #     warmup_s: float = 1.0
 
 
+# Why: the force sensor is a separate hardware stream, so we keep its config
+# optional and independent from the robot/teleop config tree.
+@dataclass
+class WowSkinConfig:
+    enabled: bool = False
+    port: str = ""
+    num_mags: int = 5
+    temp_filtered: bool = True
+    burst_mode: bool = True
+    baudrate: int = 115200
+
+
 @dataclass
 class RecordConfig:
     robot: RobotConfig
     dataset: DatasetRecordConfig
-    # # Optional WowSkin force sensor. When enabled, the readings are recorded as a
-    # # dedicated observation vector and appear in dataset visualizations.
-    # wowskin: WowSkinConfig = field(default_factory=WowSkinConfig)
+    # Why: keep the tactile stream optional so existing recording workflows do
+    # not change unless the sensor is explicitly enabled.
+    wowskin: WowSkinConfig = field(default_factory=WowSkinConfig)
     # Teleoperator to control the robot (required)
     teleop: TeleoperatorConfig | None = None
     # Display all cameras on screen
@@ -266,8 +274,7 @@ def record_loop(
     ],  # runs after robot
     dataset: LeRobotDataset | None = None,
     teleop: Teleoperator | list[Teleoperator] | None = None,
-    # wowskin_sensor: AnySkinProcess | None = None,
-    # wowskin_feature_prefix: str = "wowskin_force",
+    wowskin_sensor: AnySkinProcess | None = None,
     control_time_s: int | None = None,
     single_task: str | None = None,
     display_data: bool = False,
@@ -319,6 +326,15 @@ def record_loop(
         # Applies a pipeline to the raw robot observation, default is IdentityProcessor
         obs_processed = robot_observation_processor(obs)
 
+        if wowskin_sensor is not None:
+            # Why: sample the tactile stream inside the same control tick so the
+            # force vector lands in the exact same dataset row as state/action.
+            _, wowskin_sample = wowskin_sensor.get_sample()
+            obs_processed = {
+                **obs_processed,
+                **wowskin_sample_to_values(wowskin_sample, feature_prefix="force"),
+            }
+
         if dataset is not None:
             observation_frame = build_dataset_frame(dataset.features, obs_processed, prefix=OBS_STR)
 
@@ -351,15 +367,6 @@ def record_loop(
                     "The robot won't be at its rest position at the start of the next episode."
                 )
             continue
-
-        # if wowskin_sensor is not None:
-        #     # Keep WowSkin readings synchronized with the robot timestep so the
-        #     # force vector lands in the same dataset row as the robot state.
-        #     _, wowskin_sample = wowskin_sensor.get_sample()
-        #     obs_processed = {
-        #         **obs_processed,
-        #         **wowskin_sample_to_values(wowskin_sample, feature_prefix=wowskin_feature_prefix),
-        #     }
 
         # Send action to robot
         # Action can eventually be clipped using `max_relative_target`,
@@ -410,27 +417,27 @@ def record(
 
     robot = make_robot_from_config(cfg.robot)
     teleop = make_teleoperator_from_config(cfg.teleop) if cfg.teleop is not None else None
-    # wowskin_sensor = None
-    # wowskin_dataset_features = {}
+    wowskin_sensor = None
+    wowskin_dataset_features = {}
 
-    # if cfg.wowskin.enabled:
-    #     # The WowSkin force reader runs in a background thread so recording never
-    #     # blocks on serial I/O while the robot loop is running.
-    #     wowskin_sensor = AnySkinProcess(
-    #         num_mags=cfg.wowskin.num_mags,
-    #         port=cfg.wowskin.port,
-    #         temp_filtered=cfg.wowskin.temp_filtered,
-    #         burst_mode=cfg.wowskin.burst_mode,
-    #         baudrate=cfg.wowskin.baudrate,
-    #     )
-    #     wowskin_sensor.start()
-    #     time.sleep(cfg.wowskin.warmup_s)
-    #     wowskin_dataset_features = wowskin_force_feature_spec(
-    #         num_mags=cfg.wowskin.num_mags,
-    #         temp_filtered=cfg.wowskin.temp_filtered,
-    #         feature_name=cfg.wowskin.feature_name,
-    #         feature_prefix=cfg.wowskin.feature_prefix,
-    #     )
+    if cfg.wowskin.enabled:
+        # Why: force is a separate sensing modality, so it gets its own feature
+        # spec and background reader rather than being mixed into robot state.
+        wowskin_sensor = AnySkinProcess(
+            num_mags=cfg.wowskin.num_mags,
+            port=cfg.wowskin.port,
+            temp_filtered=cfg.wowskin.temp_filtered,
+            burst_mode=cfg.wowskin.burst_mode,
+            baudrate=cfg.wowskin.baudrate,
+        )
+        wowskin_sensor.start()
+        time.sleep(1.0)
+        wowskin_dataset_features = wowskin_force_feature_spec(
+            num_mags=cfg.wowskin.num_mags,
+            temp_filtered=cfg.wowskin.temp_filtered,
+            feature_name=OBS_FORCE,
+            feature_prefix="force",
+        )
 
     # Fall back to identity pipelines when the caller doesn't supply processors.
     if (
@@ -456,9 +463,7 @@ def record(
             initial_features=create_initial_features(observation=robot.observation_features),
             use_videos=cfg.dataset.video,
         ),
-        # # WowSkin force is appended as a standalone observation vector so it can
-        # # be replayed and visualized independently from the robot state.
-        # wowskin_dataset_features,
+        wowskin_dataset_features,
     )
 
     dataset = None
@@ -529,8 +534,7 @@ def record(
                     robot_action_processor=robot_action_processor,
                     robot_observation_processor=robot_observation_processor,
                     teleop=teleop,
-                    # wowskin_sensor=wowskin_sensor,
-                    # wowskin_feature_prefix=cfg.wowskin.feature_prefix,
+                    wowskin_sensor=wowskin_sensor,
                     dataset=dataset,
                     control_time_s=cfg.dataset.episode_time_s,
                     single_task=cfg.dataset.single_task,
@@ -553,8 +557,7 @@ def record(
                         robot_action_processor=robot_action_processor,
                         robot_observation_processor=robot_observation_processor,
                         teleop=teleop,
-                        # wowskin_sensor=wowskin_sensor,
-                        # wowskin_feature_prefix=cfg.wowskin.feature_prefix,
+                        wowskin_sensor=wowskin_sensor,
                         control_time_s=cfg.dataset.reset_time_s,
                         single_task=cfg.dataset.single_task,
                         display_data=cfg.display_data,
@@ -579,8 +582,9 @@ def record(
             robot.disconnect()
         if teleop and teleop.is_connected:
             teleop.disconnect()
-        # if wowskin_sensor is not None:
-        #     wowskin_sensor.close()
+        if wowskin_sensor is not None:
+            # Why: stop the background sensor thread before exiting the script.
+            wowskin_sensor.close()
 
         if not is_headless() and listener:
             listener.stop()

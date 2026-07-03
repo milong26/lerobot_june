@@ -73,7 +73,7 @@ import torch.utils.data
 import tqdm
 
 from lerobot.datasets import LeRobotDataset
-from lerobot.utils.constants import ACTION, DONE, OBS_STATE, REWARD
+from lerobot.utils.constants import ACTION, DONE, OBS_STATE, OBS_STR, REWARD
 from lerobot.utils.utils import init_logging
 
 
@@ -163,26 +163,26 @@ def visualize_dataset(
                 for dim_idx, val in enumerate(batch[OBS_STATE][i]):
                     rr.log(f"state/{dim_idx}", rr.Scalars(val.item()))
 
-            # Log any additional observation vectors, such as WowSkin force.
-            # This keeps custom sensor channels visible in the dataset viewer
-            # without requiring a dedicated code path for each new sensor.
-            # ai写的，不知道能不能用上，先注销
-            # for key, value in batch.items():
-            #     if not key.startswith(f"{OBS_STR}."):
-            #         continue
-            #     if key in {OBS_STATE} or ".images." in key:
-            #         continue
+            # Why: log any extra observation vectors, not just `observation.state`,
+            # so custom streams like `observation.force` are visible in the same
+            # viewer path as built-in state features.
+            for key, value in batch.items():
+                if not key.startswith(f"{OBS_STR}."):
+                    continue
+                if key in {OBS_STATE} or ".images." in key:
+                    continue
 
-            #     feature = dataset.features.get(key, {})
-            #     names = feature.get("names") or []
-            #     base_path = key.removeprefix(f"{OBS_STR}.")
+                feature = dataset.features.get(key, {})
+                names = feature.get("names") or []
+                base_path = key.removeprefix(f"{OBS_STR}.")
+                item = value[i]
 
-            #     if value[i].ndim == 0:
-            #         rr.log(base_path, rr.Scalars(value[i].item()))
-            #     else:
-            #         for dim_idx, val in enumerate(value[i]):
-            #             dim_name = names[dim_idx] if dim_idx < len(names) else str(dim_idx)
-            #             rr.log(f"{base_path}/{dim_name}", rr.Scalars(val.item()))
+                if item.ndim == 0:
+                    rr.log(base_path, rr.Scalars(item.item()))
+                else:
+                    for dim_idx, val in enumerate(item):
+                        dim_name = names[dim_idx] if dim_idx < len(names) else str(dim_idx)
+                        rr.log(f"{base_path}/{dim_name}", rr.Scalars(val.item()))
 
             if DONE in batch:
                 rr.log(DONE, rr.Scalars(batch[DONE][i].item()))
