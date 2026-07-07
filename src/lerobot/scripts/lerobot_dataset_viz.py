@@ -73,8 +73,127 @@ import torch.utils.data
 import tqdm
 
 from lerobot.datasets import LeRobotDataset
-from lerobot.utils.constants import ACTION, DONE, OBS_STATE, OBS_STR, REWARD
+from lerobot.utils.constants import ACTION, DONE, OBS_FORCE, OBS_STATE, OBS_STR, REWARD
 from lerobot.utils.utils import init_logging
+
+
+try:
+    import rerun.blueprint as rrb
+except ImportError:  # pragma: no cover - rerun is an optional viz dependency
+    rrb = None
+
+
+WOWSKIN_FORCE_SCALING = 7.0
+WOWSKIN_DISPLAY_WIDTH = 400
+WOWSKIN_CHIP_LOCATIONS = np.array(
+    [
+        [201.0, 238.0],
+        [126.0, 238.0],
+        [275.0, 238.0],
+        [201.0, 163.0],
+        [201.0, 312.0],
+    ],
+    dtype=np.float32,
+)
+WOWSKIN_CHIP_ROTATIONS = np.array(
+    [-np.pi / 2, -np.pi / 2, np.pi, np.pi / 2, 0.0],
+    dtype=np.float32,
+)
+
+
+def _load_wowskin_background() -> np.ndarray | None:
+    bg_image_path = Path(__file__).resolve().parents[3] / "WowSkin" / "images" / "wowskin_bg.png"
+    if not bg_image_path.exists():
+        logging.warning("WowSkin background image not found at %s", bg_image_path)
+        return None
+
+    try:
+        from PIL import Image as PILImage
+
+        with PILImage.open(bg_image_path) as image:
+            image = image.convert("RGBA")
+            aspect_ratio = image.height / image.width
+            desired_height = int(WOWSKIN_DISPLAY_WIDTH * aspect_ratio)
+            resample = getattr(PILImage, "Resampling", PILImage).LANCZOS
+            image = image.resize((WOWSKIN_DISPLAY_WIDTH, desired_height), resample=resample)
+            return np.asarray(image)
+    except Exception as exc:  # pragma: no cover - visual aid only
+        logging.warning("Failed to load WowSkin background image: %s", exc)
+        return None
+
+
+def _extract_force_vectors(item: object) -> np.ndarray | None:
+    if isinstance(item, torch.Tensor):
+        item_np = item.detach().cpu().numpy()
+    else:
+        item_np = np.asarray(item)
+
+    if item_np.ndim == 1:
+        if item_np.size % 3 == 0:
+            return item_np.reshape(-1, 3)
+        if item_np.size % 4 == 0:
+            return item_np.reshape(-1, 4)[..., :3]
+        return None
+
+    if item_np.ndim == 2:
+        if item_np.shape[-1] == 3:
+            return item_np
+        if item_np.shape[-1] >= 4:
+            return item_np[..., :3]
+
+    return None
+
+
+def _log_wowskin_force(rr, item: object) -> None:
+    vecs = _extract_force_vectors(item)
+    if vecs is None or vecs.size == 0:
+        return
+
+    chip_locations = WOWSKIN_CHIP_LOCATIONS[: vecs.shape[0]]
+    chip_rotations = WOWSKIN_CHIP_ROTATIONS[: vecs.shape[0]]
+
+    positions: list[list[float]] = []
+    origins: list[list[float]] = []
+    vectors: list[list[float]] = []
+    colors: list[list[int]] = []
+    radii: list[float] = []
+
+    for sidx, (cx, cy) in enumerate(chip_locations):
+        vx, vy, vz = vecs[sidx]
+        rot = chip_rotations[sidx]
+        c = np.cos(rot)
+        s = np.sin(rot)
+
+        xy = np.array([c * vx - s * vy, s * vx + c * vy], dtype=np.float32)
+
+        positions.append([float(cx), float(cy)])
+        origins.append([float(cx), float(cy)])
+        vectors.append(
+            [
+                float(xy[0] / WOWSKIN_FORCE_SCALING),
+                float(xy[1] / WOWSKIN_FORCE_SCALING),
+            ]
+        )
+        radii.append(float(abs(vz) / WOWSKIN_FORCE_SCALING))
+        colors.append([255, 0, 0] if vz >= 0 else [0, 0, 255])
+
+    rr.log(
+        "game_force/points",
+        rr.Points2D(
+            positions=positions,
+            colors=colors,
+            radii=rr.Radius.ui_points(radii),
+        ),
+    )
+    rr.log(
+        "game_force/arrows",
+        rr.Arrows2D(
+            origins=origins,
+            vectors=vectors,
+            colors=[[0, 255, 0]] * len(vectors),
+            radii=rr.Radius.ui_points(2.0),
+        ),
+    )
 
 
 def to_hwc_uint8_numpy(chw_float32_torch: torch.Tensor) -> np.ndarray:
@@ -126,6 +245,20 @@ def visualize_dataset(
     spawn_local_viewer = mode == "local" and not save
     rr.init(f"{repo_id}/episode_{episode_index}", spawn=spawn_local_viewer)
 
+    bg_image = _load_wowskin_background()
+    if bg_image is not None:
+        rr.log("game_force", rr.Image(bg_image), static=True)
+
+        if rrb is not None:
+            rr.send_blueprint(
+                rrb.Spatial2DView(
+                    visual_bounds=rrb.VisualBounds2D(
+                        x_range=[0, float(bg_image.shape[1])],
+                        y_range=[0, float(bg_image.shape[0])],
+                    )
+                )
+            )
+
     # Manually call python garbage collector after `rr.init` to avoid hanging in a blocking flush
     # when iterating on a dataloader with `num_workers` > 0
     # TODO(rcadene): remove `gc.collect` when rerun version 0.16 is out, which includes a fix
@@ -137,6 +270,7 @@ def visualize_dataset(
         rr.serve_web_viewer(open_browser=False, web_port=web_port, connect_to=server_uri)
 
     logging.info("Logging to Rerun")
+
 
     first_index = None
     for batch in tqdm.tqdm(dataloader, total=len(dataloader)):
@@ -192,6 +326,18 @@ def visualize_dataset(
 
             if "next.success" in batch:
                 rr.log("next.success", rr.Scalars(batch["next.success"][i].item()))
+
+            # ================= FORCE VISUALIZATION (WOWSKIN STYLE) =================
+            force_key = OBS_FORCE if OBS_FORCE in batch else None
+            if force_key is None:
+                for k in batch.keys():
+                    if "force" in k and k not in {"index", "timestamp"}:
+                        force_key = k
+                        break
+
+            if force_key is not None:
+                _log_wowskin_force(rr, batch[force_key][i])
+            # ================= END FORCE VISUALIZATION =================
 
     if mode == "local" and save:
         # save .rrd locally

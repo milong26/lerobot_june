@@ -164,29 +164,46 @@ from lerobot.utils.utils import (
     log_say,
 )
 from lerobot.utils.visualization_utils import init_rerun, log_rerun_data
-from lerobot.utils.wowskin import AnySkinProcess, wowskin_force_feature_spec, wowskin_sample_to_values
+from anyskin import AnySkinProcess
+import numpy as np
 
 
-# @dataclass
-# class WowSkinConfig:
-#     # Enable this block to read WowSkin force channels alongside robot state.
-#     enabled: bool = False
-#     # Serial port for the WowSkin controller board.
-#     port: str = ""
-#     # Sensor geometry used to derive the number of logged channels.
-#     num_mags: int = 5
-#     # Keep the original WowSkin channel filtering behaviour (drops temperature).
-#     temp_filtered: bool = True
-#     # Read the sensor in burst mode, matching the bundled WowSkin reader.
-#     burst_mode: bool = True
-#     # Serial baudrate used by the sensor firmware.
-#     baudrate: int = 115200
-#     # Dataset key name for the recorded channels.
-#     feature_name: str = "observation.wowskin_force"
-#     # Flat key prefix used inside the timestep dictionary.
-#     feature_prefix: str = "wowskin_force"
-#     # Warm up the stream so the first recorded frame is valid.
-#     warmup_s: float = 1.0
+def wowskin_force_dim(num_mags: int, temp_filtered: bool = True) -> int:
+	return num_mags * (3 if temp_filtered else 4)
+
+
+def wowskin_force_feature_names(
+	num_mags: int,
+	temp_filtered: bool = True,
+	feature_prefix: str = "force",
+) -> list[str]:
+	return [f"{feature_prefix}_{idx}" for idx in range(wowskin_force_dim(num_mags, temp_filtered))]
+
+
+def wowskin_force_feature_spec(
+	num_mags: int,
+	temp_filtered: bool = True,
+	feature_name: str = "observation.force",
+	feature_prefix: str = "force",
+):
+	names = wowskin_force_feature_names(num_mags, temp_filtered, feature_prefix=feature_prefix)
+	return {
+		feature_name: {
+			"dtype": "float32",
+			"shape": (len(names),),
+			"names": names,
+		}
+	}
+
+
+def wowskin_sample_to_values(
+	sample,
+	feature_prefix: str = "force",
+) -> dict[str, float]:
+	flat_sample = np.asarray(sample).reshape(-1)
+	return {f"{feature_prefix}_{idx}": float(value) for idx, value in enumerate(flat_sample)}
+
+
 
 
 # Why: the force sensor is a separate hardware stream, so we keep its config
@@ -258,6 +275,17 @@ class RecordConfig:
 """
 
 
+# 功能函数：计算baseline
+def get_baseline(sensor_stream,average_num=5):
+    """
+    从实时数据流中采集一定数量的样本，取平均作为新的 baseline
+    """
+    baseline_data = sensor_stream.get_data(num_samples=average_num)
+    print("baseline_data:", baseline_data)
+    baseline_data = np.array(baseline_data)[:, 1:]  # 跳过时间戳列
+    baseline = np.mean(baseline_data, axis=0)
+    return baseline
+
 @safe_stop_image_writer
 def record_loop(
     robot: Robot,
@@ -279,6 +307,7 @@ def record_loop(
     single_task: str | None = None,
     display_data: bool = False,
     display_compressed_images: bool = False,
+    wowskin_baseline=None,
 ):
     if dataset is not None and dataset.fps != fps:
         raise ValueError(f"The dataset fps should be equal to requested fps ({dataset.fps} != {fps}).")
@@ -329,7 +358,11 @@ def record_loop(
         if wowskin_sensor is not None:
             # Why: sample the tactile stream inside the same control tick so the
             # force vector lands in the exact same dataset row as state/action.
-            _, wowskin_sample = wowskin_sensor.get_sample()
+            wowskin_sample = wowskin_sensor.get_data(num_samples=1)[0][1:]
+            if wowskin_baseline is not None:
+                wowskin_sample = wowskin_sample - wowskin_baseline
+            else:
+                print("Warning: WowSkin baseline is None. Consider initializing it at the start of each episode.")
             obs_processed = {
                 **obs_processed,
                 **wowskin_sample_to_values(wowskin_sample, feature_prefix="force"),
@@ -398,6 +431,12 @@ def record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
+def get_wowskin_baseline(sensor):
+    baseline_data = sensor.get_data(num_samples=5)
+    baseline_data = np.array(baseline_data)[:, 1:]
+    return np.mean(baseline_data, axis=0)
+
+
 @parser.wrap()
 def record(
     cfg: RecordConfig,
@@ -426,10 +465,8 @@ def record(
         wowskin_sensor = AnySkinProcess(
             num_mags=cfg.wowskin.num_mags,
             port=cfg.wowskin.port,
-            temp_filtered=cfg.wowskin.temp_filtered,
-            burst_mode=cfg.wowskin.burst_mode,
-            baudrate=cfg.wowskin.baudrate,
         )
+        print("Starting WowSkin sensor process...")
         wowskin_sensor.start()
         time.sleep(1.0)
         wowskin_dataset_features = wowskin_force_feature_spec(
@@ -444,7 +481,7 @@ def record(
         teleop_action_processor is None
         or robot_action_processor is None
         or robot_observation_processor is None
-    ):
+):
         _t, _r, _o = make_default_processors()
         teleop_action_processor = teleop_action_processor or _t
         robot_action_processor = robot_action_processor or _r
@@ -526,6 +563,15 @@ def record(
             recorded_episodes = 0
             while recorded_episodes < cfg.dataset.num_episodes and not events["stop_recording"]:
                 log_say(f"Recording episode {dataset.num_episodes}", cfg.play_sounds)
+                # ---每个episode开始的时候初始化baseline
+                wowskin_baseline = None
+                if wowskin_sensor is not None:
+                    # 丢弃前几帧，避免串口缓存
+                    for _ in range(5):
+                        wowskin_sensor.get_data()
+                    wowskin_baseline = get_baseline(wowskin_sensor, average_num=20)
+                    print("WowSkin baseline:",wowskin_baseline)
+                # ---每个episode开始的时候初始化baseline
                 record_loop(
                     robot=robot,
                     events=events,
@@ -540,6 +586,7 @@ def record(
                     single_task=cfg.dataset.single_task,
                     display_data=cfg.display_data,
                     display_compressed_images=display_compressed_images,
+                    wowskin_baseline=wowskin_baseline,
                 )
 
                 # Execute a few seconds without recording to give time to manually reset the environment
@@ -584,7 +631,9 @@ def record(
             teleop.disconnect()
         if wowskin_sensor is not None:
             # Why: stop the background sensor thread before exiting the script.
-            wowskin_sensor.close()
+            wowskin_sensor.pause_streaming()
+            wowskin_sensor.join()
+        log_say("All hardware disconnected", blocking=True)
 
         if not is_headless() and listener:
             listener.stop()
