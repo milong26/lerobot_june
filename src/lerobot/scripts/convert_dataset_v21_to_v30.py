@@ -464,7 +464,7 @@ def convert_dataset(
     data_file_size_in_mb: int | None = None,
     video_file_size_in_mb: int | None = None,
     root: str | Path | None = None,
-    push_to_hub: bool = True,
+    push_to_hub: bool = False,
     force_conversion: bool = False,
 ):
     if data_file_size_in_mb is None:

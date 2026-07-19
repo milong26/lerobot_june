@@ -40,7 +40,7 @@ class DatasetRecordConfig:
     # Encode frames in the dataset into video
     video: bool = True
     # Upload dataset to Hugging Face hub.
-    push_to_hub: bool = True
+    push_to_hub: bool = False
     # If True, upload as private; if None, defer to the org default on the Hub (only affects orgs).
     private: bool | None = None
     # Add tags to your dataset on the hub.
