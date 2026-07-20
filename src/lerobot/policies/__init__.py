@@ -28,6 +28,7 @@ from .pi05.configuration_pi05 import PI05Config as PI05Config
 from .pretrained import PreTrainedPolicy as PreTrainedPolicy
 from .smolvla.configuration_smolvla import SmolVLAConfig as SmolVLAConfig
 from .tdmpc.configuration_tdmpc import TDMPCConfig as TDMPCConfig
+from .tinyvla.configuration_tinyvla import TinyVLAConfig as TinyVLAConfig
 from .utils import make_robot_action, prepare_observation_for_inference
 from .vqbet.configuration_vqbet import VQBeTConfig as VQBeTConfig
 from .wall_x.configuration_wall_x import WallXConfig as WallXConfig
@@ -51,6 +52,7 @@ __all__ = [
     "PI05Config",
     "SmolVLAConfig",
     "TDMPCConfig",
+    "TinyVLAConfig",
     "VQBeTConfig",
     "WallXConfig",
     "XVLAConfig",

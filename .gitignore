@@ -176,3 +176,6 @@ outputs/
 *.urdf
 *.xml
 *.part
+
+TinyVLA-MetaWorld/
+tinyvla_reference_code/
