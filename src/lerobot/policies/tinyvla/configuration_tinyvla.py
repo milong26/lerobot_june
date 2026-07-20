@@ -63,7 +63,7 @@ class TinyVLAConfig(PreTrainedConfig):
     )
 
     # Model architecture
-    model_name_or_path: str = "facebook/opt-125m"
+    model_name_or_path: str = "lesjie/Llava-Pythia-400M"
     action_head_type: str = "droid_diffusion"
     action_dim: int = 10
     state_dim: int = 7

@@ -14,8 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
-import sys
+import logging
 from collections import deque
 from pathlib import Path
 
@@ -28,21 +27,14 @@ from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
 
 from ..pretrained import PreTrainedPolicy
 from .configuration_tinyvla import TinyVLAConfig
+from .llava_pythia.model.language_model.pythia.llava_pythia import (
+    LlavaPythiaConfig,
+    LlavaPythiaForCausalLM,
+)
+from .llava_pythia.constants import DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX, IGNORE_INDEX
+from .llava_pythia.llava_pythia_utils import find_all_linear_names
 
-# Add TinyVLA reference code to path so we can import it
-_TINYVLA_PATH = Path(__file__).resolve().parents[3] / "tinyvla_reference_code" / "TinyVLA"
-if str(_TINYVLA_PATH) not in sys.path:
-    sys.path.insert(0, str(_TINYVLA_PATH))
-
-# Also add llava-pythia subpackage
-_LLAVA_PATH = _TINYVLA_PATH / "llava-pythia"
-if str(_LLAVA_PATH) not in sys.path:
-    sys.path.insert(0, str(_LLAVA_PATH))
-
-# Also add policy_heads
-_POLICY_HEADS_PATH = _TINYVLA_PATH / "policy_heads"
-if str(_POLICY_HEADS_PATH) not in sys.path:
-    sys.path.insert(0, str(_POLICY_HEADS_PATH))
+logger = logging.getLogger(__name__)
 
 
 class TinyVLAPolicy(PreTrainedPolicy):
@@ -74,12 +66,6 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
     def _build_model(self):
         """Build the LLaVA-Pythia model with action head."""
-        from llava_pythia.model.language_model.pythia.llava_pythia import (
-            LlavaPythiaConfig,
-            LlavaPythiaForCausalLM,
-        )
-
-        # Build the LLaVA-Pythia config
         llava_config = LlavaPythiaConfig.from_pretrained(
             self.config.model_name_or_path,
             trust_remote_code=True,
@@ -113,20 +99,35 @@ class TinyVLAPolicy(PreTrainedPolicy):
                 p.requires_grad = False
 
         # Always train action head
-        self.model.embed_out.requires_grad_(True)
         self.model.proj_to_action.requires_grad_(True)
+        
+        # For diffusion head, initialize it now so we can set requires_grad
+        if self.config.action_head_type == 'droid_diffusion':
+            self.model._init_diffusion_head()
+        
+        if self.model.embed_out is not None:
+            self.model.embed_out.requires_grad_(True)
 
         # Apply LoRA if enabled
         if self.config.lora_enable:
             self._apply_lora()
 
         self.model.to(self.config.device)
+        
+        # Move diffusion head to device if it exists
+        if self.config.action_head_type == 'droid_diffusion' and hasattr(self.model, 'embed_out') and self.model.embed_out is not None:
+            self.model.embed_out.to(self.config.device)
 
     def _apply_lora(self):
         """Apply LoRA to the model."""
-        from peft import LoraConfig, get_peft_model
-
-        from llava_pythia.llava_pythia_utils import find_all_linear_names
+        try:
+            from peft import LoraConfig, get_peft_model
+        except ImportError:
+            raise ImportError(
+                "LoRA is enabled but 'peft' is not installed. "
+                "Install it with: pip install peft, "
+                "or disable LoRA by setting --policy.lora_enable=false"
+            )
 
         def rank0_print(*args):
             print(*args)
@@ -142,6 +143,7 @@ class TinyVLAPolicy(PreTrainedPolicy):
             task_type="CAUSAL_LM",
         )
         self.model = get_peft_model(self.model, lora_config)
+        self.model.print_trainable_parameters()
 
     def _setup_tokenizer(self):
         """Set up the tokenizer for language processing."""
@@ -208,16 +210,12 @@ class TinyVLAPolicy(PreTrainedPolicy):
         Returns:
             Tuple of (input_ids, labels).
         """
-        from llava_pythia.constants import DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX, IGNORE_INDEX
-
         batch_input_ids = []
         batch_labels = []
 
         for lang in raw_lang:
-            # Format as conversation: "<image>\n{instruction}" -> " "
             prompt = f"{DEFAULT_IMAGE_TOKEN}\n{lang}"
 
-            # Tokenize
             encoded = self.tokenizer(
                 prompt,
                 return_tensors="pt",
@@ -225,16 +223,9 @@ class TinyVLAPolicy(PreTrainedPolicy):
                 max_length=self.config.tokenizer_max_length,
                 truncation=True,
             )
-            input_ids = encoded.input_ids[0]  # (seq_len,)
+            input_ids = encoded.input_ids[0]
             labels = input_ids.clone()
 
-            # Mask image token
-            image_token_positions = (input_ids == IMAGE_TOKEN_INDEX).nonzero(as_tuple=True)[0]
-            if len(image_token_positions) > 0:
-                labels[image_token_positions[0]] = IGNORE_INDEX
-
-            # Mask all tokens before the assistant response
-            # In TinyVLA, the assistant response is just a space, so mask everything
             labels[:] = IGNORE_INDEX
 
             batch_input_ids.append(input_ids)
@@ -261,6 +252,27 @@ class TinyVLAPolicy(PreTrainedPolicy):
             }
         ]
 
+    def _save_pretrained(self, save_directory: Path) -> None:
+        """Save the policy model and configuration to a directory."""
+        super()._save_pretrained(save_directory)
+        logger.info(f"Saved TinyVLA policy to {save_directory}")
+
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_name_or_path: str | Path,
+        *,
+        config: TinyVLAConfig | None = None,
+        **kwargs,
+    ) -> "TinyVLAPolicy":
+        """Load a TinyVLA policy from a pretrained checkpoint."""
+        policy = super().from_pretrained(
+            pretrained_name_or_path,
+            config=config,
+            **kwargs,
+        )
+        return policy
+
     def reset(self):
         """Reset the action queue. Called whenever the environment is reset."""
         self._action_queue.clear()
@@ -285,26 +297,31 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         # Prepare inputs
         states = batch[OBS_STATE].to(self.config.device) if OBS_STATE in batch else None
-        image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGES)])
+        image_keys = sorted([k for k in self.config.image_features if k in batch])
+        if not image_keys:
+            image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGES)])
         images = [batch[k].to(self.config.device) for k in image_keys]
+
+        if len(images) == 0:
+            raise ValueError("No image observations found in batch. TinyVLA requires at least one camera.")
 
         # Process images
         processed_images = self._process_images(images)
 
         # Get language
-        raw_lang = batch.get("language", [""] * len(next(iter(batch.values()))))
+        batch_size = states.shape[0] if states is not None else images[0].shape[0]
+        raw_lang = batch.get("language", [""] * batch_size)
 
         if isinstance(raw_lang, Tensor):
-            raw_lang = [""] * batch[OBS_STATE].shape[0]
+            raw_lang = [""] * batch_size
 
         if isinstance(raw_lang, str):
-            raw_lang = [raw_lang] * batch[OBS_STATE].shape[0]
+            raw_lang = [raw_lang] * batch_size
 
         input_ids, labels = self._tokenize_language(raw_lang)
 
         # Split images for multi-camera
         num_cams = len(images)
-        B = images[0].shape[0]
         image_chunks = torch.chunk(processed_images, num_cams, dim=0)
 
         kwargs = {
@@ -342,22 +359,25 @@ class TinyVLAPolicy(PreTrainedPolicy):
         is_pad = batch.get("action_is_pad", torch.zeros(actions.shape[:2], dtype=torch.bool, device=self.config.device))
         is_pad = is_pad.to(self.config.device)
 
-        image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGES)])
+        image_keys = sorted([k for k in self.config.image_features if k in batch])
+        if not image_keys:
+            image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGES)])
         images = [batch[k].to(self.config.device) for k in image_keys]
 
         # Process images
         processed_images = self._process_images(images)
 
         # Get language
+        batch_size = actions.shape[0]
         raw_lang = batch.get("language", None)
         if raw_lang is None or (isinstance(raw_lang, Tensor) and raw_lang.numel() == 0):
-            raw_lang = [""] * actions.shape[0]
+            raw_lang = [""] * batch_size
         elif isinstance(raw_lang, str):
-            raw_lang = [raw_lang] * actions.shape[0]
+            raw_lang = [raw_lang] * batch_size
         elif isinstance(raw_lang, (list, np.ndarray)):
             raw_lang = list(raw_lang)
         else:
-            raw_lang = [""] * actions.shape[0]
+            raw_lang = [""] * batch_size
 
         input_ids, labels = self._tokenize_language(raw_lang)
 
