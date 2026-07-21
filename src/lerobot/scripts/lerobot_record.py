@@ -361,8 +361,6 @@ def record_loop(
             wowskin_sample = wowskin_sensor.get_data(num_samples=1)[0][1:]
             if wowskin_baseline is not None:
                 wowskin_sample = wowskin_sample - wowskin_baseline
-            else:
-                print("Warning: WowSkin baseline is None. Consider initializing it at the start of each episode.")
             obs_processed = {
                 **obs_processed,
                 **wowskin_sample_to_values(wowskin_sample, feature_prefix="force"),

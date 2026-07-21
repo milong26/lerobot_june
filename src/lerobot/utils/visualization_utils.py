@@ -19,9 +19,9 @@ import numpy as np
 
 from lerobot.types import RobotAction, RobotObservation
 
-from .constants import ACTION, ACTION_PREFIX, OBS_PREFIX, OBS_STR
+from .constants import ACTION, ACTION_PREFIX, OBS_FORCE, OBS_PREFIX, OBS_STR
 from .import_utils import require_package
-
+import torch
 
 def init_rerun(
     session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None
@@ -60,6 +60,95 @@ def shutdown_rerun() -> None:
 def _is_scalar(x):
     return isinstance(x, (float | numbers.Real | np.integer | np.floating)) or (
         isinstance(x, np.ndarray) and x.ndim == 0
+    )
+
+WOWSKIN_FORCE_SCALING = 7.0
+WOWSKIN_DISPLAY_WIDTH = 400
+WOWSKIN_CHIP_LOCATIONS = np.array(
+    [
+        [201.0, 238.0],
+        [126.0, 238.0],
+        [275.0, 238.0],
+        [201.0, 163.0],
+        [201.0, 312.0],
+    ],
+    dtype=np.float32,
+)
+WOWSKIN_CHIP_ROTATIONS = np.array(
+    [-np.pi / 2, -np.pi / 2, np.pi, np.pi / 2, 0.0],
+    dtype=np.float32,
+)
+
+def _extract_force_vectors(item: object) -> np.ndarray | None:
+    if isinstance(item, torch.Tensor):
+        item_np = item.detach().cpu().numpy()
+    else:
+        item_np = np.asarray(item)
+
+    if item_np.ndim == 1:
+        if item_np.size % 3 == 0:
+            return item_np.reshape(-1, 3)
+        if item_np.size % 4 == 0:
+            return item_np.reshape(-1, 4)[..., :3]
+        return None
+
+    if item_np.ndim == 2:
+        if item_np.shape[-1] == 3:
+            return item_np
+        if item_np.shape[-1] >= 4:
+            return item_np[..., :3]
+
+    return None
+
+def _log_wowskin_force(rr, item: object) -> None:
+    vecs = _extract_force_vectors(item)
+    if vecs is None or vecs.size == 0:
+        return
+
+    chip_locations = WOWSKIN_CHIP_LOCATIONS[: vecs.shape[0]]
+    chip_rotations = WOWSKIN_CHIP_ROTATIONS[: vecs.shape[0]]
+
+    positions: list[list[float]] = []
+    origins: list[list[float]] = []
+    vectors: list[list[float]] = []
+    colors: list[list[int]] = []
+    radii: list[float] = []
+
+    for sidx, (cx, cy) in enumerate(chip_locations):
+        vx, vy, vz = vecs[sidx]
+        rot = chip_rotations[sidx]
+        c = np.cos(rot)
+        s = np.sin(rot)
+
+        xy = np.array([c * vx - s * vy, s * vx + c * vy], dtype=np.float32)
+
+        positions.append([float(cx), float(cy)])
+        origins.append([float(cx), float(cy)])
+        vectors.append(
+            [
+                float(xy[0] / WOWSKIN_FORCE_SCALING),
+                float(xy[1] / WOWSKIN_FORCE_SCALING),
+            ]
+        )
+        radii.append(float(abs(vz) / WOWSKIN_FORCE_SCALING))
+        colors.append([255, 0, 0] if vz >= 0 else [0, 0, 255])
+
+    rr.log(
+        "game_force/points",
+        rr.Points2D(
+            positions=positions,
+            colors=colors,
+            radii=rr.Radius.ui_points(radii),
+        ),
+    )
+    rr.log(
+        "game_force/arrows",
+        rr.Arrows2D(
+            origins=origins,
+            vectors=vectors,
+            colors=[[0, 255, 0]] * len(vectors),
+            radii=rr.Radius.ui_points(2.0),
+        ),
     )
 
 
@@ -109,6 +198,19 @@ def log_rerun_data(
                 else:
                     img_entity = rr.Image(arr).compress() if compress_images else rr.Image(arr)
                     rr.log(key, entity=img_entity, static=True)
+        # ================= FORCE VISUALIZATION =================
+        force_values = [
+            (k, v)
+            for k, v in observation.items()
+            if "force" in str(k) and v is not None
+        ]
+
+        if force_values:
+            force_values.sort(key=lambda x: int(str(x[0]).split("_")[-1]))
+            force_array = np.asarray([v for _, v in force_values], dtype=np.float32)
+            _log_wowskin_force(rr, force_array)
+        # ================= END FORCE VISUALIZATION =================
+
 
     if action:
         for k, v in action.items():
