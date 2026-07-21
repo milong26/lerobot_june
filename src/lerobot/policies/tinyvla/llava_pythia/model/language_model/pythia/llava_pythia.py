@@ -186,6 +186,36 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+    
+    # GPTNeoXPreTrainedModel 在 transformers 5.5.4 中已移除此方法，而 peft 0.18.1 的 get_peft_model 初始化时会强制调用它来包装模型，若不添加会导致 AttributeError: 'LlavaPythiaForCausalLM' object has no attribute 'prepare_inputs_for_generation' 报错，训练无法启动。
+    def prepare_inputs_for_generation(
+        self,
+        input_ids,
+        past_key_values=None,
+        attention_mask=None,
+        inputs_embeds=None,
+        **kwargs,
+    ):
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+        position_ids = kwargs.get("position_ids", None)
+        if attention_mask is not None and position_ids is None:
+            position_ids = attention_mask.long().cumsum(-1) - 1
+            position_ids.masked_fill_(attention_mask == 0, 1)
+            if past_key_values is not None:
+                position_ids = position_ids[:, -1].unsqueeze(-1)
+        model_inputs = {"input_ids": input_ids}
+        if inputs_embeds is not None:
+            model_inputs["inputs_embeds"] = inputs_embeds
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": kwargs.get("use_cache"),
+                "attention_mask": attention_mask,
+            }
+        )
+        return model_inputs
 
     def forward_fc_head(self, labels, actions, hidden_states, states):
         logits = self.embed_out(input_feature=hidden_states, state_tensor=states)
@@ -273,7 +303,21 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             hidden_states = hidden_states.repeat(num_noise_samples, 1, 1)
             timesteps = timesteps.repeat(num_noise_samples)
             is_pad = is_pad.repeat(num_noise_samples, 1)
-            states = states.repeat(num_noise_samples, 1)
+            
+            # 处理 states 维度：参考 SmolVLA 的 prepare_state 方法
+            # 如果 states 是 3 维 (B, chunk_size, state_dim)，取最后一个时间步
+            # 因为 embed_out 期望 states 是 2 维 (B, state_dim)
+            if states.ndim == 3:
+                # states: (B, chunk_size, state_dim) -> (B, state_dim)
+                # 取最后一个时间步的状态，与 SmolVLA 的 prepare_state 一致
+                states = states[:, -1, :]
+            
+            # 重复 states 以匹配 noise_samples
+            if states.ndim == 2:
+                states = states.repeat(num_noise_samples, 1)
+            else:
+                repeat_dims = [num_noise_samples] + [1] * (states.ndim - 1)
+                states = states.repeat(repeat_dims)
 
             noise_pred = self.embed_out(noisy_actions, timesteps, global_cond=hidden_states, states=states)
             noise = noise.view(noise.size(0) * noise.size(1), *noise.size()[2:])

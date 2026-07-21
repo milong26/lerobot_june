@@ -14,8 +14,9 @@
 
 from dataclasses import dataclass, field
 
-from lerobot.configs import FeatureType, NormalizationMode, PreTrainedConfig
+from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature, PreTrainedConfig
 from lerobot.optim import AdamWConfig, CosineDecayWithWarmupSchedulerConfig
+from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
 
 
 @PreTrainedConfig.register_subclass("tinyvla")
@@ -112,10 +113,28 @@ class TinyVLAConfig(PreTrainedConfig):
             )
 
     def validate_features(self) -> None:
+        """Validate and infer features from dataset/environment.
+
+        This method is called by make_policy after input_features and output_features
+        have been populated from the dataset metadata or environment config.
+        It infers action_dim and state_dim from these features.
+        """
         if not self.image_features:
             raise ValueError("At least one image input is required for TinyVLA.")
         if not self.action_feature:
             raise ValueError("An action output is required for TinyVLA.")
+
+        # Infer action_dim from output_features
+        action_shape = self.action_feature.shape
+        self.action_dim = action_shape[0] if action_shape else self.action_dim
+
+        # Infer state_dim from input_features if available
+        if OBS_STATE in self.input_features:
+            state_shape = self.input_features[OBS_STATE].shape
+            self.state_dim = state_shape[0] if state_shape else self.state_dim
+        else:
+            # No state input, create a dummy feature with state_dim=0
+            self.state_dim = 0
 
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(
