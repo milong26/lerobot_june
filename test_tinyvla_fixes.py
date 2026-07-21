@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+# 这个代码是增加tinyvla模型的时候的测试代码，留着备份，但功能上估计用不到。
+
 """Minimal test script to verify TinyVLA Bug 1, 2, 3 fixes.
 
 This script creates a fake batch and runs it through the TinyVLA policy to verify:
