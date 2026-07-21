@@ -111,6 +111,9 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             global_cond_dim=self.config.hidden_size,
             state_dim=self.config.state_dim
         )
+        # Match the dtype of the LLM backbone to avoid dtype mismatch
+        model_dtype = self.get_model().mm_projector[0].weight.dtype
+        self.embed_out.to(dtype=model_dtype)
         self._diffusion_initialized = True
 
     def forward(
@@ -278,7 +281,7 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
             loss = (loss * ~is_pad.unsqueeze(-1)).mean()
             return {'loss': loss}
         else:
-            B = 1
+            B = hidden_states.size(0)
             Tp = self.num_queries
             action_dim = self.action_dim
 

@@ -23,7 +23,7 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
+from lerobot.utils.constants import ACTION, OBS_IMAGE, OBS_IMAGES, OBS_STATE
 
 from ..pretrained import PreTrainedPolicy
 from .configuration_tinyvla import TinyVLAConfig
@@ -32,7 +32,7 @@ from .llava_pythia.model.language_model.pythia.llava_pythia import (
     LlavaPythiaForCausalLM,
 )
 from .llava_pythia.constants import DEFAULT_IMAGE_TOKEN, IMAGE_TOKEN_INDEX, IGNORE_INDEX
-from .llava_pythia.llava_pythia_utils import find_all_linear_names
+from .llava_pythia.llava_pythia_utils import find_all_linear_names, tokenizer_image_token
 
 logger = logging.getLogger(__name__)
 
@@ -114,9 +114,12 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         self.model.to(self.config.device)
         
-        # Move diffusion head to device if it exists
+        # Move diffusion head to device and match model dtype
         if self.config.action_head_type == 'droid_diffusion' and hasattr(self.model, 'embed_out') and self.model.embed_out is not None:
             self.model.embed_out.to(self.config.device)
+            # Match the dtype of the LLM backbone to avoid dtype mismatch in diffusion head
+            model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+            self.model.embed_out.to(dtype=model_dtype)
 
     def _apply_lora(self):
         """Apply LoRA to the model."""
@@ -199,6 +202,11 @@ class TinyVLAPolicy(PreTrainedPolicy):
         std = self.image_std.to(device).view(1, 3, 1, 1)
         all_images = (all_images - mean) / std
 
+        # Convert to the same dtype as the model weights to avoid dtype mismatch
+        # (e.g., pretrained LLaVA-Pythia uses bfloat16, but batch data is float32)
+        model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+        all_images = all_images.to(dtype=model_dtype)
+
         return all_images
 
     def _tokenize_language(self, raw_lang: list[str]) -> tuple[Tensor, Tensor]:
@@ -216,14 +224,12 @@ class TinyVLAPolicy(PreTrainedPolicy):
         for lang in raw_lang:
             prompt = f"{DEFAULT_IMAGE_TOKEN}\n{lang}"
 
-            encoded = self.tokenizer(
+            input_ids = tokenizer_image_token(
                 prompt,
+                self.tokenizer,
+                IMAGE_TOKEN_INDEX,
                 return_tensors="pt",
-                padding=False,
-                max_length=self.config.tokenizer_max_length,
-                truncation=True,
             )
-            input_ids = encoded.input_ids[0]
             labels = input_ids.clone()
 
             labels[:] = IGNORE_INDEX
@@ -299,7 +305,7 @@ class TinyVLAPolicy(PreTrainedPolicy):
         states = batch[OBS_STATE].to(self.config.device) if OBS_STATE in batch else None
         image_keys = sorted([k for k in self.config.image_features if k in batch])
         if not image_keys:
-            image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGES)])
+            image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGE)])
         images = [batch[k].to(self.config.device) for k in image_keys]
 
         if len(images) == 0:
@@ -310,7 +316,7 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         # Get language
         batch_size = states.shape[0] if states is not None else images[0].shape[0]
-        raw_lang = batch.get("language", [""] * batch_size)
+        raw_lang = batch.get("task", [""] * batch_size)
 
         if isinstance(raw_lang, Tensor):
             raw_lang = [""] * batch_size
@@ -323,6 +329,11 @@ class TinyVLAPolicy(PreTrainedPolicy):
         # Split images for multi-camera
         num_cams = len(images)
         image_chunks = torch.chunk(processed_images, num_cams, dim=0)
+
+        # Convert states to model dtype to avoid dtype mismatch
+        model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+        if states is not None:
+            states = states.to(dtype=model_dtype)
 
         kwargs = {
             "input_ids": input_ids,
@@ -361,15 +372,21 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         image_keys = sorted([k for k in self.config.image_features if k in batch])
         if not image_keys:
-            image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGES)])
+            image_keys = sorted([k for k in batch if k.startswith(OBS_IMAGE)])
         images = [batch[k].to(self.config.device) for k in image_keys]
 
         # Process images
         processed_images = self._process_images(images)
 
+        # Convert states and actions to model dtype to avoid dtype mismatch
+        model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+        if states is not None:
+            states = states.to(dtype=model_dtype)
+        actions = actions.to(dtype=model_dtype)
+
         # Get language
         batch_size = actions.shape[0]
-        raw_lang = batch.get("language", None)
+        raw_lang = batch.get("task", None)
         if raw_lang is None or (isinstance(raw_lang, Tensor) and raw_lang.numel() == 0):
             raw_lang = [""] * batch_size
         elif isinstance(raw_lang, str):
