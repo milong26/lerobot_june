@@ -1,3 +1,4 @@
+import math
 from collections import OrderedDict
 
 import torch
@@ -74,7 +75,7 @@ class Joiner(nn.Sequential):
         pos = []
         for name, x in xs.items():
             out.append(x)
-            pos.append(position_encoding_1d(x).to(x.dtype))
+            pos.append(self[1](x).to(x.dtype))
 
         return out, pos
 
