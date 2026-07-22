@@ -480,6 +480,7 @@ def make_policy(
     ds_meta: LeRobotDatasetMetadata | None = None,
     env_cfg: EnvConfig | None = None,
     rename_map: dict[str, str] | None = None,
+    remove_features: list[str] | None = None,
 ) -> PreTrainedPolicy:
     """
     Instantiate a policy model.
@@ -498,6 +499,8 @@ def make_policy(
                  One of `ds_meta` or `env_cfg` must be provided.
         rename_map: Optional mapping of dataset or environment feature keys to match
                  expected policy feature names (e.g., `"left"` → `"camera1"`).
+        remove_features: Optional list of feature keys to exclude from the policy's
+                 input features (e.g., `["observation.environment_state"]`).
 
     Returns:
         An instantiated and device-placed policy model.
@@ -543,6 +546,12 @@ def make_policy(
     if not cfg.input_features:
         cfg.input_features = {key: ft for key, ft in features.items() if key not in cfg.output_features}
 
+    if remove_features:
+        removed = [f for f in remove_features if f in cfg.input_features]
+        if removed:
+            logging.info(f"Removing features from policy input: {removed}")
+            cfg.input_features = {k: v for k, v in cfg.input_features.items() if k not in remove_features}
+
     # Store action feature names for relative_exclude_joints support
     if ds_meta is not None and hasattr(cfg, "action_feature_names"):
         action_names = ds_meta.features.get(ACTION, {}).get("names")
@@ -557,7 +566,11 @@ def make_policy(
 
     # Pass dataset_stats to the policy if available (needed for some policies like SARM)
     if ds_meta is not None and hasattr(ds_meta, "stats"):
-        kwargs["dataset_stats"] = ds_meta.stats
+        if remove_features:
+            filtered_stats = {k: v for k, v in ds_meta.stats.items() if k not in remove_features}
+            kwargs["dataset_stats"] = filtered_stats
+        else:
+            kwargs["dataset_stats"] = ds_meta.stats
 
     if ds_meta is not None:
         kwargs["dataset_meta"] = ds_meta

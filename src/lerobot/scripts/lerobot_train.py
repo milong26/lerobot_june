@@ -273,6 +273,7 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
             cfg=cfg.policy,
             ds_meta=dataset.meta,
             rename_map=cfg.rename_map,
+            remove_features=cfg.remove_features,
         )
 
     if cfg.peft is not None:
@@ -293,9 +294,14 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
     active_cfg = cfg.trainable_config
     processor_pretrained_path = active_cfg.pretrained_path
 
+    if cfg.remove_features:
+        filtered_stats = {k: v for k, v in dataset.meta.stats.items() if k not in cfg.remove_features}
+    else:
+        filtered_stats = dataset.meta.stats
+
     processor_kwargs = {}
     if (processor_pretrained_path and not cfg.resume) or not processor_pretrained_path:
-        processor_kwargs["dataset_stats"] = dataset.meta.stats
+        processor_kwargs["dataset_stats"] = filtered_stats
 
     if cfg.is_reward_model_training:
         processor_kwargs["dataset_meta"] = dataset.meta
@@ -304,7 +310,7 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
         preprocessor_overrides = {
             "device_processor": {"device": device.type},
             "normalizer_processor": {
-                "stats": dataset.meta.stats,
+                "stats": filtered_stats,
                 "features": {**policy.config.input_features, **policy.config.output_features},
                 "norm_map": policy.config.normalization_mapping,
             },
@@ -312,7 +318,7 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
         }
         postprocessor_overrides = {
             "unnormalizer_processor": {
-                "stats": dataset.meta.stats,
+                "stats": filtered_stats,
                 "features": policy.config.output_features,
                 "norm_map": policy.config.normalization_mapping,
             },
@@ -461,6 +467,8 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
         for cam_key in dataset.meta.camera_keys:
             if cam_key in batch and batch[cam_key].dtype == torch.uint8:
                 batch[cam_key] = batch[cam_key].to(dtype=torch.float32) / 255.0
+        for feat_key in cfg.remove_features:
+            batch.pop(feat_key, None)
         batch = preprocessor(batch)
         train_tracker.dataloading_s = time.perf_counter() - start_time
 

@@ -118,6 +118,8 @@ class TrainPipelineConfig(HubMixin):
 
     # Rename map for the observation to override the image and state keys
     rename_map: dict[str, str] = field(default_factory=dict)
+    # Features to exclude from training (e.g., ["observation.environment_state"])
+    remove_features: list[str] = field(default_factory=list)
     checkpoint_path: Path | None = field(init=False, default=None)
 
     @property

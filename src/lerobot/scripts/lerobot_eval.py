@@ -1,3 +1,10 @@
+"""
+用下面这个指令测试
+python -c "from lerobot.scripts.lerobot_eval import eval_main, _save_eval_dataset; print('Import OK')"
+
+"""
+
+
 #!/usr/bin/env python
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
@@ -517,6 +524,112 @@ def _compile_episode_data(
     return data_dict
 
 
+def _save_eval_dataset(
+    episode_data: dict,
+    output_dir: Path,
+    env_cfg,
+) -> None:
+    """Save evaluation rollout data as a LeRobotDataset.
+
+    Converts the episode data collected during evaluation into the LeRobotDataset
+    format (parquet + video files) on disk.
+
+    Args:
+        episode_data: Dictionary of episode tensors returned by _compile_episode_data.
+            Contains keys like 'observation.image', 'observation.state', 'action',
+            'episode_index', 'frame_index', 'timestamp', 'next.done', 'next.success',
+            'next.reward', 'task', and 'index'.
+        output_dir: Directory where the dataset will be saved.
+        env_cfg: Environment configuration used during evaluation.
+    """
+    from lerobot.datasets import LeRobotDataset
+
+    # Build feature specification from the episode data
+    features = {}
+    for key, value in episode_data.items():
+        if key in ("episode_index", "frame_index", "index"):
+            continue
+        if isinstance(value, torch.Tensor):
+            val = value[0]
+            if val.ndim == 0:
+                features[key] = {"dtype": "float32", "shape": (1,)}
+            elif val.ndim == 1:
+                features[key] = {"dtype": "float32", "shape": (val.shape[0],)}
+            elif val.ndim == 2:
+                features[key] = {"dtype": "float32", "shape": (val.shape[0], val.shape[1])}
+            elif val.ndim == 3:
+                if val.dtype == torch.uint8:
+                    features[key] = {"dtype": "video", "shape": (val.shape[0], val.shape[1], val.shape[2]), "names": ["height", "width", "channels"]}
+                else:
+                    features[key] = {"dtype": "float32", "shape": (val.shape[0], val.shape[1], val.shape[2])}
+
+    # Fix dtype for specific known keys
+    if "next.success" in features:
+        features["next.success"]["dtype"] = "bool"
+    if "next.reward" in features:
+        features["next.reward"]["dtype"] = "float32"
+    if "next.done" in features:
+        features["next.done"]["dtype"] = "bool"
+    if "task" in features:
+        del features["task"]
+
+    # Determine FPS from environment config
+    fps = getattr(env_cfg, "fps", 30)
+
+    # Create the dataset
+    dataset = LeRobotDataset.create(
+        repo_id=f"eval/{output_dir.name}",
+        fps=fps,
+        features=features,
+        root=output_dir,
+        use_videos=True,
+    )
+
+    # Convert tensor data to numpy for dataset writing
+    num_frames = episode_data["index"].shape[0]
+    episode_indices = episode_data["episode_index"].numpy()
+    unique_episodes = np.unique(episode_indices)
+
+    current_episode = None
+    for i in range(num_frames):
+        frame = {}
+        for key in episode_data:
+            if key in ("episode_index", "frame_index", "index", "task"):
+                continue
+            value = episode_data[key]
+            if isinstance(value, torch.Tensor):
+                frame[key] = value[i].numpy()
+            else:
+                frame[key] = value[i]
+
+        # Add task string
+        if "task" in episode_data:
+            task_val = episode_data["task"][i]
+            if isinstance(task_val, torch.Tensor):
+                task_val = task_val.item()
+            if isinstance(task_val, (np.ndarray, np.generic)):
+                task_val = task_val.item()
+            if not isinstance(task_val, str):
+                task_val = str(task_val)
+            frame["task"] = task_val
+
+        dataset.add_frame(frame)
+
+        ep_idx = episode_indices[i]
+        if current_episode != ep_idx:
+            if current_episode is not None:
+                dataset.save_episode()
+            current_episode = ep_idx
+
+    # Save the last episode
+    dataset.save_episode()
+    dataset.finalize()
+
+    logging.info(
+        f"Saved evaluation dataset with {len(unique_episodes)} episodes and {num_frames} frames to {output_dir}"
+    )
+
+
 @parser.wrap()
 def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
@@ -563,6 +676,8 @@ def eval_main(cfg: EvalPipelineConfig):
     # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
     env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
 
+    return_episode_data = cfg.eval.save_dataset
+
     with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext():
         info = eval_policy_all(
             envs=envs,
@@ -576,6 +691,7 @@ def eval_main(cfg: EvalPipelineConfig):
             videos_dir=Path(cfg.output_dir) / "videos",
             start_seed=cfg.seed,
             max_parallel_tasks=cfg.env.max_parallel_tasks,
+            return_episode_data=return_episode_data,
         )
         print("Overall Aggregated Metrics:")
         print(info["overall"])
@@ -590,6 +706,15 @@ def eval_main(cfg: EvalPipelineConfig):
     # Save info
     with open(Path(cfg.output_dir) / "eval_info.json", "w") as f:
         json.dump(info, f, indent=2)
+
+    # Save evaluation rollout data as LeRobotDataset
+    if return_episode_data and "episodes" in info:
+        logging.info(colored("Saving evaluation data as LeRobotDataset...", "yellow", attrs=["bold"]))
+        _save_eval_dataset(
+            episode_data=info["episodes"],
+            output_dir=Path(cfg.output_dir) / "eval_dataset",
+            env_cfg=cfg.env,
+        )
 
     logging.info("End of eval")
 
