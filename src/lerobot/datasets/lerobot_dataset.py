@@ -551,6 +551,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
             **card_kwargs: Additional keyword arguments forwarded to dataset card
                 creation.
         """
+        print(f"尝试上传{self.root}到hub，改一下设定")
+        return 
         ignore_patterns = ["images/"]
         if not push_videos:
             ignore_patterns.append("videos/")
@@ -596,6 +598,8 @@ class LeRobotDataset(torch.utils.data.Dataset):
 
     def _download(self, download_videos: bool = True) -> None:
         """Downloads the dataset from the given 'repo_id' at the provided version."""
+        print(f"尝试下载数据集{self.repo_id}，检查一下")
+        return
         ignore_patterns = None if download_videos else "videos/"
         files = None
         if self.episodes is not None:

@@ -175,6 +175,8 @@ class HubMixin:
         Returns:
             The url of the commit of your object in the given repository.
         """
+        print(f"尝试上传，调用了hub的{repo_id}，改代码吧")
+        return
         api = HfApi(token=token)
         repo_id = api.create_repo(repo_id=repo_id, private=private, exist_ok=True).repo_id
 
