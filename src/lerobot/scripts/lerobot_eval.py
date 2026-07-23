@@ -198,7 +198,9 @@ def rollout(
         action = action_transition[ACTION]
 
         # Convert to CPU / numpy.
-        action_numpy: np.ndarray = action.to("cpu").numpy()
+        # action_numpy: np.ndarray = action.to("cpu").numpy()
+        # 之前直接执行，因为训练的时候采用兼容bf16的形式，直接转换会报错
+        action_numpy: np.ndarray = action.detach().float().cpu().numpy()
         assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
 
         # Apply the next action.
