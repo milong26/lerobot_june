@@ -1,0 +1,14 @@
+compute_environment: LOCAL_MACHINE
+distributed_type: MULTI_GPU
+mixed_precision: 'no'
+num_processes: 3
+use_cpu: false
+gpu_ids: all
+downcast_bf16: 'no'
+machine_rank: 0
+main_training_function: main
+num_machines: 1
+rdzv_backend: static
+same_network: true
+# 安全设置：超时后自动终止
+dynamo_backend: 'NO'
