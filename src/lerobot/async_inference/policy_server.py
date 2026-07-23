@@ -348,13 +348,7 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         )
 
         if self.half_img_resolu:
-            for k in observation:
-                if "image" in k and isinstance(observation[k], torch.Tensor):
-                    # observation[k] shape: (B, C, H, W)
-                    img = observation[k]
-                    observation[k] = torch.nn.functional.interpolate(
-                        img, size=(240, 320), mode="bilinear", align_corners=False
-                    )
+            self.logger.info(f"Received half_img_resolu={self.half_img_resolu}, skipping server-side resize (handled by client)")
 
         prepare_time = time.perf_counter() - start_prepare
 
