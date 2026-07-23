@@ -85,6 +85,7 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         self.lerobot_features = None
         self.actions_per_chunk = None
         self.policy = None
+        self.half_img_resolu = False
         self.preprocessor: PolicyProcessorPipeline[dict[str, Any], dict[str, Any]] | None = None
         self.postprocessor: PolicyProcessorPipeline[PolicyAction, PolicyAction] | None = None
 
@@ -145,6 +146,7 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
         self.policy_type = policy_specs.policy_type  # act, pi0, etc.
         self.lerobot_features = policy_specs.lerobot_features
         self.actions_per_chunk = policy_specs.actions_per_chunk
+        self.half_img_resolu = getattr(policy_specs, "half_img_resolu", False)
 
         policy_class = get_policy_class(self.policy_type)
 
@@ -344,6 +346,16 @@ class PolicyServer(services_pb2_grpc.AsyncInferenceServicer):
             self.lerobot_features,
             self.policy_image_features,
         )
+
+        if self.half_img_resolu:
+            for k in observation:
+                if "image" in k and isinstance(observation[k], torch.Tensor):
+                    # observation[k] shape: (B, C, H, W)
+                    img = observation[k]
+                    observation[k] = torch.nn.functional.interpolate(
+                        img, size=(240, 320), mode="bilinear", align_corners=False
+                    )
+
         prepare_time = time.perf_counter() - start_prepare
 
         """2. Apply preprocessor"""

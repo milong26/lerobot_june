@@ -20,6 +20,7 @@ export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 
 # 训练命令
 nohup env \
+  LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH \
   CUDA_VISIBLE_DEVICES=0,2,3 \
   HF_HUB_OFFLINE=1 \
 accelerate launch \

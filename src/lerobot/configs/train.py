@@ -120,6 +120,10 @@ class TrainPipelineConfig(HubMixin):
     rename_map: dict[str, str] = field(default_factory=dict)
     # Features to exclude from training (e.g., ["observation.environment_state"])
     remove_features: list[str] = field(default_factory=list)
+    # Halve image resolution (640x480 -> 320x240) via resize (not crop) for both training and inference
+    half_img_resolu: bool = field(
+        default=False, metadata={"help": "Halve image resolution (640x480 -> 320x240) via resize"}
+    )
     checkpoint_path: Path | None = field(init=False, default=None)
 
     @property

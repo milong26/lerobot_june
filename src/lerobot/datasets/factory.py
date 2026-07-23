@@ -85,6 +85,18 @@ def make_dataset(cfg: TrainPipelineConfig) -> LeRobotDataset | MultiLeRobotDatas
         ds_meta = LeRobotDatasetMetadata(
             cfg.dataset.repo_id, root=cfg.dataset.root, revision=cfg.dataset.revision
         )
+
+        if cfg.half_img_resolu:
+            from torchvision.transforms import v2
+
+            camera_key = ds_meta.camera_keys[0]
+            h, w = ds_meta.features[camera_key]["shape"][:2]
+            half_res_transform = v2.Resize((h // 2, w // 2))
+            if image_transforms is not None:
+                original_transforms = image_transforms
+                image_transforms = lambda img: half_res_transform(original_transforms(img))
+            else:
+                image_transforms = half_res_transform
         delta_timestamps = resolve_delta_timestamps(cfg.trainable_config, ds_meta)
         if not cfg.dataset.streaming:
             dataset = LeRobotDataset(

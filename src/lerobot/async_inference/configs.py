@@ -148,6 +148,11 @@ class RobotClientConfig:
         default=False, metadata={"help": "Visualize the action queue size"}
     )
 
+    # Halve image resolution (640x480 -> 320x240) via resize (not crop) to match training
+    half_img_resolu: bool = field(
+        default=False, metadata={"help": "Halve image resolution for inference to match training"}
+    )
+
     @property
     def environment_dt(self) -> float:
         """Environment time step, in seconds"""
