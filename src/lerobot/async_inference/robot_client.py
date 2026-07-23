@@ -75,6 +75,8 @@ from .helpers import (
     TimedAction,
     TimedObservation,
     get_logger,
+    halve_image_resolution,
+    is_image_key,
     map_robot_keys_to_lerobot_features,
     visualize_action_queue_size,
 )
@@ -106,7 +108,13 @@ class RobotClient:
             lerobot_features,
             config.actions_per_chunk,
             config.policy_device,
+            half_img_resolu=config.half_img_resolu,
         )
+        self.half_img_resolu = config.half_img_resolu
+        if self.half_img_resolu:
+            self.logger.info("half_img_resolu is enabled - images will be sent at half resolution")
+        else:
+            self.logger.debug("half_img_resolu is disabled - images will be sent at full resolution")
         self.channel = grpc.insecure_channel(
             self.server_address, grpc_channel_options(initial_backoff=f"{config.environment_dt:.4f}s")
         )
@@ -412,6 +420,16 @@ class RobotClient:
 
             raw_observation: RawObservation = self.robot.get_observation()
             raw_observation["task"] = task
+
+            # Apply half resolution if enabled
+            if self.half_img_resolu:
+                for key in list(raw_observation.keys()):
+                    if is_image_key(key) and isinstance(raw_observation[key], torch.Tensor):
+                        original_shape = raw_observation[key].shape
+                        raw_observation[key] = halve_image_resolution(raw_observation[key])
+                        self.logger.debug(
+                            f"Downsampled image {key} from {original_shape} to {raw_observation[key].shape}"
+                        )
 
             with self.latest_action_lock:
                 latest_action = self.latest_action

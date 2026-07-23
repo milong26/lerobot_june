@@ -143,6 +143,11 @@ class RobotClientConfig:
         metadata={"help": f"Name of aggregate function to use. Options: {list(AGGREGATE_FUNCTIONS.keys())}"},
     )
 
+    # Image resolution configuration
+    half_img_resolu: bool = field(
+        default=False, metadata={"help": "Halve image resolution before sending to reduce bandwidth"}
+    )
+
     # Debug configuration
     debug_visualize_queue_size: bool = field(
         default=False, metadata={"help": "Visualize the action queue size"}
@@ -198,6 +203,7 @@ class RobotClientConfig:
             "fps": self.fps,
             "actions_per_chunk": self.actions_per_chunk,
             "task": self.task,
+            "half_img_resolu": self.half_img_resolu,
             "debug_visualize_queue_size": self.debug_visualize_queue_size,
             "aggregate_fn_name": self.aggregate_fn_name,
         }

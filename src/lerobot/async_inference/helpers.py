@@ -71,6 +71,36 @@ def is_image_key(k: str) -> bool:
     return k.startswith(OBS_IMAGES)
 
 
+def halve_image_resolution(image: torch.Tensor) -> torch.Tensor:
+    """Halve the image resolution (both height and width).
+    
+    Args:
+        image: Image tensor, can be (H, W, C) or (C, H, W) format
+        
+    Returns:
+        Image tensor with halved resolution
+    """
+    if image.ndim == 3:
+        # Check if image is in (H, W, C) or (C, H, W) format
+        if image.shape[0] <= 4:  # Likely (C, H, W) format
+            h, w = image.shape[1], image.shape[2]
+            image_batched = image.unsqueeze(0)  # (1, C, H, W)
+            resized = torch.nn.functional.interpolate(
+                image_batched, size=(h // 2, w // 2), mode="bilinear", align_corners=False
+            )
+            return resized.squeeze(0)  # (C, H//2, W//2)
+        else:  # Likely (H, W, C) format
+            h, w = image.shape[0], image.shape[1]
+            image_permuted = image.permute(2, 0, 1)  # (C, H, W)
+            image_batched = image_permuted.unsqueeze(0)  # (1, C, H, W)
+            resized = torch.nn.functional.interpolate(
+                image_batched, size=(h // 2, w // 2), mode="bilinear", align_corners=False
+            )
+            return resized.squeeze(0).permute(1, 2, 0)  # (H//2, W//2, C)
+    else:
+        raise ValueError(f"Image must be 3D tensor! Received {image.shape}")
+
+
 def resize_robot_observation_image(image: torch.tensor, resize_dims: tuple[int, int, int]) -> torch.tensor:
     assert image.ndim == 3, f"Image must be (C, H, W)! Received {image.shape}"
     # (H, W, C) -> (C, H, W) for resizing from robot obsevation resolution to policy image resolution
@@ -270,6 +300,7 @@ class RemotePolicyConfig:
     actions_per_chunk: int
     device: str = "cpu"
     rename_map: dict[str, str] = field(default_factory=dict)
+    half_img_resolu: bool = False
 
 
 def _compare_observation_states(obs1_state: torch.Tensor, obs2_state: torch.Tensor, atol: float) -> bool:
