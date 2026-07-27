@@ -176,3 +176,7 @@ outputs/
 *.urdf
 *.xml
 *.part
+
+# half resolution test
+work/test_half_resolution/train_embeddings_cache/*
+work/test_half_resolution/norm_stats.json
