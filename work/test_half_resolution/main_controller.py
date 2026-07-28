@@ -155,7 +155,7 @@ class MainController:
                 port=wowskin_config.port,
             )
             self.wowskin_sensor.start()
-            time.sleep(1.0)  # 等待传感器初始化
+            time.sleep(2.0)  # 等待传感器初始化
             
             # 采集 baseline
             logger.info("正在采集 WowSkin baseline...")
