@@ -144,7 +144,7 @@ async def _amain():
             dummy_img = np.ones((640, 240, 3), dtype=np.uint8)*255
             
             payload = {
-                "image": [dummy_img.astype(np.uint8).tolist()] *2, # -4 step，0 step
+                "image": [dummy_img.astype(np.uint8).tolist()] *2, # -4 step，0 step # 当前的和前4帧的图片
                 "state": state[-2:,:21].tolist(), #原始值 # -4 step，0 step
                 "action": actions_gt[-2:].tolist(),
                 "prompt": prompt,
