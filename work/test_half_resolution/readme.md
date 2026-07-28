@@ -117,7 +117,6 @@ python main_controller.py \
     --robot.id=start_new_heihei_2 \
     --task="Grab the cross-shape equipment." \
     --server_url=ws://10.10.16.19:9000 \
-    --norm_stats_path=./norm_stats.json \
     --fps=30
 ```
 

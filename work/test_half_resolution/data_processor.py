@@ -101,7 +101,7 @@ from collections import deque
 class DataProcessor:
     """数据处理和 payload 构建"""
     
-    def __init__(self, norm_stats_path: str, history_size: int = 5):
+    def __init__(self, history_size: int = 5):
         """
         Args:
             norm_stats_path: norm_stats.json 文件路径（当前未使用，保留接口兼容）
@@ -112,6 +112,9 @@ class DataProcessor:
         
         # 历史动作缓冲区（使用 deque 自动管理大小，O(1) 操作）
         self.action_history = deque(maxlen=history_size)
+        
+        # 历史图像缓冲区（保存最近5帧处理后的图像）
+        self.image_history = deque(maxlen=history_size)
         
     def process_images(self, images: Dict[str, np.ndarray]) -> List[List]:
         """
@@ -140,8 +143,11 @@ class DataProcessor:
         
         # 如果找不到对应图像，使用占位符
         if top_img is None:
+            raise ValueError("top图不在图像中，无法处理")
+            # 或者用历史图填充。 
             top_img = np.ones((480, 640, 3), dtype=np.uint8) * 255
         if wrist_img is None:
+            raise ValueError("wrist图不在图像中，无法处理")
             wrist_img = np.ones((480, 640, 3), dtype=np.uint8) * 255
         
         # 分辨率减半
@@ -152,6 +158,7 @@ class DataProcessor:
         combined_img = np.hstack([top_img, wrist_img])  # 640x240
         
         # 转换为 uint8 列表
+        # TODO: 这个转换有必要吗？
         processed_images.append(combined_img.astype(np.uint8).tolist())
         
         return processed_images
@@ -171,8 +178,8 @@ class DataProcessor:
         target_w, target_h = target_size
         
         # 简单的间隔采样
-        h_step = h // target_h
-        w_step = w // target_w
+        h_step = max(1, h // target_h)
+        w_step = max(1, w // target_w)
         
         return img[::h_step, ::w_step, :]
     
@@ -234,15 +241,31 @@ class DataProcessor:
             完整的 payload 字典
         """
         # 处理当前图像 - 分辨率减半 + 拼接（top左 + wrist右）
-        processed_images = self.process_images(images)
+        processed_current_image = self.process_images(images)
+        
+        # 更新图像历史缓冲区
+        self.image_history.append(processed_current_image[0])  # 保存处理后的单张图像
+        
+        # 构建历史图像窗口：取 -4 step 和 0 step（共2帧）
+        # image_history 包含最近5帧，索引 -5 是 -4 step，-1 是 0 step
+        if len(self.image_history) >= 5:
+            image_minus_4 = [self.image_history[-5]]  # -4 step 的图像
+            image_current = [self.image_history[-1]]   # 0 step 的图像（当前帧）
+        else:
+            # 如果历史数据不足，使用当前帧重复（与 state 逻辑一致）
+            image_minus_4 = processed_current_image
+            image_current = processed_current_image
+        
+        # 合并为 2 张图像
+        processed_images = image_minus_4 + image_current
         
         # 处理当前状态 - state(6) + force(15) = 21维
         current_state = self.process_state(state, force)
         
         # 构建历史状态窗口：取 -4 step 和 0 step（共2帧）
-        # history_states 应该包含最近5帧，索引 -2 是 -4 step，-1 是 0 step
-        if history_states and len(history_states) >= 2:
-            state_minus_4 = self.process_state(history_states[-2][0], history_states[-2][1])
+        # history_states 应该包含最近5帧，索引 -5 是 -4 step，-1 是 0 step
+        if history_states and len(history_states) >= 5:
+            state_minus_4 = self.process_state(history_states[-5][0], history_states[-5][1])
             state_current = self.process_state(history_states[-1][0], history_states[-1][1])
         else:
             # 如果没有历史数据，使用当前帧重复
@@ -250,18 +273,18 @@ class DataProcessor:
             state_current = current_state
         
         # 构建历史动作窗口：取 -4 step 和 0 step（共2帧）
-        if history_actions and len(history_actions) >= 2:
-            action_minus_4 = history_actions[-2]
-            action_current = history_actions[-1]
-        else:
+        # if history_actions and len(history_actions) >= 2:
+        #     action_minus_4 = history_actions[-2]
+        #     action_current = history_actions[-1]
+        # else:
+        #     # 这里改个测试，假设全用0试试
             # 默认动作（零动作，24维与 action_mask 对应）
-            action_minus_4 = np.zeros(24, dtype=np.float32)
-            action_current = np.zeros(24, dtype=np.float32)
+        action_minus_4 = np.zeros(24, dtype=np.float32)
+        action_current = np.zeros(24, dtype=np.float32)
         
         # 构建 payload
-        # processed_images 已经是 list 格式，直接使用
         payload = {
-            "image": processed_images * 2,  # 2张图：-4 step 和 0 step
+            "image": processed_images,  # 2张图：-4 step 和 0 step
             "state": [state_minus_4.tolist(), state_current.tolist()],  # 2帧状态，每帧21维
             "action": [action_minus_4.tolist(), action_current.tolist()],  # 2帧动作，每帧24维
             "prompt": prompt,
@@ -275,12 +298,12 @@ class DataProcessor:
         }
         
         # 调试：打印 payload 结构
-        print(f"Payload 结构检查:")
-        print(f"  - image: {len(payload['image'])} 张, 每张维度: {len(payload['image'][0]) if payload['image'] else 0}")
-        print(f"  - state: {len(payload['state'])} 帧, 每帧维度: {len(payload['state'][0]) if payload['state'] else 0}")
-        print(f"  - action: {len(payload['action'])} 帧, 每帧维度: {len(payload['action'][0]) if payload['action'] else 0}")
-        print(f"  - action_mask 长度: {len(payload['action_mask'])}")
-        print(f"  - prompt: {prompt[:50]}...")
+        # print(f"Payload 结构检查:")
+        # print(f"  - image: {len(payload['image'])} 张, 每张维度: {len(payload['image'][0]) if payload['image'] else 0}")
+        # print(f"  - state: {len(payload['state'])} 帧, 每帧维度: {len(payload['state'][0]) if payload['state'] else 0}")
+        # print(f"  - action: {len(payload['action'])} 帧, 每帧维度: {len(payload['action'][0]) if payload['action'] else 0}")
+        # print(f"  - action_mask 长度: {len(payload['action_mask'])}")
+        # print(f"  - prompt: {prompt[:50]}...")
         
         return payload
     

@@ -26,7 +26,6 @@ python main_controller.py \
     --robot.id=start_new_heihei_2 \
     --task="Grab the cross-shape equipment." \
     --server_url=ws://10.10.16.19:9000 \
-    --norm_stats_path=./norm_stats.json \
     --fps=30
 """
 
@@ -107,7 +106,6 @@ class ControllerConfig:
     robot: RobotConfig
     task: str
     server_url: str = "ws://10.10.16.19:9000"
-    norm_stats_path: str = "./norm_stats.json"
     fps: int = 30
     max_steps: Optional[int] = None
     recording: RecordingConfig = field(default_factory=RecordingConfig)
@@ -122,7 +120,6 @@ class MainController:
         robot_config: RobotConfig,
         task: str,
         server_url: str,
-        norm_stats_path: str,
         fps: int = 30,
         history_size: int = 5,
         enable_recording: bool = False,
@@ -134,7 +131,6 @@ class MainController:
             robot_config: 机器人配置对象
             task: 任务描述
             server_url: 推理服务器地址
-            norm_stats_path: 归一化统计文件路径
             fps: 控制频率
             history_size: 历史数据窗口大小
             enable_recording: 是否启用数据录制
@@ -181,7 +177,7 @@ class MainController:
         )
         
         # 初始化数据处理器
-        self.processor = DataProcessor(norm_stats_path, history_size=history_size)
+        self.processor = DataProcessor(history_size=history_size)
         
         # 初始化 WebSocket 客户端
         self.ws_client = WSClient(server_url)
@@ -209,7 +205,7 @@ class MainController:
             # 连接服务器
             await self.ws_client.connect()
             
-            logger.info(f"🚀 开始执行任务: {self.task}")
+            logger.info(f"开始执行任务: {self.task}")
             logger.info(f"控制频率: {self.fps} Hz")
             
             while self.running:
@@ -238,15 +234,10 @@ class MainController:
                 
                 # 4. 发送请求并接收响应
                 response = await self.ws_client.send_and_receive(payload)
-                print(response)
                 
                 # TODO: 本地接收到 action 后的处理
                 actions = response['actions']
-                states = response['states']
                 
-                # 解析状态（前6维是state，6-21维是force）
-                pred_state = states[:, :6]
-                pred_force = states[:, 6:21]
                 
                 # 5. 执行动作
                 if len(actions) > 0:
@@ -295,7 +286,7 @@ class MainController:
         
         await self.ws_client.disconnect()
         self.robot.disconnect()
-        logger.info("🛑 控制器已停止")
+        logger.info("控制器已停止")
 
 
 @draccus.wrap()
@@ -313,7 +304,6 @@ def main(cfg: ControllerConfig):
         robot_config=cfg.robot,
         task=cfg.task,
         server_url=cfg.server_url,
-        norm_stats_path=cfg.norm_stats_path,
         fps=cfg.fps,
         enable_recording=cfg.recording.enable_recording,
         recording_config=recording_config,

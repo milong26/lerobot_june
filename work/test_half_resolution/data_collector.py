@@ -52,6 +52,7 @@ class DataSaver:
         
         # 帧计数器
         self.frame_count = 0
+        self.saved_count = 0  # 实际保存成功的帧数
         
         # 创建时间戳子目录
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -68,7 +69,7 @@ class DataSaver:
         """停止后台保存线程"""
         self.running = False
         self.save_thread.join(timeout=5)
-        print(f"✅ 数据保存完成，共保存 {self.frame_count} 帧")
+        print(f"✅ 数据保存完成，共保存 {self.saved_count} 帧（处理 {self.frame_count} 帧）")
         
     def queue_data(self, observation: Dict[str, Any], action: Optional[np.ndarray] = None):
         """
@@ -86,20 +87,18 @@ class DataSaver:
             
             # 准备保存的数据（轻量级）
             save_data = {
-                'timestamp': observation.get('timestamp', time.time()),
+                'timestamp': np.array(observation.get('timestamp', time.time()), dtype=np.float64),  # 转为 numpy 数组
                 'state': observation['state'].copy(),  # 6维
                 'force': observation['force'].copy(),  # 15维
                 'frame_idx': self.frame_count
             }
             
-            # 可选保存图像（降采样到更小尺寸以节省空间）
+            # 可选保存图像（保存原始尺寸，与 payload 一致）
             if self.save_images and 'images' in observation:
                 save_data['images'] = {}
                 for key, img in observation['images'].items():
-                    # 降采样到 160x120（原始640x480的1/16）
                     if isinstance(img, np.ndarray):
-                        h, w = img.shape[:2]
-                        save_data['images'][key] = img[::4, ::4, :]  # 每4像素取1个
+                        save_data['images'][key] = img.copy()  # 保存原始图像
                     else:
                         save_data['images'][key] = img
             
@@ -133,10 +132,12 @@ class DataSaver:
                 npz_path = self.session_dir / f"frame_{frame_idx:06d}.npz"
                 np.savez_compressed(npz_path, **save_data)
                 
-                # 保存图像为 npy（如果启用）
+                # 保存图像为 npz（如果启用）
                 if images:
-                    img_path = self.session_dir / f"frame_{frame_idx:06d}_images.npy"
-                    np.save(img_path, images, allow_pickle=False)
+                    img_path = self.session_dir / f"frame_{frame_idx:06d}_images.npz"
+                    np.savez_compressed(img_path, **images)  # 将字典展开为多个数组保存
+                
+                self.saved_count += 1  # 保存成功计数
                 
             except queue.Empty:
                 continue
