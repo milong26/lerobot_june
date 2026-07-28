@@ -197,6 +197,7 @@ class MainController:
         """
         self.running = True
         step_count = 0
+        last_step_time = None
         
         try:
             # 启动数据录制（如果启用）
@@ -211,8 +212,17 @@ class MainController:
             while self.running:
                 loop_start = time.time()
                 
+                # 计算与上一步的间隔时间
+                if last_step_time is not None:
+                    interval = loop_start - last_step_time
+                else:
+                    interval = 0.0
+                last_step_time = loop_start
+                
                 # 1. 采集数据
+                t1 = time.time()
                 observation = self.collector.get_observation()
+                t_obs = time.time() - t1
                 
                 # 2. 更新历史状态（deque 自动限制大小为 5，无需手动截断）
                 self.state_history.append({
@@ -221,6 +231,7 @@ class MainController:
                 })
                 
                 # 3. 构建 payload
+                t2 = time.time()
                 payload = self.processor.build_payload(
                     images=observation['images'],
                     state=observation['state'],
@@ -231,24 +242,39 @@ class MainController:
                     ],
                     history_actions=self.processor.get_action_history()
                 )
+                t_build = time.time() - t2
                 
                 # 4. 发送请求并接收响应
+                t3 = time.time()
                 response = await self.ws_client.send_and_receive(payload)
+                t_ws = time.time() - t3
                 
                 # TODO: 本地接收到 action 后的处理
                 actions = response['actions']
                 
                 
-                # 5. 执行动作
+                # 5. 执行所有动作
+                t4 = time.time()
                 if len(actions) > 0:
-                    # 执行第一个动作
-                    action_to_execute = actions[0]
-                    
-                    # TODO: 发送动作到机器人
-                    self.collector.send_action(action_to_execute)
-                    
-                    # 更新动作历史
-                    self.processor.update_action_history(action_to_execute)
+                    for action_idx, action_to_execute in enumerate(actions):
+                        # 发送动作到机器人
+                        self.collector.send_action(action_to_execute)
+                        
+                        # 更新动作历史
+                        self.processor.update_action_history(action_to_execute)
+                        
+                        # 控制每个动作的执行频率
+                        action_elapsed = time.time() - t4
+                        action_sleep = self.dt - action_elapsed
+                        if action_sleep > 0:
+                            await asyncio.sleep(action_sleep)
+                        
+                        # 打印每个动作的执行信息
+                        print(
+                            f"Step {step_count}.{action_idx+1}/{len(actions)} | "
+                            f"动作耗时: {action_elapsed*1000:.1f}ms"
+                        )
+                t_send = time.time() - t4
                 
                 # 6. 控制频率
                 elapsed = time.time() - loop_start
@@ -257,7 +283,17 @@ class MainController:
                     await asyncio.sleep(sleep_time)
                 
                 step_count += 1
-                logger.info(f"Step {step_count} | 耗时: {elapsed*1000:.1f}ms")
+                actual_interval = time.time() - loop_start
+                print(
+                    f"Step {step_count} | "
+                    f"间隔: {interval*1000:.1f}ms | "
+                    f"采集: {t_obs*1000:.1f}ms | "
+                    f"构建: {t_build*1000:.1f}ms | "
+                    f"WS: {t_ws*1000:.1f}ms | "
+                    f"发送: {t_send*1000:.1f}ms | "
+                    f"循环: {elapsed*1000:.1f}ms | "
+                    f"实际: {actual_interval*1000:.1f}ms"
+                )
                 
                 # 检查是否达到最大步数
                 if max_steps and step_count >= max_steps:

@@ -200,7 +200,7 @@ class DataProcessor:
         combined = np.concatenate([state, force])  # 21维
         
         # 调试
-        print(f"process_state: state shape={state.shape}, force shape={force.shape}, combined shape={combined.shape}")
+        # print(f"process_state: state shape={state.shape}, force shape={force.shape}, combined shape={combined.shape}")
         
         return combined
     
