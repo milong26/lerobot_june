@@ -212,10 +212,10 @@ class DataProcessor:
         prompt: str,
         history_states: Optional[List[tuple]] = None,
         history_actions: Optional[List[np.ndarray]] = None,
-        steps: int = 11,
+        steps: int = 11, 
         seed: int = 22,
         g_scale: float = 1.0,
-        num_loop: int = 2
+        num_loop: int = 2 #max10 测试从5到10哪个好
     ) -> Dict[str, Any]:
         """
         构建发送给服务器的 payload
@@ -291,19 +291,12 @@ class DataProcessor:
             "steps": steps,
             "seed": seed,
             "g_scale": g_scale,
-            "video_name": '',
+            "video_name": prompt,  # 传入prompt
             "image_mask": [1, 1, 0],  # 前两帧有效
             "action_mask": [1, 1, 1, 1, 1, 1] + [0] * 18,  # 前6维有效，后18维填充
             "num_loop": num_loop
         }
         
-        # 调试：打印 payload 结构
-        # print(f"Payload 结构检查:")
-        # print(f"  - image: {len(payload['image'])} 张, 每张维度: {len(payload['image'][0]) if payload['image'] else 0}")
-        # print(f"  - state: {len(payload['state'])} 帧, 每帧维度: {len(payload['state'][0]) if payload['state'] else 0}")
-        # print(f"  - action: {len(payload['action'])} 帧, 每帧维度: {len(payload['action'][0]) if payload['action'] else 0}")
-        # print(f"  - action_mask 长度: {len(payload['action_mask'])}")
-        # print(f"  - prompt: {prompt[:50]}...")
         
         return payload
     

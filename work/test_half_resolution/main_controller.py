@@ -398,7 +398,8 @@ class MainController:
                     history_states=[
                         (h['state'], h['force']) for h in self.state_history
                     ],
-                    history_actions=self.processor.get_action_history()
+                    history_actions=self.processor.get_action_history(),
+                    steps=step_count
                 )
                 t_build = time.time() - t2
                 
