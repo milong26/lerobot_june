@@ -1,7 +1,7 @@
 compute_environment: LOCAL_MACHINE
 distributed_type: MULTI_GPU
 mixed_precision: 'bf16'
-num_processes: 2
+num_processes: 3
 use_cpu: false
 gpu_ids: all
 downcast_bf16: 'no'
