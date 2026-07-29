@@ -215,7 +215,7 @@ class DataProcessor:
         steps: int = 11,
         seed: int = 22,
         g_scale: float = 1.0,
-        num_loop: int = 1
+        num_loop: int = 2
     ) -> Dict[str, Any]:
         """
         构建发送给服务器的 payload

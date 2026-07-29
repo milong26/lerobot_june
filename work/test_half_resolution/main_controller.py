@@ -39,6 +39,8 @@ from typing import Dict, Any, Optional
 from collections import deque
 import numpy as np
 import draccus
+import threading
+from pynput import keyboard
 
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -145,7 +147,7 @@ class MainController:
         self.wowskin_sensor = None
         self.wowskin_baseline = None
         if wowskin_config and wowskin_config.enabled and HAS_WOWSKIN:
-            logger.info(f"正在初始化 WowSkin 力传感器 (port={wowskin_config.port})...")
+            print(f"正在初始化 WowSkin 力传感器 (port={wowskin_config.port})...")
             self.wowskin_sensor = AnySkinProcess(
                 num_mags=wowskin_config.num_mags,
                 port=wowskin_config.port,
@@ -154,17 +156,17 @@ class MainController:
             time.sleep(2.0)  # 等待传感器初始化
             
             # 采集 baseline
-            logger.info("正在采集 WowSkin baseline...")
+            print("正在采集 WowSkin baseline...")
             baseline_data = self.wowskin_sensor.get_data(num_samples=20)
             baseline_data = np.array(baseline_data)[:, 1:]  # 跳过时间戳
             self.wowskin_baseline = np.mean(baseline_data, axis=0)
-            logger.info(f"✅ WowSkin baseline: {self.wowskin_baseline}")
+            print(f"✅ WowSkin baseline: {self.wowskin_baseline}")
         
         # 初始化机器人
-        logger.info("正在连接机器人...")
+        print("正在连接机器人...")
         self.robot = make_robot_from_config(robot_config)
         self.robot.connect()
-        logger.info("✅ 机器人已连接")
+        print("✅ 机器人已连接")
         
         # 初始化数据采集器（带录制功能）
         self.collector = DataCollector(
@@ -187,6 +189,114 @@ class MainController:
         
         # 控制标志
         self.running = False
+        self._cleanup_done = False  # 防止重复清理
+        
+        # 键盘控制状态
+        self.initial_state = None  # 复位目标状态
+        self.is_resetting = False  # 是否正在执行复位
+        self.is_paused = False  # 是否暂停服务器通信（复位后）
+        self.keyboard_listener = None
+        
+        # 线程安全的事件标志
+        self._reset_requested = threading.Event()
+        self._shutdown_requested = threading.Event()
+        self._resume_requested = threading.Event()
+    
+    def _setup_keyboard_listener(self):
+        """设置键盘监听器"""
+        def on_press(key):
+            try:
+                if key == keyboard.Key.right:
+                    print("⌨️  检测到右键 → 请求复位")
+                    self._reset_requested.set()
+                elif key == keyboard.Key.down:
+                    print("⌨️  检测到下键 → 请求安全关闭")
+                    self._shutdown_requested.set()
+                elif key == keyboard.Key.left:
+                    print("⌨️  检测到左键 → 请求恢复")
+                    self._resume_requested.set()
+            except AttributeError:
+                pass
+        
+        self.keyboard_listener = keyboard.Listener(on_press=on_press)
+        self.keyboard_listener.start()
+        print("✅ 键盘监听器已启动 (右键=复位, 左键=恢复, 下键=关闭)")
+    
+    async def _execute_reset(self, current_state):
+        """
+        执行复位操作：从当前状态平滑移动到初始状态
+        
+        Args:
+            current_state: 当前关节角度
+        """
+        if self.initial_state is None:
+            logger.warning("⚠️  未设置初始状态，无法复位")
+            return
+        
+        self.is_resetting = True
+        print("🔄 开始复位操作...")
+        
+        # 计算插值步数（平滑过渡，避免跳变）
+        diff = self.initial_state - current_state
+        max_diff = np.max(np.abs(diff))
+        
+        # 根据最大差值计算步数，每步最多移动 0.15 弧度（可根据需要调整）
+        steps = max(10, int(max_diff / 0.15))
+        
+        print(f"复位需要 {steps} 步，最大差值: {max_diff:.3f}")
+        
+        for step in range(1, steps + 1):
+            if not self.running:
+                break
+            
+            # 线性插值
+            alpha = step / steps
+            target_state = current_state + alpha * diff
+            
+            # 发送插值后的状态
+            self.collector.send_action(target_state.tolist())
+            
+            # 控制频率
+            await asyncio.sleep(self.dt)
+            
+            if step % 10 == 0 or step == steps:
+                print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
+        
+        print("✅ 复位完成")
+        self.is_resetting = False
+        self.is_paused = True  # 复位后暂停服务器通信
+        print("⏸️  已暂停服务器通信，按左键恢复")
+    
+    async def _safe_shutdown(self):
+        """安全关闭程序"""
+        print("🛑 开始安全关闭...")
+        self.running = False
+        
+        # 停止键盘监听
+        if self.keyboard_listener:
+            self.keyboard_listener.stop()
+            print("键盘监听器已停止")
+        
+        # 停止数据录制
+        self.collector.stop_recording()
+        print("数据录制已停止")
+        
+        # 停止 WowSkin 传感器
+        if self.wowskin_sensor is not None:
+            print("正在停止 WowSkin 传感器...")
+            self.wowskin_sensor.pause_streaming()
+            self.wowskin_sensor.join()
+            print("WowSkin 传感器已停止")
+        
+        # 断开 WebSocket
+        await self.ws_client.disconnect()
+        print("WebSocket 已断开")
+        
+        # 断开机器人
+        self.robot.disconnect()
+        print("机器人已断开")
+        
+        print("✅ 安全关闭完成")
     
     async def run(self, max_steps: Optional[int] = None):
         """
@@ -200,16 +310,64 @@ class MainController:
         last_step_time = None
         
         try:
+            # 启动键盘监听
+            self._setup_keyboard_listener()
+            
+            # 等待一小段时间让机器人稳定
+            time.sleep(1.0)
+            
+            # 记录初始状态（复位目标）
+            initial_obs = self.collector.get_observation()
+            self.initial_state = np.array(initial_obs['state'], dtype=np.float64)
+            print(f"✅ 初始状态已记录: {self.initial_state}")
+            
             # 启动数据录制（如果启用）
             self.collector.start_recording()
             
             # 连接服务器
             await self.ws_client.connect()
             
-            logger.info(f"开始执行任务: {self.task}")
-            logger.info(f"控制频率: {self.fps} Hz")
+            print(f"开始执行任务: {self.task}")
+            print(f"控制频率: {self.fps} Hz")
             
             while self.running:
+                # 检查关闭请求（最高优先级）
+                if self._shutdown_requested.is_set():
+                    print("检测到关闭请求")
+                    await self._safe_shutdown()
+                    return
+                
+                # 检查复位请求（高优先级）
+                if self._reset_requested.is_set():
+                    print("检测到复位请求")
+                    self._reset_requested.clear()
+                    
+                    # 获取当前状态
+                    current_obs = self.collector.get_observation()
+                    current_state = np.array(current_obs['state'], dtype=np.float64)
+                    
+                    # 执行复位
+                    await self._execute_reset(current_state)
+                    
+                    # 复位完成后继续循环（会进入暂停状态）
+                    continue
+                
+                # 检查恢复请求
+                if self._resume_requested.is_set() and self.is_paused:
+                    print("检测到恢复请求")
+                    self._resume_requested.clear()
+                    self.is_paused = False
+                    print("▶️  已恢复服务器通信")
+                
+                # 如果处于暂停状态，发送初始状态保持位置
+                if self.is_paused:
+                    loop_start = time.time()
+                    self.collector.send_action(self.initial_state.tolist())
+                    await asyncio.sleep(self.dt)
+                    elapsed = time.time() - loop_start
+                    print(f"⏸️  暂停中 | 保持初始状态 | 耗时: {elapsed*1000:.1f}ms")
+                    continue
+                
                 loop_start = time.time()
                 
                 # 计算与上一步的间隔时间
@@ -258,6 +416,21 @@ class MainController:
                     for action_idx, action_to_execute in enumerate(actions):
                         action_start = time.time()
                         
+                        # 检查复位请求（最高优先级，中断当前动作执行）
+                        if self._reset_requested.is_set():
+                            print("⚠️  复位请求中断当前动作执行")
+                            self._reset_requested.clear()
+                            current_obs = self.collector.get_observation()
+                            current_state = np.array(current_obs['state'], dtype=np.float64)
+                            await self._execute_reset(current_state)
+                            break
+                        
+                        # 检查关闭请求
+                        if self._shutdown_requested.is_set():
+                            print("检测到关闭请求")
+                            await self._safe_shutdown()
+                            return
+                        
                         # 发送动作到机器人
                         self.collector.send_action(action_to_execute)
                         
@@ -279,12 +452,6 @@ class MainController:
                         )
                         
                         step_count += 1
-                        
-                        # 检查是否达到最大步数
-                        if max_steps and step_count >= max_steps:
-                            logger.info(f"已达到最大步数 {max_steps}，停止执行")
-                            self.running = False
-                            break
                 t_send = time.time() - t4
                 
                 # 打印本轮统计
@@ -299,13 +466,8 @@ class MainController:
                     f"总耗时: {elapsed*1000:.1f}ms"
                 )
                 
-                # 检查是否达到最大步数
-                if max_steps and step_count >= max_steps:
-                    logger.info(f"已达到最大步数 {max_steps}，停止执行")
-                    break
-                
         except KeyboardInterrupt:
-            logger.info("⚠️  用户中断执行")
+            print("⚠️  用户中断执行")
         except Exception as e:
             logger.error(f"❌ 执行出错: {e}", exc_info=True)
         finally:
@@ -313,20 +475,42 @@ class MainController:
     
     async def stop(self):
         """停止控制器"""
+        # 防止重复清理
+        if self._cleanup_done:
+            return
+        
+        self._cleanup_done = True
         self.running = False
+        
+        # 停止键盘监听
+        if self.keyboard_listener:
+            self.keyboard_listener.stop()
+            print("键盘监听器已停止")
         
         # 停止数据录制
         self.collector.stop_recording()
         
         # 停止 WowSkin 传感器
         if self.wowskin_sensor is not None:
-            logger.info("正在停止 WowSkin 传感器...")
+            print("正在停止 WowSkin 传感器...")
             self.wowskin_sensor.pause_streaming()
             self.wowskin_sensor.join()
         
+        # 断开 WebSocket
         await self.ws_client.disconnect()
-        self.robot.disconnect()
-        logger.info("控制器已停止")
+        
+        # 断开机器人（检查是否已连接）
+        try:
+            if hasattr(self.robot, 'is_connected') and self.robot.is_connected:
+                self.robot.disconnect()
+                print("机器人已断开")
+            else:
+                self.robot.disconnect()
+                print("机器人已断开")
+        except Exception as e:
+            logger.warning(f"断开机器人连接时出现警告: {e}")
+        
+        print("控制器已停止")
 
 
 @draccus.wrap()
@@ -351,7 +535,7 @@ def main(cfg: ControllerConfig):
     )
     
     # 运行
-    asyncio.run(controller.run(max_steps=cfg.max_steps))
+    asyncio.run(controller.run())
 
 
 if __name__ == "__main__":
