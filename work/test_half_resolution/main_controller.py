@@ -249,50 +249,54 @@ class MainController:
                 response = await self.ws_client.send_and_receive(payload)
                 t_ws = time.time() - t3
                 
-                # TODO: 本地接收到 action 后的处理
+                # 获取动作序列
                 actions = response['actions']
                 
-                
-                # 5. 执行所有动作
+                # 5. 执行所有动作（严格 30Hz 频率控制）
                 t4 = time.time()
                 if len(actions) > 0:
                     for action_idx, action_to_execute in enumerate(actions):
+                        action_start = time.time()
+                        
                         # 发送动作到机器人
                         self.collector.send_action(action_to_execute)
                         
                         # 更新动作历史
                         self.processor.update_action_history(action_to_execute)
                         
-                        # 控制每个动作的执行频率
-                        action_elapsed = time.time() - t4
+                        # 控制每个动作的执行频率（严格 30Hz）
+                        action_elapsed = time.time() - action_start
                         action_sleep = self.dt - action_elapsed
                         if action_sleep > 0:
                             await asyncio.sleep(action_sleep)
                         
                         # 打印每个动作的执行信息
+                        actual_dt = time.time() - action_start
                         print(
                             f"Step {step_count}.{action_idx+1}/{len(actions)} | "
-                            f"动作耗时: {action_elapsed*1000:.1f}ms"
+                            f"目标: {self.dt*1000:.1f}ms | "
+                            f"实际: {actual_dt*1000:.1f}ms"
                         )
+                        
+                        step_count += 1
+                        
+                        # 检查是否达到最大步数
+                        if max_steps and step_count >= max_steps:
+                            logger.info(f"已达到最大步数 {max_steps}，停止执行")
+                            self.running = False
+                            break
                 t_send = time.time() - t4
                 
-                # 6. 控制频率
+                # 打印本轮统计
                 elapsed = time.time() - loop_start
-                sleep_time = self.dt - elapsed
-                if sleep_time > 0:
-                    await asyncio.sleep(sleep_time)
-                
-                step_count += 1
-                actual_interval = time.time() - loop_start
                 print(
                     f"Step {step_count} | "
                     f"间隔: {interval*1000:.1f}ms | "
                     f"采集: {t_obs*1000:.1f}ms | "
                     f"构建: {t_build*1000:.1f}ms | "
                     f"WS: {t_ws*1000:.1f}ms | "
-                    f"发送: {t_send*1000:.1f}ms | "
-                    f"循环: {elapsed*1000:.1f}ms | "
-                    f"实际: {actual_interval*1000:.1f}ms"
+                    f"执行: {t_send*1000:.1f}ms | "
+                    f"总耗时: {elapsed*1000:.1f}ms"
                 )
                 
                 # 检查是否达到最大步数

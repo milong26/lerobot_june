@@ -41,7 +41,7 @@ for motor, max_diff in max_diffs.items():
 
 # 建议设置（留一些余量，比如乘以1.2）
 print("\n建议的 max_relative_target 设置：")
-suggested = {motor: round(float(diff) * 1.1, 2) for motor, diff in max_diffs.items()}
+suggested = {motor: round(float(diff) * 1.2, 2) for motor, diff in max_diffs.items()}
 print(suggested)
 
 # 输出可直接复制到 launch.json 的命令行参数
