@@ -45,7 +45,9 @@ from typing import Any
 
 import draccus
 import grpc
+import numpy as np
 import torch
+from pynput import keyboard
 
 from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
 from lerobot.cameras.realsense import RealSenseCameraConfig  # noqa: F401
@@ -144,6 +146,95 @@ class RobotClient:
         self.must_go = threading.Event()
         self.must_go.set()  # Initially set - observations qualify for direct processing
 
+        # 键盘控制状态
+        self.initial_state = None  # 复位目标状态
+        self.is_resetting = False  # 是否正在执行复位
+        self.is_paused = False  # 是否暂停服务器通信（复位后）
+        self.keyboard_listener = None
+
+        # 线程安全的事件标志
+        self._reset_requested = threading.Event()
+        self._shutdown_requested = threading.Event()
+        self._resume_requested = threading.Event()
+
+    def _setup_keyboard_listener(self):
+        """设置键盘监听器"""
+        def on_press(key):
+            try:
+                if key == keyboard.Key.right:
+                    print("⌨️  检测到右键 → 请求复位")
+                    self._reset_requested.set()
+                elif key == keyboard.Key.down:
+                    print("⌨️  检测到下键 → 请求安全关闭")
+                    self._shutdown_requested.set()
+                elif key == keyboard.Key.left:
+                    print("⌨️  检测到左键 → 请求恢复")
+                    self._resume_requested.set()
+            except AttributeError:
+                pass
+
+        self.keyboard_listener = keyboard.Listener(on_press=on_press)
+        self.keyboard_listener.start()
+        print("✅ 键盘监听器已启动 (右键=复位, 左键=恢复, 下键=关闭)")
+
+    def _execute_reset(self, current_state):
+        """
+        执行复位操作：从当前状态平滑移动到初始状态
+
+        Args:
+            current_state: 当前关节角度
+        """
+        if self.initial_state is None:
+            self.logger.warning("⚠️  未设置初始状态，无法复位")
+            return
+
+        self.is_resetting = True
+        print("🔄 开始复位操作...")
+
+        # 计算插值步数（平滑过渡，避免跳变）
+        diff = self.initial_state - current_state
+        max_diff = np.max(np.abs(diff))
+
+        # 根据最大差值计算步数，每步最多移动 0.15 弧度（可根据需要调整）
+        steps = max(10, int(max_diff / 0.15))
+
+        print(f"复位需要 {steps} 步，最大差值: {max_diff:.3f}")
+
+        for step in range(1, steps + 1):
+            if not self.running:
+                break
+
+            # 线性插值
+            alpha = step / steps
+            target_state = current_state + alpha * diff
+
+            # 发送插值后的状态
+            action_dict = self._action_tensor_to_action_dict(torch.tensor(target_state.tolist(), dtype=torch.float32))
+            self.robot.send_action(action_dict)
+
+            # 控制频率
+            time.sleep(self.config.environment_dt)
+
+            if step % 10 == 0 or step == steps:
+                print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
+
+        print("✅ 复位完成")
+        self.is_resetting = False
+        self.is_paused = True  # 复位后暂停服务器通信
+        print("⏸️  已暂停服务器通信，按左键恢复")
+
+    def _safe_shutdown(self):
+        """安全关闭程序"""
+        print("🛑 开始安全关闭...")
+        self.stop()
+
+        # 停止键盘监听
+        if self.keyboard_listener:
+            self.keyboard_listener.stop()
+            print("键盘监听器已停止")
+
+        print("✅ 安全关闭完成")
+
     @property
     def running(self):
         return not self.shutdown_event.is_set()
@@ -181,6 +272,11 @@ class RobotClient:
     def stop(self):
         """Stop the robot client"""
         self.shutdown_event.set()
+
+        # 防止重复断开连接
+        if hasattr(self, '_already_disconnected') and self._already_disconnected:
+            return
+        self._already_disconnected = True
 
         self.robot.disconnect()
         self.logger.debug("Robot disconnected")
@@ -479,10 +575,70 @@ class RobotClient:
         self.start_barrier.wait()
         self.logger.info("Control loop thread starting")
 
+        # 启动键盘监听
+        self._setup_keyboard_listener()
+
+        # 等待一小段时间让机器人稳定
+        time.sleep(1.0)
+
+        # 记录初始状态（复位目标）
+        raw_obs = self.robot.get_observation()
+        # 只提取关节位置（action_features 中的键）
+        action_keys = list(self.robot.action_features.keys())
+        if len(action_keys) > 0:
+            self.initial_state = np.array([raw_obs[key] for key in action_keys], dtype=np.float64)
+            self.logger.info(f"✅ 初始状态已记录: {self.initial_state}")
+
         _performed_action = None
         _captured_observation = None
 
         while self.running:
+            # 检查关闭请求（最高优先级）
+            if self._shutdown_requested.is_set():
+                print("检测到关闭请求")
+                self._shutdown_requested.clear()
+                self._safe_shutdown()
+                break
+
+            # 检查复位请求（高优先级）
+            if self._reset_requested.is_set():
+                print("检测到复位请求")
+                self._reset_requested.clear()
+
+                # 清空 action queue
+                with self.action_queue_lock:
+                    self.action_queue.queue.clear()
+                    print("✅ 已清空 action queue")
+
+                # 获取当前状态
+                raw_obs = self.robot.get_observation()
+                action_keys = list(self.robot.action_features.keys())
+                if len(action_keys) > 0:
+                    current_state = np.array([raw_obs[key] for key in action_keys], dtype=np.float64)
+                    # 执行复位
+                    self._execute_reset(current_state)
+
+                # 复位完成后继续循环（会进入暂停状态）
+                continue
+
+            # 检查恢复请求
+            if self._resume_requested.is_set() and self.is_paused:
+                print("检测到恢复请求")
+                self._resume_requested.clear()
+                self.is_paused = False
+                print("▶️  已恢复服务器通信")
+
+            # 如果处于暂停状态，发送初始状态保持位置
+            if self.is_paused:
+                loop_start = time.time()
+                if self.initial_state is not None:
+                    action_dict = self._action_tensor_to_action_dict(torch.tensor(self.initial_state.tolist(), dtype=torch.float32))
+                    self.robot.send_action(action_dict)
+                time.sleep(self.config.environment_dt)
+                elapsed = time.time() - loop_start
+                print(f"⏸️  暂停中 | 保持初始状态 | 耗时: {elapsed*1000:.1f}ms")
+                continue
+
             control_loop_start = time.perf_counter()
             """Control loop: (1) Performing actions, when available"""
             if self.actions_available():
@@ -495,6 +651,11 @@ class RobotClient:
             self.logger.debug(f"Control loop (ms): {(time.perf_counter() - control_loop_start) * 1000:.2f}")
             # Dynamically adjust sleep time to maintain the desired control frequency
             time.sleep(max(0, self.config.environment_dt - (time.perf_counter() - control_loop_start)))
+
+        # 停止键盘监听
+        if self.keyboard_listener:
+            self.keyboard_listener.stop()
+            print("键盘监听器已停止")
 
         return _captured_observation, _performed_action
 
