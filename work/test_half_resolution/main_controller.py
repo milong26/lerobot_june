@@ -112,6 +112,7 @@ class ControllerConfig:
     max_steps: Optional[int] = None
     recording: RecordingConfig = field(default_factory=RecordingConfig)
     wowskin: WowSkinConfig = field(default_factory=WowSkinConfig)
+    num_loop: int = 5
 
 
 class MainController:
@@ -126,7 +127,8 @@ class MainController:
         history_size: int = 5,
         enable_recording: bool = False,
         recording_config: Dict[str, Any] = None,
-        wowskin_config: Optional[WowSkinConfig] = None
+        wowskin_config: Optional[WowSkinConfig] = None,
+        num_loop: int = 5,
     ):
         """
         Args:
@@ -142,6 +144,7 @@ class MainController:
         self.task = task
         self.fps = fps
         self.dt = 1.0 / fps
+        self.num_loop = num_loop
         
         # 初始化 WowSkin 力传感器
         self.wowskin_sensor = None
@@ -399,7 +402,8 @@ class MainController:
                         (h['state'], h['force']) for h in self.state_history
                     ],
                     history_actions=self.processor.get_action_history(),
-                    steps=step_count
+                    steps=step_count,
+                    num_loop=self.num_loop,
                 )
                 t_build = time.time() - t2
                 
@@ -532,7 +536,8 @@ def main(cfg: ControllerConfig):
         fps=cfg.fps,
         enable_recording=cfg.recording.enable_recording,
         recording_config=recording_config,
-        wowskin_config=cfg.wowskin
+        wowskin_config=cfg.wowskin,
+        num_loop=cfg.num_loop,
     )
     
     # 运行
