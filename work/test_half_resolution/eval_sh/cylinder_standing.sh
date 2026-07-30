@@ -1,18 +1,18 @@
 #!/bin/bash
 
 # ============================================================
-# 测试脚本：valve
-# 功能：运行 test_half_resolution 主控制循环，执行 valve 相关任务
+# 测试脚本：cylinder_standing
+# 功能：运行 test_half_resolution 主控制循环，执行 cylinder_standing 相关任务
 # ============================================================
 
 # 运行方式：
 # 1. 先赋予执行权限（仅首次需要）：
-#    chmod +x /home/qwe/jun/lerobot/work/test_half_resolution/eval_sh/valve.sh
+#    chmod +x /home/qwe/jun/lerobot/work/test_half_resolution/eval_sh/cylinder_standing.sh
 #
 # 2. 直接运行：
-#    ./valve.sh
+#    ./cylinder_standing.sh
 #    或者：
-#    bash /home/qwe/jun/lerobot/work/test_half_resolution/eval_sh/valve.sh
+#    bash /home/qwe/jun/lerobot/work/test_half_resolution/eval_sh/cylinder_standing.sh
 #
 # 3. 如果需要修改参数，直接编辑本脚本中的对应行即可
 # ============================================================
@@ -26,15 +26,13 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --robot.port=/dev/ttyACM1 \
     --robot.id=start_new_heihei_2 \
     --robot.cameras="{wrist: {type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30, fourcc: MJPG},top: {type: intelrealsense, serial_number_or_name: 806312060427, width: 640, height: 480, fps: 30, use_depth: False}}" \
-    --task="Grab the cross-shape equipment." \
+    --task="Grab the cylindrical object" \
     --server_url=ws://10.10.16.19:9000 \
     --fps=30 \
-    --max_steps=2000 \
     --recording.enable_recording=True \
     --recording.record_dir=./debug_recorded_data \
     --recording.skip_frames=1 \
-    --recording.save_images=True \
+    --recording.save_images=False \
     --wowskin.enabled=True \
     --wowskin.port=/dev/ttyACM0 \
-    "--robot.max_relative_target={shoulder_pan: 4.11, shoulder_lift: 3.16, elbow_flex: 3.69, wrist_flex: 5.38, wrist_roll: 6.96, gripper: 12.1}" \
-    "--num_loop=5"
+    --num_loop=2
