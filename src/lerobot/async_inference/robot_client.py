@@ -156,6 +156,10 @@ class RobotClient:
         self._reset_requested = threading.Event()
         self._shutdown_requested = threading.Event()
         self._resume_requested = threading.Event()
+        
+        # 暂停状态打印计数器
+        self._pause_print_counter = 0
+        self._pause_print_interval = 100  # 每 100 次循环打印一次
 
     def _setup_keyboard_listener(self):
         """设置键盘监听器"""
@@ -195,8 +199,8 @@ class RobotClient:
         diff = self.initial_state - current_state
         max_diff = np.max(np.abs(diff))
 
-        # 根据最大差值计算步数，每步最多移动 0.15 弧度（可根据需要调整）
-        steps = max(10, int(max_diff / 0.15))
+        # 根据最大差值计算步数，每步最多移动 0.5 弧度（可根据需要调整）
+        steps = max(10, int(max_diff / 1.5))
 
         print(f"复位需要 {steps} 步，最大差值: {max_diff:.3f}")
 
@@ -215,8 +219,8 @@ class RobotClient:
             # 控制频率
             time.sleep(self.config.environment_dt)
 
-            if step % 10 == 0 or step == steps:
-                print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
+            # if step % 10 == 0 or step == steps:
+            #     print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
 
         print("✅ 复位完成")
         self.is_resetting = False
@@ -625,18 +629,36 @@ class RobotClient:
             if self._resume_requested.is_set() and self.is_paused:
                 print("检测到恢复请求")
                 self._resume_requested.clear()
+                
+                # 在恢复前再次清空 queue，确保没有残留动作
+                with self.action_queue_lock:
+                    self.action_queue.queue.clear()
+                    print("✅ 恢复前已清空 action queue")
+                
                 self.is_paused = False
                 print("▶️  已恢复服务器通信")
 
-            # 如果处于暂停状态，发送初始状态保持位置
+            # 如果处于暂停状态，发送初始状态保持位置，并持续清空 queue
             if self.is_paused:
                 loop_start = time.time()
+                
+                # 持续清空 action queue，防止 accumulate 旧动作
+                with self.action_queue_lock:
+                    if not self.action_queue.empty():
+                        self.action_queue.queue.clear()
+                
                 if self.initial_state is not None:
                     action_dict = self._action_tensor_to_action_dict(torch.tensor(self.initial_state.tolist(), dtype=torch.float32))
                     self.robot.send_action(action_dict)
                 time.sleep(self.config.environment_dt)
                 elapsed = time.time() - loop_start
-                print(f"⏸️  暂停中 | 保持初始状态 | 耗时: {elapsed*1000:.1f}ms")
+                
+                # 减少打印频率，每 N 次循环打印一次
+                self._pause_print_counter += 1
+                if self._pause_print_counter >= self._pause_print_interval:
+                    print(f"⏸️  暂停中 | 保持初始状态 | 耗时: {elapsed*1000:.1f}ms")
+                    self._pause_print_counter = 0
+                
                 continue
 
             control_loop_start = time.perf_counter()
@@ -645,7 +667,8 @@ class RobotClient:
                 _performed_action = self.control_loop_action(verbose)
 
             """Control loop: (2) Streaming observations to the remote policy server"""
-            if self._ready_to_send_observation():
+            # 只有在非暂停状态下才发送 observation
+            if not self.is_paused and self._ready_to_send_observation():
                 _captured_observation = self.control_loop_observation(task, verbose)
 
             self.logger.debug(f"Control loop (ms): {(time.perf_counter() - control_loop_start) * 1000:.2f}")

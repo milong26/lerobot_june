@@ -262,8 +262,8 @@ class MainController:
             # 控制频率
             await asyncio.sleep(self.dt)
             
-            if step % 10 == 0 or step == steps:
-                print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
+            # if step % 10 == 0 or step == steps:
+            #     print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
         
         print("✅ 复位完成")
         self.is_resetting = False
