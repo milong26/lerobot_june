@@ -12,49 +12,46 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import numbers
-import os
+"""Backend-agnostic visualization dispatch.
 
-import numpy as np
+Selects a visualization backend at runtime via a display-mode string (e.g. a ``--display_mode`` CLI
+flag) so callers never branch on the backend. The concrete implementations live in
+:mod:`lerobot.utils.rerun_visualization` and :mod:`lerobot.utils.foxglove_visualization`; importing
+this module does not import ``rerun`` or ``foxglove`` (each backend imports its SDK lazily behind a
+``require_package`` guard).
+"""
 
-from lerobot.types import RobotAction, RobotObservation
+from lerobot.lerobot_types import RobotAction, RobotObservation
 
-from .constants import ACTION, ACTION_PREFIX, OBS_FORCE, OBS_PREFIX, OBS_STR
+from .constants import ACTION, ACTION_PREFIX, OBS_PREFIX, OBS_STR
 from .import_utils import require_package
-import torch
+from .foxglove_visualization import init_foxglove, log_foxglove_data, shutdown_foxglove
+from .rerun_visualization import init_rerun, log_rerun_data, shutdown_rerun
 
-def init_rerun(
-    session_name: str = "lerobot_control_loop", ip: str | None = None, port: int | None = None
+# Visualization backends selectable at runtime via a display-mode string (e.g. a --display_mode flag).
+VISUALIZATION_MODES = ("rerun", "foxglove")
+
+
+def init_visualization(
+    display_mode: str,
+    *,
+    session_name: str = "lerobot_control_loop",
+    ip: str | None = None,
+    port: int | None = None,
 ) -> None:
-    """
-    Initializes the Rerun SDK for visualizing the control loop.
+    """Initializes the visualization backend selected by ``display_mode``.
 
-    Args:
-        session_name: Name of the Rerun session.
-        ip: Optional IP for connecting to a Rerun server.
-        port: Optional port for connecting to a Rerun server.
+    For ``"rerun"``, ``ip``/``port`` point at an optional remote Rerun server. For ``"foxglove"``,
+    ``ip`` is the interface to bind the WebSocket server to (``127.0.0.1`` for local only, ``0.0.0.0``
+    for all interfaces) and ``port`` is its port.
     """
 
-    require_package("rerun-sdk", extra="viz", import_name="rerun")
-    import rerun as rr
-
-    batch_size = os.getenv("RERUN_FLUSH_NUM_BYTES", "8000")
-    os.environ["RERUN_FLUSH_NUM_BYTES"] = batch_size
-    rr.init(session_name)
-    memory_limit = os.getenv("LEROBOT_RERUN_MEMORY_LIMIT", "10%")
-    if ip and port:
-        rr.connect_grpc(url=f"rerun+http://{ip}:{port}/proxy")
+    if display_mode == "rerun":
+        init_rerun(session_name=session_name, ip=ip, port=port)
+    elif display_mode == "foxglove":
+        init_foxglove(host=ip or "127.0.0.1", port=port)
     else:
-        rr.spawn(memory_limit=memory_limit)
-
-
-def shutdown_rerun() -> None:
-    """Shuts down the Rerun SDK gracefully."""
-
-    require_package("rerun-sdk", extra="viz", import_name="rerun")
-    import rerun as rr
-
-    rr.rerun_shutdown()
+        raise ValueError(f"Unknown display_mode '{display_mode}'. Expected one of {VISUALIZATION_MODES}.")
 
 
 def _is_scalar(x):
@@ -152,6 +149,8 @@ def _log_wowskin_force(rr, item: object) -> None:
     )
 
 
+
+
 def log_rerun_data(
     observation: RobotObservation | None = None,
     action: RobotAction | None = None,
@@ -211,7 +210,6 @@ def log_rerun_data(
             _log_wowskin_force(rr, force_array)
         # ================= END FORCE VISUALIZATION =================
 
-
     if action:
         for k, v in action.items():
             if v is None:
@@ -229,3 +227,31 @@ def log_rerun_data(
                     flat = v.flatten()
                     for i, vi in enumerate(flat):
                         rr.log(f"{key}_{i}", rr.Scalars(float(vi)))
+
+
+def log_visualization_data(
+    display_mode: str,
+    observation: RobotObservation | None = None,
+    action: RobotAction | None = None,
+    compress_images: bool = False,
+) -> None:
+    """Logs observation/action data to the backend selected by ``display_mode``."""
+
+    if display_mode == "rerun":
+        log_rerun_data(observation=observation, action=action, compress_images=compress_images)
+    elif display_mode == "foxglove":
+        log_foxglove_data(observation=observation, action=action, compress_images=compress_images)
+    else:
+        raise ValueError(f"Unknown display_mode '{display_mode}'. Expected one of {VISUALIZATION_MODES}.")
+
+
+def shutdown_visualization(display_mode: str) -> None:
+    """Shuts down the backend selected by ``display_mode``."""
+
+    if display_mode == "rerun":
+        shutdown_rerun()
+    elif display_mode == "foxglove":
+        shutdown_foxglove()
+    else:
+        raise ValueError(f"Unknown display_mode '{display_mode}'. Expected one of {VISUALIZATION_MODES}.")
+
