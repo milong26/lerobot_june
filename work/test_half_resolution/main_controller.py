@@ -113,6 +113,7 @@ class ControllerConfig:
     recording: RecordingConfig = field(default_factory=RecordingConfig)
     wowskin: WowSkinConfig = field(default_factory=WowSkinConfig)
     num_loop: int = 5
+    action_steps: Optional[int] = None
 
 
 class MainController:
@@ -129,6 +130,7 @@ class MainController:
         recording_config: Dict[str, Any] = None,
         wowskin_config: Optional[WowSkinConfig] = None,
         num_loop: int = 5,
+        action_steps: Optional[int] = None,
     ):
         """
         Args:
@@ -145,6 +147,7 @@ class MainController:
         self.fps = fps
         self.dt = 1.0 / fps
         self.num_loop = num_loop
+        self.action_steps = action_steps
         
         # 初始化 WowSkin 力传感器
         self.wowskin_sensor = None
@@ -188,7 +191,14 @@ class MainController:
         self.ws_client = WSClient(server_url)
         
         # 历史状态缓冲区（使用 deque 自动管理大小，O(1) 操作）
+        # 后台采集线程会持续更新这个缓冲区
         self.state_history = deque(maxlen=5)
+        
+        # 图像历史缓冲区（后台采集线程更新）
+        self.image_history = deque(maxlen=5)
+        
+        # 后台采集线程
+        self._collection_thread = None
         
         # 控制标志
         self.running = False
@@ -301,16 +311,57 @@ class MainController:
         
         print("✅ 安全关闭完成")
     
+    def _collect_frames_thread(self, num_frames: int = 5, result_list: list = None):
+        """
+        采集指定帧数的数据（在独立线程中运行）
+        
+        Args:
+            num_frames: 需要采集的帧数
+            result_list: 用于存储采集结果的列表（线程安全）
+        """
+        for i in range(num_frames):
+            if not self.running:
+                break
+            
+            frame_start = time.time()
+            
+            try:
+                observation = self.collector.get_observation()
+                observation['timestamp'] = time.time()
+                
+                # 存储到结果列表
+                if result_list is not None:
+                    result_list.append({
+                        'state': observation['state'],
+                        'force': observation['force'],
+                        'images': observation['images'],
+                        'timestamp': observation['timestamp']
+                    })
+                
+            except Exception as e:
+                logger.warning(f"采集帧 {i} 出错: {e}")
+            
+            # 精确控制采集间隔
+            elapsed = time.time() - frame_start
+            sleep_time = self.dt - elapsed
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+    
     async def run(self, max_steps: Optional[int] = None):
         """
         运行主控制循环
+        
+        设计思路：
+        1. 启动后台采集线程（持续 30Hz 采集，覆盖执行动作的时间段）
+        2. 主循环：从缓冲区取最新 5 帧 → 构建 payload → 发送 → 等待 → 执行
+        3. 由于采集是持续的，-4 step 和 0 step 会包含移动过程中的状态
         
         Args:
             max_steps: 最大执行步数（None 表示无限循环）
         """
         self.running = True
         step_count = 0
-        last_step_time = None
+        last_loop_time = None
         
         try:
             # 启动键盘监听
@@ -330,8 +381,11 @@ class MainController:
             # 连接服务器
             await self.ws_client.connect()
             
+            # 不再启动后台采集线程，改为按需采集
+            
             print(f"开始执行任务: {self.task}")
             print(f"控制频率: {self.fps} Hz")
+            print(f"采集策略: 按需采集 5 帧（30Hz），-4 step 和 0 step 间隔 ≈ 133ms")
             
             while self.running:
                 # 检查关闭请求（最高优先级）
@@ -373,41 +427,60 @@ class MainController:
                 
                 loop_start = time.time()
                 
-                # 计算与上一步的间隔时间
-                if last_step_time is not None:
-                    interval = loop_start - last_step_time
+                # 计算与上一轮循环的间隔时间
+                if last_loop_time is not None:
+                    loop_interval = loop_start - last_loop_time
                 else:
-                    interval = 0.0
-                last_step_time = loop_start
+                    loop_interval = 0.0
+                last_loop_time = loop_start
                 
-                # 1. 采集数据
+                # ========== 阶段 1: 采集历史帧（独立线程，严格 30Hz） ==========
                 t1 = time.time()
-                observation = self.collector.get_observation()
-                t_obs = time.time() - t1
+                history_frames = []
+                collect_thread = threading.Thread(
+                    target=self._collect_frames_thread,
+                    args=(5, history_frames),
+                    daemon=True
+                )
+                collect_thread.start()
+                collect_thread.join()  # 等待采集完成（约 166ms）
+                t_collect = time.time() - t1
                 
-                # 2. 更新历史状态（deque 自动限制大小为 5，无需手动截断）
-                self.state_history.append({
-                    'state': observation['state'],
-                    'force': observation['force']
-                })
+                # 验证采集时间间隔
+                if len(history_frames) >= 5:
+                    ts_minus_4 = history_frames[0]['timestamp']
+                    ts_current = history_frames[4]['timestamp']
+                    actual_interval_ms = (ts_current - ts_minus_4) * 1000
+                    expected_interval_ms = 4 * 1000 / self.fps
+                    print(
+                        f"⏱️  采集验证: -4 step 到 0 step = {actual_interval_ms:.1f}ms "
+                        f"(期望 {expected_interval_ms:.1f}ms)"
+                    )
                 
-                # 3. 构建 payload
+                # 处理图像历史
+                for frame in history_frames:
+                    processed_img = self.processor.process_images(frame['images'])
+                    self.processor.image_history.append(processed_img[0])
+                
+                # 构建历史状态列表
+                history_states = [
+                    {'state': f['state'], 'force': f['force'], 'timestamp': f['timestamp']}
+                    for f in history_frames
+                ]
+                
+                # ========== 阶段 2: 构建 payload ==========
                 t2 = time.time()
-                payload = self.processor.build_payload(
-                    images=observation['images'],
-                    state=observation['state'],
-                    force=observation['force'],
+                payload = self.processor.build_payload_with_history(
+                    image_history=list(self.processor.image_history),
+                    history_states=history_states,
                     prompt=self.task,
-                    history_states=[
-                        (h['state'], h['force']) for h in self.state_history
-                    ],
                     history_actions=self.processor.get_action_history(),
                     steps=step_count,
                     num_loop=self.num_loop,
                 )
                 t_build = time.time() - t2
                 
-                # 4. 发送请求并接收响应
+                # ========== 阶段 3: 发送请求并接收响应 ==========
                 t3 = time.time()
                 response = await self.ws_client.send_and_receive(payload)
                 t_ws = time.time() - t3
@@ -415,7 +488,12 @@ class MainController:
                 # 获取动作序列
                 actions = response['actions']
                 
-                # 5. 执行所有动作（严格 30Hz 频率控制）
+                # 限制动作执行数量
+                if self.action_steps is not None and len(actions) > self.action_steps:
+                    actions = actions[:self.action_steps]
+                    print(f"⚠️  动作数量限制: {len(response['actions'])} -> {self.action_steps}")
+                
+                # ========== 阶段 4: 执行所有动作（严格 30Hz 频率控制） ==========
                 t4 = time.time()
                 if len(actions) > 0:
                     for action_idx, action_to_execute in enumerate(actions):
@@ -463,8 +541,8 @@ class MainController:
                 elapsed = time.time() - loop_start
                 print(
                     f"Step {step_count} | "
-                    f"间隔: {interval*1000:.1f}ms | "
-                    f"采集: {t_obs*1000:.1f}ms | "
+                    f"循环间隔: {loop_interval*1000:.1f}ms | "
+                    f"采集: {t_collect*1000:.1f}ms | "
                     f"构建: {t_build*1000:.1f}ms | "
                     f"WS: {t_ws*1000:.1f}ms | "
                     f"执行: {t_send*1000:.1f}ms | "
@@ -486,6 +564,11 @@ class MainController:
         
         self._cleanup_done = True
         self.running = False
+        
+        # 停止后台采集线程
+        if self._collection_thread is not None and self._collection_thread.is_alive():
+            self._collection_thread.join(timeout=2.0)
+            print("后台采集线程已停止")
         
         # 停止键盘监听
         if self.keyboard_listener:
@@ -538,6 +621,7 @@ def main(cfg: ControllerConfig):
         recording_config=recording_config,
         wowskin_config=cfg.wowskin,
         num_loop=cfg.num_loop,
+        action_steps=cfg.action_steps,
     )
     
     # 运行

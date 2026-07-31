@@ -182,4 +182,4 @@ work/test_half_resolution/train_embeddings_cache/*
 work/test_half_resolution/norm_stats.json
 work/test_half_resolution/debug_recorded_data/*
 
-commit_reminder.md
+提交提示.md

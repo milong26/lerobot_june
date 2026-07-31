@@ -33,8 +33,9 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --recording.enable_recording=True \
     --recording.record_dir=./debug_recorded_data \
     --recording.skip_frames=1 \
-    --recording.save_images=True \
+    --recording.save_images=False \
     --wowskin.enabled=True \
     --wowskin.port=/dev/ttyACM0 \
-    "--robot.max_relative_target={shoulder_pan: 4.11, shoulder_lift: 3.16, elbow_flex: 3.69, wrist_flex: 5.38, wrist_roll: 6.96, gripper: 12.1}" \
-    "--num_loop=5"
+    --num_loop=5 \
+    --action_steps=20
+

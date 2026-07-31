@@ -243,14 +243,13 @@ class DataProcessor:
         # 处理当前图像 - 分辨率减半 + 拼接（top左 + wrist右）
         processed_current_image = self.process_images(images)
         
-        # 更新图像历史缓冲区
-        self.image_history.append(processed_current_image[0])  # 保存处理后的单张图像
-        
+        # 注意：图像历史已经在 main_controller 中更新，这里直接使用
         # 构建历史图像窗口：取 -4 step 和 0 step（共2帧）
-        # image_history 包含最近5帧，索引 -5 是 -4 step，-1 是 0 step
+        # image_history 现在是列表形式：[frame_-4, frame_-3, frame_-2, frame_-1, frame_0]
+        # 索引 0 = -4 step，索引 4 = 0 step
         if len(self.image_history) >= 5:
-            image_minus_4 = [self.image_history[-5]]  # -4 step 的图像
-            image_current = [self.image_history[-1]]   # 0 step 的图像（当前帧）
+            image_minus_4 = [self.image_history[0]]  # -4 step 的图像
+            image_current = [self.image_history[4]]   # 0 step 的图像（当前帧）
         else:
             # 如果历史数据不足，使用当前帧重复（与 state 逻辑一致）
             image_minus_4 = processed_current_image
@@ -263,10 +262,11 @@ class DataProcessor:
         current_state = self.process_state(state, force)
         
         # 构建历史状态窗口：取 -4 step 和 0 step（共2帧）
-        # history_states 应该包含最近5帧，索引 -5 是 -4 step，-1 是 0 step
+        # history_states 现在是列表：[frame_-4, frame_-3, frame_-2, frame_-1, frame_0]
+        # 索引 0 = -4 step，索引 4 = 0 step
         if history_states and len(history_states) >= 5:
-            state_minus_4 = self.process_state(history_states[-5][0], history_states[-5][1])
-            state_current = self.process_state(history_states[-1][0], history_states[-1][1])
+            state_minus_4 = self.process_state(history_states[0][0], history_states[0][1])
+            state_current = self.process_state(history_states[4][0], history_states[4][1])
         else:
             # 如果没有历史数据，使用当前帧重复
             state_minus_4 = current_state
@@ -297,6 +297,82 @@ class DataProcessor:
             "num_loop": num_loop
         }
         
+        
+        return payload
+    
+    def build_payload_with_history(
+        self,
+        image_history: List,
+        history_states: List[Dict],
+        prompt: str,
+        history_actions: Optional[List[np.ndarray]] = None,
+        steps: int = 11, 
+        seed: int = 22,
+        g_scale: float = 1.0,
+        num_loop: int = 2
+    ) -> Dict[str, Any]:
+        """
+        使用已处理的历史数据构建 payload（供后台采集模式使用）
+        
+        Args:
+            image_history: 已处理的图像历史列表（索引 0 = -4 step，索引 4 = 0 step）
+            history_states: 历史状态列表，每个元素包含 {'state', 'force', 'timestamp'}
+            prompt: 任务描述
+            history_actions: 历史动作列表
+            steps: 推理步数
+            seed: 随机种子
+            g_scale: 引导缩放系数
+            num_loop: 循环次数
+            
+        Returns:
+            完整的 payload 字典
+        """
+        # 构建历史图像窗口：取 -4 step 和 0 step（共2帧）
+        # image_history 索引 0 = -4 step，索引 4 = 0 step
+        if len(image_history) >= 5:
+            image_minus_4 = [image_history[0]]
+            image_current = [image_history[4]]
+        else:
+            # 历史不足，用最后一帧填充
+            fallback_img = image_history[-1] if image_history else None
+            if fallback_img is None:
+                raise ValueError("图像历史为空，无法构建 payload")
+            image_minus_4 = [fallback_img]
+            image_current = [fallback_img]
+        
+        processed_images = image_minus_4 + image_current
+        
+        # 构建历史状态窗口：取 -4 step 和 0 step
+        # history_states 索引 0 = -4 step，索引 4 = 0 step
+        if history_states and len(history_states) >= 5:
+            state_minus_4 = self.process_state(history_states[0]['state'], history_states[0]['force'])
+            state_current = self.process_state(history_states[4]['state'], history_states[4]['force'])
+        else:
+            # 历史不足，用最后一帧填充
+            fallback = history_states[-1] if history_states else None
+            if fallback is None:
+                raise ValueError("状态历史为空，无法构建 payload")
+            state_minus_4 = self.process_state(fallback['state'], fallback['force'])
+            state_current = state_minus_4
+        
+        # 默认动作（零动作，24维）
+        action_minus_4 = np.zeros(24, dtype=np.float32)
+        action_current = np.zeros(24, dtype=np.float32)
+        
+        # 构建 payload
+        payload = {
+            "image": processed_images,
+            "state": [state_minus_4.tolist(), state_current.tolist()],
+            "action": [action_minus_4.tolist(), action_current.tolist()],
+            "prompt": prompt,
+            "steps": steps,
+            "seed": seed,
+            "g_scale": g_scale,
+            "video_name": prompt,
+            "image_mask": [1, 1, 0],
+            "action_mask": [1, 1, 1, 1, 1, 1] + [0] * 18,
+            "num_loop": num_loop
+        }
         
         return payload
     
