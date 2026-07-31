@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# ============================================================
-# 测试脚本：valve
-# 功能：运行 test_half_resolution 主控制循环，执行 valve 相关任务
-# ============================================================
-
 # 运行方式：
 # 1. 先赋予执行权限（仅首次需要）：
 #    chmod +x /home/qwe/jun/lerobot/work/test_half_resolution/eval_sh/valve.sh
@@ -29,7 +24,6 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --task="Grab the cross-shape equipment." \
     --server_url=ws://10.10.16.19:9000 \
     --fps=30 \
-    --max_steps=2000 \
     --recording.enable_recording=True \
     --recording.record_dir=./debug_recorded_data \
     --recording.skip_frames=1 \
@@ -38,4 +32,3 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --wowskin.port=/dev/ttyACM0 \
     --num_loop=5 \
     --action_steps=20
-

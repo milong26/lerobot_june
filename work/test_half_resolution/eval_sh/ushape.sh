@@ -1,10 +1,5 @@
 #!/bin/bash
 
-# ============================================================
-# 测试脚本：ushape
-# 功能：运行 test_half_resolution 主控制循环，执行 ushape 相关任务
-# ============================================================
-
 # 运行方式：
 # 1. 先赋予执行权限（仅首次需要）：
 #    chmod +x /home/qwe/jun/lerobot/work/test_half_resolution/eval_sh/ushape.sh
@@ -35,4 +30,5 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --recording.save_images=False \
     --wowskin.enabled=True \
     --wowskin.port=/dev/ttyACM0 \
-    --num_loop=2
+    --num_loop=5 \
+    --action_steps=20
