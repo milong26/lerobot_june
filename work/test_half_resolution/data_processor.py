@@ -333,6 +333,7 @@ class DataProcessor:
             image_minus_4 = [image_history[0]]
             image_current = [image_history[4]]
         else:
+            print(f"  ⚠ 图像历史长度不足5帧，使用最后一帧填充")
             # 历史不足，用最后一帧填充
             fallback_img = image_history[-1] if image_history else None
             if fallback_img is None:
@@ -363,6 +364,68 @@ class DataProcessor:
         payload = {
             "image": processed_images,
             "state": [state_minus_4.tolist(), state_current.tolist()],
+            "action": [action_minus_4.tolist(), action_current.tolist()],
+            "prompt": prompt,
+            "steps": steps,
+            "seed": seed,
+            "g_scale": g_scale,
+            "video_name": prompt,
+            "image_mask": [1, 1, 0],
+            "action_mask": [1, 1, 1, 1, 1, 1] + [0] * 18,
+            "num_loop": num_loop
+        }
+        
+        return payload
+    
+    def build_payload_with_two_frames(
+        self,
+        image_minus_133ms: List,
+        image_current: List,
+        history_states: List[Dict],
+        prompt: str,
+        history_actions: Optional[List[np.ndarray]] = None,
+        steps: int = 11, 
+        seed: int = 22,
+        g_scale: float = 1.0,
+        num_loop: int = 2
+    ) -> Dict[str, Any]:
+        """
+        使用 2 帧数据构建 payload（当前帧和 -133ms 帧）
+        
+        所有数据均来自后台采集缓冲区，不会调用 collector.get_observation()
+        
+        Args:
+            image_minus_133ms: 已处理的 -133ms 图像
+            image_current: 已处理的当前图像
+            history_states: 历史状态列表 [frame_minus_133ms, frame_current]
+            prompt: 任务描述
+            history_actions: 历史动作列表
+            steps: 推理步数
+            seed: 随机种子
+            g_scale: 引导缩放系数
+            num_loop: 循环次数
+            
+        Returns:
+            完整的 payload 字典
+        """
+        # 合并 2 张图像
+        processed_images = image_minus_133ms + image_current
+        
+        # 构建历史状态：取 -133ms 和当前帧
+        if history_states and len(history_states) >= 2:
+            state_minus_133ms = self.process_state(history_states[0]['state'], history_states[0]['force'])
+            state_current = self.process_state(history_states[1]['state'], history_states[1]['force'])
+        else:
+            raise ValueError("history_states 必须包含 2 帧数据")
+        
+        # 默认动作（零动作，24维）
+        action_minus_4 = np.zeros(24, dtype=np.float32)
+        action_current = np.zeros(24, dtype=np.float32)
+        
+        # 构建 payload
+        payload = {
+            "image": processed_images,
+            "state": [state_minus_133ms.tolist(), state_current.tolist()],
             "action": [action_minus_4.tolist(), action_current.tolist()],
             "prompt": prompt,
             "steps": steps,

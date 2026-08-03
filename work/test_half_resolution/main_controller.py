@@ -1,11 +1,10 @@
 """
 主控制循环
-功能：
 - 整合 data_collector、data_processor、ws_client 三个模块
 - 实现主循环：采集→处理→发送→接收→执行
 - 控制执行频率（30Hz）
 - 将服务器返回的动作发送给机器人执行
-- 异常处理和优雅退出
+- 异常处理和退出
 
 执行示例：
 python main_controller.py \
@@ -98,7 +97,6 @@ class RecordingConfig:
     """录制配置"""
     enable_recording: bool = False
     record_dir: str = "./recorded_data"
-    skip_frames: int = 3
     save_images: bool = False
 
 
@@ -172,7 +170,7 @@ class MainController:
         print("正在连接机器人...")
         self.robot = make_robot_from_config(robot_config)
         self.robot.connect()
-        print("✅ 机器人已连接")
+        print("机器人已连接")
         
         # 初始化数据采集器（带录制功能）
         self.collector = DataCollector(
@@ -188,17 +186,16 @@ class MainController:
         self.processor = DataProcessor(history_size=history_size)
         
         # 初始化 WebSocket 客户端
-        self.ws_client = WSClient(server_url)
-        
-        # 历史状态缓冲区（使用 deque 自动管理大小，O(1) 操作）
-        # 后台采集线程会持续更新这个缓冲区
-        self.state_history = deque(maxlen=5)
-        
-        # 图像历史缓冲区（后台采集线程更新）
-        self.image_history = deque(maxlen=5)
-        
+        self.ws_client = WSClient(server_url)        
         # 后台采集线程
         self._collection_thread = None
+        
+        # 非阻塞采集队列（带时间戳）
+        # 存储格式：{'state', 'force', 'images', 'timestamp'}
+        self.collection_queue = deque(maxlen=15)  # 保存最近 15 帧（约 0.5 秒）
+        
+        # 采集线程控制标志
+        self._collection_running = False
         
         # 控制标志
         self.running = False
@@ -254,7 +251,7 @@ class MainController:
         max_diff = np.max(np.abs(diff))
         
         # 根据最大差值计算步数，每步最多移动 0.15 弧度（可根据需要调整）
-        steps = max(10, int(max_diff / 0.15))
+        steps = max(10, int(max_diff / 1.5))
         
         print(f"复位需要 {steps} 步，最大差值: {max_diff:.3f}")
         
@@ -311,50 +308,47 @@ class MainController:
         
         print("✅ 安全关闭完成")
     
-    def _collect_frames_thread(self, num_frames: int = 5, result_list: list = None):
+    def _continuous_collection_thread(self):
         """
-        采集指定帧数的数据（在独立线程中运行）
-        
-        Args:
-            num_frames: 需要采集的帧数
-            result_list: 用于存储采集结果的列表（线程安全）
+        后台持续采集线程
+        以 30Hz 频率持续采集，将数据存入 collection_queue
         """
-        for i in range(num_frames):
-            if not self.running:
-                break
-            
+        print("🎥 后台采集线程已启动 (30Hz)")
+        while self._collection_running and self.running:
             frame_start = time.time()
             
             try:
                 observation = self.collector.get_observation()
-                observation['timestamp'] = time.time()
+                timestamp = time.time()
                 
-                # 存储到结果列表
-                if result_list is not None:
-                    result_list.append({
-                        'state': observation['state'],
-                        'force': observation['force'],
-                        'images': observation['images'],
-                        'timestamp': observation['timestamp']
-                    })
+                # 存入队列（带时间戳）
+                frame_data = {
+                    'state': observation['state'],
+                    'force': observation['force'],
+                    'images': observation['images'],
+                    'timestamp': timestamp
+                }
+                self.collection_queue.append(frame_data)
                 
             except Exception as e:
-                logger.warning(f"采集帧 {i} 出错: {e}")
+                logger.warning(f"后台采集出错: {e}")
             
-            # 精确控制采集间隔
             elapsed = time.time() - frame_start
             sleep_time = self.dt - elapsed
             if sleep_time > 0:
                 time.sleep(sleep_time)
+        
+        print("🎥 后台采集线程已停止")
     
     async def run(self, max_steps: Optional[int] = None):
         """
         运行主控制循环
         
         设计思路：
-        1. 启动后台采集线程（持续 30Hz 采集，覆盖执行动作的时间段）
-        2. 主循环：从缓冲区取最新 5 帧 → 构建 payload → 发送 → 等待 → 执行
-        3. 由于采集是持续的，-4 step 和 0 step 会包含移动过程中的状态
+        1. 启动后台采集线程（持续 30Hz 采集，完全不阻塞主循环）
+        2. 后台线程负责：采集 → 记录时间戳 → 放入 collection_queue
+        3. 主循环：从队列选取当前帧和 -133ms 帧 → 构建 payload → 发送 → 执行
+        4. 所有 payload 数据均来自缓冲区，不会再次调用 collector.get_observation()
         
         Args:
             max_steps: 最大执行步数（None 表示无限循环）
@@ -367,7 +361,7 @@ class MainController:
             # 启动键盘监听
             self._setup_keyboard_listener()
             
-            # 等待一小段时间让机器人稳定
+            # 等待一段时间让机器人稳定
             time.sleep(1.0)
             
             # 记录初始状态（复位目标）
@@ -381,11 +375,17 @@ class MainController:
             # 连接服务器
             await self.ws_client.connect()
             
-            # 不再启动后台采集线程，改为按需采集
+            # 启动后台持续采集线程
+            self._collection_running = True
+            self._collection_thread = threading.Thread(
+                target=self._continuous_collection_thread,
+                daemon=True
+            )
+            self._collection_thread.start()
             
             print(f"开始执行任务: {self.task}")
             print(f"控制频率: {self.fps} Hz")
-            print(f"采集策略: 按需采集 5 帧（30Hz），-4 step 和 0 step 间隔 ≈ 133ms")
+            print(f"采集策略: 后台持续采集 (30Hz)，主循环从队列选取当前帧和 -133ms 帧")
             
             while self.running:
                 # 检查关闭请求（最高优先级）
@@ -434,44 +434,80 @@ class MainController:
                     loop_interval = 0.0
                 last_loop_time = loop_start
                 
-                # ========== 阶段 1: 采集历史帧（独立线程，严格 30Hz） ==========
+                # ========== 阶段 1: 从后台采集队列选取 2 帧（从后向前，高效） ==========
                 t1 = time.time()
-                history_frames = []
-                collect_thread = threading.Thread(
-                    target=self._collect_frames_thread,
-                    args=(5, history_frames),
-                    daemon=True
+                
+                # 当前时间戳
+                current_time = time.time()
+                target_past_time = current_time - 0.133  # 133ms 前的时间点
+                
+                # 从后向前遍历队列（最新帧在末尾）
+                # 只需检查最后 10 帧（30Hz 下约 333ms，足够覆盖 133ms）
+                frame_current = None
+                frame_minus_133ms = None
+                min_current_diff = float('inf')
+                min_past_diff = float('inf')
+                
+                # 从队列末尾向前遍历（最多检查 10 帧）
+                queue_len = len(self.collection_queue)
+                check_count = min(10, queue_len)
+                
+                for i in range(queue_len - 1, queue_len - check_count - 1, -1):
+                    if i < 0:
+                        break
+                    
+                    frame = self.collection_queue[i]
+                    ts = frame['timestamp']
+                    
+                    # 查找最接近当前的帧
+                    current_diff = abs(ts - current_time)
+                    if current_diff < min_current_diff:
+                        min_current_diff = current_diff
+                        frame_current = frame
+                    
+                    # 查找最接近 133ms 前的帧
+                    past_diff = abs(ts - target_past_time)
+                    if past_diff < min_past_diff:
+                        min_past_diff = past_diff
+                        frame_minus_133ms = frame
+                    
+                    # 优化：如果已经找到足够接近的帧，提前退出
+                    if min_current_diff < 0.005 and min_past_diff < 0.005:  # 5ms 以内
+                        break
+                
+                # 验证选取结果
+                if frame_current is None or frame_minus_133ms is None:
+                    queue_len = len(self.collection_queue)
+                    print(f"⚠️  队列数据不足: {queue_len} 帧，跳过本轮")
+                    continue
+                
+                actual_interval_ms = (frame_current['timestamp'] - frame_minus_133ms['timestamp']) * 1000
+                print(
+                    f"⏱️  非阻塞采集: 队列 {queue_len} 帧 | "
+                    f"检查 {check_count} 帧 | "
+                    f"当前帧误差: {min_current_diff*1000:.1f}ms | "
+                    f"-133ms帧误差: {min_past_diff*1000:.1f}ms | "
+                    f"实际间隔: {actual_interval_ms:.1f}ms"
                 )
-                collect_thread.start()
-                collect_thread.join()  # 等待采集完成（约 166ms）
+                
                 t_collect = time.time() - t1
                 
-                # 验证采集时间间隔
-                if len(history_frames) >= 5:
-                    ts_minus_4 = history_frames[0]['timestamp']
-                    ts_current = history_frames[4]['timestamp']
-                    actual_interval_ms = (ts_current - ts_minus_4) * 1000
-                    expected_interval_ms = 4 * 1000 / self.fps
-                    print(
-                        f"⏱️  采集验证: -4 step 到 0 step = {actual_interval_ms:.1f}ms "
-                        f"(期望 {expected_interval_ms:.1f}ms)"
-                    )
+                # ========== 阶段 2: 构建 payload（仅使用缓冲区数据） ==========
+                t2 = time.time()
                 
-                # 处理图像历史
-                for frame in history_frames:
-                    processed_img = self.processor.process_images(frame['images'])
-                    self.processor.image_history.append(processed_img[0])
+                # 处理 2 帧图像（-133ms 和当前）
+                processed_image_minus_133ms = self.processor.process_images(frame_minus_133ms['images'])
+                processed_image_current = self.processor.process_images(frame_current['images'])
                 
-                # 构建历史状态列表
+                # 构建历史状态（仅 2 帧）
                 history_states = [
-                    {'state': f['state'], 'force': f['force'], 'timestamp': f['timestamp']}
-                    for f in history_frames
+                    {'state': frame_minus_133ms['state'], 'force': frame_minus_133ms['force']},
+                    {'state': frame_current['state'], 'force': frame_current['force']}
                 ]
                 
-                # ========== 阶段 2: 构建 payload ==========
-                t2 = time.time()
-                payload = self.processor.build_payload_with_history(
-                    image_history=list(self.processor.image_history),
+                payload = self.processor.build_payload_with_two_frames(
+                    image_minus_133ms=processed_image_minus_133ms,
+                    image_current=processed_image_current,
                     history_states=history_states,
                     prompt=self.task,
                     history_actions=self.processor.get_action_history(),
@@ -493,7 +529,7 @@ class MainController:
                     actions = actions[:self.action_steps]
                     print(f"⚠️  动作数量限制: {len(response['actions'])} -> {self.action_steps}")
                 
-                # ========== 阶段 4: 执行所有动作（严格 30Hz 频率控制） ==========
+                # ========== 阶段 4: 执行动作（严格 30Hz 频率控制） ==========
                 t4 = time.time()
                 if len(actions) > 0:
                     for action_idx, action_to_execute in enumerate(actions):
@@ -564,6 +600,7 @@ class MainController:
         
         self._cleanup_done = True
         self.running = False
+        self._collection_running = False  # 停止后台采集线程
         
         # 停止后台采集线程
         if self._collection_thread is not None and self._collection_thread.is_alive():
@@ -607,7 +644,6 @@ def main(cfg: ControllerConfig):
     # 构建录制配置
     recording_config = {
         'save_dir': cfg.recording.record_dir,
-        'skip_frames': cfg.recording.skip_frames,
         'save_images': cfg.recording.save_images
     }
     

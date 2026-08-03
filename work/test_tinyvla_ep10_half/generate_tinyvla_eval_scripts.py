@@ -11,7 +11,7 @@ from pathlib import Path
 
 # 配置路径
 EP10_DIR = Path.home() / ".cache" / "huggingface" / "lerobot" / "ep10"
-EVAL_SH_DIR = Path("/home/qwe/jun/lerobot/work/test_smolvla_ep10_half/smolvla_eval_sh")
+EVAL_SH_DIR = Path("/home/qwe/jun/lerobot/work/test_tinyvla_ep10_half/tinyvla_eval_sh")
 
 # 脚本模板
 SCRIPT_TEMPLATE = '''#!/bin/bash
@@ -42,17 +42,18 @@ cd /home/qwe/jun/lerobot
     --robot.port=/dev/ttyACM1 \\
     --robot.id=start_new_heihei_2 \\
     --robot.cameras="{{ \\
-        camera2:{{type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}}, \\
-        camera1: {{type: intelrealsense, serial_number_or_name: 806312060427, width: 640, height: 480, fps: 30, use_depth: false}} \\
+        wrist:{{type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}}, \\
+        top: {{type: intelrealsense, serial_number_or_name: 806312060427, width: 640, height: 480, fps: 30, use_depth: false}} \\
     }}" \\
     --task="{task}" \\
     --server_address=10.10.16.18:8080 \\
-    --policy_type=smolvla \\
-    --pretrained_name_or_path=outputs/smolvla_ep10_half/checkpoints/026000/pretrained_model \\
+    --policy_type=tinyvla \\
+    --pretrained_name_or_path=outputs/tinyvla_ep10_half_50step/checkpoints/026000/pretrained_model \\
     --policy_device=cuda \\
     --actions_per_chunk=20 \\
     --chunk_size_threshold=0 \\
-    --half_img_resolu=true
+    --half_img_resolu=true \\
+    --robot.max_relative_target="{{shoulder_pan: 4.11, shoulder_lift: 3.16, elbow_flex: 3.69, wrist_flex: 5.38, wrist_roll: 6.96, gripper: 12.1}}"
 '''
 
 

@@ -26,9 +26,8 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --fps=30 \
     --recording.enable_recording=True \
     --recording.record_dir=./debug_recorded_data \
-    --recording.skip_frames=1 \
-    --recording.save_images=False \
+    --recording.save_images=True \
     --wowskin.enabled=True \
     --wowskin.port=/dev/ttyACM0 \
-    --num_loop=5 \
-    --action_steps=20
+    --num_loop=2 \
+    --action_steps=35

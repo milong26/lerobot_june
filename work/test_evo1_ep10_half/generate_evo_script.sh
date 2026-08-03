@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-自动生成 SmolVLA 评估脚本的流水线
+自动生成评估脚本的流水线
 功能：从 ~/.cache/huggingface/lerobot/ep10/ 下的所有文件夹中读取 tasks.parquet，
-      提取 task 描述，并生成对应的 .sh 脚本到 smolvla_eval_sh 目录
+      提取 task 描述，并生成对应的 .sh 脚本到 eval_sh 目录
 """
 
 import os
@@ -11,15 +11,10 @@ from pathlib import Path
 
 # 配置路径
 EP10_DIR = Path.home() / ".cache" / "huggingface" / "lerobot" / "ep10"
-EVAL_SH_DIR = Path("/home/qwe/jun/lerobot/work/test_smolvla_ep10_half/smolvla_eval_sh")
+EVAL_SH_DIR = Path("/home/qwe/jun/lerobot/work/test_half_resolution/eval_sh")
 
 # 脚本模板
 SCRIPT_TEMPLATE = '''#!/bin/bash
-
-# ============================================================
-# SmolVLA 测试脚本：{folder_name}
-# 功能：运行 SmolVLA 模型推理，执行 {folder_name} 相关任务
-# ============================================================
 
 # 运行方式：
 # 1. 先赋予执行权限（仅首次需要）：
@@ -33,26 +28,24 @@ SCRIPT_TEMPLATE = '''#!/bin/bash
 # 3. 如果需要修改参数，直接编辑本脚本中的对应行即可
 # ============================================================
 
-# 切换到 lerobot 项目目录
-cd /home/qwe/jun/lerobot
+# 切换到脚本所在目录
+cd /home/qwe/jun/lerobot/work/test_half_resolution
 
-# 运行 SmolVLA 推理客户端
-/home/qwe/anaconda3/envs/lb_local/bin/python -m lerobot.async_inference.robot_client \\
+# 运行主控制程序
+/home/qwe/anaconda3/envs/lb_local/bin/python main_controller.py \\
     --robot.type=so100_follower \\
     --robot.port=/dev/ttyACM1 \\
     --robot.id=start_new_heihei_2 \\
-    --robot.cameras="{{ \\
-        camera2:{{type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30}}, \\
-        camera1: {{type: intelrealsense, serial_number_or_name: 806312060427, width: 640, height: 480, fps: 30, use_depth: false}} \\
-    }}" \\
+    --robot.cameras="{{wrist: {{type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30, fourcc: MJPG}},top: {{type: intelrealsense, serial_number_or_name: 806312060427, width: 640, height: 480, fps: 30, use_depth: False}}}}" \\
     --task="{task}" \\
-    --server_address=10.10.16.18:8080 \\
-    --policy_type=smolvla \\
-    --pretrained_name_or_path=outputs/smolvla_ep10_half/checkpoints/026000/pretrained_model \\
-    --policy_device=cuda \\
-    --actions_per_chunk=20 \\
-    --chunk_size_threshold=0 \\
-    --half_img_resolu=true
+    --server_url=ws://10.10.16.19:9000 \\
+    --fps=30 \\
+    --recording.enable_recording=True \\
+    --recording.record_dir=./debug_recorded_data \\
+    --recording.save_images=True \\
+    --wowskin.enabled=True \\
+    --wowskin.port=/dev/ttyACM0 \\
+    --action_steps=35
 '''
 
 
@@ -102,7 +95,7 @@ def generate_script(folder_name: str, task: str, output_dir: Path) -> Path:
 
 
 def main():
-    """主函数：遍历 ep10 目录下的所有文件夹，生成对应的 SmolVLA 评估脚本"""
+    """主函数：遍历 ep10 目录下的所有文件夹，生成对应的评估脚本"""
     print(f"扫描目录: {EP10_DIR}\n")
     
     if not EP10_DIR.exists():
@@ -138,7 +131,7 @@ def main():
     
     # 输出统计信息
     print("=" * 60)
-    print(f"完成！共生成 {generated_count} 个 SmolVLA 脚本，跳过 {skipped_count} 个文件夹")
+    print(f"完成！共生成 {generated_count} 个脚本，跳过 {skipped_count} 个文件夹")
     print(f"脚本保存位置: {EVAL_SH_DIR}")
 
 

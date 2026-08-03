@@ -38,16 +38,15 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --robot.id=start_new_heihei_2 \\
     --robot.cameras="{{wrist: {{type: opencv, index_or_path: 6, width: 640, height: 480, fps: 30, fourcc: MJPG}},top: {{type: intelrealsense, serial_number_or_name: 806312060427, width: 640, height: 480, fps: 30, use_depth: False}}}}" \\
     --task="{task}" \\
-    --server_url=ws://10.10.16.19:9000 \\
+    --server_url=ws://10.10.16.19:9001 \\
     --fps=30 \\
     --recording.enable_recording=True \\
     --recording.record_dir=./debug_recorded_data \\
-    --recording.skip_frames=1 \\
-    --recording.save_images=False \\
+    --recording.save_images=True \\
     --wowskin.enabled=True \\
     --wowskin.port=/dev/ttyACM0 \\
-    --num_loop=5 \\
-    --action_steps=20
+    --num_loop=2 \\
+    --action_steps=35
 '''
 
 

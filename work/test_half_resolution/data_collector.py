@@ -28,19 +28,16 @@ class DataSaver:
     def __init__(
         self,
         save_dir: str = "./recorded_data",
-        skip_frames: int = 3,
         save_images: bool = True
     ):
         """
         Args:
             save_dir: 保存目录
-            skip_frames: 跳帧数（每N帧保存1帧，默认3表示每3帧保存1帧）
             save_images: 是否保存图像（占用空间大，可选择关闭）
         """
         self.save_dir = Path(save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
         
-        self.skip_frames = skip_frames
         self.save_images = save_images
         
         # 线程安全队列
@@ -80,11 +77,7 @@ class DataSaver:
             action: 执行的动作（可选）
         """
         try:
-            # 跳帧策略：每 skip_frames 帧保存1帧
-            if self.frame_count % self.skip_frames != 0:
-                self.frame_count += 1
-                return
-            
+
             # 准备保存的数据（轻量级）
             save_data = {
                 'timestamp': np.array(observation.get('timestamp', time.time()), dtype=np.float64),  # 转为 numpy 数组
@@ -176,7 +169,6 @@ class DataCollector:
             config = recording_config or {}
             self.data_saver = DataSaver(
                 save_dir=config.get('save_dir', './recorded_data'),
-                skip_frames=config.get('skip_frames', 3),
                 save_images=config.get('save_images', True)
             )
         
