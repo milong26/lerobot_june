@@ -88,6 +88,7 @@ class MetaworldEnv(gym.Env):
         observation_height=480,
         visualization_width=640,
         visualization_height=480,
+        fixed_states: list[np.ndarray] | None = None,
     ):
         super().__init__()
         self.task = task.replace("metaworld-", "")
@@ -98,6 +99,9 @@ class MetaworldEnv(gym.Env):
         self.visualization_width = visualization_width
         self.visualization_height = visualization_height
         self.camera_name = camera_name
+
+        self._fixed_states = fixed_states
+        self._fixed_state_cursor = 0
 
         self._env_name = self.task  # already stripped of "metaworld-" prefix above
         self._env = None  # deferred — created on first reset() inside the worker subprocess
@@ -221,13 +225,23 @@ class MetaworldEnv(gym.Env):
         self._ensure_env()
         super().reset(seed=seed)
 
+        if self._fixed_states is not None:
+            rand_vec = self._fixed_states[self._fixed_state_cursor % len(self._fixed_states)]
+            self._fixed_state_cursor += 1
+            self._env._freeze_rand_vec = False
+            self._env._get_state_rand_vec = lambda: rand_vec.copy()
+
         if seed is not None:
             self._env.seed(seed)
         raw_obs, info = self._env.reset(seed=seed)
 
         observation = self._format_raw_obs(raw_obs)
 
-        info = {"is_success": False}
+        info = {
+            "is_success": False,
+            "obj_init_pos": self._env.obj_init_pos.copy() if self._env.obj_init_pos is not None else None,
+            "goal_pos": self._env.goal.copy(),
+        }
         return observation, info
 
     def step(self, action: np.ndarray) -> tuple[RobotObservation, float, bool, bool, dict[str, Any]]:

@@ -82,17 +82,16 @@ with open(CONFIG_PATH) as f:
 TASK_DESCRIPTIONS = METAWORLD_CONFIG.get("TASK_DESCRIPTIONS", {})
 
 
-# Meta-World 39维observation的结构说明
+# Meta-World 39维observation的结构说明（修正版，见 SPEC.md 3.1节）
 ENV_STATE_DESCRIPTION = {
-    "0:4": "手臂位置 (x, y, z) + 夹爪开合",
-    "4:7": "物体位置 obj_pose (x, y, z) ← 这就是初始物体位置！",
-    "7:10": "目标位置相关信息 (x, y, z)",
-    "10:18": "one-hot 任务编码向量 (8维)",
-    "18:21": "手臂位置 (重复)",
-    "21:24": "物体位置 (重复)",
-    "24:27": "目标位置 (重复)",
-    "27:36": "one-hot 任务编码 (重复)",
-    "36:39": "相机位置参数",
+    "0:3": "末端执行器(手)位置 xyz",
+    "3:4": "夹爪开合度(归一化)",
+    "4:7": "物体1位置 xyz (= obj_pose)",
+    "7:11": "物体1四元数朝向(4维)",
+    "11:14": "物体2位置(单物体任务中恒为0)",
+    "14:18": "物体2四元数(恒为0)",
+    "18:36": "上一帧的[0:18]原样重复(frame-stack)",
+    "36:39": "目标位置 xyz (= goal_pose)",
 }
 
 
