@@ -282,6 +282,8 @@ def create_dataset(repo_id, output_dir, fps=80, image_size=480):
         dataset: LeRobotDataset实例
     """
     # 定义数据集的features
+    # 注意：task 字段不需要在这里定义，它是 LeRobot 的特殊必填字段，
+    # validate_frame 会单独检查，不参与常规 feature 验证
     features = {
         "observation.images.top": {
             "dtype": "image",
@@ -313,10 +315,6 @@ def create_dataset(repo_id, output_dir, fps=80, image_size=480):
         },
         "next.success": {
             "dtype": "bool",
-            "shape": (1,),
-        },
-        "task": {
-            "dtype": "string",
             "shape": (1,),
         },
     }
