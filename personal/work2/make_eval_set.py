@@ -1,9 +1,13 @@
 """生成一份固定的、所有数据配方共用的评测集。见 SPEC.md 4.5 节。"""
 
+import sys
+from pathlib import Path
+# 添加项目根目录到 sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import argparse
 import json
 import numpy as np
-from pathlib import Path
 
 from personal.work2.sampling_strategies import UniformRandomStrategy
 

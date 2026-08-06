@@ -1,14 +1,10 @@
 #!/usr/bin/env python
 """
-Meta-World 示范数据生成器（重构版）。
-见 SPEC.md 4.7 节。
+Meta-World demonstration data generator for SIC framework.
+Generates LeRobot format datasets with dual-camera (top + wrist) views.
 
-相比原版 collect_metaworld_dataset.py 的主要改动:
-- 支持可插拔采样策略 (--strategy uniform/grid/boundary/distance_stratified)
-- 使用 mw_common/state_injection.py 精确指定 (obj_pos, goal_pos)
-- --require-success (默认 True): expert 失败的 episode 不写入数据集
-- 断点续采: 已存在数据集时追加而非删除重建
-- ENV_STATE_DESCRIPTION 引用 mw_common.obs_utils
+Uses different seeds for each episode to get varied obj/goal positions,
+following the original collect_metaworld_dataset.py approach.
 """
 
 import argparse
@@ -18,7 +14,6 @@ import sys
 import time
 from pathlib import Path
 
-# 添加项目根目录到 sys.path
 _project_root = Path(__file__).parent.parent.parent
 if str(_project_root) not in sys.path:
     sys.path.insert(0, str(_project_root))
@@ -31,12 +26,10 @@ import mujoco
 import metaworld
 import metaworld.policies as policies
 
-os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).parent / "outputs")
+os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).parent / "data")
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from personal.work2.mw_common.obs_utils import ENV_STATE_LAYOUT
-from personal.work2.mw_common.state_injection import make_env_with_fixed_state, validate_pick_place_pair
-from personal.work2.sampling_strategies import get_strategy, STRATEGY_MAP
 
 CONFIG_PATH = Path(__file__).parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
 with open(CONFIG_PATH) as f:
@@ -51,7 +44,7 @@ def get_expert_policy(task_name):
         policy_class = getattr(policies, policy_class_name)
         return policy_class(), policy_class_name
     except AttributeError:
-        print(f"错误: 找不到任务 {task_name} 的专家策略 {policy_class_name}")
+        print(f"Error: Cannot find expert policy {policy_class_name} for task {task_name}")
         sys.exit(1)
 
 
@@ -62,7 +55,7 @@ def resize_image(image, target_size):
     return np.array(img)
 
 
-def render_dual_camera(env_top, env_wrist, image_size=480):
+def render_dual_camera(env_top, env_wrist, image_size=224):
     top_image = env_top.render()
     if top_image is not None:
         top_image = np.flip(top_image, (0, 1))
@@ -80,7 +73,16 @@ def sync_env_state(src_env, dst_env):
     mujoco.mj_forward(dst_env.model, dst_env.data)
 
 
-def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, image_size=480):
+def create_metaworld_env(task_name, seed=None, camera_name="corner2"):
+    mt1 = metaworld.MT1(task_name, seed=seed)
+    env = mt1.train_classes[task_name](render_mode="rgb_array", camera_name=camera_name)
+    task = mt1.train_tasks[0]
+    env.set_task(task)
+    env._freeze_rand_vec = True
+    return env
+
+
+def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, image_size=224):
     obs, info = env_top.reset()
     env_wrist.reset()
     sync_env_state(env_top, env_wrist)
@@ -100,7 +102,6 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
         if top_image is None or wrist_image is None:
             continue
 
-        task_description = TASK_DESCRIPTIONS.get(task_name, task_name)
         frame = {
             "observation.images.top": top_image,
             "observation.images.wrist": wrist_image,
@@ -109,7 +110,6 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
             "action": action.copy().astype(np.float32),
             "next.reward": np.array([reward], dtype=np.float32),
             "next.success": np.array([info.get("success", 0)], dtype=bool),
-            "task": task_description,
         }
         frames.append(frame)
         success_flags.append(info.get("success", 0))
@@ -125,7 +125,7 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
     }
 
 
-def create_dataset(repo_id, output_dir, fps=80, image_size=480):
+def create_dataset(repo_id, output_dir, fps=10, image_size=224):
     features = {
         "observation.images.top": {
             "dtype": "image",
@@ -142,7 +142,6 @@ def create_dataset(repo_id, output_dir, fps=80, image_size=480):
         "action": {"dtype": "float32", "shape": (4,), "names": {"axes": ["x", "y", "z", "gripper"]}},
         "next.reward": {"dtype": "float32", "shape": (1,)},
         "next.success": {"dtype": "bool", "shape": (1,)},
-        "task": {"dtype": "string", "shape": (1,)},
     }
     return LeRobotDataset.create(
         repo_id=repo_id, fps=fps, features=features, root=output_dir,
@@ -150,21 +149,12 @@ def create_dataset(repo_id, output_dir, fps=80, image_size=480):
     )
 
 
-def load_existing_dataset(output_dir):
-    """尝试加载已有数据集，返回 (dataset, num_episodes) 或 (None, 0)。"""
-    try:
-        ds = LeRobotDataset(root=str(output_dir))
-        return ds, ds.num_episodes
-    except Exception:
-        return None, 0
-
-
-def save_episode_metadata(output_dir, episode_infos, task_name):
+def save_episode_metadata(output_dir, episode_infos, task_name, config_map):
     metadata_file = Path(output_dir) / "episode_initial_states.json"
     metadata = {
         "task": task_name,
         "num_episodes": len(episode_infos),
-        "env_state_layout": {k: f"slice({v.start}, {v.stop})" for k, v in ENV_STATE_LAYOUT.items()},
+        "config_map": {str(k): list(v) for k, v in config_map.items()},
         "episodes": [],
     }
     for i, info in enumerate(episode_infos):
@@ -180,94 +170,67 @@ def save_episode_metadata(output_dir, episode_infos, task_name):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Meta-World 示范数据生成器")
+    parser = argparse.ArgumentParser(description="Meta-World Data Generator for SIC Framework")
     parser.add_argument("--task", type=str, default="pick-place-v3")
-    parser.add_argument("--strategy", type=str, default="uniform", choices=list(STRATEGY_MAP.keys()))
-    parser.add_argument("--num-episodes", type=int, default=50)
+    parser.add_argument("--num-episodes", type=int, default=72)
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument("--repo-id", type=str, default=None)
-    parser.add_argument("--fps", type=int, default=80)
-    parser.add_argument("--image-size", type=int, default=480)
-    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fps", type=int, default=10)
+    parser.add_argument("--image-size", type=int, default=224)
+    parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=500)
-    parser.add_argument("--require-success", action="store_true", default=True,
-                        help="只收录 expert 成功的 episode (默认开启)")
-    parser.add_argument("--no-require-success", action="store_true", default=False,
-                        help="允许收录失败的 episode")
+    parser.add_argument("--save-config-map", type=str, default=None)
     args = parser.parse_args()
 
-    require_success = args.require_success and not args.no_require_success
-
     if args.output_dir is None:
-        args.output_dir = f"personal/work2/generated/{args.strategy}_{args.num_episodes}"
+        args.output_dir = "personal/work3/data/b0_dataset"
     if args.repo_id is None:
-        task_short = args.task.replace("-v3", "").replace("-", "_")
-        args.repo_id = f"lerobot/metaworld_{task_short}_{args.strategy}"
+        args.repo_id = "b0_dataset"
 
     output_dir = Path(args.output_dir)
-
-    # 断点续采: 加载已有数据集
-    existing_ds, existing_eps = load_existing_dataset(output_dir)
-    start_ep = existing_eps
-    if existing_eps > 0:
-        print(f"检测到已有数据集: {existing_eps} episodes, 将从 episode {existing_eps} 开始追加")
-    elif output_dir.exists():
+    if output_dir.exists():
         import shutil
         shutil.rmtree(output_dir)
-
-    rng = np.random.default_rng(args.seed)
-    strategy = get_strategy(args.strategy, task_name=args.task)
-    samples = strategy.sample(args.num_episodes, rng)
 
     expert_policy, policy_name = get_expert_policy(args.task)
 
     print("=" * 80)
-    print("Meta-World 数据生成 (重构版)")
+    print("Meta-World Data Generator for SIC Framework")
     print("=" * 80)
-    print(f"任务: {args.task}")
-    print(f"策略: {args.strategy}")
-    print(f"目标 episode 数: {args.num_episodes}")
-    print(f"输出目录: {args.output_dir}")
+    print(f"Task: {args.task}")
+    print(f"Target episodes: {args.num_episodes}")
+    print(f"Output dir: {args.output_dir}")
     print(f"Repo ID: {args.repo_id}")
-    print(f"Require success: {require_success}")
+    print(f"FPS: {args.fps}")
+    print(f"Image size: {args.image_size}")
+    print(f"Seed range: {args.seed_start} ~ {args.seed_start + args.num_episodes - 1}")
     print(f"Expert policy: {policy_name}")
     print("=" * 80)
 
-    if existing_eps == 0:
-        dataset = create_dataset(args.repo_id, args.output_dir, args.fps, args.image_size)
-    else:
-        dataset = existing_ds
+    dataset = create_dataset(args.repo_id, args.output_dir, args.fps, args.image_size)
 
     episode_infos = []
-    if existing_eps > 0:
-        metadata_file = output_dir / "episode_initial_states.json"
-        if metadata_file.exists():
-            with open(metadata_file) as f:
-                old_meta = json.load(f)
-            episode_infos = old_meta.get("episodes", [])
-
+    config_map = {}
     success_count = 0
     fail_count = 0
     start_time = time.time()
 
-    print(f"\n开始生成 {args.num_episodes} 个episode (从 #{start_ep} 开始)...")
+    print(f"\nGenerating {args.num_episodes} episodes...")
     print("-" * 80)
 
-    for ep_idx in range(start_ep, args.num_episodes):
+    for ep_idx in range(args.num_episodes):
         ep_start = time.time()
-        obj, goal = samples[ep_idx]
-        rand_vec = np.concatenate([obj, goal])
+        seed = args.seed_start + ep_idx
 
-        if not validate_pick_place_pair(obj[:2], goal[:2]):
-            print(f"  Episode {ep_idx}: 跳过 (obj/goal 不满足平面距离约束)")
-            fail_count += 1
-            continue
+        pos_id = ep_idx // 8
+        rot_id = ep_idx % 8
+        config_map[ep_idx] = (pos_id, rot_id)
 
         try:
-            env_top, _, _ = make_env_with_fixed_state(args.task, rand_vec, seed=args.seed, camera_name="corner2")
-            env_wrist, _, _ = make_env_with_fixed_state(args.task, rand_vec, seed=args.seed, camera_name="behindGripper")
+            env_top = create_metaworld_env(args.task, seed=seed, camera_name="corner2")
+            env_wrist = create_metaworld_env(args.task, seed=seed, camera_name="behindGripper")
         except Exception as e:
-            print(f"  Episode {ep_idx}: 创建环境失败 ({e})")
+            print(f"  Episode {ep_idx}: Failed to create env ({e})")
             fail_count += 1
             continue
 
@@ -275,14 +238,8 @@ def main():
         env_top.close()
         env_wrist.close()
 
-        if require_success and not ep_info["success"]:
-            print(
-                f"  Episode {ep_idx:3d}/{args.num_episodes} | "
-                f"Expert 失败, 不收录 | "
-                f"Obj: [{obj[0]:.3f}, {obj[1]:.3f}, {obj[2]:.3f}] | "
-                f"Time: {time.time() - ep_start:.2f}s"
-            )
-            episode_infos.append({**ep_info, "obj_init_pos": obj, "goal_pose": goal, "included": False})
+        if ep_info["num_frames"] == 0:
+            print(f"  Episode {ep_idx:3d}/{args.num_episodes} | No frames rendered | Seed: {seed}")
             fail_count += 1
             continue
 
@@ -290,32 +247,40 @@ def main():
             dataset.add_frame(frame)
         dataset.save_episode()
 
-        episode_infos.append({**ep_info, "obj_init_pos": obj, "goal_pose": goal, "included": True})
+        episode_infos.append({**ep_info, "included": True})
         if ep_info["success"]:
             success_count += 1
 
         print(
             f"  Episode {ep_idx:3d}/{args.num_episodes} | "
             f"Frames: {ep_info['num_frames']:4d} | "
-            f"Success: {'✓' if ep_info['success'] else '✗'} | "
-            f"Obj: [{obj[0]:.3f}, {obj[1]:.3f}, {obj[2]:.3f}] | "
+            f"Success: {'Y' if ep_info['success'] else 'N'} | "
+            f"Pos={pos_id}, Rot={rot_id} | "
+            f"Seed: {seed} | "
             f"Time: {time.time() - ep_start:.2f}s"
         )
 
     dataset.finalize()
-    save_episode_metadata(args.output_dir, episode_infos, args.task)
+
+    save_episode_metadata(args.output_dir, episode_infos, args.task, config_map)
+
+    if args.save_config_map:
+        os.makedirs(os.path.dirname(args.save_config_map), exist_ok=True)
+        with open(args.save_config_map, 'w') as f:
+            json.dump({str(k): list(v) for k, v in config_map.items()}, f, indent=2)
+        print(f"\nConfig map saved to {args.save_config_map}")
 
     total_time = time.time() - start_time
     included = sum(1 for e in episode_infos if e.get("included", True))
     print("\n" + "=" * 80)
-    print("生成完成!")
+    print("Generation Complete!")
     print("=" * 80)
-    print(f"目标 episode 数: {args.num_episodes}")
-    print(f"实际收录 episode 数: {included}")
-    print(f"Expert 成功: {success_count}")
-    print(f"失败/跳过: {fail_count}")
-    print(f"总用时: {total_time:.1f}s")
-    print(f"数据集路径: {args.output_dir}")
+    print(f"Target episodes: {args.num_episodes}")
+    print(f"Included episodes: {included}")
+    print(f"Expert success: {success_count}")
+    print(f"Failed/skipped: {fail_count}")
+    print(f"Total time: {total_time:.1f}s")
+    print(f"Dataset path: {args.output_dir}")
     print("=" * 80)
 
 

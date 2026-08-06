@@ -81,6 +81,7 @@ def main():
                 print(f"  [TRAIN] {name} -> {train_output}")
                 cmd = [
                     "lerobot-train",
+                    f"--dataset.repo_id=test/{name}",
                     f"--dataset.root={dataset_root}",
                     f"--output_dir={train_output}",
                     f"--steps={args.steps}",

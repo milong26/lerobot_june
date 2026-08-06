@@ -1,5 +1,12 @@
 """数据配方采样器。见 SPEC.md 4.3 节。"""
 
+import sys
+from pathlib import Path
+# 添加项目根目录到 sys.path（支持直接运行 python sampling_strategies.py）
+_project_root = Path(__file__).parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
 from typing import Protocol
 import numpy as np
 from personal.work2.mw_common.task_ranges import KNOWN_RANGES

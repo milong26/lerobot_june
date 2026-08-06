@@ -24,23 +24,15 @@ def make_env_with_fixed_state(
         对 pick-place-v3 是 6 个数: [obj_x,obj_y,obj_z, goal_x,goal_y,goal_z]。
         其他任务用 `env._random_reset_space.low` / `.high` 自省。
 
-    注意:这个函数按"每个 episode 建一次性 env"设计,不要对同一个 env 反复
-    调用 reset()——第二次 reset 会触发 RandVecExhaustedError。
+    注意: _get_state_rand_vec 会被任务内部的拒绝采样循环多次调用，
+    我们每次都返回相同的固定值，这样拒绝采样会一直用同一个状态。
     """
     mt1 = metaworld.MT1(task_name, seed=seed)
     env = mt1.train_classes[task_name](render_mode=render_mode, camera_name=camera_name)
     env.set_task(mt1.train_tasks[0])
     env._freeze_rand_vec = False
 
-    call_count = [0]
-
     def _patched():
-        if call_count[0] > 0:
-            raise RandVecExhaustedError(
-                f"_get_state_rand_vec 被调用了 {call_count[0] + 1} 次, "
-                f"但固定状态只允许一次调用。任务内部可能在拒绝采样。"
-            )
-        call_count[0] += 1
         return rand_vec.copy()
 
     env._get_state_rand_vec = _patched

@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 """Smoke test: 精确指定状态 + expert 策略验证。"""
 
+import sys
+from pathlib import Path
+# 添加项目根目录到 sys.path
+sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+
 import os
 os.environ["MUJOCO_GL"] = "egl"
 os.environ["PYOPENGL_PLATFORM"] = "egl"
