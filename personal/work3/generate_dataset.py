@@ -125,7 +125,7 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
     }
 
 
-def create_dataset(repo_id, output_dir, fps=10, image_size=224):
+def create_dataset(repo_id, output_dir, fps=30, image_size=224):
     features = {
         "observation.images.top": {
             "dtype": "image",
@@ -175,7 +175,7 @@ def main():
     parser.add_argument("--num-episodes", type=int, default=72)
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument("--repo-id", type=str, default=None)
-    parser.add_argument("--fps", type=int, default=10)
+    parser.add_argument("--fps", type=int, default=30)
     parser.add_argument("--image-size", type=int, default=224)
     parser.add_argument("--seed-start", type=int, default=0)
     parser.add_argument("--max-steps", type=int, default=500)

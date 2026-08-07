@@ -1,0 +1,7516 @@
+{
+  "task": "pick-place-v3",
+  "num_episodes": 500,
+  "env_state_structure": {
+    "0:3": "\u672b\u7aef\u6267\u884c\u5668(\u624b)\u4f4d\u7f6e xyz",
+    "3:4": "\u5939\u722a\u5f00\u5408\u5ea6(\u5f52\u4e00\u5316)",
+    "4:7": "\u7269\u4f531\u4f4d\u7f6e xyz (= obj_pose)",
+    "7:11": "\u7269\u4f531\u56db\u5143\u6570\u671d\u5411(4\u7ef4)",
+    "11:14": "\u7269\u4f532\u4f4d\u7f6e(\u5355\u7269\u4f53\u4efb\u52a1\u4e2d\u6052\u4e3a0)",
+    "14:18": "\u7269\u4f532\u56db\u5143\u6570(\u6052\u4e3a0)",
+    "18:36": "\u4e0a\u4e00\u5e27\u7684[0:18]\u539f\u6837\u91cd\u590d(frame-stack)",
+    "36:39": "\u76ee\u6807\u4f4d\u7f6e xyz (= goal_pose)"
+  },
+  "episodes": [
+    {
+      "episode_index": 0,
+      "obj_init_pos": [
+        -0.0124825577474615,
+        0.689177300078208,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 1,
+      "obj_init_pos": [
+        -0.059109550053696516,
+        0.6878117436390945,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 2,
+      "obj_init_pos": [
+        -0.0590702731924315,
+        0.6619270966350663,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 3,
+      "obj_init_pos": [
+        -0.07488293790723276,
+        0.6207242878138186,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 4,
+      "obj_init_pos": [
+        0.09525489095524836,
+        0.600623025520459,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 71
+    },
+    {
+      "episode_index": 5,
+      "obj_init_pos": [
+        0.05318157129606313,
+        0.6518417987872943,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 6,
+      "obj_init_pos": [
+        0.005963472438564321,
+        0.6418807428556654,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 7,
+      "obj_init_pos": [
+        0.00022409273198757684,
+        0.6072051133359762,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 8,
+      "obj_init_pos": [
+        0.05217911512058579,
+        0.6712374574082091,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 9,
+      "obj_init_pos": [
+        -0.016298363897909507,
+        0.6248101168413559,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 10,
+      "obj_init_pos": [
+        -0.060387427048075204,
+        0.6760530712198958,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 11,
+      "obj_init_pos": [
+        -0.09744383708187827,
+        0.6487371607319872,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 12,
+      "obj_init_pos": [
+        0.08884502721060844,
+        0.6852735541109285,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 13,
+      "obj_init_pos": [
+        -0.08829750162358506,
+        0.6857060942587199,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 14,
+      "obj_init_pos": [
+        0.0026233424535774263,
+        0.6318284424872098,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 15,
+      "obj_init_pos": [
+        -0.038816216852816804,
+        0.6304474359154143,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 16,
+      "obj_init_pos": [
+        0.0377452323642713,
+        0.6163731425000899,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 17,
+      "obj_init_pos": [
+        0.027504179208727164,
+        0.6575602893753034,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 18,
+      "obj_init_pos": [
+        0.03322033349706452,
+        0.6987895448275961,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 19,
+      "obj_init_pos": [
+        0.009111991601845212,
+        0.6234076073147001,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 20,
+      "obj_init_pos": [
+        0.0566007218918021,
+        0.6850327639774995,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 21,
+      "obj_init_pos": [
+        -0.03954562120707664,
+        0.66639102946247,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 22,
+      "obj_init_pos": [
+        -0.04589343334043377,
+        0.6691041350449596,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 23,
+      "obj_init_pos": [
+        0.07698950767529472,
+        0.6300409689366481,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 24,
+      "obj_init_pos": [
+        0.09929114501781941,
+        0.6316346977790608,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 25,
+      "obj_init_pos": [
+        0.03699374887482701,
+        0.643761105965965,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 26,
+      "obj_init_pos": [
+        -0.046098950876616356,
+        0.6496192140987861,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 27,
+      "obj_init_pos": [
+        0.07863886934302708,
+        0.6209715169754375,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 70
+    },
+    {
+      "episode_index": 28,
+      "obj_init_pos": [
+        -0.063461328316835,
+        0.6853512875248853,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 29,
+      "obj_init_pos": [
+        -0.08832453883765577,
+        0.6409668926157784,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 30,
+      "obj_init_pos": [
+        0.09835019845872153,
+        0.6235057895605646,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 31,
+      "obj_init_pos": [
+        0.08167476045798003,
+        0.606863851797712,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 32,
+      "obj_init_pos": [
+        -0.07978268793827506,
+        0.6928488070407937,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 33,
+      "obj_init_pos": [
+        -0.0960677149139912,
+        0.6953252031503712,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 34,
+      "obj_init_pos": [
+        -0.014685123652893317,
+        0.625308645075813,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 35,
+      "obj_init_pos": [
+        0.025287445790850488,
+        0.6276787886636515,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 36,
+      "obj_init_pos": [
+        -0.06268863754213683,
+        0.6259151238287947,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 37,
+      "obj_init_pos": [
+        -0.0793124889960004,
+        0.6745475766284433,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 38,
+      "obj_init_pos": [
+        -0.059974631428019114,
+        0.6387387887666701,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 39,
+      "obj_init_pos": [
+        -0.007218318837986321,
+        0.6471445744424515,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 40,
+      "obj_init_pos": [
+        0.005279904859429085,
+        0.6623812212884687,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 41,
+      "obj_init_pos": [
+        -0.06181386744405218,
+        0.6668515717260346,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 42,
+      "obj_init_pos": [
+        0.06648852816008435,
+        0.6212339110678275,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 43,
+      "obj_init_pos": [
+        0.03321804261960515,
+        0.6541162212283403,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 44,
+      "obj_init_pos": [
+        -0.021244089782349734,
+        0.6409072609860899,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 45,
+      "obj_init_pos": [
+        -0.09029559981871083,
+        0.6163324448208266,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 46,
+      "obj_init_pos": [
+        -0.09142691032954722,
+        0.6440867203429804,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 47,
+      "obj_init_pos": [
+        0.029112370901658496,
+        0.6414599607188166,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 48,
+      "obj_init_pos": [
+        0.07294207733805166,
+        0.6447512632213874,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 49,
+      "obj_init_pos": [
+        0.009393176048606344,
+        0.6210423835986766,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 50,
+      "obj_init_pos": [
+        -0.018360559933360582,
+        0.6771893994839713,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 51,
+      "obj_init_pos": [
+        -0.06846596624524721,
+        0.6387972962422762,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 52,
+      "obj_init_pos": [
+        -0.08922195608031125,
+        0.6960654057804239,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 53,
+      "obj_init_pos": [
+        0.06549125535586922,
+        0.6264542198722034,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 54,
+      "obj_init_pos": [
+        0.06027625120329219,
+        0.6757311988608654,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 55,
+      "obj_init_pos": [
+        0.07252607541032793,
+        0.6041100153460873,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 56,
+      "obj_init_pos": [
+        -0.050430089297747796,
+        0.6458611325146213,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 57,
+      "obj_init_pos": [
+        -0.015897234788990744,
+        0.6582169787938396,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 58,
+      "obj_init_pos": [
+        -0.03823910824231505,
+        0.637487616650522,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 59,
+      "obj_init_pos": [
+        -0.04874388843799891,
+        0.6563980411958313,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 60,
+      "obj_init_pos": [
+        -0.02411701689508068,
+        0.6010581535878643,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 61,
+      "obj_init_pos": [
+        0.08472886932767704,
+        0.6629443913234544,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 62,
+      "obj_init_pos": [
+        0.00856005778604188,
+        0.6228181379903304,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 63,
+      "obj_init_pos": [
+        -0.04878264405677049,
+        0.6543093157869511,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 64,
+      "obj_init_pos": [
+        -0.03733252776048593,
+        0.6294859461001581,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 65,
+      "obj_init_pos": [
+        0.03986275064555331,
+        0.6771510831668193,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 66,
+      "obj_init_pos": [
+        0.05168327830712133,
+        0.6557618589562353,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 67,
+      "obj_init_pos": [
+        -0.049585698322152094,
+        0.631507669038981,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 68,
+      "obj_init_pos": [
+        0.06145043868223787,
+        0.609483773491622,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 69,
+      "obj_init_pos": [
+        -0.0790045832629782,
+        0.605846072919688,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 70,
+      "obj_init_pos": [
+        0.018265674310175478,
+        0.6310010978254841,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 71,
+      "obj_init_pos": [
+        0.04452085687596746,
+        0.6995694520864464,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 72,
+      "obj_init_pos": [
+        0.04321475765839922,
+        0.61733340387744,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 73,
+      "obj_init_pos": [
+        -0.05120399614248377,
+        0.6572094525978397,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 74,
+      "obj_init_pos": [
+        -0.08394582381251617,
+        0.614877046192275,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 75,
+      "obj_init_pos": [
+        -0.0624301315683993,
+        0.6618263462185013,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 76,
+      "obj_init_pos": [
+        0.0312611717865548,
+        0.6369455717927461,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 77,
+      "obj_init_pos": [
+        -0.03476981259310223,
+        0.6541067821475968,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 78,
+      "obj_init_pos": [
+        0.06624697531216964,
+        0.6246567634877213,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 79,
+      "obj_init_pos": [
+        0.05583479942148267,
+        0.6815080307879222,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 80,
+      "obj_init_pos": [
+        -0.05766933120138451,
+        0.631726607412618,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 81,
+      "obj_init_pos": [
+        -0.05035795497579898,
+        0.6509119444409606,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 82,
+      "obj_init_pos": [
+        0.09948684134189689,
+        0.6832513276463734,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 83,
+      "obj_init_pos": [
+        -0.022652786650396495,
+        0.6743409161299788,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 84,
+      "obj_init_pos": [
+        -0.06528216733067016,
+        0.625831405765968,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 85,
+      "obj_init_pos": [
+        -0.025350051580144653,
+        0.6369278593573237,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 86,
+      "obj_init_pos": [
+        0.01784356496008188,
+        0.6421647220790023,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 87,
+      "obj_init_pos": [
+        0.009490586890502709,
+        0.6719153297928757,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 88,
+      "obj_init_pos": [
+        0.04346767641828014,
+        0.622281946218286,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 89,
+      "obj_init_pos": [
+        -0.06948095422321626,
+        0.64802477305619,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 90,
+      "obj_init_pos": [
+        -0.03318976850232418,
+        0.6644591870932525,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 91,
+      "obj_init_pos": [
+        0.03047254878403735,
+        0.6504850095136869,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 92,
+      "obj_init_pos": [
+        -0.04169632237310925,
+        0.6835235422395175,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 93,
+      "obj_init_pos": [
+        0.09987530576465428,
+        0.675098392693219,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 94,
+      "obj_init_pos": [
+        0.002381429626257911,
+        0.6112751958994788,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 95,
+      "obj_init_pos": [
+        0.04484753527986954,
+        0.6482086991139164,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 96,
+      "obj_init_pos": [
+        -0.08151983698486916,
+        0.6561973998312679,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 97,
+      "obj_init_pos": [
+        0.0952670149790569,
+        0.6929151975097736,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 98,
+      "obj_init_pos": [
+        -0.022288095443425956,
+        0.6394642790539342,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 99,
+      "obj_init_pos": [
+        -0.040475500259211206,
+        0.6046695720506953,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 100,
+      "obj_init_pos": [
+        0.03414981694535574,
+        0.6825852755105047,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 101,
+      "obj_init_pos": [
+        -0.038606756065552444,
+        0.6893613079683397,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 102,
+      "obj_init_pos": [
+        -0.0665502991702169,
+        0.6312144968576899,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 103,
+      "obj_init_pos": [
+        0.06453695160357201,
+        0.6821548110867993,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 104,
+      "obj_init_pos": [
+        -0.018912095434285264,
+        0.699590453800326,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 105,
+      "obj_init_pos": [
+        -0.04063308426599291,
+        0.6002245236820116,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 106,
+      "obj_init_pos": [
+        0.09488631786860527,
+        0.6857461874632955,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 107,
+      "obj_init_pos": [
+        -0.0309617568642222,
+        0.604167488488051,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 108,
+      "obj_init_pos": [
+        0.074639193763296,
+        0.6126964902965552,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 109,
+      "obj_init_pos": [
+        -0.00816647494864546,
+        0.6018205548630582,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 110,
+      "obj_init_pos": [
+        0.09100199919752089,
+        0.6637222939391708,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 111,
+      "obj_init_pos": [
+        -0.09550433509116765,
+        0.6420224492264557,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 112,
+      "obj_init_pos": [
+        -0.08903885194351835,
+        0.6817677382175268,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 113,
+      "obj_init_pos": [
+        0.06809418394591446,
+        0.6435120551155131,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 114,
+      "obj_init_pos": [
+        -0.07335905998142705,
+        0.6521694075997719,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 115,
+      "obj_init_pos": [
+        0.014623638183140747,
+        0.6614192551940253,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 116,
+      "obj_init_pos": [
+        -0.09164787070607168,
+        0.6477993951039045,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 117,
+      "obj_init_pos": [
+        -0.0909195579845986,
+        0.6759705444484112,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 118,
+      "obj_init_pos": [
+        -0.07383034417497181,
+        0.6571918636657865,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 119,
+      "obj_init_pos": [
+        -0.09144622344600367,
+        0.6419986481999685,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 120,
+      "obj_init_pos": [
+        0.09691511981560819,
+        0.685442254589266,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 121,
+      "obj_init_pos": [
+        0.011158119966546878,
+        0.6745523942220909,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 122,
+      "obj_init_pos": [
+        0.016616120816212512,
+        0.6214508870616386,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 123,
+      "obj_init_pos": [
+        0.09615283967692309,
+        0.6684829738584863,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 124,
+      "obj_init_pos": [
+        0.03359248188161465,
+        0.6395475010782278,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 125,
+      "obj_init_pos": [
+        0.0013372221879845575,
+        0.6412826076249296,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 126,
+      "obj_init_pos": [
+        0.016009034840512484,
+        0.6049996662532764,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 127,
+      "obj_init_pos": [
+        -0.011721048581366869,
+        0.6715549151470657,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 128,
+      "obj_init_pos": [
+        0.05811987040444663,
+        0.6601442438192376,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 129,
+      "obj_init_pos": [
+        0.07779786593098345,
+        0.6097392399012365,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 70
+    },
+    {
+      "episode_index": 130,
+      "obj_init_pos": [
+        -0.024030993171127737,
+        0.6126449651443332,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 131,
+      "obj_init_pos": [
+        -0.05210664480561431,
+        0.6254157067260717,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 132,
+      "obj_init_pos": [
+        0.09242438675174777,
+        0.6356239854718708,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 133,
+      "obj_init_pos": [
+        -0.05948721962701438,
+        0.6311157191145877,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 134,
+      "obj_init_pos": [
+        0.04233401548082069,
+        0.6665271651640465,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 135,
+      "obj_init_pos": [
+        0.0041211354017823,
+        0.6963955615133384,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 136,
+      "obj_init_pos": [
+        -0.026349933506032583,
+        0.6479645394089626,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 137,
+      "obj_init_pos": [
+        0.0783606338442899,
+        0.6088953639789209,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 72
+    },
+    {
+      "episode_index": 138,
+      "obj_init_pos": [
+        -0.023087181978078686,
+        0.6195124461848915,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 139,
+      "obj_init_pos": [
+        -0.04166386985525836,
+        0.6250262187974793,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 140,
+      "obj_init_pos": [
+        -0.08150443387553222,
+        0.6591278109609404,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 141,
+      "obj_init_pos": [
+        0.05914717156472202,
+        0.6212131383651145,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 142,
+      "obj_init_pos": [
+        0.054287821456352026,
+        0.6432288552174383,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 143,
+      "obj_init_pos": [
+        -0.09337111792768107,
+        0.6008783956523437,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 73
+    },
+    {
+      "episode_index": 144,
+      "obj_init_pos": [
+        -0.008191236231606641,
+        0.6807376172871804,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 145,
+      "obj_init_pos": [
+        0.019627915871345047,
+        0.6326683562206756,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 146,
+      "obj_init_pos": [
+        -0.0274336366467776,
+        0.6006343847882116,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 147,
+      "obj_init_pos": [
+        -0.022783395647708843,
+        0.6074265890964073,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 148,
+      "obj_init_pos": [
+        -0.054655149035798156,
+        0.6914835050234528,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 149,
+      "obj_init_pos": [
+        -0.00584952391440996,
+        0.6441234439777636,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 150,
+      "obj_init_pos": [
+        -0.08404739508062782,
+        0.6231966040804408,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 151,
+      "obj_init_pos": [
+        0.09015224426678212,
+        0.6752789013316767,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 152,
+      "obj_init_pos": [
+        -0.08549284328171657,
+        0.6329760765912765,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 153,
+      "obj_init_pos": [
+        -0.055865832850310285,
+        0.6495635285178523,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 154,
+      "obj_init_pos": [
+        0.043333490570627214,
+        0.6597540215911266,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 155,
+      "obj_init_pos": [
+        0.045814670122017676,
+        0.6815850880653458,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 156,
+      "obj_init_pos": [
+        0.06451644699250716,
+        0.6784609625197574,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 157,
+      "obj_init_pos": [
+        -0.0502052000334412,
+        0.6453742239611874,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 158,
+      "obj_init_pos": [
+        0.03326844474076318,
+        0.6716022117952528,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 159,
+      "obj_init_pos": [
+        -0.06731822069466327,
+        0.6924524706402401,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 160,
+      "obj_init_pos": [
+        -0.06451126599052714,
+        0.6391888141525544,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 161,
+      "obj_init_pos": [
+        0.08477152683269693,
+        0.6948034831969864,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 162,
+      "obj_init_pos": [
+        0.04577211119004629,
+        0.6295941489210116,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 163,
+      "obj_init_pos": [
+        0.055449240904659275,
+        0.657287867434502,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 164,
+      "obj_init_pos": [
+        -0.08420315996541997,
+        0.6780370050120882,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 165,
+      "obj_init_pos": [
+        -0.06348096321102159,
+        0.605882152353505,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 166,
+      "obj_init_pos": [
+        0.019896671831311524,
+        0.6701735107333879,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 167,
+      "obj_init_pos": [
+        0.00015986771217842144,
+        0.6824600788879946,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 168,
+      "obj_init_pos": [
+        0.04668045483877384,
+        0.6511781025092351,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 169,
+      "obj_init_pos": [
+        -0.06973940260657872,
+        0.6026027443712113,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 170,
+      "obj_init_pos": [
+        0.04827071205288855,
+        0.6017103673950561,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 171,
+      "obj_init_pos": [
+        -0.0882437245039393,
+        0.6761258304400267,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 172,
+      "obj_init_pos": [
+        -0.03825515215031159,
+        0.6321581867532452,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 173,
+      "obj_init_pos": [
+        -0.016660468367012474,
+        0.6672828749358418,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 174,
+      "obj_init_pos": [
+        0.05166406315682401,
+        0.6804446630281866,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 175,
+      "obj_init_pos": [
+        -0.0029957291966565547,
+        0.6301652794459318,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 176,
+      "obj_init_pos": [
+        -0.019184030796242285,
+        0.6616654760956994,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 177,
+      "obj_init_pos": [
+        0.009918029665038935,
+        0.6270341336229042,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 178,
+      "obj_init_pos": [
+        0.011101917847354703,
+        0.6873482734611125,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 53
+    },
+    {
+      "episode_index": 179,
+      "obj_init_pos": [
+        0.06328210357428712,
+        0.666359709644231,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 180,
+      "obj_init_pos": [
+        -0.022079987769322587,
+        0.6056730396480358,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 181,
+      "obj_init_pos": [
+        -0.03617606603148703,
+        0.6332187583621653,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 182,
+      "obj_init_pos": [
+        0.07486496956314337,
+        0.6458815186982367,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 183,
+      "obj_init_pos": [
+        -0.03162168313173046,
+        0.6245391622261991,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 184,
+      "obj_init_pos": [
+        0.012775211193109731,
+        0.6569000429230032,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 185,
+      "obj_init_pos": [
+        0.07730969283516873,
+        0.672226020135852,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 186,
+      "obj_init_pos": [
+        -0.06223091467028912,
+        0.6269926774988598,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 187,
+      "obj_init_pos": [
+        -0.014065346086246572,
+        0.6068377619542181,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 188,
+      "obj_init_pos": [
+        -0.04615200534313291,
+        0.6355481799290243,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 189,
+      "obj_init_pos": [
+        -0.05907610895072464,
+        0.6070540924391542,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 190,
+      "obj_init_pos": [
+        -0.0008790206518462795,
+        0.6928835011367871,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 191,
+      "obj_init_pos": [
+        -0.028878163319200054,
+        0.6106309335551936,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 192,
+      "obj_init_pos": [
+        -0.03816159270535398,
+        0.6172203444284224,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 193,
+      "obj_init_pos": [
+        0.02043673528882159,
+        0.6257169479050636,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 194,
+      "obj_init_pos": [
+        -0.06779550036706636,
+        0.6563510594749582,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 195,
+      "obj_init_pos": [
+        -0.020657486680415116,
+        0.6735091105155122,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 196,
+      "obj_init_pos": [
+        0.050204843716299935,
+        0.6519320563288632,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 197,
+      "obj_init_pos": [
+        0.046952092436694653,
+        0.6703133840014126,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 198,
+      "obj_init_pos": [
+        0.09514379069317394,
+        0.6743712067983464,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 199,
+      "obj_init_pos": [
+        0.02389556832877779,
+        0.6331836788709385,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 200,
+      "obj_init_pos": [
+        -0.028515263742527663,
+        0.6909694885663908,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 70
+    },
+    {
+      "episode_index": 201,
+      "obj_init_pos": [
+        -0.04649762358050975,
+        0.6147604452782675,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 202,
+      "obj_init_pos": [
+        0.019921399837099577,
+        0.6114325079246289,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 203,
+      "obj_init_pos": [
+        0.01888971506748391,
+        0.6911456879486775,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 204,
+      "obj_init_pos": [
+        -0.022831471058796488,
+        0.6608665856785076,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 205,
+      "obj_init_pos": [
+        -0.0459398009864312,
+        0.6636303251328516,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 206,
+      "obj_init_pos": [
+        -0.06562077143290153,
+        0.6668463553494318,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 207,
+      "obj_init_pos": [
+        -0.030276640341131242,
+        0.6016383701517029,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 208,
+      "obj_init_pos": [
+        -0.06081087614278394,
+        0.6140617141911177,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 209,
+      "obj_init_pos": [
+        -0.04137706060451734,
+        0.6090369210164767,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 210,
+      "obj_init_pos": [
+        -0.0895218524376904,
+        0.6861960695115461,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 211,
+      "obj_init_pos": [
+        0.09281842815228541,
+        0.6782445141481747,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 212,
+      "obj_init_pos": [
+        -0.09283699575696916,
+        0.6833647902295105,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 213,
+      "obj_init_pos": [
+        -0.025744497969680702,
+        0.6140314120545196,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 214,
+      "obj_init_pos": [
+        -0.018724837250484766,
+        0.6017896960236637,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 215,
+      "obj_init_pos": [
+        0.08318786319814692,
+        0.6607700762900535,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 216,
+      "obj_init_pos": [
+        -0.017037272853816773,
+        0.6745337395721309,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 217,
+      "obj_init_pos": [
+        -0.004895779153135257,
+        0.6604274932572785,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 218,
+      "obj_init_pos": [
+        0.01786912320537533,
+        0.6396337996552468,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 219,
+      "obj_init_pos": [
+        -0.01625114392232936,
+        0.6859003712133551,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 220,
+      "obj_init_pos": [
+        -0.04009053051346341,
+        0.6930107426942658,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 221,
+      "obj_init_pos": [
+        0.030897943253631793,
+        0.6737589057988724,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 222,
+      "obj_init_pos": [
+        -0.08122956767764647,
+        0.6783189073180886,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 223,
+      "obj_init_pos": [
+        -0.07666659919062149,
+        0.6653335853558274,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 224,
+      "obj_init_pos": [
+        0.04246778670786558,
+        0.6302255678276981,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 225,
+      "obj_init_pos": [
+        0.020250820264813466,
+        0.6423795584830349,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 226,
+      "obj_init_pos": [
+        -0.005276471734736957,
+        0.639643126794221,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 227,
+      "obj_init_pos": [
+        0.026484449005283545,
+        0.6714716970298723,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 228,
+      "obj_init_pos": [
+        0.030732434587596502,
+        0.611026583566095,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 229,
+      "obj_init_pos": [
+        -0.02562684579831674,
+        0.6669590357282964,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 230,
+      "obj_init_pos": [
+        -0.09868935499144418,
+        0.6019766151074581,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 231,
+      "obj_init_pos": [
+        0.04167181425667882,
+        0.6483235072607624,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 232,
+      "obj_init_pos": [
+        0.0695725918192984,
+        0.6562792338540131,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 233,
+      "obj_init_pos": [
+        -0.07632522920214567,
+        0.6426506890155115,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 234,
+      "obj_init_pos": [
+        0.07328586383926722,
+        0.6639521847110937,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 235,
+      "obj_init_pos": [
+        0.06765218626863706,
+        0.6087924307409323,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 236,
+      "obj_init_pos": [
+        0.09412691462753792,
+        0.6713681964216718,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 237,
+      "obj_init_pos": [
+        0.01644441741881915,
+        0.6527125649555795,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 238,
+      "obj_init_pos": [
+        -0.08746968333166201,
+        0.6057137420171024,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 73
+    },
+    {
+      "episode_index": 239,
+      "obj_init_pos": [
+        0.0065605789854336904,
+        0.6491185499492005,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 240,
+      "obj_init_pos": [
+        0.0453471747300381,
+        0.6971006500695915,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 241,
+      "obj_init_pos": [
+        -0.09992128057596501,
+        0.6638375402714403,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 242,
+      "obj_init_pos": [
+        0.025147078378191634,
+        0.6839842149176267,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 243,
+      "obj_init_pos": [
+        0.04653278048859538,
+        0.6317623557396062,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 244,
+      "obj_init_pos": [
+        0.09809685758267178,
+        0.6631038042369436,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 245,
+      "obj_init_pos": [
+        0.09036725937655729,
+        0.6181182670695236,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 246,
+      "obj_init_pos": [
+        -0.041805930284652626,
+        0.6998348362940479,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 247,
+      "obj_init_pos": [
+        0.07124869159970293,
+        0.6551830392660506,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 248,
+      "obj_init_pos": [
+        -0.06111851326377056,
+        0.6509138757600553,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 249,
+      "obj_init_pos": [
+        -0.0575685684183114,
+        0.6045464564929208,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 250,
+      "obj_init_pos": [
+        0.01605472356680386,
+        0.6333898700879722,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 251,
+      "obj_init_pos": [
+        0.006878732758724679,
+        0.6369126425291658,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 252,
+      "obj_init_pos": [
+        -0.043632142326681535,
+        0.6896955345526088,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 253,
+      "obj_init_pos": [
+        0.0024369343194859255,
+        0.6929137474893022,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 254,
+      "obj_init_pos": [
+        0.05110140044234848,
+        0.6207364158620826,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 255,
+      "obj_init_pos": [
+        -0.022533650129859556,
+        0.6179842396905683,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 256,
+      "obj_init_pos": [
+        0.008879112231389819,
+        0.6523175039488696,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 257,
+      "obj_init_pos": [
+        -0.0351388448166164,
+        0.6249221595447801,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 258,
+      "obj_init_pos": [
+        0.07952636425484724,
+        0.6426458455021657,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 259,
+      "obj_init_pos": [
+        0.062186299971396936,
+        0.6605050360507222,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 260,
+      "obj_init_pos": [
+        0.07768971327648189,
+        0.6149570998936342,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 261,
+      "obj_init_pos": [
+        0.08883123842902249,
+        0.6142929435515684,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 262,
+      "obj_init_pos": [
+        -0.08697637857247248,
+        0.6201856708698931,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 263,
+      "obj_init_pos": [
+        0.09830216220515739,
+        0.6399640173986635,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 264,
+      "obj_init_pos": [
+        0.011301567890247194,
+        0.6492228641290114,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 265,
+      "obj_init_pos": [
+        -0.07159442453633476,
+        0.6662811756855557,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 266,
+      "obj_init_pos": [
+        0.09995782558857583,
+        0.611998400279627,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 267,
+      "obj_init_pos": [
+        -0.029176284330696856,
+        0.6901984505150922,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 268,
+      "obj_init_pos": [
+        -0.09701112772845087,
+        0.6009111365631012,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 269,
+      "obj_init_pos": [
+        0.06638484275273004,
+        0.6856428221169014,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 270,
+      "obj_init_pos": [
+        -0.036368996211351104,
+        0.6500253866549655,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 271,
+      "obj_init_pos": [
+        -0.042424501679856876,
+        0.65424411039325,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 272,
+      "obj_init_pos": [
+        -0.055521229116633666,
+        0.6282978161656,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 273,
+      "obj_init_pos": [
+        -0.07660953591895484,
+        0.6462102681622117,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 274,
+      "obj_init_pos": [
+        0.09125813211322353,
+        0.6125300994528547,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 275,
+      "obj_init_pos": [
+        -0.07669646896242271,
+        0.6827223178171765,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 276,
+      "obj_init_pos": [
+        0.09067370710146497,
+        0.6505628902624432,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 277,
+      "obj_init_pos": [
+        0.06027355372351925,
+        0.6672301794237014,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 278,
+      "obj_init_pos": [
+        0.06447627487589602,
+        0.6554585045643084,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 279,
+      "obj_init_pos": [
+        0.08910457616491915,
+        0.6672866932165871,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 280,
+      "obj_init_pos": [
+        -0.00022011231318888602,
+        0.6122266976377772,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 281,
+      "obj_init_pos": [
+        -0.031398581142740925,
+        0.6291137894427019,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 282,
+      "obj_init_pos": [
+        -0.02301970343283484,
+        0.6010210314312338,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 283,
+      "obj_init_pos": [
+        -0.06615558678506883,
+        0.6672289039505273,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 284,
+      "obj_init_pos": [
+        -0.08018447927741597,
+        0.679411785146269,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 285,
+      "obj_init_pos": [
+        0.04578965289721246,
+        0.6312493134837682,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 286,
+      "obj_init_pos": [
+        -0.06732400809070482,
+        0.6013164000481204,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 287,
+      "obj_init_pos": [
+        0.0910302660615365,
+        0.6033357888330582,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 288,
+      "obj_init_pos": [
+        -0.05890612283098051,
+        0.6593368265972537,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 289,
+      "obj_init_pos": [
+        -0.01652700820033648,
+        0.6423819674508066,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 290,
+      "obj_init_pos": [
+        0.09334388744103725,
+        0.6583926592629187,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 291,
+      "obj_init_pos": [
+        -0.03012548032598894,
+        0.6631551938059754,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 292,
+      "obj_init_pos": [
+        0.022043459805067056,
+        0.641611191161364,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 293,
+      "obj_init_pos": [
+        -0.09884159090404805,
+        0.6165955656686574,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 294,
+      "obj_init_pos": [
+        -0.030187188080499874,
+        0.6842635149900271,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 295,
+      "obj_init_pos": [
+        0.06750347358734268,
+        0.6844565434368938,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 296,
+      "obj_init_pos": [
+        0.010532293664843345,
+        0.658404381310504,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 297,
+      "obj_init_pos": [
+        0.043953190039537404,
+        0.6086141241746309,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 298,
+      "obj_init_pos": [
+        -0.04534733624539904,
+        0.6871797670119363,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 299,
+      "obj_init_pos": [
+        0.018724519774088372,
+        0.6441587267742369,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 300,
+      "obj_init_pos": [
+        0.06221887319297023,
+        0.6400790540773673,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 301,
+      "obj_init_pos": [
+        -0.06161286981221692,
+        0.6009806253089596,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 302,
+      "obj_init_pos": [
+        0.009133313415715216,
+        0.6131601249207456,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 303,
+      "obj_init_pos": [
+        -0.06259344327743807,
+        0.6360300426099432,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 304,
+      "obj_init_pos": [
+        0.020500087642929626,
+        0.6890307751375374,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 54
+    },
+    {
+      "episode_index": 305,
+      "obj_init_pos": [
+        0.09620682886667772,
+        0.6444358899068233,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 306,
+      "obj_init_pos": [
+        0.09943963497567951,
+        0.6344755385926453,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 307,
+      "obj_init_pos": [
+        -0.002346779670602109,
+        0.6426147683607635,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 308,
+      "obj_init_pos": [
+        -0.07421951753782362,
+        0.6857416108481595,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 309,
+      "obj_init_pos": [
+        -0.04604213770185697,
+        0.6180462695491239,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 310,
+      "obj_init_pos": [
+        -0.08785318463118777,
+        0.6660208391189164,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 311,
+      "obj_init_pos": [
+        -0.041124167446568376,
+        0.64282983492707,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 312,
+      "obj_init_pos": [
+        -0.012779048168564414,
+        0.6684504863956413,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 313,
+      "obj_init_pos": [
+        0.07391749716373563,
+        0.6172400474509693,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 314,
+      "obj_init_pos": [
+        0.0455902964538602,
+        0.6260480424339983,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 315,
+      "obj_init_pos": [
+        -0.07750340776445933,
+        0.6981730222459545,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 316,
+      "obj_init_pos": [
+        -0.007254732100559866,
+        0.6180961958337352,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 317,
+      "obj_init_pos": [
+        0.011928812993105997,
+        0.6678201483184464,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 318,
+      "obj_init_pos": [
+        -0.09515092696468914,
+        0.6746196534332063,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 319,
+      "obj_init_pos": [
+        0.05026692161814614,
+        0.695106608541662,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 320,
+      "obj_init_pos": [
+        -0.09567476632529433,
+        0.6077109114169833,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 321,
+      "obj_init_pos": [
+        0.08151075064796806,
+        0.688407029712774,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 322,
+      "obj_init_pos": [
+        -0.060159475560551484,
+        0.6107421362390202,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 70
+    },
+    {
+      "episode_index": 323,
+      "obj_init_pos": [
+        0.09979784177679593,
+        0.6644063700250583,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 324,
+      "obj_init_pos": [
+        -0.05125156031704292,
+        0.659907503839441,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 325,
+      "obj_init_pos": [
+        0.05995220969005907,
+        0.6790384442761959,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 326,
+      "obj_init_pos": [
+        -0.051564202039573015,
+        0.6435366714277516,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 327,
+      "obj_init_pos": [
+        -0.09420562678803744,
+        0.6373903897000435,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 328,
+      "obj_init_pos": [
+        0.083762302074157,
+        0.6980360776249283,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 329,
+      "obj_init_pos": [
+        -0.002833552720104743,
+        0.631137075100255,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 330,
+      "obj_init_pos": [
+        0.026241217709873088,
+        0.666069587326873,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 331,
+      "obj_init_pos": [
+        0.08739593132765369,
+        0.683787053902592,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 332,
+      "obj_init_pos": [
+        -0.08381867574106472,
+        0.6586649506500846,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 333,
+      "obj_init_pos": [
+        -0.07909396236550584,
+        0.6097437515616365,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 334,
+      "obj_init_pos": [
+        0.05986747165985648,
+        0.6106530889205103,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 335,
+      "obj_init_pos": [
+        0.05748123305411745,
+        0.644986833458115,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 336,
+      "obj_init_pos": [
+        0.0295079017340793,
+        0.6839106238578021,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 337,
+      "obj_init_pos": [
+        -0.03208609864262038,
+        0.6388413238826824,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 338,
+      "obj_init_pos": [
+        -0.08094283447923996,
+        0.6478766575346246,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 339,
+      "obj_init_pos": [
+        -0.08741498042587217,
+        0.6894838220000165,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 340,
+      "obj_init_pos": [
+        -0.03245011041197157,
+        0.6116519361669096,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 341,
+      "obj_init_pos": [
+        -0.08403015491924865,
+        0.6034110852616643,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 342,
+      "obj_init_pos": [
+        -0.013493077482162635,
+        0.6376217726424495,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 343,
+      "obj_init_pos": [
+        0.0863663230520198,
+        0.6108572893094083,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 344,
+      "obj_init_pos": [
+        0.015179811860566342,
+        0.649262717838969,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 345,
+      "obj_init_pos": [
+        0.04210808295018795,
+        0.64513923810902,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 346,
+      "obj_init_pos": [
+        -0.09633233208424163,
+        0.663313172283028,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 347,
+      "obj_init_pos": [
+        0.011720493963349593,
+        0.606900005866191,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 348,
+      "obj_init_pos": [
+        -0.0300786339017044,
+        0.6197317317364178,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 349,
+      "obj_init_pos": [
+        0.06054469738081922,
+        0.6990455424395747,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 350,
+      "obj_init_pos": [
+        -0.006253185194989935,
+        0.6661032891314657,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 351,
+      "obj_init_pos": [
+        0.0957872898833882,
+        0.6987341715058092,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 352,
+      "obj_init_pos": [
+        -0.0760937263413485,
+        0.6643251063256197,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 353,
+      "obj_init_pos": [
+        -0.0822476901974753,
+        0.6750681200543677,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 354,
+      "obj_init_pos": [
+        0.0907554206533785,
+        0.6494759956541734,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 355,
+      "obj_init_pos": [
+        0.025756276786508547,
+        0.6199337455701533,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 356,
+      "obj_init_pos": [
+        -0.053035925112417816,
+        0.6105562076480306,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 357,
+      "obj_init_pos": [
+        0.02331980463129693,
+        0.6649374306065365,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 358,
+      "obj_init_pos": [
+        -0.03558529256884223,
+        0.6585095592245105,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 359,
+      "obj_init_pos": [
+        0.021821611418517267,
+        0.6310132054793124,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 360,
+      "obj_init_pos": [
+        0.029894076718216256,
+        0.6208786941363952,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 361,
+      "obj_init_pos": [
+        -0.01794027680022167,
+        0.6506155990301751,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 362,
+      "obj_init_pos": [
+        0.0893801556440682,
+        0.6223489389710902,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 363,
+      "obj_init_pos": [
+        0.07497227340988474,
+        0.6037175529820831,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 364,
+      "obj_init_pos": [
+        -0.022566462263309384,
+        0.6657842083713,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 365,
+      "obj_init_pos": [
+        0.05332515474533947,
+        0.6305012427341242,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 366,
+      "obj_init_pos": [
+        0.013118393015805307,
+        0.6152647434287083,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 367,
+      "obj_init_pos": [
+        0.08204886619735491,
+        0.6961506918767145,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 368,
+      "obj_init_pos": [
+        -0.0829654056022728,
+        0.6350072375741775,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 369,
+      "obj_init_pos": [
+        -0.028449428172049582,
+        0.6524401483885497,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 370,
+      "obj_init_pos": [
+        -0.05834360561433232,
+        0.6206068982521494,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 371,
+      "obj_init_pos": [
+        0.07699391706681136,
+        0.6465735166163344,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 372,
+      "obj_init_pos": [
+        0.09452661873374066,
+        0.6188668782895648,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 373,
+      "obj_init_pos": [
+        0.051989646287692565,
+        0.6415432381957912,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 374,
+      "obj_init_pos": [
+        0.07218942961104621,
+        0.60663683242143,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 375,
+      "obj_init_pos": [
+        0.0883824769319872,
+        0.6293473634967518,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 376,
+      "obj_init_pos": [
+        0.05234199770173428,
+        0.6566576240509736,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 377,
+      "obj_init_pos": [
+        -0.00170508741636273,
+        0.6174393631873264,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 52
+    },
+    {
+      "episode_index": 378,
+      "obj_init_pos": [
+        -0.09605029872958236,
+        0.6096338722699014,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 379,
+      "obj_init_pos": [
+        -0.09891704417012137,
+        0.6728214726080534,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 380,
+      "obj_init_pos": [
+        -0.023371132262989633,
+        0.6590210697324486,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 381,
+      "obj_init_pos": [
+        0.03719917816194879,
+        0.6261144448123941,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 382,
+      "obj_init_pos": [
+        -0.034491010805789785,
+        0.674230436134642,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 383,
+      "obj_init_pos": [
+        -0.06348480252175631,
+        0.6990481670654101,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 384,
+      "obj_init_pos": [
+        0.03996707655014001,
+        0.6544089467018446,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 385,
+      "obj_init_pos": [
+        0.08189299441987227,
+        0.6567046265503905,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 386,
+      "obj_init_pos": [
+        -0.018451603089678165,
+        0.6114927630613008,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 387,
+      "obj_init_pos": [
+        0.0979560047372186,
+        0.6035677325352131,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 388,
+      "obj_init_pos": [
+        -0.004173497586657346,
+        0.6096326411256184,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 389,
+      "obj_init_pos": [
+        -0.07059999214010398,
+        0.628196350987315,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 390,
+      "obj_init_pos": [
+        -0.03109006792348197,
+        0.6969085139669414,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 391,
+      "obj_init_pos": [
+        -0.08808876702509522,
+        0.6141272343787504,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 392,
+      "obj_init_pos": [
+        0.049634883822611775,
+        0.614726106246236,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 393,
+      "obj_init_pos": [
+        -0.06877983390955056,
+        0.6682832640658137,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 394,
+      "obj_init_pos": [
+        0.08438667544715059,
+        0.6249686640675962,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 395,
+      "obj_init_pos": [
+        -0.04585623335927922,
+        0.6413584152104376,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 396,
+      "obj_init_pos": [
+        0.047488288713618626,
+        0.6697286219644163,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 397,
+      "obj_init_pos": [
+        -0.021444243733466498,
+        0.6123690610628013,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 398,
+      "obj_init_pos": [
+        -0.08727228454453105,
+        0.6950529079887086,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 399,
+      "obj_init_pos": [
+        0.09885135953450119,
+        0.6784798241340326,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 400,
+      "obj_init_pos": [
+        0.05523081858715084,
+        0.6404736128583398,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 401,
+      "obj_init_pos": [
+        0.09761687662312138,
+        0.6084011099578523,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 402,
+      "obj_init_pos": [
+        -0.03991239594268366,
+        0.676068679530904,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 403,
+      "obj_init_pos": [
+        0.043408272847542895,
+        0.6431156060403314,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 404,
+      "obj_init_pos": [
+        -0.005567589409219906,
+        0.6006247251199005,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 405,
+      "obj_init_pos": [
+        0.04978377596012079,
+        0.6211926158086176,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 406,
+      "obj_init_pos": [
+        0.030277526061150473,
+        0.6551360878642889,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 407,
+      "obj_init_pos": [
+        -0.04184935564431154,
+        0.6469994822311571,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 408,
+      "obj_init_pos": [
+        0.0816511627274574,
+        0.6887581344443896,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 409,
+      "obj_init_pos": [
+        -0.06589552069404621,
+        0.6472482391181436,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 410,
+      "obj_init_pos": [
+        -0.06905555209012706,
+        0.699005390405574,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 411,
+      "obj_init_pos": [
+        0.043941742493006836,
+        0.6403887651888969,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 412,
+      "obj_init_pos": [
+        0.0580382915931133,
+        0.6747691366300972,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 413,
+      "obj_init_pos": [
+        0.029695200768295044,
+        0.6951163305793135,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 414,
+      "obj_init_pos": [
+        -0.05312973125534146,
+        0.6191874656130709,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 415,
+      "obj_init_pos": [
+        0.04284101984813918,
+        0.685405101007209,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 416,
+      "obj_init_pos": [
+        -0.03725315634895858,
+        0.6877719159330645,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 57
+    },
+    {
+      "episode_index": 417,
+      "obj_init_pos": [
+        -0.06074115036786412,
+        0.6425074575786607,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 418,
+      "obj_init_pos": [
+        0.08997258234065786,
+        0.6073948051140147,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 419,
+      "obj_init_pos": [
+        -0.06485321384972995,
+        0.6880597839106394,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 420,
+      "obj_init_pos": [
+        -0.029496258416536983,
+        0.6067537599364671,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 421,
+      "obj_init_pos": [
+        -0.03340924093721501,
+        0.6742609242309997,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 422,
+      "obj_init_pos": [
+        0.07550701359238485,
+        0.6732233437521903,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 423,
+      "obj_init_pos": [
+        0.026088587679840097,
+        0.6416979599071202,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 424,
+      "obj_init_pos": [
+        -0.07386804573787745,
+        0.6540903851359053,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 425,
+      "obj_init_pos": [
+        -0.003359698153116472,
+        0.656255816748043,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 55
+    },
+    {
+      "episode_index": 426,
+      "obj_init_pos": [
+        -0.04278228981511156,
+        0.6226895440322506,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 427,
+      "obj_init_pos": [
+        -0.07924544581442745,
+        0.6251503502412419,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 428,
+      "obj_init_pos": [
+        -0.0564125427854207,
+        0.6834519454027437,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 429,
+      "obj_init_pos": [
+        0.05387704351902639,
+        0.6522466923842531,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 430,
+      "obj_init_pos": [
+        -0.03689460430074758,
+        0.6626301631365472,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 431,
+      "obj_init_pos": [
+        -0.09199645672489698,
+        0.6635768940903134,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 432,
+      "obj_init_pos": [
+        0.053324571009269406,
+        0.6032805637423808,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 69
+    },
+    {
+      "episode_index": 433,
+      "obj_init_pos": [
+        0.029590131545027654,
+        0.6239264913908783,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 434,
+      "obj_init_pos": [
+        0.08925385167412189,
+        0.6158454478175358,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 435,
+      "obj_init_pos": [
+        0.07834790416712309,
+        0.6809616388946063,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 436,
+      "obj_init_pos": [
+        0.028479935428225828,
+        0.6245188415777777,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 437,
+      "obj_init_pos": [
+        -0.08584387996522191,
+        0.6867976548236299,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 438,
+      "obj_init_pos": [
+        0.09444868052471164,
+        0.6384343592131208,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 439,
+      "obj_init_pos": [
+        -0.030042224287538874,
+        0.6558903080891766,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 440,
+      "obj_init_pos": [
+        -0.0694285366454852,
+        0.6175014955438738,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 441,
+      "obj_init_pos": [
+        -0.036069471831263064,
+        0.6226863530472383,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 442,
+      "obj_init_pos": [
+        0.07786888254184987,
+        0.6262275389846735,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 443,
+      "obj_init_pos": [
+        0.038193009168772635,
+        0.6181538921473395,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 444,
+      "obj_init_pos": [
+        0.08355928818276556,
+        0.6754820284374036,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 445,
+      "obj_init_pos": [
+        -0.09687999805065217,
+        0.6758178200754823,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 446,
+      "obj_init_pos": [
+        0.021028843742227993,
+        0.6478229175870127,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 447,
+      "obj_init_pos": [
+        0.028978675336319676,
+        0.6185773759397443,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 448,
+      "obj_init_pos": [
+        -0.07834741440984945,
+        0.6239679759445328,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 449,
+      "obj_init_pos": [
+        0.0626353477082838,
+        0.6686086157717236,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 450,
+      "obj_init_pos": [
+        0.0864626629583467,
+        0.6916138144584192,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 451,
+      "obj_init_pos": [
+        0.08264024872780684,
+        0.6377469864021248,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 452,
+      "obj_init_pos": [
+        -0.09355724908695498,
+        0.6463981189533663,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 453,
+      "obj_init_pos": [
+        0.07771006725982416,
+        0.6512571920491061,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 454,
+      "obj_init_pos": [
+        0.04092858931259416,
+        0.6820633842858274,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 455,
+      "obj_init_pos": [
+        -0.036250241035088365,
+        0.657925062688677,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 456,
+      "obj_init_pos": [
+        0.07714038062298273,
+        0.6759117467832982,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 457,
+      "obj_init_pos": [
+        0.04563518161538821,
+        0.6088354473462378,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 458,
+      "obj_init_pos": [
+        -0.014452014676902006,
+        0.6725334980428603,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 459,
+      "obj_init_pos": [
+        0.09695559372290816,
+        0.6980121920029017,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 460,
+      "obj_init_pos": [
+        0.023416253011542085,
+        0.6975969276626942,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 461,
+      "obj_init_pos": [
+        -0.055097902407274926,
+        0.6184351135341118,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 462,
+      "obj_init_pos": [
+        0.015456777086879314,
+        0.6695081672792702,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 463,
+      "obj_init_pos": [
+        -0.0917844193489335,
+        0.6561852979286232,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 464,
+      "obj_init_pos": [
+        -0.06125272095582582,
+        0.6559673518270802,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 465,
+      "obj_init_pos": [
+        0.05904401858841288,
+        0.6943622371900774,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 466,
+      "obj_init_pos": [
+        0.060279949687009726,
+        0.6058738328350862,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 71
+    },
+    {
+      "episode_index": 467,
+      "obj_init_pos": [
+        0.04916895792419704,
+        0.6951663400202678,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 468,
+      "obj_init_pos": [
+        0.09236206276945808,
+        0.6923906233723516,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 469,
+      "obj_init_pos": [
+        0.03484746286110593,
+        0.6258385438222327,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 470,
+      "obj_init_pos": [
+        0.03928857524529464,
+        0.6262078357908085,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 471,
+      "obj_init_pos": [
+        0.06857068236745281,
+        0.6720195703253212,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 472,
+      "obj_init_pos": [
+        0.017808409872935055,
+        0.6197881789432617,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 473,
+      "obj_init_pos": [
+        -0.0031341142414213208,
+        0.6006478907492411,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 474,
+      "obj_init_pos": [
+        0.059906938030082985,
+        0.6382090537320015,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 475,
+      "obj_init_pos": [
+        0.09572619782441058,
+        0.6951510945098102,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 476,
+      "obj_init_pos": [
+        -0.035764797308145815,
+        0.6437038077714778,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 477,
+      "obj_init_pos": [
+        0.056474318501620824,
+        0.6540595059011528,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    },
+    {
+      "episode_index": 478,
+      "obj_init_pos": [
+        -0.05510368484170394,
+        0.6170347211350204,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 479,
+      "obj_init_pos": [
+        0.011665863653919348,
+        0.6431890352295587,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 480,
+      "obj_init_pos": [
+        0.09474512220376458,
+        0.6658207003809397,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 481,
+      "obj_init_pos": [
+        -0.028272119710415794,
+        0.6476605010066927,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 482,
+      "obj_init_pos": [
+        -0.0761779055638487,
+        0.6518995660231073,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 483,
+      "obj_init_pos": [
+        0.008771374172057284,
+        0.6078344271843721,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 53
+    },
+    {
+      "episode_index": 484,
+      "obj_init_pos": [
+        0.030719531261296285,
+        0.6487017169399238,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 485,
+      "obj_init_pos": [
+        -0.09608929764108119,
+        0.6541622820540284,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 61
+    },
+    {
+      "episode_index": 486,
+      "obj_init_pos": [
+        -0.017010724046475967,
+        0.6730732686965171,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 487,
+      "obj_init_pos": [
+        0.07362015944963415,
+        0.6810986813560957,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 488,
+      "obj_init_pos": [
+        0.059444761771538734,
+        0.6057728986964379,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 489,
+      "obj_init_pos": [
+        0.042080861823026366,
+        0.6532202122810211,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 64
+    },
+    {
+      "episode_index": 490,
+      "obj_init_pos": [
+        0.07741443292329192,
+        0.6313746527992836,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 66
+    },
+    {
+      "episode_index": 491,
+      "obj_init_pos": [
+        0.003020964448502708,
+        0.6399959381190843,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 56
+    },
+    {
+      "episode_index": 492,
+      "obj_init_pos": [
+        -0.03771778725919424,
+        0.6288870884177113,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 58
+    },
+    {
+      "episode_index": 493,
+      "obj_init_pos": [
+        0.04757822735847575,
+        0.6516116022541848,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 68
+    },
+    {
+      "episode_index": 494,
+      "obj_init_pos": [
+        0.026058308148848908,
+        0.6932982849376788,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 67
+    },
+    {
+      "episode_index": 495,
+      "obj_init_pos": [
+        0.09221664781473557,
+        0.6507119068758649,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 65
+    },
+    {
+      "episode_index": 496,
+      "obj_init_pos": [
+        0.016810758209348672,
+        0.6524453948169222,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 60
+    },
+    {
+      "episode_index": 497,
+      "obj_init_pos": [
+        0.055876045046018424,
+        0.6173971530887277,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 62
+    },
+    {
+      "episode_index": 498,
+      "obj_init_pos": [
+        -0.04095327497349058,
+        0.6346293913831266,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 63
+    },
+    {
+      "episode_index": 499,
+      "obj_init_pos": [
+        -0.09252613676890516,
+        0.6734718406421332,
+        0.02
+      ],
+      "goal_pose": [
+        0.1,
+        0.8,
+        0.2
+      ],
+      "success": true,
+      "num_frames": 59
+    }
+  ]
+}

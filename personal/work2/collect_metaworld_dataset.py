@@ -32,14 +32,6 @@
         --randomize-obj \
         --seed-start 0
 
-    # 采集50个episode，不随机化物体位置（所有episode使用相同的固定位置）
-    python collect_metaworld_dataset.py \
-        --task pick-place-v3 \
-        --num-episodes 50 \
-        --output-dir ./outputs/metaworld_pick_place_fixed \
-        --repo-id your-username/metaworld_pick_place_fixed \
-        --no-randomize-obj
-
 参数说明:
     --task: Meta-World任务名称，如 pick-place-v3, assembly-v3, push-v3 等
     --num-episodes: 采集的episode数量
@@ -198,7 +190,7 @@ def get_goal_pose_from_env(env):
     return env.goal.copy()
 
 
-def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, image_size=480):
+def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, image_size=480, extra_frames_after_success=10):
     """
     运行一个完整的episode，使用expert policy生成示范数据。
 
@@ -209,6 +201,7 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
         task_name: 任务名称
         max_steps: 最大步数
         image_size: 图像分辨率
+        extra_frames_after_success: 成功后继续采集的帧数（默认10帧）
 
     Returns:
         frames: 列表，每个元素是一个frame的字典
@@ -224,6 +217,8 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
 
     frames = []
     success_flags = []
+    success_detected = False
+    frames_after_success = 0
 
     for step in range(max_steps):
         # 使用expert policy生成动作
@@ -254,6 +249,20 @@ def run_episode(env_top, env_wrist, expert_policy, task_name, max_steps=500, ima
         }
         frames.append(frame)
         success_flags.append(info.get("success", 0))
+
+        # 检测是否成功
+        current_success = info.get("success", 0)
+        if current_success and not success_detected:
+            success_detected = True
+            frames_after_success = 0
+            print(f"  >>> Success detected at step {step}, collecting {extra_frames_after_success} more frames...")
+
+        # 如果已经检测到成功，继续采集指定帧数后结束
+        if success_detected:
+            frames_after_success += 1
+            if frames_after_success >= extra_frames_after_success:
+                print(f"  >>> Collected {extra_frames_after_success} extra frames, ending episode.")
+                break
 
         if terminated or truncated:
             break
@@ -518,10 +527,11 @@ def main():
     success_count = 0
     start_time = time.time()
 
-    print(f"\n开始采集 {args.num_episodes} 个episode...")
+    print(f"\n开始采集 {args.num_episodes} 个成功的episode...")
     print("-" * 80)
 
-    for ep_idx in range(args.num_episodes):
+    ep_idx = 0
+    while ep_idx < args.num_episodes:
         ep_start = time.time()
 
         # 设置seed
@@ -534,30 +544,40 @@ def main():
         # 运行episode
         frames, ep_info = run_episode(env_top, env_wrist, expert_policy, args.task, args.max_steps, args.image_size)
 
-        # 添加frame到数据集
-        for frame in frames:
-            dataset.add_frame(frame)
-
-        # 保存episode
-        dataset.save_episode()
-
-        # 记录episode信息
-        episode_infos.append(ep_info)
-
-        if ep_info["success"]:
-            success_count += 1
-
-        elapsed = time.time() - ep_start
-        print(
-            f"Episode {ep_idx + 1:3d}/{args.num_episodes} | "
-            f"Frames: {ep_info['num_frames']:4d} | "
-            f"Success: {'✓' if ep_info['success'] else '✗'} | "
-            f"Obj pose: [{ep_info['obj_init_pos'][0]:.3f}, {ep_info['obj_init_pos'][1]:.3f}, {ep_info['obj_init_pos'][2]:.3f}] | "
-            f"Time: {elapsed:.2f}s"
-        )
-
         env_top.close()
         env_wrist.close()
+
+        # 只保存成功的episode
+        if ep_info["success"]:
+            # 添加frame到数据集
+            for frame in frames:
+                dataset.add_frame(frame)
+
+            # 保存episode
+            dataset.save_episode()
+
+            # 记录episode信息
+            episode_infos.append(ep_info)
+            success_count += 1
+
+            elapsed = time.time() - ep_start
+            print(
+                f"Episode {ep_idx + 1:3d}/{args.num_episodes} | "
+                f"Frames: {ep_info['num_frames']:4d} | "
+                f"Success: ✓ | "
+                f"Obj pose: [{ep_info['obj_init_pos'][0]:.3f}, {ep_info['obj_init_pos'][1]:.3f}, {ep_info['obj_init_pos'][2]:.3f}] | "
+                f"Time: {elapsed:.2f}s"
+            )
+            ep_idx += 1
+        else:
+            elapsed = time.time() - ep_start
+            print(
+                f"Episode FAILED (seed={seed}) | "
+                f"Frames: {ep_info['num_frames']:4d} | "
+                f"Retrying with next seed... | "
+                f"Time: {elapsed:.2f}s"
+            )
+            # 不增加ep_idx，继续尝试下一个seed
 
     # 完成数据集
     print("\n" + "-" * 80)
