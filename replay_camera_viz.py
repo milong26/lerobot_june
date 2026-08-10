@@ -29,7 +29,7 @@ from lerobot.cameras import ColorMode
 
 # ==================== 配置 ====================
 REPO_ID = "test/first"
-ROOT = "/home/qwe/.cache/huggingface/lerobot/ep10/rectangular"
+ROOT = "/home/qwe/.cache/huggingface/lerobot/ep10/cylinder_standing"
 EPISODE_INDEX = 0
 CAMERA_SERIAL = "806312060427"
 CAMERA_WIDTH = 640

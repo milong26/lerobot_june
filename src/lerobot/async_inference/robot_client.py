@@ -486,9 +486,11 @@ class RobotClient:
             timed_action = self.action_queue.get_nowait()
         get_end = time.perf_counter() - get_start
 
+        # 发送实际动作值
         _performed_action = self.robot.send_action(
             self._action_tensor_to_action_dict(timed_action.get_action())
         )
+
         with self.latest_action_lock:
             self.latest_action = timed_action.get_timestep()
 
@@ -670,6 +672,28 @@ class RobotClient:
             # 只有在非暂停状态下才发送 observation
             if not self.is_paused and self._ready_to_send_observation():
                 _captured_observation = self.control_loop_observation(task, verbose)
+                
+                # # 队列清空后，持续发送冻结action让机械臂保持当前位置，直到收到新动作
+                # action_keys = list(self.robot.action_features.keys())
+                # if len(action_keys) > 0:
+                #     freeze_state = {key: _captured_observation[key] for key in action_keys}
+                #     if verbose:
+                #         self.logger.debug("队列清空：开始持续冻结状态（与服务器观测一致）")
+                    
+                #     # 持续冻结，直到收到新动作
+                #     while self.running and not self.actions_available():
+                #         self.robot.send_action(freeze_state)
+                #         time.sleep(max(0, self.config.environment_dt - (time.perf_counter() - control_loop_start)))
+                        
+                #         # 检查是否有新动作
+                #         if self.actions_available():
+                #             if verbose:
+                #                 self.logger.debug("收到新动作，退出冻结模式")
+                #             break
+                    
+                #     # 退出冻结后，继续执行新动作
+                #     if self.actions_available():
+                #         _performed_action = self.control_loop_action(verbose)
 
             self.logger.debug(f"Control loop (ms): {(time.perf_counter() - control_loop_start) * 1000:.2f}")
             # Dynamically adjust sleep time to maintain the desired control frequency

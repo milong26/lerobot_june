@@ -50,7 +50,7 @@ cd /home/qwe/jun/lerobot
     --policy_type=smolvla \\
     --pretrained_name_or_path=outputs/smolvla_ep10_half/checkpoints/026000/pretrained_model \\
     --policy_device=cuda \\
-    --actions_per_chunk=20 \\
+    --actions_per_chunk=35 \\
     --chunk_size_threshold=0 \\
     --half_img_resolu=true
 '''

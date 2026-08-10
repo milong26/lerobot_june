@@ -40,9 +40,9 @@ cd /home/qwe/jun/lerobot/work/test_half_resolution
     --task="{task}" \\
     --server_url=ws://10.10.16.19:9001 \\
     --fps=30 \\
-    --recording.enable_recording=True \\
+    --recording.enable_recording=False \\
     --recording.record_dir=./debug_recorded_data \\
-    --recording.save_images=True \\
+    --recording.save_images=False \\
     --wowskin.enabled=True \\
     --wowskin.port=/dev/ttyACM0 \\
     --num_loop=2 \\

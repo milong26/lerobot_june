@@ -1,13 +1,14 @@
 """
-主控制循环
-- 整合 data_collector、data_processor、ws_client 三个模块
+Evo-1 主控制循环
+- 适配 Evo-1 服务器（两张独立的 320x240 图像）
+- 整合 evo1_data_collector、evo1_data_processor、evo1_ws_client 三个模块
 - 实现主循环：采集→处理→发送→接收→执行
 - 控制执行频率（30Hz）
 - 将服务器返回的动作发送给机器人执行
 - 异常处理和退出
 
 执行示例：
-python main_controller.py \
+python evo1_main_controller.py \
     --robot.type=so100_follower \
     --robot.port=/dev/ttyACM1 \
     --robot.cameras.wrist.type=opencv \
@@ -24,7 +25,7 @@ python main_controller.py \
     --robot.cameras.top.use_depth=False \
     --robot.id=start_new_heihei_2 \
     --task="Grab the cross-shape equipment." \
-    --server_url=ws://10.10.16.19:9000 \
+    --server_url=ws://10.10.16.19:8001 \
     --fps=30
 """
 
@@ -41,22 +42,19 @@ import draccus
 import threading
 from pynput import keyboard
 
-# 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from data_collector import DataCollector
-from data_processor import DataProcessor
-from ws_client import WSClient
+from evo1_data_collector import Evo1DataCollector
+from evo1_data_processor import Evo1DataProcessor
+from evo1_ws_client import Evo1WSClient
 
-# LeRobot 导入
 from lerobot.robots import make_robot_from_config
 from lerobot.robots.config import RobotConfig
 from lerobot.cameras import CameraConfig
-from lerobot.cameras.opencv import OpenCVCameraConfig  # noqa: F401
-from lerobot.cameras.realsense import RealSenseCameraConfig  # noqa: F401
+from lerobot.cameras.opencv import OpenCVCameraConfig
+from lerobot.cameras.realsense import RealSenseCameraConfig
 
-# 导入所有机器人模块以触发 @RobotConfig.register_subclass 注册
-from lerobot.robots import (  # noqa: F401
+from lerobot.robots import (
     so_follower,
     koch_follower,
     omx_follower,
@@ -68,7 +66,6 @@ from lerobot.robots import (  # noqa: F401
     reachy2,
 )
 
-# WowSkin 导入
 try:
     from anyskin import AnySkinProcess
     HAS_WOWSKIN = True
@@ -101,21 +98,20 @@ class RecordingConfig:
 
 
 @dataclass
-class ControllerConfig:
-    """主控制器配置"""
+class Evo1ControllerConfig:
+    """Evo-1 主控制器配置"""
     robot: RobotConfig
     task: str
-    server_url: str = "ws://10.10.16.19:9001"
+    server_url: str = "ws://localhost:8001"
     fps: int = 30
     max_steps: Optional[int] = None
     recording: RecordingConfig = field(default_factory=RecordingConfig)
     wowskin: WowSkinConfig = field(default_factory=WowSkinConfig)
-    num_loop: int = 5
     action_steps: Optional[int] = None
 
 
-class MainController:
-    """主控制器"""
+class Evo1MainController:
+    """Evo-1 主控制器"""
     
     def __init__(
         self,
@@ -126,25 +122,23 @@ class MainController:
         enable_recording: bool = False,
         recording_config: Dict[str, Any] = None,
         wowskin_config: Optional[WowSkinConfig] = None,
-        num_loop: int = 5,
         action_steps: Optional[int] = None,
     ):
         """
         Args:
             robot_config: 机器人配置对象
             task: 任务描述
-            server_url: 推理服务器地址
+            server_url: Evo-1 推理服务器地址
             fps: 控制频率
             enable_recording: 是否启用数据录制
             recording_config: 录制配置字典
             wowskin_config: WowSkin 力传感器配置
-            num_loop: 循环次数
             action_steps: 动作步数限制
         """
         self.task = task
+        self.server_url = server_url
         self.fps = fps
         self.dt = 1.0 / fps
-        self.num_loop = num_loop
         self.action_steps = action_steps
         
         # 初始化 WowSkin 力传感器
@@ -166,48 +160,40 @@ class MainController:
             self.wowskin_baseline = np.mean(baseline_data, axis=0)
             print(f"[INFO] WowSkin baseline: {self.wowskin_baseline}")
         
-        # 初始化机器人
         print("[INFO] 正在连接机器人...")
         self.robot = make_robot_from_config(robot_config)
         self.robot.connect()
         print("[INFO] 机器人已连接")
         
-        # 初始化数据采集器（带录制功能）
-        self.collector = DataCollector(
+        self.collector = Evo1DataCollector(
             self.robot,
             enable_recording=enable_recording,
             recording_config=recording_config,
             wowskin_sensor=self.wowskin_sensor,
-            wowskin_baseline=self.wowskin_baseline
+            wowskin_baseline=self.wowskin_baseline,
         )
         
-        # 初始化数据处理器
-        self.processor = DataProcessor()
+        self.processor = Evo1DataProcessor()
         
-        # 初始化 WebSocket 客户端
-        self.ws_client = WSClient(server_url)
+        self.ws_client = Evo1WSClient(server_url)
         
-        # 历史帧队列（用于构建 payload 时选取 -133ms 的帧）
-        # 存储格式：{'state', 'force', 'images', 'timestamp'}
-        self.frame_history = deque(maxlen=20)  # 保存最近 20 帧
+        self.frame_history = deque(maxlen=20)
         
-        # 最后一个 action 完成的时间戳（用于 payload 选帧）
         self._last_action_completion_time = None
         
-        # 控制标志
         self.running = False
-        self._cleanup_done = False  # 防止重复清理
+        self._cleanup_done = False
         
-        # 键盘控制状态
-        self.initial_state = None  # 复位目标状态
-        self.is_resetting = False  # 是否正在执行复位
-        self.is_paused = False  # 是否暂停服务器通信（复位后）
+        self.initial_state = None
+        self.is_resetting = False
+        self.is_paused = False
         self.keyboard_listener = None
         
-        # 线程安全的事件标志
         self._reset_requested = threading.Event()
         self._shutdown_requested = threading.Event()
         self._resume_requested = threading.Event()
+        
+        self._last_obs_refresh_time = 0.0  # 用于暂停期间定期刷新相机观测
     
     def _setup_keyboard_listener(self):
         """设置键盘监听器"""
@@ -235,11 +221,9 @@ class MainController:
             return
         
         self.is_resetting = True
-        # 计算插值步数（平滑过渡，避免跳变）
         diff = self.initial_state - current_state
         max_diff = np.max(np.abs(diff))
         
-        # 根据最大差值计算步数，每步最多移动 0.15 弧度（可根据需要调整）
         steps = max(10, int(max_diff / 1.5))
         
         print(f"复位需要 {steps} 步，最大差值: {max_diff:.3f}")
@@ -248,35 +232,28 @@ class MainController:
             if not self.running:
                 break
             
-            # 线性插值
             alpha = step / steps
             target_state = current_state + alpha * diff
             
-            # 发送插值后的状态
             self.collector.send_action(target_state.tolist())
             
-            # 控制频率
             await asyncio.sleep(self.dt)
-            
-            # if step % 10 == 0 or step == steps:
-            #     print(f"复位进度: {step}/{steps} ({alpha*100:.1f}%)")
         
         print("[INFO] 复位完成")
         self.is_resetting = False
-        self.is_paused = True  # 复位后暂停服务器通信
+        self.is_paused = True
         print("[INFO] 已暂停服务器通信，按左键恢复")
     
     async def _safe_shutdown(self):
         """安全关闭程序"""
         self.running = False
         
-        # 停止键盘监听
         if self.keyboard_listener:
             self.keyboard_listener.stop()
     
-        # 停止数据录制
         self.collector.stop_recording()
         print("数据录制已停止")
+        
         # 停止 WowSkin 传感器
         if self.wowskin_sensor is not None:
             print("正在停止 WowSkin 传感器...")
@@ -284,11 +261,9 @@ class MainController:
             self.wowskin_sensor.join()
             print("WowSkin 传感器已停止")
         
-        # 断开 WebSocket
         await self.ws_client.disconnect()
         print("WebSocket 已断开")
         
-        # 断开机器人
         self.robot.disconnect()
         print("机器人已断开")
         
@@ -296,12 +271,7 @@ class MainController:
     
     async def run(self, max_steps: Optional[int] = None):
         """
-        运行主控制循环（单线程，类似 lerobot_record.py）
-        
-        设计思路：
-        1. 单线程顺序执行：采集 → 构建 payload → 发送 → 等待 response → 执行动作
-        2. 每帧都记录到 frame_history，供下一轮选取 -133ms 的帧
-        3. 不需要线程锁，因为所有硬件访问都在同一个线程中顺序执行
+        运行 Evo-1 主控制循环
         
         Args:
             max_steps: 最大执行步数（None 表示无限循环）
@@ -311,104 +281,75 @@ class MainController:
         last_loop_time = None
         
         try:
-            # 启动键盘监听
             self._setup_keyboard_listener()
             
-            # 等待一段时间让机器人稳定
             time.sleep(1.0)
             
-            # 记录初始状态（复位目标）
             initial_obs = self.collector.get_observation()
             self.initial_state = np.array(initial_obs['state'], dtype=np.float64)
             print(f"[INFO] 初始状态已记录: {self.initial_state}")
             
-            # 启动数据录制（如果启用）
             self.collector.start_recording()
             
-            # 连接服务器
             await self.ws_client.connect()
             
-            print(f"开始执行任务: {self.task}")
+            print(f"开始执行 Evo-1 任务: {self.task}")
             print(f"控制频率: {self.fps} Hz")
-            print(f"采集策略: 单线程顺序执行（类似 lerobot_record.py）")
+            print(f"Evo-1 服务器: {self.server_url}")
             
-            # 第一轮：发送初始状态占位动作
             print("[INFO] 第一轮：发送初始状态占位动作")
             self.collector.send_action(self.initial_state.tolist())
             await asyncio.sleep(self.dt)
             step_count = 1
             
-            # 采集第一帧（执行占位动作后）
             observation = self.collector.get_observation()
             first_frame_time = time.time()
             self.frame_history.append({
                 'state': observation['state'],
-                'force': observation['force'],
                 'images': observation['images'],
                 'timestamp': first_frame_time
             })
             print(f"[INFO] 第一帧采集时间: {first_frame_time:.3f}")
             
-            # 构建第一帧 payload 并发送，获取动作序列
             frame_current = self.frame_history[-1]
-            frame_minus_133ms = self.frame_history[-1]  # 第一帧没有历史，使用同一帧
             
-            processed_image_minus_133ms = self.processor.process_images(frame_minus_133ms['images'])
-            processed_image_current = self.processor.process_images(frame_current['images'])
-            
-            history_states = [
-                {'state': frame_minus_133ms['state'], 'force': frame_minus_133ms['force']},
-                {'state': frame_current['state'], 'force': frame_current['force']}
-            ]
-            
-            payload = self.processor.build_payload_with_two_frames(
-                image_minus_133ms=processed_image_minus_133ms,
-                image_current=processed_image_current,
-                history_states=history_states,
+            payload = self.processor.build_evo1_payload_with_two_frames(
+                images_current=frame_current['images'],
+                state_current=frame_current['state'],
                 prompt=self.task,
-                steps=step_count,
-                num_loop=self.num_loop,
             )
             
-            print("[INFO] 发送初始 payload，等待服务器返回动作序列...")
-            response = await self.ws_client.send_and_receive(payload)
-            actions = response['actions']
+            print("[INFO] 发送初始 payload，等待 Evo-1 服务器返回动作序列...")
+            actions = await self.ws_client.send_and_receive(payload)
             
             if self.action_steps is not None and len(actions) > self.action_steps:
                 actions = actions[:self.action_steps]
-                print(f"[WARN] 动作数量限制: {len(response['actions'])} -> {self.action_steps}")
+                print(f"[WARN] 动作数量限制: {len(actions)} -> {self.action_steps}")
             
             print(f"[INFO] 收到 {len(actions)} 个动作，开始主循环")
             
-            # 主循环：执行动作 → 采集 → 构建 payload → 发送 → 获取下一轮动作
             while self.running:
                 loop_start = time.time()
                 
-                # 检查关闭请求（最高优先级）
                 if self._shutdown_requested.is_set():
                     print("检测到关闭请求")
                     await self._safe_shutdown()
                     return
                 
-                # 检查复位请求（高优先级）
                 if self._reset_requested.is_set():
                     print("检测到复位请求")
                     self._reset_requested.clear()
                     
-                    # 清空 actions 队列
                     actions = []
                     print("[INFO] 已清空 actions 队列")
                     
-                    # 获取当前状态
                     current_obs = self.collector.get_observation()
                     current_state = np.array(current_obs['state'], dtype=np.float64)
                     
-                    # 缓慢返回初始状态（平滑插值）
                     print("[INFO] 开始缓慢返回初始状态...")
                     diff = self.initial_state - current_state
                     max_diff = np.max(np.abs(diff))
                     
-                    # 根据最大差值计算步数，每步最多移动 0.15 弧度
                     steps = max(10, int(max_diff / 1.5))
                     print(f"复位需要 {steps} 步，最大差值: {max_diff:.3f}")
                     
@@ -416,94 +357,75 @@ class MainController:
                         if not self.running:
                             break
                         
-                        # 线性插值
                         alpha = step / steps
                         target_state = current_state + alpha * diff
                         
-                        # 发送插值后的状态
                         self.collector.send_action(target_state.tolist())
                         
-                        # 控制频率
                         await asyncio.sleep(self.dt)
                     
                     print("[INFO] 已返回初始状态")
                     
-                    # 进入等待状态
                     self.is_paused = True
                     print("[INFO] 已进入等待状态，按左键恢复")
                     continue
                 
-                # 检查恢复请求
                 if self._resume_requested.is_set() and self.is_paused:
                     print("检测到恢复请求")
                     self._resume_requested.clear()
                     self.is_paused = False
                     
-                    # 采集当前帧（实时状态）
                     observation = self.collector.get_observation()
                     resume_time = time.time()
                     self.frame_history.append({
                         'state': observation['state'],
-                        'force': observation['force'],
                         'images': observation['images'],
                         'timestamp': resume_time
                     })
                     print(f"[INFO] 恢复时采集帧: {resume_time:.3f}")
                     
-                    # 使用同一帧作为当前帧和 -133ms 帧（类似程序刚开始）
                     frame_current = self.frame_history[-1]
-                    frame_minus_133ms = self.frame_history[-1]
                     
-                    # 构建 payload
-                    processed_image = self.processor.process_images(frame_current['images'])
-                    history_states = [
-                        {'state': frame_minus_133ms['state'], 'force': frame_minus_133ms['force']},
-                        {'state': frame_current['state'], 'force': frame_current['force']}
-                    ]
-                    
-                    payload = self.processor.build_payload_with_two_frames(
-                        image_minus_133ms=processed_image,
-                        image_current=processed_image,
-                        history_states=history_states,
+                    payload = self.processor.build_evo1_payload_with_two_frames(
+                        images_current=frame_current['images'],
+                        state_current=frame_current['state'],
                         prompt=self.task,
-                        steps=step_count,
-                        num_loop=self.num_loop,
                     )
                     
-                    print("[INFO] 发送恢复 payload（两帧相同），等待服务器返回动作序列...")
-                    response = await self.ws_client.send_and_receive(payload)
-                    actions = response['actions']
+                    print("[INFO] 发送恢复 payload，等待 Evo-1 服务器返回动作序列...")
+                    actions = await self.ws_client.send_and_receive(payload)
                     
                     if self.action_steps is not None and len(actions) > self.action_steps:
                         actions = actions[:self.action_steps]
-                        print(f"[WARN] 动作数量限制: {len(response['actions'])} -> {self.action_steps}")
+                        print(f"[WARN] 动作数量限制: {len(actions)} -> {self.action_steps}")
                     
                     print(f"[INFO] 收到 {len(actions)} 个动作，恢复正常执行")
                     continue
                 
-                # 如果处于暂停状态，发送初始状态保持位置
                 if self.is_paused:
                     self.collector.send_action(self.initial_state.tolist())
+                    
+                    # 每 3 秒调用一次 get_observation 刷新相机，防止相机等待时间过长
+                    current_time = time.time()
+                    if current_time - self._last_obs_refresh_time >= 3.0:
+                        self.collector.get_observation()
+                        self._last_obs_refresh_time = current_time
+                    
                     await asyncio.sleep(self.dt)
-                    elapsed = time.time() - loop_start
-                    # print(f"⏸️  暂停中 | 保持初始状态 | 耗时: {elapsed*1000:.1f}ms")
                     continue
                 
-                # 计算与上一轮循环的间隔时间
                 if last_loop_time is not None:
                     loop_interval = loop_start - last_loop_time
                 else:
                     loop_interval = 0.0
                 last_loop_time = loop_start
                 
-                # ========== 阶段 1: 执行动作序列（上一轮服务器返回的动作） ==========
                 t1 = time.time()
                 
                 if len(actions) > 0:
                     for action_idx, action_to_execute in enumerate(actions):
                         action_start = time.time()
                         
-                        # 检查复位请求（最高优先级，中断当前动作执行）
                         if self._reset_requested.is_set():
                             print("[WARN] 复位请求中断当前动作执行")
                             self._reset_requested.clear()
@@ -512,23 +434,11 @@ class MainController:
                             await self._execute_reset(current_state)
                             break
                         
-                        # 检查关闭请求
                         if self._shutdown_requested.is_set():
                             print("检测到关闭请求")
                             await self._safe_shutdown()
                             return
                         
-                        # 将 numpy array 转换为字典格式
-                        # if isinstance(action_to_execute, np.ndarray):
-                        #     action_dict = {
-                        #         'shoulder_pan.pos': action_to_execute[0],
-                        #         'shoulder_lift.pos': action_to_execute[1],
-                        #         'elbow_flex.pos': action_to_execute[2],
-                        #         'wrist_flex.pos': action_to_execute[3],
-                        #         'wrist_roll.pos': action_to_execute[4],
-                        #         'gripper.pos': action_to_execute[5],
-                        #     }
-                        # else:
                         action_dict = action_to_execute
                         
                         # 发送动作到机器人
@@ -536,45 +446,35 @@ class MainController:
                             # 非最后一帧：发送实际动作值
                             self.collector.send_action(action_dict)
                         else:
-                            # 最后一帧：不发送服务器的 action，而是读取当前 state 并发送，让机械臂保持静止
-                            # 这样后续采集的 state 就不会变化了
-                            # get_only_state() 返回的就是字典格式，直接使用
-                            self.collector.send_action(self.collector.get_only_state())
-                            # print(f"最后一帧：不发送 action，读取当前 state 并发送保持静止 | state: {current_obs}")
-
-
-                        # self.collector.send_action(action_dict)
+                            # 最后一帧：立即读取当前 state 并发送，让机械臂在移动中立即停止
+                            # 原理：目标位置 = 当前位置，电机停止移动
+                            current_obs = self.collector.get_only_state()
+                            self.collector.send_action(current_obs)
+                            print(f"最后一帧：立即停止机械臂 | state: {current_obs}")
                         
-                        # 控制间隔时间
+                        # self.collector.send_action(action_dict)  # 旧代码：直接发送所有动作
+                        
                         action_elapsed = time.time() - action_start
                         action_sleep = self.dt - action_elapsed
                         if action_sleep > 0:
                             await asyncio.sleep(action_sleep)
                         
-                        # 每个 action 执行完后都采集一帧
                         observation = self.collector.get_observation()
                         self.frame_history.append({
                             'state': observation['state'],
-                            'force': observation['force'],
                             'images': observation['images'],
                             'timestamp': time.time()
                         })
                         
                         step_count += 1
                     
-                    # 记录最后一个 action 完成的时间
                     last_action_complete_time = time.time()
-                    print(f"[INFO] 最后一个 action 完成时间: {last_action_complete_time:.3f}")
                 
                 t_send = time.time() - t1
                 
-                # ========== 阶段 2: 选取 2 帧构建 payload ==========
                 current_time = last_action_complete_time if last_action_complete_time else time.time()
-                target_past_time = current_time - 0.166
                 
-                # 从后向前遍历队列
                 frame_current = None
-                frame_minus_133ms = None
                 min_current_diff = float('inf')
                 min_past_diff = float('inf')
                 
@@ -593,71 +493,29 @@ class MainController:
                         min_current_diff = current_diff
                         frame_current = frame
                     
-                    past_diff = abs(ts - target_past_time)
-                    if past_diff < min_past_diff:
-                        min_past_diff = past_diff
-                        frame_minus_133ms = frame
                     
                     if min_current_diff < 0.005 and min_past_diff < 0.005:
                         break
                 
-                # 验证选取结果
-                if frame_current is None or frame_minus_133ms is None:
-                    if queue_len >= 1:
-                        print(f"⚠️  队列只有 {queue_len} 帧，使用同一帧")
-                        frame_current = self.frame_history[-1]
-                        frame_minus_133ms = self.frame_history[-1]
-                    else:
-                        print(f"⚠️  队列为空，跳过本轮")
-                        await asyncio.sleep(self.dt)
-                        continue
                 
-                actual_interval_ms = (frame_current['timestamp'] - frame_minus_133ms['timestamp']) * 1000
-                print(
-                    f"[INFO] 队列 {queue_len} 帧 | "
-                    f"检查 {check_count} 帧 | "
-                    f"当前帧: {current_time:.3f} | "
-                    f"当前帧误差: {min_current_diff*1000:.1f}ms | "
-                    f"-133ms帧误差: {min_past_diff*1000:.1f}ms | "
-                    f"实际间隔: {actual_interval_ms:.1f}ms"
-                )
                 
-                # ========== 阶段 3: 构建 payload ==========
                 t2 = time.time()
                 
-                # 处理 2 帧图像（-133ms 和当前）
-                processed_image_minus_133ms = self.processor.process_images(frame_minus_133ms['images'])
-                processed_image_current = self.processor.process_images(frame_current['images'])
-                
-                # 构建历史状态（仅 2 帧）
-                history_states = [
-                    {'state': frame_minus_133ms['state'], 'force': frame_minus_133ms['force']},
-                    {'state': frame_current['state'], 'force': frame_current['force']}
-                ]
-                
-                payload = self.processor.build_payload_with_two_frames(
-                    image_minus_133ms=processed_image_minus_133ms,
-                    image_current=processed_image_current,
-                    history_states=history_states,
+                payload = self.processor.build_evo1_payload_with_two_frames(
+                    images_current=frame_current['images'],
+                    state_current=frame_current['state'],
                     prompt=self.task,
-                    steps=step_count,
-                    num_loop=self.num_loop,
                 )
                 t_build = time.time() - t2
                 
-                # ========== 阶段 4: 发送请求并接收响应 ==========
                 t3 = time.time()
-                response = await self.ws_client.send_and_receive(payload)
+                actions = await self.ws_client.send_and_receive(payload)
                 t_ws = time.time() - t3
-                
-                # 获取下一轮要执行的动作序列
-                actions = response['actions']
                 
                 if self.action_steps is not None and len(actions) > self.action_steps:
                     actions = actions[:self.action_steps]
-                    print(f"[WARN] 动作数量限制: {len(response['actions'])} -> {self.action_steps}")
+                    print(f"[WARN] 动作数量限制: {len(actions)} -> {self.action_steps}")
                 
-                # 打印本轮统计
                 elapsed = time.time() - loop_start
                 print(
                     f"Step {step_count} | "
@@ -677,19 +535,16 @@ class MainController:
     
     async def stop(self):
         """停止控制器"""
-        # 防止重复清理
         if self._cleanup_done:
             return
         
         self._cleanup_done = True
         self.running = False
         
-        # 停止键盘监听
         if self.keyboard_listener:
             self.keyboard_listener.stop()
             print("键盘监听器已停止")
         
-        # 停止数据录制
         self.collector.stop_recording()
         
         # 停止 WowSkin 传感器
@@ -698,10 +553,8 @@ class MainController:
             self.wowskin_sensor.pause_streaming()
             self.wowskin_sensor.join()
         
-        # 断开 WebSocket
         await self.ws_client.disconnect()
         
-        # 断开机器人（检查是否已连接）
         try:
             if hasattr(self.robot, 'is_connected') and self.robot.is_connected:
                 self.robot.disconnect()
@@ -712,20 +565,18 @@ class MainController:
         except Exception as e:
             logger.warning(f"断开机器人连接时出现警告: {e}")
         
-        print("控制器已停止")
+        print("Evo-1 控制器已停止")
 
 
 @draccus.wrap()
-def main(cfg: ControllerConfig):
+def main(cfg: Evo1ControllerConfig):
     """主函数"""
-    # 构建录制配置
     recording_config = {
         'save_dir': cfg.recording.record_dir,
         'save_images': cfg.recording.save_images
     }
     
-    # 创建控制器
-    controller = MainController(
+    controller = Evo1MainController(
         robot_config=cfg.robot,
         task=cfg.task,
         server_url=cfg.server_url,
@@ -733,11 +584,9 @@ def main(cfg: ControllerConfig):
         enable_recording=cfg.recording.enable_recording,
         recording_config=recording_config,
         wowskin_config=cfg.wowskin,
-        num_loop=cfg.num_loop,
         action_steps=cfg.action_steps,
     )
     
-    # 运行
     asyncio.run(controller.run())
 
 

@@ -183,3 +183,5 @@ work/test_half_resolution/norm_stats.json
 work/test_half_resolution/debug_recorded_data/*
 
 提交提示.md
+work/test_half_resolution/batch_results/*
+work/test_half_resolution/debug_output/*

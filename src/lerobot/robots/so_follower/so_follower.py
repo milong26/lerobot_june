@@ -189,15 +189,27 @@ class SOFollower(Robot):
         for cam_key, cam in self.cameras.items():
             if getattr(cam, "use_rgb", True):
                 start = time.perf_counter()
-                obs_dict[cam_key] = cam.read_latest()
+                obs_dict[cam_key] = cam.read_latest(max_age_ms=4000)
                 dt_ms = (time.perf_counter() - start) * 1e3
                 logger.debug(f"{self} read {cam_key}: {dt_ms:.1f}ms")
 
             if getattr(cam, "use_depth", False):
                 start = time.perf_counter()
-                obs_dict[f"{cam_key}_depth"] = cam.read_latest_depth()
+                obs_dict[f"{cam_key}_depth"] = cam.read_latest_depth(max_age_ms=4000)
                 dt_ms = (time.perf_counter() - start) * 1e3
                 logger.debug(f"{self} read {cam_key} depth: {dt_ms:.1f}ms")
+
+        return obs_dict
+
+
+
+    def get_only_state(self):
+        # Read arm position
+        start = time.perf_counter()
+        obs_dict = self.bus.sync_read("Present_Position", num_retry=self.config.num_read_retries)
+        obs_dict = {f"{motor}.pos": val for motor, val in obs_dict.items()}
+        dt_ms = (time.perf_counter() - start) * 1e3
+        logger.debug(f"{self} read state: {dt_ms:.1f}ms")
 
         return obs_dict
 

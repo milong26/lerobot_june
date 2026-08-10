@@ -1,8 +1,8 @@
 """
-数据采集模块
+Evo-1 数据采集模块
 功能：
 - 连接机器人硬件
-- 实时读取摄像头图像、关节状态、力传感器数据
+- 实时读取摄像头图像、关节状态
 - 保存最新观测数据
 - 异步保存历史数据到本地（跳帧策略，降低CPU压力）
 """
@@ -17,12 +17,11 @@ import os
 import logging
 from datetime import datetime
 from pathlib import Path
-from collections import deque
 
 logger = logging.getLogger(__name__)
 
 
-class DataSaver:
+class Evo1DataSaver:
     """异步数据保存器（后台线程，不阻塞主循环）"""
     
     def __init__(
@@ -40,18 +39,14 @@ class DataSaver:
         
         self.save_images = save_images
         
-        # 线程安全队列
-        self.data_queue = queue.Queue(maxsize=100)  # 限制队列大小防止内存溢出
+        self.data_queue = queue.Queue(maxsize=100)
         
-        # 后台保存线程
         self.save_thread = threading.Thread(target=self._save_worker, daemon=True)
         self.running = False
         
-        # 帧计数器
         self.frame_count = 0
-        self.saved_count = 0  # 实际保存成功的帧数
+        self.saved_count = 0
         
-        # 创建时间戳子目录
         self.timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         self.session_dir = self.save_dir / self.timestamp
         self.session_dir.mkdir(exist_ok=True)
@@ -77,33 +72,26 @@ class DataSaver:
             action: 执行的动作（可选）
         """
         try:
-
-            # 准备保存的数据（轻量级）
             save_data = {
-                'timestamp': np.array(observation.get('timestamp', time.time()), dtype=np.float64),  # 转为 numpy 数组
-                'state': observation['state'].copy(),  # 6维
-                'force': observation['force'].copy(),  # 15维
+                'timestamp': np.array(observation.get('timestamp', time.time()), dtype=np.float64),
+                'state': observation['state'].copy(),
                 'frame_idx': self.frame_count
             }
             
-            # 可选保存图像（保存原始尺寸，与 payload 一致）
             if self.save_images and 'images' in observation:
                 save_data['images'] = {}
                 for key, img in observation['images'].items():
                     if isinstance(img, np.ndarray):
-                        save_data['images'][key] = img.copy()  # 保存原始图像
+                        save_data['images'][key] = img.copy()
                     else:
                         save_data['images'][key] = img
             
-            # 保存动作
             if action is not None:
                 save_data['action'] = action.copy()
             
-            # 非阻塞入队
             self.data_queue.put_nowait(save_data)
             
         except queue.Full:
-            # 队列满了，丢弃当前帧（不影响主循环）
             pass
         
         self.frame_count += 1
@@ -112,25 +100,20 @@ class DataSaver:
         """后台保存工作线程"""
         while self.running:
             try:
-                # 从队列获取数据（超时1秒）
                 save_data = self.data_queue.get(timeout=1)
                 
-                # 保存为 npz 格式（轻量、快速）
                 frame_idx = save_data.pop('frame_idx')
                 
-                # 分离图像和其他数据
                 images = save_data.pop('images', None)
                 
-                # 保存 state/force/action 到 npz
                 npz_path = self.session_dir / f"frame_{frame_idx:06d}.npz"
                 np.savez_compressed(npz_path, **save_data)
                 
-                # 保存图像为 npz（如果启用）
                 if images:
                     img_path = self.session_dir / f"frame_{frame_idx:06d}_images.npz"
-                    np.savez_compressed(img_path, **images)  # 将字典展开为多个数组保存
+                    np.savez_compressed(img_path, **images)
                 
-                self.saved_count += 1  # 保存成功计数
+                self.saved_count += 1
                 
             except queue.Empty:
                 continue
@@ -138,8 +121,8 @@ class DataSaver:
                 print(f"[WARN] 保存数据失败: {e}")
 
 
-class DataCollector:
-    """机器人数据采集器"""
+class Evo1DataCollector:
+    """Evo-1 机器人数据采集器"""
     
     def __init__(self, robot, enable_recording: bool = False, recording_config: Dict[str, Any] = None, wowskin_sensor=None, wowskin_baseline=None):
         """
@@ -152,21 +135,16 @@ class DataCollector:
         """
         self.robot = robot
         
-        # 串口访问锁（防止多线程冲突）
-        self._robot_lock = threading.Lock()
-        
         # WowSkin 力传感器
         self.wowskin_sensor = wowskin_sensor
         self.wowskin_baseline = wowskin_baseline
         
-        # 最新观测数据（替代历史缓冲区）
         self.latest_observation = None
         
-        # 数据保存器
         self.data_saver = None
         if enable_recording:
             config = recording_config or {}
-            self.data_saver = DataSaver(
+            self.data_saver = Evo1DataSaver(
                 save_dir=config.get('save_dir', './recorded_data'),
                 save_images=config.get('save_images', True)
             )
@@ -181,33 +159,20 @@ class DataCollector:
         if self.data_saver:
             self.data_saver.stop()
             
-    def get_only_state(self) -> Dict[str, float]:
-        """
-        仅获取当前关节状态（不获取图像和力传感器，速度更快）
-        
-        Returns:
-            关节状态字典，格式: {'shoulder_pan.pos': float, ...}
-        """
-        with self._robot_lock:
-            return self.robot.get_only_state()
-    
     def get_observation(self) -> Dict[str, Any]:
         """
         获取当前观测数据
         
         Returns:
             {
-                'images': {camera_name: np.ndarray},  # 图像字典
-                'state': np.ndarray,  # 6维关节状态
-                'force': np.ndarray,  # 15维力传感器数据
+                'images': {camera_name: np.ndarray},
+                'state': np.ndarray,
+                'force': np.ndarray,
                 'timestamp': float
             }
         """
-        # 从机器人获取原始观测
-        with self._robot_lock:
-            raw_obs = self.robot.get_observation()
+        raw_obs = self.robot.get_observation()
         
-        # 提取图像数据（直接使用 'wrist' 和 'top' 键）
         images = {}
         for key in ['wrist', 'top']:
             if key in raw_obs:
@@ -216,22 +181,17 @@ class DataCollector:
                 else:
                     images[key] = raw_obs[key]
         
-        # 提取关节状态（6个电机的位置，保持原始顺序）
-        # SO100 返回的键格式: "{motor}.pos"
         motor_keys = ['shoulder_pan.pos', 'shoulder_lift.pos', 'elbow_flex.pos', 
                       'wrist_flex.pos', 'wrist_roll.pos', 'gripper.pos']
         state = np.array([raw_obs[k] for k in motor_keys], dtype=np.float32)
         
         # 力传感器数据（15维）
-        # 如果有 wowskin 传感器，从 wowskin 中获取
         force = np.zeros(15, dtype=np.float32)
         if self.wowskin_sensor is not None:
             try:
-                # 从 wowskin 获取最新数据
                 wowskin_sample = self.wowskin_sensor.get_data(num_samples=1)[0][1:]
                 if self.wowskin_baseline is not None:
                     wowskin_sample = wowskin_sample - self.wowskin_baseline
-                # 取前15维（5个磁传感器 × 3轴 = 15维）
                 force = np.array(wowskin_sample[:15], dtype=np.float32)
             except Exception as e:
                 logger.warning(f"获取 WowSkin 数据失败: {e}")
@@ -245,7 +205,6 @@ class DataCollector:
             'timestamp': raw_obs.get('timestamp', 0.0)
         }
         
-        # 保存最新观测
         self.latest_observation = observation
         
         return observation
@@ -258,6 +217,15 @@ class DataCollector:
             最新观测数据字典，如果没有则返回 None
         """
         return self.latest_observation
+    
+    def get_only_state(self) -> Dict[str, float]:
+        """
+        仅获取当前关节状态（不获取图像和力传感器，速度更快）
+        
+        Returns:
+            关节状态字典，格式: {'shoulder_pan.pos': float, ...}
+        """
+        return self.robot.get_only_state()
     
     def send_action(self, action) -> Dict[str, Any]:
         """
@@ -282,18 +250,13 @@ class DataCollector:
                 if i < len(action):
                     action_dict[key] = float(action[i])
         
-        # 发送动作
-        with self._robot_lock:
-            result = self.robot.send_action(action_dict)
+        result = self.robot.send_action(action_dict)
         
-        # 录制数据（异步，不阻塞）
         if self.data_saver:
-            # 获取最新观测
             if self.latest_observation is not None:
                 latest_obs = {
                     'images': self.latest_observation['images'],
                     'state': self.latest_observation['state'],
-                    'force': self.latest_observation['force'],
                     'timestamp': time.time()
                 }
                 self.data_saver.queue_data(latest_obs, action)
