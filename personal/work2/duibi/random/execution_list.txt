@@ -1,0 +1,24 @@
+Random Baseline Experiments - Execution List
+================================================================================
+
+Status Legend: [ ] Pending  [R] Running  [✓] Done  [✗] Failed
+
+Status   Experiment                     GPU   tmux Session         Script
+----------------------------------------------------------------------------------------------------
+[ ]      random_100_seed42              0     random_100_s42       bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_100_seed42.sh
+[ ]      random_100_seed142             1     random_100_s142      bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_100_seed142.sh
+[ ]      random_100_seed242             0     random_100_s242      bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_100_seed242.sh
+[ ]      random_200_seed42              1     random_200_s42       bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_200_seed42.sh
+[ ]      random_200_seed142             0     random_200_s142      bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_200_seed142.sh
+[ ]      random_200_seed242             1     random_200_s242      bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_200_seed242.sh
+[ ]      random_300_seed42              0     random_300_s42       bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_300_seed42.sh
+[ ]      random_300_seed142             1     random_300_s142      bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_300_seed142.sh
+[ ]      random_300_seed242             0     random_300_s242      bash /data/zhonglinye/jun/lerobot/personal/work2/duibi/random/scripts/jobs/run_random_300_seed242.sh
+
+================================================================================
+Commands:
+  tmux ls                    # List all sessions
+  tmux attach -t <session>   # Attach to session
+  cat logs/<exp>.time        # Check start/end time
+  cat logs/<exp>.pid         # Check PID
+  tail -f logs/<exp>.log     # Follow logs

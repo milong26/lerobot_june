@@ -73,37 +73,20 @@ Episode Meta Details
 就确定是metaworld的pickplacev3任务，唯一的目标是数据量少+成功率高
 1. 每一集是什么、在哪里、有哪些任务变化
 2. 从数据集中extract_embedding，首先检验smolvlm2
-python extract_embeddings.py --num-keyframes 5 --force
-获得的是每一集
-pca/k5/
-├── raw_embeddings.npy       # (500, 5, 960)  ← 改了！
-├── embedding_metadata.json
-├── pca_embeddings.npy       # (500, 32)
-├── pca_model.pkl
-└── pca_metadata.json
+python extract_embeddings.py --force
+之前相机的忘记提取了python extract_wrist_embeddings.py
+
+
+3. 确定用什么方式得到每集的embedding
 
 
 
-python extract_embeddings.py --num-keyframes 5 --force 运行这个代码以后，personal/work2/ours/pca/k5文件内得到了相应的embedding
-这个过程是这样的：k=5的时候，按照0%, 25%, 50%, 75%, 100%的时间比例从每一集里面抽取5个关键帧，每个关键帧通过 SmolVLM2 的 vision_model，提取视觉特征 → connector 投影到语言空间，得到 (1, hidden_dim) 的 embedding，形状: (N, K, D) = (500, 5, 1024)
-然后降维 PCA: (500, 5120) → (500, 32)
-也顺便运行了k7的：python extract_embeddings.py --num-keyframes 7 --force
+4. 找到ours
 
-第二步有问题，最后每一集的embedding之间要能和别的episode区分开，特别是位置差别大的一定要显著区分。
-
-最后应该会保存
-pca/k5/
-├── raw_embeddings.npy       # 原始特征 (max-pooling 后)：(500, 960)
-├── embedding_metadata.json  # raw 的元信息
-├── pca_embeddings.npy       # PCA 降维后的特征
-├── pca_model.pkl            # PCA 模型对象
-└── pca_metadata.json        # PCA 的元信息
-
-
-3. 运行selction的同时train和eval
-现在不知道我的方法怎么样，所以运行selction以后，会将选择出来的子集保存到
-work2/ours/subsets/ours_sic_b0_fps_size_20_subset.json
-等等这种文件里面。
-
-python run_experiment.py --stage select --strategy sic --target-size 200
-结果会保存到subsets/select_sic_ts200_subset.json这个文件夹
+5. 对比方法
+5.1 首先用random的方法，计算使用100数据集、200数据集、300数据集的成功率
+2026年8月11日19:50:24：开始执行100和200seed=42的train，需要最后输出成功率结果
+执行了
+./jobs/run_random_200_seed42.sh
+和
+./jobs/run_random_100_seed42.sh
