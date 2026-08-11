@@ -53,26 +53,27 @@ def stage_pool():
     return obj_pos, goal_pos, ep_indices, stats
 
 
-def stage_embed(num_keyframes=5, pca_dim=32, force=False):
+def stage_embed(num_keyframes=5, pca_dim=32, pooling="concat", force=False):
     """Stage 2: Extract VLM embeddings with temporal keyframe sampling."""
     print("\n" + "=" * 60)
-    print(f"STAGE 2: Extracting VLM embeddings (K={num_keyframes}, PCA={pca_dim})")
+    print(f"STAGE 2: Extracting VLM embeddings (K={num_keyframes}, pool={pooling}, PCA={pca_dim})")
     print("=" * 60)
 
     from extract_embeddings import load_embeddings
     raw_emb, pca_emb, episode_indices, pca_model = load_embeddings(
         num_keyframes=num_keyframes,
         n_components=pca_dim,
+        pooling=pooling,
         force=force,
     )
     return raw_emb, pca_emb, episode_indices, pca_model
 
 
 def stage_select(strategy="sic", target_size=20, b0_method="fps", b0_grid_size=3,
-                 num_keyframes=5, pca_dim=32):
+                 num_keyframes=5, pca_dim=32, pooling="concat"):
     """Stage 3: Select subset using Ours strategy."""
     print("\n" + "=" * 60)
-    print(f"STAGE 3: Selecting subset (strategy={strategy}, target={target_size})")
+    print(f"STAGE 3: Selecting subset (strategy={strategy}, target={target_size}, pool={pooling})")
     print("=" * 60)
 
     # Load VLM embeddings
@@ -80,6 +81,7 @@ def stage_select(strategy="sic", target_size=20, b0_method="fps", b0_grid_size=3
     raw_emb, pca_emb, episode_indices, _ = load_embeddings(
         num_keyframes=num_keyframes,
         n_components=pca_dim,
+        pooling=pooling,
     )
 
     # Use PCA embeddings for selection (N, pca_dim)
@@ -111,13 +113,14 @@ def stage_select(strategy="sic", target_size=20, b0_method="fps", b0_grid_size=3
     selected = selector.select(target_size, b0_indices=b0_indices)
 
     # Save
-    method_name = f"select_{strategy}_ts{target_size}"
+    method_name = f"select_{strategy}_k{num_keyframes}_{pooling}_ts{target_size}"
     config = {
         "strategy": strategy,
         "b0_method": b0_method,
         "b0_grid_size": b0_grid_size,
         "target_size": target_size,
         "num_keyframes": num_keyframes,
+        "pooling": pooling,
         "pca_dim": pca_dim,
     }
     result = selector.save_selection(method_name, config)
@@ -327,8 +330,10 @@ def main():
     parser.add_argument("--b0-method", type=str, default="fps",
                         choices=["fps", "uniform_grid", "quantile_grid", "random"])
     parser.add_argument("--b0-grid-size", type=int, default=3)
-    parser.add_argument("--num-keyframes", type=int, default=7, choices=[3, 5, 7, 9],
+    parser.add_argument("--num-keyframes", type=int, default=5, choices=[3, 5, 7, 9],
                         help="Number of temporal keyframes (default: 5)")
+    parser.add_argument("--pooling", type=str, default="concat", choices=["max", "mean", "concat"],
+                        help="Pooling method for keyframe embeddings (default: concat)")
     parser.add_argument("--pca-dim", type=int, default=32,
                         help="PCA dimension (default: 32)")
     parser.add_argument("--force-embed", action="store_true",
@@ -353,12 +358,13 @@ def main():
     print(f"Target size: {args.target_size}")
     print(f"B0 method: {args.b0_method}")
     print(f"Num keyframes: {args.num_keyframes}")
+    print(f"Pooling: {args.pooling}")
     print(f"PCA dim: {args.pca_dim}")
 
     if args.stage == "pool":
         stage_pool()
     elif args.stage == "embed":
-        stage_embed(num_keyframes=args.num_keyframes, pca_dim=args.pca_dim, force=args.force_embed)
+        stage_embed(num_keyframes=args.num_keyframes, pca_dim=args.pca_dim, pooling=args.pooling, force=args.force_embed)
     elif args.stage == "select":
         stage_select(
             strategy=args.strategy,
@@ -366,6 +372,7 @@ def main():
             b0_method=args.b0_method,
             b0_grid_size=args.b0_grid_size,
             num_keyframes=args.num_keyframes,
+            pooling=args.pooling,
             pca_dim=args.pca_dim,
         )
     elif args.stage == "train-eval":

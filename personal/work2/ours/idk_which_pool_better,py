@@ -1,0 +1,82 @@
+"""
+Analyze embedding quality: compare max-pooling vs mean-pooling
+"""
+import numpy as np
+from pathlib import Path
+from sklearn.decomposition import PCA
+from scipy.spatial.distance import pdist, squareform
+
+PCA_DIR = Path(__file__).parent / "pca"
+
+def analyze_embeddings(k=5, n_components=32):
+    k_dir = PCA_DIR / f"k{k}"
+    raw_path = k_dir / "raw_embeddings.npy"
+    
+    if not raw_path.exists():
+        print(f"No embeddings found at {raw_path}")
+        return
+    
+    # Load raw embeddings (N, K, D) or (N, D)
+    raw = np.load(raw_path)
+    print(f"Raw embeddings shape: {raw.shape}")
+    
+    if raw.ndim == 3:
+        N, K, D = raw.shape
+        # Max-pooling
+        max_pooled = raw.max(axis=1)  # (N, D)
+        # Mean-pooling
+        mean_pooled = raw.mean(axis=1)  # (N, D)
+    else:
+        N, D = raw.shape
+        max_pooled = raw
+        mean_pooled = None
+        print("Already max-pooled, no mean comparison available")
+    
+    # Analyze both
+    for name, emb in [("max-pooling", max_pooled), ("mean-pooling", mean_pooled)]:
+        if emb is None:
+            continue
+        
+        print(f"\n{'='*50}")
+        print(f"Analyzing: {name}")
+        print(f"{'='*50}")
+        
+        # PCA
+        pca = PCA(n_components=n_components)
+        pca_emb = pca.fit_transform(emb)
+        print(f"PCA explained variance: {pca.explained_variance_ratio_.sum():.4f}")
+        
+        # Pairwise distances
+        dist_matrix = squareform(pdist(pca_emb, metric='euclidean'))
+        
+        # Global statistics
+        upper_tri = dist_matrix[np.triu_indices(N, k=1)]
+        print(f"Global distance: mean={upper_tri.mean():.4f}, median={np.median(upper_tri):.4f}")
+        print(f"Distance std: {upper_tri.std():.4f}")
+        
+        # B0 simulation: FPS in PCA space
+        from selection_strategies import B0Initializer
+        b0_indices = B0Initializer.fps(pca_emb, n=9)
+        
+        # d_bar: median distance among B0 points
+        b0_dist = dist_matrix[np.ix_(b0_indices, b0_indices)]
+        b0_upper = b0_dist[np.triu_indices(9, k=1)]
+        d_bar = np.median(b0_upper)
+        print(f"B0 (FPS) d_bar: {d_bar:.4f}")
+        
+        # Coverage ratio: how much of the space B0 covers
+        min_dists_to_b0 = dist_matrix[:, b0_indices].min(axis=1)
+        coverage_50 = (min_dists_to_b0 < upper_tri.mean() * 0.5).sum() / N
+        print(f"Coverage (50% of mean dist): {coverage_50:.2%}")
+        
+        # Nearest neighbor distance distribution
+        np.fill_diagonal(dist_matrix, np.inf)
+        nn_dists = dist_matrix.min(axis=1)
+        print(f"Nearest neighbor dist: mean={nn_dists.mean():.4f}, min={nn_dists.min():.4f}")
+        
+        # Coefficient of variation (higher = more diverse)
+        cv = upper_tri.std() / upper_tri.mean()
+        print(f"Distance CV (diversity): {cv:.4f}")
+
+if __name__ == "__main__":
+    analyze_embeddings(k=5, n_components=32)

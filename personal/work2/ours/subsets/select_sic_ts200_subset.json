@@ -1357,8 +1357,8 @@
     "b0_method": "fps",
     "b0_grid_size": 3,
     "target_size": 200,
-    "num_keyframes": 7,
+    "num_keyframes": 5,
     "pca_dim": 32
   },
-  "timestamp": "2026-08-10 11:06:47"
+  "timestamp": "2026-08-10 15:01:41"
 }

@@ -73,11 +73,31 @@ Episode Meta Details
 就确定是metaworld的pickplacev3任务，唯一的目标是数据量少+成功率高
 1. 每一集是什么、在哪里、有哪些任务变化
 2. 从数据集中extract_embedding，首先检验smolvlm2
+python extract_embeddings.py --num-keyframes 5 --force
+获得的是每一集
+pca/k5/
+├── raw_embeddings.npy       # (500, 5, 960)  ← 改了！
+├── embedding_metadata.json
+├── pca_embeddings.npy       # (500, 32)
+├── pca_model.pkl
+└── pca_metadata.json
+
+
 
 python extract_embeddings.py --num-keyframes 5 --force 运行这个代码以后，personal/work2/ours/pca/k5文件内得到了相应的embedding
 这个过程是这样的：k=5的时候，按照0%, 25%, 50%, 75%, 100%的时间比例从每一集里面抽取5个关键帧，每个关键帧通过 SmolVLM2 的 vision_model，提取视觉特征 → connector 投影到语言空间，得到 (1, hidden_dim) 的 embedding，形状: (N, K, D) = (500, 5, 1024)
 然后降维 PCA: (500, 5120) → (500, 32)
 也顺便运行了k7的：python extract_embeddings.py --num-keyframes 7 --force
+
+第二步有问题，最后每一集的embedding之间要能和别的episode区分开，特别是位置差别大的一定要显著区分。
+
+最后应该会保存
+pca/k5/
+├── raw_embeddings.npy       # 原始特征 (max-pooling 后)：(500, 960)
+├── embedding_metadata.json  # raw 的元信息
+├── pca_embeddings.npy       # PCA 降维后的特征
+├── pca_model.pkl            # PCA 模型对象
+└── pca_metadata.json        # PCA 的元信息
 
 
 3. 运行selction的同时train和eval
