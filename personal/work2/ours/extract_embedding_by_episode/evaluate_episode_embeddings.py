@@ -842,7 +842,11 @@ def save_evaluation_results(
 
     search_df = pd.DataFrame(all_results)
     search_df = search_df.sort_values("position_correlation", ascending=False)
-    search_df.insert(0, "rank", range(1, len(search_df) + 1))
+    if "rank" not in search_df.columns:
+        search_df.insert(0, "rank", range(1, len(search_df) + 1))
+    else:
+        search_df = search_df.drop(columns=["rank"])
+        search_df.insert(0, "rank", range(1, len(search_df) + 1))
     search_csv = OUTPUT_DIR / "temporal_search_results.csv"
     search_df.to_csv(search_csv, index=False)
     print(f"Saved temporal search results to {search_csv}")
@@ -1049,10 +1053,11 @@ def main():
     print("=" * 60)
     save_evaluation_results(valid_results, best_result, full_ep_result)
 
-    print("\nSaving final episode embeddings...")
-    eval_frames = [all_frame_embeddings[i] for i in eval_indices]
+    print("\nSaving final episode embeddings (ALL 500 episodes)...")
+    all_indices = list(range(len(all_frame_embeddings)))
+    all_frames = [all_frame_embeddings[i] for i in all_indices]
     final_embs, pca_model = extract_episode_embeddings(
-        eval_frames,
+        all_frames,
         best_result["method_name"],
         best_result["start_pct"],
         best_result["end_pct"],
@@ -1067,7 +1072,7 @@ def main():
         pickle.dump(pca_model, f)
 
     meta_out = []
-    for i, ep_idx in enumerate(eval_indices):
+    for i, ep_idx in enumerate(all_indices):
         meta_out.append({
             "episode_id": ep_idx,
             "object_x": obj_positions[ep_idx, 0],

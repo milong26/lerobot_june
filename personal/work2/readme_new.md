@@ -78,6 +78,125 @@ python extract_embeddings.py --force
 
 
 3. 确定用什么方式得到每集的embedding
+evaluate_episode_embeddings.py
+这个代码运行以后应该可以得到比较好的以episode为单位的embedding，用于后续的微调
+执行以后得到的结果显示
+============================================================
+TOP 20 TEMPORAL STRATEGIES
+============================================================
+Rank  Method                       Start%  End%    Len%    Weight       PosCorr  d_bar   Cluster  Overall 
+--------------------------------------------------------------------------------------------------------------
+1     temporal_multi_window        15      30      15      uniform      0.1118   0.0000  0.0000   0.0671  
+2     temporal_multi_window        25      40      15      uniform      0.1118   0.0000  0.0000   0.0671  
+3     temporal_multi_window        60      75      15      uniform      0.1118   0.0000  0.0000   0.0671  
+4     temporal_multi_window        70      85      15      uniform      0.1118   0.0000  0.0000   0.0671  
+5     temporal_multi_window        15      70      55      uniform      0.0965   0.1023  0.0000   0.0784  
+6     temporal_multi_window        30      85      55      uniform      0.0914   0.1020  0.0000   0.0752  
+7     temporal_multi_window        30      65      35      uniform      0.0902   0.1005  0.0000   0.0742  
+8     temporal_multi_window        35      70      35      uniform      0.0901   0.1004  0.0000   0.0741  
+9     temporal_window              50      95      45      uniform      0.0896   0.1017  288.4054 57.7552 
+10    temporal_multi_window        45      60      15      uniform      0.0879   0.1003  0.0000   0.0728  
+11    temporal_multi_window        10      80      70      uniform      0.0861   0.1000  0.0000   0.0716  
+12    temporal_multi_window        5       30      25      uniform      0.0852   0.0823  0.0000   0.0676  
+13    temporal_multi_window        70      95      25      uniform      0.0852   0.0823  0.0000   0.0676  
+14    temporal_multi_window        40      95      55      uniform      0.0829   0.1021  0.0000   0.0702  
+15    temporal_multi_window        20      75      55      uniform      0.0812   0.1021  0.0000   0.0691  
+16    temporal_window              0       60      60      uniform      0.0796   0.1035  50.1713  10.1027 
+17    temporal_multi_window        55      90      35      uniform      0.0789   0.0000  0.0000   0.0474  
+18    temporal_multi_window        45      100     55      uniform      0.0775   0.0370  0.0000   0.0539  
+19    temporal_window              30      90      60      uniform      0.0760   0.1049  30.2329  6.1132  
+20    temporal_multi_window        30      90      60      uniform      0.0732   0.1018  0.0000   0.0643  
+
+============================================================
+GENERATING VISUALIZATIONS
+============================================================
+Saved embedding comparison to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/embedding_comparison.png
+Saved temporal importance to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/temporal_importance.png
+
+============================================================
+SAVING RESULTS
+============================================================
+Saved evaluation results to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/evaluation.csv
+Saved temporal search results to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/temporal_search_results.csv
+
+Saving final episode embeddings...
+
+============================================================
+ADAPTIVE TEMPORAL EMBEDDING SEARCH
+============================================================
+
+Dataset:
+MetaWorld PickPlace-v3
+
+Episodes:
+500
+
+Frame embedding dimension:
+1920
+
+Final episode embedding dimension:
+32
+
+------------------------------------------------------------
+BEST STRATEGY
+------------------------------------------------------------
+
+Method:
+temporal_multi_window
+
+Temporal window:
+15% - 30%
+
+Window length:
+15%
+
+Weighting:
+uniform
+
+------------------------------------------------------------
+METRICS
+------------------------------------------------------------
+
+Position correlation:
+0.1118
+
+d_bar ratio:
+0.0000
+
+Cluster separation:
+0.0000
+
+Overall score:
+0.0671
+
+------------------------------------------------------------
+BASELINE COMPARISON
+------------------------------------------------------------
+
+Full episode:
+0.0220
+
+Best temporal strategy:
+0.1118
+
+Improvement:
++409.09%
+
+------------------------------------------------------------
+RECOMMENDATION
+------------------------------------------------------------
+
+Use:
+temporal_multi_window
+
+Effective temporal region:
+15% - 30%
+
+Reason:
+Highest position correlation on held-out episodes.
+
+
+
 
 
 
