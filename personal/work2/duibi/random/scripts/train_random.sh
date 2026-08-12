@@ -52,6 +52,7 @@ lerobot-train \
     --policy.path=lerobot/smolvla_base \
     --policy.device=cuda \
     --policy.push_to_hub=false \
+    --policy.empty_cameras=1 \
     --dataset.repo_id=lerobot/metaworld_pick_place \
     --dataset.root=$DATASET_DIR \
     --dataset.episodes="$EPISODES" \
@@ -59,6 +60,7 @@ lerobot-train \
     --rename_map='{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \
     --env.type=metaworld \
     --env.task=pick-place-v3 \
+    --env.camera_name="corner2,behindGripper" \
     --policy.vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct \
     --policy.freeze_vision_encoder=true \
     --policy.train_expert_only=true \

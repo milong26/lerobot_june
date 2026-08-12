@@ -455,6 +455,7 @@ class MetaworldEnv(EnvConfig):
     episode_length: int = 400
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
+    camera_name: str = "corner2"  # Support dual cameras: "corner2,behindGripper"
     multitask_eval: bool = True
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
@@ -466,17 +467,22 @@ class MetaworldEnv(EnvConfig):
             "action": ACTION,
             "agent_pos": OBS_STATE,
             "top": f"{OBS_IMAGE}",
-            "pixels/top": f"{OBS_IMAGE}",
+            "pixels/top": f"{OBS_IMAGES}.top",
         }
     )
 
     def __post_init__(self):
+        cameras = [c.strip() for c in self.camera_name.split(",")]
         if self.obs_type == "pixels":
             self.features["top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
 
         elif self.obs_type == "pixels_agent_pos":
             self.features["agent_pos"] = PolicyFeature(type=FeatureType.STATE, shape=(4,))
             self.features["pixels/top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
+            # Add wrist camera feature if dual-camera mode
+            if len(cameras) > 1:
+                self.features["pixels/wrist"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
+                self.features_map["pixels/wrist"] = f"{OBS_IMAGES}.wrist"
 
         else:
             raise ValueError(f"Unsupported obs_type: {self.obs_type}")
@@ -486,6 +492,7 @@ class MetaworldEnv(EnvConfig):
         return {
             "obs_type": self.obs_type,
             "render_mode": self.render_mode,
+            "camera_name": self.camera_name,
         }
 
     def create_envs(self, n_envs: int, use_async_envs: bool = False):

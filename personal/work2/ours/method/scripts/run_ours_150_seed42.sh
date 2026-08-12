@@ -16,7 +16,6 @@ OUTPUT_DIR="$METHOD_DIR/training_output/N${NUM_EPISODES}/seed${SEED}"
 DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset"
 LOG_DIR="$METHOD_DIR/training_output/logs"
 
-mkdir -p "$OUTPUT_DIR" "$LOG_DIR"
 
 EPISODES=$(python -c "
 import json

@@ -98,13 +98,17 @@ class MetaworldEnv(gym.Env):
         self.observation_height = observation_height
         self.visualization_width = visualization_width
         self.visualization_height = visualization_height
-        self.camera_name = camera_name
+
+        # Support multiple cameras (comma-separated, e.g., "corner2,behindGripper")
+        self.camera_names = [c.strip() for c in camera_name.split(",")]
+        self.camera_name = camera_name  # Keep original for backward compatibility
 
         self._fixed_states = fixed_states
         self._fixed_state_cursor = 0
 
         self._env_name = self.task  # already stripped of "metaworld-" prefix above
         self._env = None  # deferred — created on first reset() inside the worker subprocess
+        self._env_wrist = None  # second camera for dual-camera setup
         self._max_episode_steps = 500  # MT1 environments always have max_path_length=500
         self.task_description = TASK_DESCRIPTIONS[self.task]
 
@@ -153,14 +157,23 @@ class MetaworldEnv(gym.Env):
         if self._env is not None:
             return
         mt1 = metaworld.MT1(self._env_name, seed=42)
-        env = mt1.train_classes[self._env_name](render_mode="rgb_array", camera_name=self.camera_name)
+        env = mt1.train_classes[self._env_name](render_mode="rgb_array", camera_name=self.camera_names[0])
         env.set_task(mt1.train_tasks[0])
-        if self.camera_name == "corner2":
+        if self.camera_names[0] == "corner2":
             env.model.cam_pos[2] = [0.75, 0.075, 0.7]
         env.reset()
         env._freeze_rand_vec = False  # otherwise no randomization
         env.seeded_rand_vec = True  # use seeded RNG so reset(seed=X) controls object positions
         self._env = env
+
+        # Create second camera environment if dual-camera mode
+        if len(self.camera_names) > 1:
+            env_wrist = mt1.train_classes[self._env_name](render_mode="rgb_array", camera_name=self.camera_names[1])
+            env_wrist.set_task(mt1.train_tasks[0])
+            env_wrist.reset()
+            env_wrist._freeze_rand_vec = False
+            env_wrist.seeded_rand_vec = True
+            self._env_wrist = env_wrist
 
     def render(self) -> np.ndarray:
         """
@@ -171,18 +184,36 @@ class MetaworldEnv(gym.Env):
         """
         self._ensure_env()
         image = self._env.render()
-        if self.camera_name == "corner2":
+        if self.camera_names[0] == "corner2":
             # Images from this camera are flipped — correct them
+            image = np.flip(image, (0, 1))
+        return image
+
+    def _sync_env_state(self, src_env, dst_env):
+        """Sync simulation state from src to dst environment."""
+        dst_env.data.qpos[:] = src_env.data.qpos[:]
+        dst_env.data.qvel[:] = src_env.data.qvel[:]
+        dst_env.data.ctrl[:] = src_env.data.ctrl[:]
+        mujoco.mj_forward(dst_env.model, dst_env.data)
+
+    def _render_camera(self, env, camera_name) -> np.ndarray:
+        """Render a specific camera view."""
+        image = env.render()
+        if camera_name == "corner2":
             image = np.flip(image, (0, 1))
         return image
 
     def _format_raw_obs(self, raw_obs: np.ndarray) -> RobotObservation:
         image = None
         if self._env is not None:
-            image = self._env.render()
-            if self.camera_name == "corner2":
-                # NOTE: The "corner2" camera in MetaWorld environments outputs images with both axes inverted.
-                image = np.flip(image, (0, 1))
+            image = self._render_camera(self._env, self.camera_names[0])
+
+        # Sync wrist camera environment state and render
+        image_wrist = None
+        if self._env_wrist is not None:
+            self._sync_env_state(self._env, self._env_wrist)
+            image_wrist = self._render_camera(self._env_wrist, self.camera_names[1])
+
         agent_pos = raw_obs[:4]
         if self.obs_type == "state":
             raise NotImplementedError(
@@ -196,13 +227,17 @@ class MetaworldEnv(gym.Env):
             )
 
             if self.obs_type == "pixels":
-                obs = {"pixels": image.copy()}
+                obs = {"pixels/top": image.copy()}
 
             else:  # pixels_agent_pos
                 obs = {
-                    "pixels": image.copy(),
+                    "pixels/top": image.copy(),
                     "agent_pos": agent_pos,
                 }
+
+            # Add wrist camera image if dual-camera mode
+            if image_wrist is not None:
+                obs["pixels/wrist"] = image_wrist.copy()
         else:
             raise ValueError(f"Unknown obs_type: {self.obs_type}")
         return obs
@@ -234,6 +269,13 @@ class MetaworldEnv(gym.Env):
         if seed is not None:
             self._env.seed(seed)
         raw_obs, info = self._env.reset(seed=seed)
+
+        # Sync wrist camera if dual-camera mode
+        if self._env_wrist is not None:
+            if seed is not None:
+                self._env_wrist.seed(seed)
+            self._env_wrist.reset(seed=seed)
+            self._sync_env_state(self._env, self._env_wrist)
 
         observation = self._format_raw_obs(raw_obs)
 
@@ -292,6 +334,8 @@ class MetaworldEnv(gym.Env):
     def close(self):
         if self._env is not None:
             self._env.close()
+        if self._env_wrist is not None:
+            self._env_wrist.close()
 
 
 # ---- Main API ----------------------------------------------------------------
