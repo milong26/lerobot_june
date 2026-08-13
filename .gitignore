@@ -185,3 +185,6 @@ work/test_half_resolution/debug_recorded_data/*
 提交提示.md
 work/test_half_resolution/batch_results/*
 work/test_half_resolution/debug_output/*
+work/test_rollback/force_comparison/*
+work/test_rollback/state_comparison/*
+work/test_rollback/force_analysis/*
