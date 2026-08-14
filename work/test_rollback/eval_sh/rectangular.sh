@@ -15,7 +15,7 @@
 # 切换到脚本所在目录
 cd /home/qwe/jun/lerobot/work/test_rollback
 
-# 运行主控制程序（带回滚重试机制 + 力传感器记录 + state 对比绘图 + 力滤波检查）
+# 运行主控制程序（带回滚重试机制 - 新版状态机 + 力传感器记录 + state 对比绘图）
 /home/qwe/anaconda3/envs/lb_local/bin/python main_controller.py \
     --robot.type=so100_follower \
     --robot.port=/dev/ttyACM1 \
@@ -38,13 +38,15 @@ cd /home/qwe/jun/lerobot/work/test_rollback
     --record_force_save_dir=./force_comparison \
     --record_gripper=True \
     --record_gripper_save_dir=./gripper_comparison \
-    --force_ratio_multiplier=10.0 \
-    --force_delay_steps=50 \
+    --min_start_steps=100 \
     --force_filter_cutoff_freq=2.0 \
     --force_sampling_rate=30.0 \
-    --grasp_history_window=50 \
-    --min_start_steps=100 \
-    --gripper_decrease_threshold=5 \
-    --gripper_stable_threshold=1 \
-    --use_gripper_stable_check=True \
-    --use_gripper_initial_close_check=True
+    --force_delay_steps=50 \
+    --gripper_velocity_threshold=1 \
+    --stable_window=10 \
+    --settle_steps=30 \
+    --sustain_steps=10 \
+    --max_closing_duration=100 \
+    --grasp_wait_steps=10 \
+    --force_ratio_threshold=0.2 \
+    --filter_order=4

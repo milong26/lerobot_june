@@ -37,7 +37,6 @@ import os
 from dataclasses import dataclass, field
 from typing import Dict, Any, Optional
 from collections import deque
-from scipy.signal import butter, filtfilt
 import numpy as np
 import draccus
 import threading
@@ -91,72 +90,26 @@ logger = logging.getLogger(__name__)
 
 
 class ForceDataRecorder:
-    """力传感器对比数据记录（只保存滤波后的 L2 范数）"""
+    """力传感器对比数据记录（新版状态机模式）"""
     
     def __init__(self, save_dir: str = "./force_comparison", rollback_config: Optional[RollbackConfig] = None):
         self.save_dir = Path(save_dir)
         self.save_dir.mkdir(parents=True, exist_ok=True)
         self.rollback_config = rollback_config
         
-        self.step_indices = []
-        self.actual_force_norms = []
-        self.predicted_force_norms = []
-        
-        # 历史数据（用于滤波）
-        self.cutoff_freq = rollback_config.force_filter_cutoff_freq if rollback_config else 2.0
-        self.fs = rollback_config.force_sampling_rate if rollback_config else 30.0
-        self.actual_force_history: deque = deque(maxlen=100)
-        self.predicted_force_history: deque = deque(maxlen=100)
+        self.step_indices = [] #TODO: 应该可以不需要保存这个？
+        self.gripper_states = []  # 状态机状态字符串列表
+        self.gripper_close_threshold = None  # 动态计算的闭合阈值
+        self.initial_gripper_value = None  # 初始 gripper 值
     
-    def _butterworth_lowpass_1d(self, signal, cutoff_freq=None, fs=None, order=4):
-        """Butterworth 低通滤波（1D信号）"""
-        if cutoff_freq is None:
-            cutoff_freq = self.cutoff_freq
-        if fs is None:
-            fs = self.fs
-        
-        # filtfilt 要求信号长度 > padlen (padlen = 3 * max(len(a), len(b)))
-        # 对于 order 阶滤波器，len(a) = len(b) = order + 1
-        # 所以 padlen = 3 * (order + 1)，需要 len(signal) > padlen
-        min_length = 3 * (order + 1) + 1  # 至少需要 padlen + 1
-        if len(signal) <= min_length:
-            return signal
-        
-        nyquist = fs / 2.0
-        normalized_cutoff = cutoff_freq / nyquist
-        b, a = butter(order, normalized_cutoff, btype='low', analog=False)
-        return filtfilt(b, a, signal)
-    
-    def record(self, step_idx: int, actual_force: np.ndarray, predicted_force: np.ndarray):
-        """记录一帧的力传感器数据（保存滤波后的 L2 范数）"""
-        actual_norm = float(np.linalg.norm(actual_force))
-        predicted_norm = float(np.linalg.norm(predicted_force))
-        
-        self.actual_force_history.append(actual_norm)
-        self.predicted_force_history.append(predicted_norm)
-        
-        # 对历史数据进行滤波，获取当前滤波后的值
-        min_length = 3 * (4 + 1) + 1  # order=4, padlen=15, 需要 > 15
-        if len(self.predicted_force_history) > min_length:
-            current_array = np.array(list(self.predicted_force_history))
-            current_filtered = self._butterworth_lowpass_1d(current_array)
-            predicted_norm_filtered = float(current_filtered[-1])
-        else:
-            predicted_norm_filtered = predicted_norm
-        
-        if len(self.actual_force_history) > min_length:
-            current_array = np.array(list(self.actual_force_history))
-            current_filtered = self._butterworth_lowpass_1d(current_array)
-            actual_norm_filtered = float(current_filtered[-1])
-        else:
-            actual_norm_filtered = actual_norm
-        
+    def record(self, step_idx: int, actual_force: np.ndarray, predicted_force: np.ndarray,
+               gripper_state: str = "unknown"):
+        """记录一帧的力传感器数据（保存状态机状态）"""
         self.step_indices.append(step_idx)
-        self.actual_force_norms.append(actual_norm_filtered)
-        self.predicted_force_norms.append(predicted_norm_filtered)
+        self.gripper_states.append(gripper_state)
     
-    def save_to_file(self):
-        """保存数据到 npz 文件"""
+    def save_to_file(self, state_trajectory: Optional[list] = None):
+        """保存数据到 npz 文件（包含完整配置和状态机轨迹）"""
         if not self.step_indices:
             print("[WARN] 没有数据，跳过保存")
             return
@@ -164,39 +117,72 @@ class ForceDataRecorder:
         timestamp = time.strftime("%Y%m%d_%H%M%S")
         npz_path = self.save_dir / f"force_data_{timestamp}.npz"
         
+        # 新版状态机配置参数
         config_params = {}
         if self.rollback_config is not None:
             config_params = {
-                'force_ratio_multiplier': self.rollback_config.force_ratio_multiplier,
-                'force_delay_steps': self.rollback_config.force_delay_steps,
-                'grasp_history_window': self.rollback_config.grasp_history_window,
+                'enabled': self.rollback_config.enabled,
+                'max_consecutive_failures': self.rollback_config.max_consecutive_failures,
+                'max_rollback_count': self.rollback_config.max_rollback_count,
+                'reset_wait_time': self.rollback_config.reset_wait_time,
+                'use_force_check': self.rollback_config.use_force_check,
+                'use_state_check': self.rollback_config.use_state_check,
                 'min_start_steps': self.rollback_config.min_start_steps,
                 'force_filter_cutoff_freq': self.rollback_config.force_filter_cutoff_freq,
                 'force_sampling_rate': self.rollback_config.force_sampling_rate,
-                'gripper_decrease_threshold': self.rollback_config.gripper_decrease_threshold,
-                'gripper_stable_threshold': self.rollback_config.gripper_stable_threshold,
-                'use_gripper_stable_check': self.rollback_config.use_gripper_stable_check,
+                'force_delay_steps': self.rollback_config.force_delay_steps,
+                'gripper_velocity_threshold': self.rollback_config.gripper_velocity_threshold,
+                'stable_window': self.rollback_config.stable_window,
+                'settle_steps': self.rollback_config.settle_steps,
+                'sustain_steps': self.rollback_config.sustain_steps,
+                'max_closing_duration': self.rollback_config.max_closing_duration,
+                'force_ratio_threshold': self.rollback_config.force_ratio_threshold,
+                'filter_order': self.rollback_config.filter_order,
             }
         
-        np.savez_compressed(
-            npz_path,
-            step_indices=np.array(self.step_indices),
-            actual_force_norms=np.array(self.actual_force_norms),
-            predicted_force_norms=np.array(self.predicted_force_norms),
-            config_params=np.array([str(config_params)]),
-        )
+        # 添加动态计算的 gripper_close_threshold 和 initial_gripper_value
+        if self.gripper_close_threshold is not None:
+            config_params['gripper_close_threshold'] = self.gripper_close_threshold
+        if self.initial_gripper_value is not None:
+            config_params['initial_gripper_value'] = self.initial_gripper_value
+        
+        # 从状态机轨迹提取滤波后的力范数
+        if state_trajectory is not None and len(state_trajectory) > 0:
+            trajectory_steps = np.array([t[0] for t in state_trajectory])
+            trajectory_states = np.array([t[1] for t in state_trajectory])
+            trajectory_actual = np.array([t[2] for t in state_trajectory])
+            trajectory_predicted = np.array([t[3] for t in state_trajectory])
+        else:
+            trajectory_steps = np.array(self.step_indices)
+            trajectory_states = np.array(self.gripper_states)
+            trajectory_actual = np.array([])
+            trajectory_predicted = np.array([])
+        
+        # 保存数据
+        save_dict = {
+            'step_indices': np.array(self.step_indices),
+            'gripper_states': np.array(self.gripper_states),
+            'config_params': np.array([str(config_params)]),
+            'trajectory_steps': trajectory_steps,
+            'trajectory_states': trajectory_states,
+            'trajectory_actual_norms': trajectory_actual,
+            'trajectory_predicted_norms': trajectory_predicted,
+        }
+        
+        np.savez_compressed(npz_path, **save_dict)
+        
         print(f"[INFO]数据已保存: {npz_path}")
         if config_params:
             print(f"[INFO] 配置参数: {config_params}")
+        if state_trajectory:
+            print(f"[INFO] 状态机轨迹: {len(state_trajectory)} 条记录")
 
 
 class GripperDataRecorder:
-    """Gripper 数据记录（只保存实际和预测的 gripper 值）"""
-    
+    """Gripper 数据记录"""
     def __init__(self, save_dir: str = "./state_comparison"):
         self.save_dir = Path(save_dir)  # 保存目录路径
         self.save_dir.mkdir(parents=True, exist_ok=True)  # 创建目录
-        
         self.step_indices = []  # 步数索引列表
         self.actual_gripper = []  # 实际 gripper 值（每步）
         self.predicted_gripper = []  # 预测 gripper 值（每步）
@@ -236,7 +222,7 @@ class WowSkinConfig:
 
 @dataclass
 class ControllerConfig:
-    """主控制器配置"""
+    """主控制器配置（新版状态机）"""
     robot: RobotConfig  # 机器人配置
     task: str  # 任务描述
     server_url: str = "ws://10.10.16.19:9001"  # 服务器地址
@@ -245,28 +231,33 @@ class ControllerConfig:
     wowskin: WowSkinConfig = field(default_factory=WowSkinConfig)  # WowSkin 力传感器配置
     num_loop: int = 5  # 循环次数
     action_steps: Optional[int] = None  # 动作步数
+    # 回滚配置
     rollback_enabled: bool = True  # 是否启用回滚
     max_consecutive_failures: int = 3  # 连续失败多少次触发回滚
     max_rollback_count: int = 10  # 最大回滚次数
     reset_wait_time: float = 2.0  # 回滚后等待时间
     use_force_check: bool = True  # 是否使用力传感器检测
     use_state_check: bool = True  # 是否使用 state 检测
+    # 数据记录配置
     record_force: bool = True  # 是否记录力数据
     record_force_save_dir: str = "./force_comparison"  # 力数据保存目录
     record_gripper: bool = True  # 是否记录 gripper 数据
     record_gripper_save_dir: str = "./gripper_comparison"  # gripper 数据保存目录
-    # 力检查配置
-    force_ratio_multiplier: float = 10.0  # 预测力/实际力比值阈值（调大减少误触发）
-    force_delay_steps: int = 30  # 力传感器延迟补偿步数
+    # 基础配置
+    min_start_steps: int = 100  # 排除前面多少步
     force_filter_cutoff_freq: float = 2.0  # Butterworth 滤波截止频率
     force_sampling_rate: float = 30.0  # 采样率
-    grasp_history_window: int = 50  # 计算历史均值的窗口大小
-    min_start_steps: int = 100  # 排除前面多少步
-    # Gripper 检测配置
-    gripper_decrease_threshold: int = 15  # gripper 连续减小步数阈值（调大减少误触发）
-    gripper_stable_threshold: float = 0.5  # gripper 稳定阈值：变化量小于此值认为稳定
-    use_gripper_stable_check: bool = False  # 是否使用 gripper 稳定检测（True=稳定检测，False=减小趋势检测）
-    use_gripper_initial_close_check: bool = False  # 是否使用初始 gripper 闭合检测（True=当前值<初始值即满足条件B）
+    force_delay_steps: int = 50  # 力传感器延迟补偿步数
+    # 状态机配置
+    gripper_velocity_threshold: float = 0.5  # gripper速度噪声阈值
+    stable_window: int = 10  # 连续多少步速度低于阈值认为进入稳定候选
+    settle_steps: int = 30  # 进入STABLE_CANDIDATE后等待力信号建立的步数
+    sustain_steps: int = 10  # 力信号需要连续达标多少步才确认接触/滑脱
+    max_closing_duration: int = 100  # 最大闭合步数（从STABLE_CANDIDATE开始计时），超时未稳定判定"一点没抓住"
+    grasp_wait_steps: int = 10  # 进入STABLE_CANDIDATE后等待夹爪闭合的步数（此期间不检测力失败）
+    # 力阈值配置
+    force_ratio_threshold: float = 0.5  # 实际力/预测力的比值阈值
+    filter_order: int = 4  # Butterworth滤波器阶数
 
 
 class MainController:
@@ -510,14 +501,14 @@ class MainController:
             else:
                 return None, None
         
-        actual_interval_ms = (frame_current['timestamp'] - frame_minus_133ms['timestamp']) * 1000
-        print(
-            f"[INFO] 队列 {queue_len} 帧 | "
-            f"检查 {check_count} 帧 | "
-            f"当前帧误差: {min_current_diff*1000:.1f}ms | "
-            f"-133ms帧误差: {min_past_diff*1000:.1f}ms | "
-            f"实际间隔: {actual_interval_ms:.1f}ms"
-        )
+        # actual_interval_ms = (frame_current['timestamp'] - frame_minus_133ms['timestamp']) * 1000
+        # print(
+        #     f"[INFO] 队列 {queue_len} 帧 | "
+        #     f"检查 {check_count} 帧 | "
+        #     f"当前帧误差: {min_current_diff*1000:.1f}ms | "
+        #     f"-133ms帧误差: {min_past_diff*1000:.1f}ms | "
+        #     f"实际间隔: {actual_interval_ms:.1f}ms"
+        # )
         
         return frame_current, frame_minus_133ms
     
@@ -664,10 +655,14 @@ class MainController:
             
             print(f"开始执行任务: {self.task}")
             print(f"控制频率: {self.fps} Hz")
-            print(f"回滚检测: 启用 (force_ratio_multiplier={self.rollback_mgr.config.force_ratio_multiplier}, "
-                  f"gripper_decrease_threshold={self.rollback_mgr.config.gripper_decrease_threshold}, "
+            print(f"回滚检测: 启用 (状态机模式)")
+            print(f"  - Gripper: velocity_threshold={self.rollback_mgr.config.gripper_velocity_threshold}, "
+                  f"stable_window={self.rollback_mgr.config.stable_window}, "
+                  f"max_closing_duration={self.rollback_mgr.config.max_closing_duration}")
+            print(f"  - Force: force_ratio_threshold={self.rollback_mgr.config.force_ratio_threshold}")
+            print(f"  - 去抖: sustain_steps={self.rollback_mgr.config.sustain_steps}, "
                   f"max_consecutive={self.rollback_mgr.config.max_consecutive_failures}, "
-                  f"max_rollback={self.rollback_mgr.config.max_rollback_count})")
+                  f"max_rollback={self.rollback_mgr.config.max_rollback_count}")
             
             # 第一轮：发送初始状态占位动作
             print("[INFO] 第一轮：发送初始状态占位动作")
@@ -774,6 +769,7 @@ class MainController:
                         })
                         
                         # 回滚检测
+                        # 保存predicted_gripper和actual_gripper
                         if predicted_states is not None and action_idx < len(predicted_states):
                             predicted_state = predicted_states[action_idx]
                             actual_state = observation['state']
@@ -791,27 +787,26 @@ class MainController:
                             if len(predicted_state) >= 21:
                                 predicted_force = predicted_state[6:21]
                                 
-                                # 记录力传感器数据（只保存力相关数据）
-                                if self.force_recorder is not None:
-                                    self.force_recorder.record(step_count, actual_force, predicted_force)
+                                # 获取当前gripper状态机状态
+                                current_gripper_state = self.rollback_mgr.gripper_state.value
                                 
-                                # 统一回滚检测接口（根据配置选择 force 或 state 检查）
+                                # 记录力传感器数据（包含状态机状态）
+                                if self.force_recorder is not None:
+                                    self.force_recorder.record(
+                                        step_count, actual_force, predicted_force,
+                                        gripper_state=current_gripper_state
+                                    )
+                                
+                                # 统一回滚检测接口（新版状态机）
                                 need_rollback = self.rollback_mgr.check_rollback_condition(
                                     actual_gripper_pos, actual_force, predicted_force, predicted_gripper_pos
                                 )
                                 
-                                # 调试日志：打印回滚检测结果
-                                if step_count % 10 == 0:  # 每10步打印一次
-                                    print(
-                                        f"[DEBUG-ROLLBACK] step={step_count}, "
-                                        f"need_rollback={need_rollback}, "
-                                        f"rollback_limited={self.rollback_mgr.rollback_limited}, "
-                                        f"step_counter={self.rollback_mgr.step_counter}"
-                                    )
                                 
                                 if self.rollback_mgr.update_rollback_status(need_rollback):
                                     print(
                                         f"[DO ROLLBACK] step={step_count}, action_idx={action_idx}, "
+                                        f"gripper_state={current_gripper_state}, "
                                         f"rollback_limited={self.rollback_mgr.rollback_limited}, "
                                         f"rollback_happened={self.rollback_mgr.rollback_happened}, "
                                         f"g_seed={self.rollback_mgr.g_seed}"
@@ -835,7 +830,7 @@ class MainController:
                     
                     last_action_complete_time = time.time()
                 
-                t_send = time.time() - t1
+                # t_send = time.time() - t1
                 
                 # ========== 阶段 2: 选取帧 ==========
                 current_time = last_action_complete_time if 'last_action_complete_time' in locals() else time.time()
@@ -846,21 +841,21 @@ class MainController:
                     continue
                 
                 # ========== 阶段 3 & 4: 构建 payload 并发送 ==========
-                t2 = time.time()
+                # t2 = time.time()
                 actions, predicted_states = await self._build_and_send_payload(
                     frame_current, frame_minus_133ms, step_count
                 )
-                t_build_ws = time.time() - t2
+                # t_build_ws = time.time() - t2
                 
-                # 打印统计
-                elapsed = time.time() - loop_start
-                print(
-                    f"Step {step_count} | "
-                    f"循环间隔: {loop_interval*1000:.1f}ms | "
-                    f"执行: {t_send*1000:.1f}ms | "
-                    f"构建+WS: {t_build_ws*1000:.1f}ms | "
-                    f"总耗时: {elapsed*1000:.1f}ms"
-                )
+                # # 打印统计
+                # elapsed = time.time() - loop_start
+                # print(
+                #     f"Step {step_count} | "
+                #     f"循环间隔: {loop_interval*1000:.1f}ms | "
+                #     f"执行: {t_send*1000:.1f}ms | "
+                #     f"构建+WS: {t_build_ws*1000:.1f}ms | "
+                #     f"总耗时: {elapsed*1000:.1f}ms"
+                # )
                 
         except KeyboardInterrupt:
             print("[WARN] 用户中断执行")
@@ -877,9 +872,14 @@ class MainController:
         self._cleanup_done = True
         self.running = False
         
-        # 保存力传感器数据到文件
+        # 保存力传感器数据到文件（包含状态机轨迹）
         if self.force_recorder is not None:
-            self.force_recorder.save_to_file()
+            # 更新动态计算的阈值和初始值
+            self.force_recorder.gripper_close_threshold = self.rollback_mgr.gripper_close_threshold
+            self.force_recorder.initial_gripper_value = self.rollback_mgr.initial_gripper_value
+            
+            state_trajectory = self.rollback_mgr.get_state_trajectory()
+            self.force_recorder.save_to_file(state_trajectory=state_trajectory)
         
         # 保存 state/gripper 数据到文件
         if self.gripper_recorder is not None:
@@ -916,16 +916,18 @@ def main(cfg: ControllerConfig):
         reset_wait_time=cfg.reset_wait_time,
         use_force_check=cfg.use_force_check,
         use_state_check=cfg.use_state_check,
-        force_ratio_multiplier=cfg.force_ratio_multiplier,
-        force_delay_steps=cfg.force_delay_steps,
+        min_start_steps=cfg.min_start_steps,
         force_filter_cutoff_freq=cfg.force_filter_cutoff_freq,
         force_sampling_rate=cfg.force_sampling_rate,
-        grasp_history_window=cfg.grasp_history_window,
-        min_start_steps=cfg.min_start_steps,
-        gripper_decrease_threshold=cfg.gripper_decrease_threshold,
-        gripper_stable_threshold=cfg.gripper_stable_threshold,
-        use_gripper_stable_check=cfg.use_gripper_stable_check,
-        use_gripper_initial_close_check=cfg.use_gripper_initial_close_check,
+        force_delay_steps=cfg.force_delay_steps,
+        gripper_velocity_threshold=cfg.gripper_velocity_threshold,
+        stable_window=cfg.stable_window,
+        settle_steps=cfg.settle_steps,
+        sustain_steps=cfg.sustain_steps,
+        max_closing_duration=cfg.max_closing_duration,
+        grasp_wait_steps=cfg.grasp_wait_steps,
+        force_ratio_threshold=cfg.force_ratio_threshold,
+        filter_order=cfg.filter_order,
     )
     
     controller = MainController(

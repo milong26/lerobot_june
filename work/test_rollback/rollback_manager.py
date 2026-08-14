@@ -1,22 +1,27 @@
 """
-回滚重试模块
+回滚重试模块 - 重构版
 功能：
-- 检测力传感器差异（条件A）
-- 检测 gripper 减小趋势（条件B）
-- 满足任一条件即判断需要回滚
+- Gripper 状态机：CLOSING → STABLE_CANDIDATE → GRASP_CONFIRMED
+- Force 判据：统一滤波顺序（15维逐维因果滤波 → L2范数）
+- 失败检测：一点没抓住 / 抓住一半松了
 """
 
 import numpy as np
-from typing import Optional
+from typing import Optional, Tuple
 from collections import deque
-from scipy.signal import butter, filtfilt
-import logging
+from scipy.signal import butter, filtfilt, sosfilt, sosfilt_zi
+from enum import Enum
 
-logger = logging.getLogger(__name__)
+
+class GripperState(Enum):
+    """Gripper 状态机状态"""
+    CLOSING = "closing"                    # 正在闭合
+    STABLE_CANDIDATE = "stable_candidate"  # 速度稳定，等待力信号确认
+    GRASP_CONFIRMED = "grasp_confirmed"    # 已确认抓取成功
+    FAILED_NO_GRASP = "failed_no_grasp"    # 一点没抓住（超时未稳定）
 
 
 class RollbackConfig:
-    """回滚重试配置"""
     def __init__(
         self,
         enabled: bool = True,
@@ -25,18 +30,22 @@ class RollbackConfig:
         reset_wait_time: float = 2.0,  # 回滚后等待时间（秒）
         use_force_check: bool = True,  # 是否使用力传感器检测
         use_state_check: bool = True,  # 是否使用 state 检测
-        # 力检查配置
-        force_ratio_multiplier: float = 5.0,  # 预测力/实际力比值阈值
-        force_delay_steps: int = 30,  # 力传感器延迟补偿步数
+        # 基础配置
+        min_start_steps: int = 100,  # 排除前面多少步，避免初始阶段误判
+        # 滤波配置
         force_filter_cutoff_freq: float = 2.0,  # Butterworth 滤波截止频率 (Hz)
         force_sampling_rate: float = 30.0,  # 采样率 (Hz)
-        grasp_history_window: int = 50,  # 计算历史均值的窗口大小
-        min_start_steps: int = 100,  # 排除前面多少步，避免初始阶段误判
-        # Gripper 检测配置
-        gripper_decrease_threshold: int = 10,  # 连续减小多少步认为 gripper 在减小趋势
-        gripper_stable_threshold: float = 0.5,  # gripper 稳定阈值：变化量小于此值认为稳定
-        use_gripper_stable_check: bool = False,  # 是否使用 gripper 稳定检测（True=稳定检测，False=减小趋势检测）
-        use_gripper_initial_close_check: bool = False,  # 是否使用初始 gripper 闭合检测（True=当前值<初始值即满足条件B）
+        force_delay_steps: int = 50,  # 力传感器延迟补偿步数
+        # 状态机配置
+        gripper_velocity_threshold: float = 0.5,  # gripper速度噪声阈值（相邻差分绝对值均值）
+        stable_window: int = 10,  # 连续多少步速度低于阈值认为进入稳定候选
+        settle_steps: int = 30,  # 进入STABLE_CANDIDATE后等待力信号建立的步数
+        sustain_steps: int = 10,  # 力信号需要连续达标多少步才确认接触/滑脱
+        max_closing_duration: int = 100,  # 最大闭合步数（从STABLE_CANDIDATE开始计时），超时未稳定判定"一点没抓住"
+        grasp_wait_steps: int = 10,  # 进入STABLE_CANDIDATE后等待夹爪闭合的步数（此期间不检测力失败）
+        # 力阈值配置
+        force_ratio_threshold: float = 0.5,  # 实际力/预测力的比值阈值（判断是否匹配）
+        filter_order: int = 4,  # Butterworth滤波器阶数
     ):
         self.enabled = enabled
         self.max_consecutive_failures = max_consecutive_failures
@@ -44,20 +53,69 @@ class RollbackConfig:
         self.reset_wait_time = reset_wait_time
         self.use_force_check = use_force_check
         self.use_state_check = use_state_check
-        self.force_ratio_multiplier = force_ratio_multiplier
-        self.force_delay_steps = force_delay_steps
+        self.min_start_steps = min_start_steps
         self.force_filter_cutoff_freq = force_filter_cutoff_freq
         self.force_sampling_rate = force_sampling_rate
-        self.grasp_history_window = grasp_history_window
-        self.min_start_steps = min_start_steps
-        self.gripper_decrease_threshold = gripper_decrease_threshold
-        self.gripper_stable_threshold = gripper_stable_threshold
-        self.use_gripper_stable_check = use_gripper_stable_check
-        self.use_gripper_initial_close_check = use_gripper_initial_close_check
+        self.force_delay_steps = force_delay_steps
+        self.gripper_velocity_threshold = gripper_velocity_threshold
+        self.stable_window = stable_window
+        self.settle_steps = settle_steps
+        self.sustain_steps = sustain_steps
+        self.max_closing_duration = max_closing_duration
+        self.grasp_wait_steps = grasp_wait_steps
+        self.force_ratio_threshold = force_ratio_threshold
+        self.filter_order = filter_order
+
+
+class CausalFilter:
+    """因果滤波器（15维，逐维sosfilt + zi状态）"""
+    
+    def __init__(self, n_dims: int = 15, cutoff_freq: float = 2.0, 
+                 fs: float = 30.0, order: int = 4):
+        self.n_dims = n_dims
+        nyquist = fs / 2.0
+        normalized_cutoff = cutoff_freq / nyquist
+        self.sos = butter(order, normalized_cutoff, btype='low', output='sos')
+        # sos shape: (n_sections, 6), where n_sections = order // 2
+        # zi shape for each channel: (n_sections, 2) - required by sosfilt for 1D input
+        n_sections = self.sos.shape[0]
+        # 为每个维度初始化 zi: (n_dims, n_sections, 2)
+        self.zi = np.zeros((n_dims, n_sections, 2))
+    
+    def filter_step(self, force_15d: np.ndarray) -> np.ndarray:
+        """单步因果滤波，更新zi状态"""
+        # force_15d shape: (15,)
+        filtered = np.zeros(self.n_dims)
+        for dim in range(self.n_dims):
+            # 取出该维度的zi状态 (n_sections, 2)
+            zi_dim = self.zi[dim]  # (n_sections, 2)
+            # 输入信号 (1,) 单样本
+            # sosfilt 返回 (output_array, new_zi_array)
+            result, new_zi = sosfilt(
+                self.sos, force_15d[dim:dim+1], zi=zi_dim
+            )
+            # result shape: (1,), 提取标量
+            filtered[dim] = result[0]
+            # 更新该维度的 zi 状态
+            self.zi[dim] = new_zi
+        return filtered  # (15,)
+    
+    def reset(self):
+        """重置滤波器状态"""
+        n_sections = self.sos.shape[0]
+        self.zi = np.zeros((self.n_dims, n_sections, 2))
+    
+    def filtfilt_offline(self, signal_15d: np.ndarray) -> np.ndarray:
+        """离线双向滤波（用于check_force_dim9.py）"""
+        # signal_15d shape: (N, 15)
+        filtered = np.zeros_like(signal_15d)
+        for dim in range(self.n_dims):
+            filtered[:, dim] = filtfilt(self.sos, signal_15d[:, dim])
+        return filtered
 
 
 class RollbackManager:
-    """回滚管理器"""
+    """回滚管理器 - 重构版"""
     
     def __init__(self, config: Optional[RollbackConfig] = None):
         self.config = config or RollbackConfig()
@@ -68,309 +126,246 @@ class RollbackManager:
         self.g_seed = 0  # 随机种子，用于服务器生成不同的动作序列
         self.step_counter = 0  # 总步数计数器，不回滚重置
         
-        # 力传感器历史数据（用于延迟补偿和均值计算）
-        self.actual_force_history: deque = deque(maxlen=self.config.force_delay_steps + 50)  # 保存实际力范数历史，用于延迟补偿
-        self.predicted_force_15d_history: deque = deque(maxlen=self.config.grasp_history_window * 2)  # 保存15维预测力历史，用于滤波和均值计算
+        # Gripper 状态机
+        self.gripper_state = GripperState.CLOSING
+        self.stable_step_count = 0  # 连续稳定步数计数器
+        self.force_sustain_count = 0  # 力达标连续步数
+        self.force_fail_count = 0  # 力不达标连续步数
+        self.closing_start_step = 0  # CLOSING状态开始步数
+        self.settle_step_count = 0  # settle等待步数
+        self.grasp_wait_counter = 0  # 进入STABLE_CANDIDATE后的闭合等待步数
         
-        # Gripper 历史数据（用于检测减小趋势）
-        self.predicted_gripper_history: deque = deque(maxlen=self.config.grasp_history_window * 2)  # 保存预测 gripper 值历史
-        self.actual_gripper_history: deque = deque(maxlen=self.config.grasp_history_window * 2)  # 保存实际 gripper 值历史
-        self.initial_gripper_value: Optional[float] = None  # 初始 gripper 值，用于闭合检测
+        # Gripper 历史数据（用于速度计算和闭合检测）
+        self.actual_gripper_history: deque = deque(maxlen=self.config.stable_window + 10)
+        self.initial_gripper_value: Optional[float] = None
+        self.gripper_max_value: Optional[float] = None  # 记录夹爪初始最大值（闭合前）
+        self.gripper_has_closed = False  # 是否检测到夹爪闭合动作（位置下降）
+        self.gripper_close_threshold: Optional[float] = None  # 动态计算的闭合阈值（基于initial_gripper）
+        self.closing_detected_step: Optional[int] = None  # 检测到稳定下降的步数
+        self.stable_candidate_start_step: Optional[int] = None  # 进入STABLE_CANDIDATE的步数
+        
+        # 因果滤波器（actual和predicted分开维护）
+        self.actual_force_filter = CausalFilter(
+            n_dims=15,
+            cutoff_freq=self.config.force_filter_cutoff_freq,
+            fs=self.config.force_sampling_rate,
+            order=self.config.filter_order
+        )
+        self.predicted_force_filter = CausalFilter(
+            n_dims=15,
+            cutoff_freq=self.config.force_filter_cutoff_freq,
+            fs=self.config.force_sampling_rate,
+            order=self.config.filter_order
+        )
+        
+        # 延迟补偿历史（保存滤波后的predicted力范数）
+        self.predicted_norm_history: deque = deque(maxlen=self.config.force_delay_steps + 50)
+        
+        # 状态机轨迹记录（用于保存到npz文件）
+        self.state_trajectory = []  # List[Tuple[step, gripper_state_str, actual_norm, predicted_norm]]
         
         # 回滚后的冷却期
         self.post_rollback_cooldown_steps = 100  # 回滚后多少步内不检测
         self.steps_since_rollback = 999  # 回滚后经过的步数，初始值大避免首次被冷却
 
-    def _butterworth_lowpass_1d(self, signal, cutoff_freq=None, fs=None, order=4):
-        """Butterworth 低通滤波（1D信号）"""
-        if cutoff_freq is None:
-            cutoff_freq = self.config.force_filter_cutoff_freq
-        if fs is None:
-            fs = self.config.force_sampling_rate
+    def _compute_gripper_velocity(self, current_gripper: float) -> float:
+        """计算gripper速度（最近K步相邻差分绝对值均值）"""
+        if len(self.actual_gripper_history) < 2:
+            return float('inf')
         
-        # filtfilt 要求信号长度 > padlen (padlen = 3 * max(len(a), len(b)))
-        # 对于 order 阶滤波器，len(a) = len(b) = order + 1
-        # 所以 padlen = 3 * (order + 1)，需要 len(signal) > padlen
-        min_length = 3 * (order + 1) + 1  # 至少需要 padlen + 1
-        if len(signal) <= min_length:
-            return signal
+        recent_values = list(self.actual_gripper_history)[-self.config.stable_window:]
+        if len(recent_values) < 2:
+            return float('inf')
         
-        nyquist = fs / 2.0
-        normalized_cutoff = cutoff_freq / nyquist
-        b, a = butter(order, normalized_cutoff, btype='low', analog=False)
-        return filtfilt(b, a, signal)
-
-    def check_force_rollback_condition(
-        self,
-        actual_force: np.ndarray,
-        predicted_force: np.ndarray,
-    ) -> bool:
-        """
-        条件A：检查力传感器差异
-        
-        逻辑：
-        - 对15维力数据分别进行 Butterworth 低通滤波
-        - 计算滤波后的预测力 L2 范数
-        - 如果预测力 L2 范数 / 历史均值 > 阈值，认为需要回滚
-        - 同时检查预测力/实际力（延迟补偿后）> 阈值
-        """
-        if not self.config.enabled or not self.config.use_force_check:
-            return False
-        
-        self.step_counter += 1
-        self.steps_since_rollback += 1
-        
-        # 计算当前 L2 范数（原始数据）
-        actual_norm = np.linalg.norm(actual_force)
-        predicted_norm = np.linalg.norm(predicted_force)
-        
-        # 添加到历史（用于延迟补偿）
-        self.actual_force_history.append(actual_norm)
-        
-        # 添加到 15 维力历史（用于滤波和均值计算）
-        self.predicted_force_15d_history.append(predicted_force.copy())
-        
-        
-        # 历史数据不足时，暂不判断
-        if len(self.actual_force_history) < 3:
-            return False
-        
-        # 回滚后冷却期内不检测
-        if self.steps_since_rollback < self.post_rollback_cooldown_steps:
-            return False
-        
-        # 排除初始阶段
-        if self.step_counter < self.config.min_start_steps:
-            return False
-        
-        # ===== 条件A1：预测力相对历史均值显著增大 =====
-        force_detected_by_history = False
-        history_size = len(self.predicted_force_15d_history)
-        history_start = max(0, history_size - self.config.grasp_history_window - 1)
-        history_predicted_15d = list(self.predicted_force_15d_history)[history_start:-1]
-        
-        if len(history_predicted_15d) >= 10:
-            history_array = np.array(history_predicted_15d)
-            n_dims = history_array.shape[1]
-            history_filtered = np.zeros_like(history_array)
-            for dim in range(n_dims):
-                history_filtered[:, dim] = self._butterworth_lowpass_1d(history_array[:, dim])
-            
-            history_norms_filtered = np.linalg.norm(history_filtered, axis=1)
-            history_mean = np.mean(history_norms_filtered)
-            
-            if history_mean > 1e-6:
-                current_array = np.array(list(self.predicted_force_15d_history))
-                if len(current_array) >= 15:
-                    current_filtered = np.zeros_like(current_array)
-                    for dim in range(n_dims):
-                        current_filtered[:, dim] = self._butterworth_lowpass_1d(current_array[:, dim])
-                    predicted_norm_filtered = np.linalg.norm(current_filtered[-1])
-                else:
-                    predicted_norm_filtered = predicted_norm
-                
-                relative_ratio = predicted_norm_filtered / history_mean
-                
-                if relative_ratio > self.config.force_ratio_multiplier:
-                    force_detected_by_history = True
-                    # print(
-                    #     f"[FORCE CHECK-A1] step={self.step_counter}, "
-                    #     f"predicted_norm_filtered={predicted_norm_filtered:.4f}, "
-                    #     f"history_mean={history_mean:.4f}, "
-                    #     f"ratio={relative_ratio:.2f} (threshold={self.config.force_ratio_multiplier})"
-                    # )
-        
-        # ===== 条件A2：实际力/历史预测力（延迟补偿）> 阈值 =====
-        # 逻辑：实际力滞后，用当前实际力 与 force_delay_steps 前的预测力比较
-        # 如果实际力远小于历史预测，说明预测的力没有出现，实际环境与预期不符
-        # 使用滤波后的数据进行比较
-        force_detected_by_ratio = False
-        
-        # 对实际力历史进行滤波
-        if len(self.actual_force_history) >= 15:
-            actual_history_array = np.array(list(self.actual_force_history))
-            actual_filtered = self._butterworth_lowpass_1d(actual_history_array)
-            actual_norm_filtered = actual_filtered[-1]
-        else:
-            actual_norm_filtered = actual_norm
-        
-        # 获取延迟补偿后的预测力（使用滤波后的值）
-        if len(self.predicted_force_15d_history) > self.config.force_delay_steps:
-            # 获取延迟点附近的窗口进行滤波
-            delay_idx = -self.config.force_delay_steps - 1
-            window_size = 15
-            window_start = delay_idx - window_size + 1
-            window_forces = list(self.predicted_force_15d_history)[window_start:delay_idx + 1]
-            
-            if len(window_forces) >= window_size:
-                window_array = np.array(window_forces)
-                window_filtered = np.zeros_like(window_array)
-                for dim in range(window_array.shape[1]):
-                    window_filtered[:, dim] = self._butterworth_lowpass_1d(window_array[:, dim])
-                delayed_predicted_norm = np.linalg.norm(window_filtered[-1])
-            else:
-                delayed_predicted_force = list(self.predicted_force_15d_history)[delay_idx]
-                delayed_predicted_norm = np.linalg.norm(delayed_predicted_force)
-        else:
-            delayed_predicted_norm = predicted_norm
-        
-        if actual_norm_filtered < 1e-6:
-            condition_ratio = delayed_predicted_norm > 1e-6
-        else:
-            condition_ratio = (delayed_predicted_norm / actual_norm_filtered) > self.config.force_ratio_multiplier
-        
-        if condition_ratio:
-            force_detected_by_ratio = True
-            force_ratio = delayed_predicted_norm / actual_norm if actual_norm >= 1e-6 else float('inf')
-            # print(
-            #     f"[FORCE CHECK-A2] step={self.step_counter}, "
-            #     f"delayed_predicted_norm={delayed_predicted_norm:.3f}, "
-            #     f"actual_norm={actual_norm:.3f}, "
-            #     f"ratio={force_ratio:.3f} (threshold={self.config.force_ratio_multiplier})"
-            # )
-        
-        # 满足任一条件即认为需要回滚（A1或A2）
-        need_rollback = force_detected_by_history or force_detected_by_ratio
-        
-        return need_rollback
-
-    def _check_gripper_initial_close(self, current_gripper: float) -> bool:
-        """
-        条件B（最新）：当前 gripper 值 < 初始值即满足条件B
-        
-        逻辑：
-        - 以初始 gripper 值作为参考
-        - 如果当前 gripper 值小于初始值，说明 gripper 已经闭合
-        - 这适用于不同宽度的物体，不依赖绝对值
-        """
-        if self.initial_gripper_value is None:
-            return False
-        
-        if current_gripper < self.initial_gripper_value:
-            decrease_ratio = (self.initial_gripper_value - current_gripper) / (self.initial_gripper_value + 1e-6)
-            # print(
-            #     f"[GRIPPER CHECK-B-initial-close] step={self.step_counter}, "
-            #     f"current_gripper={current_gripper:.2f}, "
-            #     f"initial_gripper={self.initial_gripper_value:.2f}, "
-            #     f"decrease_ratio={decrease_ratio:.2%}"
-            # )
-            return True
-        
-        return False
-
-    def _check_gripper_decreasing_trend(self) -> bool:
-        """
-        条件B（旧）：检测 actual gripper 减小趋势
-        
-        逻辑：
-        - 每一步保存一个实际 gripper 值
-        - 判断从历史到当前是否呈现闭合趋势（值变小）
-        - 如果当前值 < 历史均值，说明 gripper 在减小
-        - 如果减小幅度超过阈值，认为 gripper 在持续闭合
-        """
-        if len(self.actual_gripper_history) < 3:
-            return False
-        
-        # 获取历史值（不包括当前值）
-        history_values = list(self.actual_gripper_history)[:-1]
-        current_value = self.actual_gripper_history[-1]
-        
-        if len(history_values) < 10:
-            return False
-        
-        # 计算历史均值
-        history_mean = np.mean(history_values)
-        
-        # 如果当前值 < 历史均值，说明 gripper 在减小
-        if current_value < history_mean:
-            decrease_ratio = (history_mean - current_value) / (history_mean + 1e-6)
-            
-            # 减小幅度超过阈值（例如 10%）
-            if decrease_ratio > 0.1:
-                print(
-                    f"[GRIPPER CHECK-B-decrease] step={self.step_counter}, "
-                    f"current_gripper={current_value:.2f}, "
-                    f"history_mean={history_mean:.2f}, "
-                    f"decrease_ratio={decrease_ratio:.2%}"
-                )
-                return True
-        
-        return False
-
-    def _check_gripper_stable(self) -> bool:
-        """
-        条件B（新）：检测 gripper 是否趋于稳定（不再减小或变化很小）
-        
-        逻辑：
-        - 计算最近 N 步 gripper 的平均变化量
-        - 如果变化量小于阈值，认为 gripper 已经稳定
-        - 这适用于不同宽度的物体，不依赖绝对值
-        """
-        if len(self.actual_gripper_history) < 10:
-            return False
-        
-        # 获取最近 10 步的 gripper 值
-        recent_values = list(self.actual_gripper_history)[-10:]
-        
-        # 计算相邻差分的绝对值
         diffs = [abs(recent_values[i+1] - recent_values[i]) for i in range(len(recent_values)-1)]
-        
-        # 平均变化量
-        avg_change = np.mean(diffs)
-        
-        # 如果平均变化量小于阈值，认为 gripper 稳定
-        if avg_change < self.config.gripper_stable_threshold:
-            print(
-                f"[GRIPPER CHECK-B-stable] step={self.step_counter}, "
-                f"avg_change={avg_change:.4f}, "
-                f"threshold={self.config.gripper_stable_threshold}"
-            )
-            return True
-        
-        return False
+        return float(np.mean(diffs))
 
-    def check_state_rollback_condition(
-        self,
-        actual_gripper_pos: float,
-        predicted_gripper_pos: float,
-    ) -> bool:
+    def _detect_closing_start(self, current_gripper: float, step: int) -> bool:
         """
-        检查 state 维度的回滚条件
+        检测夹爪是否开始稳定下降过程
+        判定标准：actual gripper 连续稳定下降（相邻差分都为负）
+        """
+        # 先添加到历史
+        self.actual_gripper_history.append(current_gripper)
         
-        条件B：根据配置选择检测模式
-            - use_gripper_initial_close_check=True: 当前值 < 初始值即满足条件B
-            - use_gripper_stable_check=True: gripper 趋于稳定（不再减小或变化很小）
-            - use_gripper_stable_check=False: gripper 减小趋势检测（旧逻辑）
-        """
-        if not self.config.enabled or not self.config.use_state_check:
+        if len(self.actual_gripper_history) < 5:
             return False
         
-        # 保存初始 gripper 值（第一次调用时）
-        if self.initial_gripper_value is None:
-            self.initial_gripper_value = actual_gripper_pos
-            print(f"[GRIPPER] 初始 gripper 值: {self.initial_gripper_value:.2f}")
+        # 检查最近5步是否都在下降
+        recent_values = list(self.actual_gripper_history)[-5:]
+        for i in range(len(recent_values) - 1):
+            if recent_values[i+1] >= recent_values[i]:
+                return False
         
-        # 保存实际 gripper 值到历史（用于检测）
-        self.actual_gripper_history.append(actual_gripper_pos)
+        return True
+
+    def _update_gripper_state(self, current_gripper: float, step: int) -> None:
+        """更新gripper状态机"""
+        # 先检测是否开始稳定下降（会添加 current_gripper 到历史）
+        if not self.gripper_has_closed:
+            if self._detect_closing_start(current_gripper, step):
+                self.gripper_has_closed = True
+                self.closing_detected_step = step
+                # 动态计算闭合阈值：基于 initial gripper 的 15%
+                if self.initial_gripper_value is not None:
+                    self.gripper_close_threshold = self.initial_gripper_value * 0.15
+                    print(
+                        f"[GRIPPER] ✓ 检测到稳定下降开始,gripper_has_closed设置成true， step={step}, "
+                        f"initial_gripper={self.initial_gripper_value:.2f}, "
+                        f"close_threshold={self.gripper_close_threshold:.2f}"
+                    )
         
-        # ===== 条件B：根据配置选择检测模式 =====
-        if self.config.use_gripper_initial_close_check:
-            # 新模式：当前值 < 初始值即满足条件B
-            condition_b_met = self._check_gripper_initial_close(actual_gripper_pos)
-        elif self.config.use_gripper_stable_check:
-            # 中模式：检测 gripper 是否趋于稳定
-            condition_b_met = self._check_gripper_stable()
+        # 计算速度（使用已更新的历史）
+        velocity = self._compute_gripper_velocity(current_gripper)
+        
+        # 更新夹爪最大值（闭合前的初始位置）
+        if self.gripper_max_value is None:
+            self.gripper_max_value = current_gripper
         else:
-            # 旧模式：检测 gripper 减小趋势
-            condition_b_met = self._check_gripper_decreasing_trend()
+            self.gripper_max_value = max(self.gripper_max_value, current_gripper)
         
-        if condition_b_met:
-            print(
-                f"[STATE ROLLBACK-B] actual_gripper_pos={actual_gripper_pos:.2f}, "
-                f"predicted_gripper_pos={predicted_gripper_pos:.2f}"
-            )
+        if self.gripper_state == GripperState.CLOSING:
+            # 检测到稳定下降后，速度低于阈值即可进入 STABLE_CANDIDATE
+            if self.gripper_has_closed and velocity < self.config.gripper_velocity_threshold:
+                self.stable_step_count += 1
+                if self.stable_step_count >= self.config.stable_window:
+                    # 进入稳定候选
+                    self.gripper_state = GripperState.STABLE_CANDIDATE
+                    self.stable_candidate_start_step = step  # 记录进入 STABLE_CANDIDATE 的步数
+                    self.stable_step_count = 0
+                    self.settle_step_count = 0
+                    self.force_sustain_count = 0
+                    self.force_fail_count = 0
+                    self.grasp_wait_counter = 0
+                    print(
+                        f"[GRIPPER] ✓ 进入STABLE_CANDIDATE, step={step}, "
+                        f"velocity={velocity:.4f} < threshold={self.config.gripper_velocity_threshold}, "
+                        f"stable_count={self.stable_step_count} >= window={self.config.stable_window}, "
+                        f"将等待 {self.config.grasp_wait_steps} 步用于夹爪闭合"
+                    )
+            else:
+                self.stable_step_count = 0
+                    
+        elif self.gripper_state == GripperState.STABLE_CANDIDATE:
+            if velocity >= self.config.gripper_velocity_threshold:
+                # 稳定被打破，回到CLOSING重新评估
+                self.gripper_state = GripperState.CLOSING
+                self.stable_step_count = 0
+                self.closing_start_step = step
+                print(
+                    f"[GRIPPER] → 稳定被打破，回到CLOSING, step={step}, "
+                    f"velocity={velocity:.4f} >= threshold={self.config.gripper_velocity_threshold}"
+                )
+            else:
+                self.settle_step_count += 1
+                
+        elif self.gripper_state == GripperState.GRASP_CONFIRMED:
+            if velocity >= self.config.gripper_velocity_threshold:
+                # 位置变化，回到CLOSING重新评估
+                self.gripper_state = GripperState.CLOSING
+                self.stable_step_count = 0
+                self.closing_start_step = step
+                self.force_sustain_count = 0
+                self.force_fail_count = 0
+                print(
+                    f"[GRIPPER] → 位置变化，回到CLOSING, step={step}, "
+                    f"velocity={velocity:.4f} >= threshold={self.config.gripper_velocity_threshold}"
+                )
+
+    def _update_force_condition(self, actual_force_15d: np.ndarray, 
+                                predicted_force_15d: np.ndarray, 
+                                actual_gripper_pos: float,
+                                predicted_gripper_pos: float,
+                                step: int) -> Optional[str]:
+        """更新力判据，返回失败原因或None"""
+        # 因果滤波
+        actual_filtered = self.actual_force_filter.filter_step(actual_force_15d)
+        predicted_filtered = self.predicted_force_filter.filter_step(predicted_force_15d)
         
-        return condition_b_met
+        actual_norm = float(np.linalg.norm(actual_filtered))
+        predicted_norm = float(np.linalg.norm(predicted_filtered))
+        
+        # 保存predicted范数到延迟历史
+        self.predicted_norm_history.append(predicted_norm)
+        
+        if self.gripper_state == GripperState.STABLE_CANDIDATE:
+            # 检查 max_closing_duration 超时（从 STABLE_CANDIDATE 开始计时）
+            if self.stable_candidate_start_step is not None:
+                duration_in_stable = step - self.stable_candidate_start_step
+                if duration_in_stable >= self.config.max_closing_duration:
+                    self.gripper_state = GripperState.FAILED_NO_GRASP
+                    print(
+                        f"[GRIPPER] ✗ FAILED_NO_GRASP (超时), step={step}, "
+                        f"duration_in_stable={duration_in_stable} >= max={self.config.max_closing_duration}"
+                    )
+                    return "FAILED_NO_GRASP"
+            
+            # 递增闭合等待计数器
+            self.grasp_wait_counter += 1
+            
+            # 在闭合等待期间，不检测力失败，给夹爪时间闭合
+            if self.grasp_wait_counter < self.config.grasp_wait_steps:
+                # 仅记录轨迹，不做力判据
+                if self.grasp_wait_counter % 20 == 0 or self.grasp_wait_counter == 1:
+                    print(
+                        f"[FORCE] 闭合等待中... step={step}, grasp_wait_counter={self.grasp_wait_counter}/{self.config.grasp_wait_steps}, "
+                        f"actual_norm={actual_norm:.4f}, predicted_norm={predicted_norm:.4f}"
+                    )
+            else:
+                # 闭合等待结束后，开始力判据检测
+                # 计算实际力与预测力的比值
+                if predicted_norm > 1e-6:
+                    force_ratio = actual_norm / predicted_norm
+                else:
+                    force_ratio = 0.0
+                
+                # 检查比值是否达标
+                if force_ratio >= self.config.force_ratio_threshold:
+                    # 实际力与预测力匹配 → 抓取正常
+                    self.force_sustain_count += 1
+                    if self.grasp_wait_counter % 10 == 0 or self.force_sustain_count == 1:
+                        print(
+                            f"[FORCE] 力比值达标计数+1, step={step}, force_ratio={force_ratio:.4f} >= {self.config.force_ratio_threshold}, "
+                            f"actual_norm={actual_norm:.4f}, predicted_norm={predicted_norm:.4f}, "
+                            f"sustain_count={self.force_sustain_count}/{self.config.sustain_steps}"
+                        )
+                    if self.force_sustain_count >= self.config.sustain_steps:
+                        self.gripper_state = GripperState.GRASP_CONFIRMED
+                        self.force_sustain_count = 0
+                        print(
+                            f"[FORCE] ✓ GRASP_CONFIRMED, step={step}, "
+                            f"force_ratio={force_ratio:.4f} >= {self.config.force_ratio_threshold}, "
+                            f"actual_norm={actual_norm:.4f}, predicted_norm={predicted_norm:.4f}, "
+                            f"sustain_count={self.force_sustain_count} >= {self.config.sustain_steps}"
+                        )
+                else:
+                    # 比值不达标 → 实际力远小于预测力 → 失败
+                    self.force_fail_count += 1
+                    if self.force_fail_count == 1 or self.force_fail_count % 5 == 0:
+                        print(
+                            f"[FORCE] 力比值不达标，失败计数+1, step={step}, force_ratio={force_ratio:.4f} < {self.config.force_ratio_threshold}, "
+                            f"actual_norm={actual_norm:.4f}, predicted_norm={predicted_norm:.4f}, "
+                            f"fail_count={self.force_fail_count}/{self.config.sustain_steps}"
+                        )
+                    if self.force_fail_count >= self.config.sustain_steps:
+                        print(
+                            f"[FORCE] ✗ FAILED_NO_GRASP (闭合等待后没接触), step={step}, "
+                            f"force_ratio={force_ratio:.4f} < {self.config.force_ratio_threshold}, "
+                            f"actual_norm={actual_norm:.4f}, predicted_norm={predicted_norm:.4f}, "
+                            f"grasp_wait_counter={self.grasp_wait_counter}, "
+                            f"fail_count={self.force_fail_count} >= {self.config.sustain_steps}"
+                        )
+                        return "FAILED_NO_GRASP"
+        
+        # 记录状态机轨迹
+        self.state_trajectory.append((
+            step,
+            self.gripper_state.value,
+            actual_norm,
+            predicted_norm
+        ))
+        
+        return None
 
     def check_rollback_condition(
         self,
@@ -380,34 +375,58 @@ class RollbackManager:
         predicted_gripper_pos: float,
     ) -> bool:
         """
-        统一回滚检测接口
+        统一回滚检测接口（新版状态机）
         
-        条件A：力传感器差异检测
-        条件B：Gripper 减小趋势检测
-        
-        条件A和条件B同时满足才判断需要回滚
+        返回：是否需要回滚
         """
         if not self.config.enabled:
             return False
         
-        need_rollback_force = False
-        need_rollback_state = False
+        self.step_counter += 1
+        self.steps_since_rollback += 1
         
-        # 力传感器检测（条件A）
+        # 回滚后冷却期内不检测
+        if self.steps_since_rollback < self.post_rollback_cooldown_steps:
+            return False
+        
+        # 排除初始阶段
+        if self.step_counter < self.config.min_start_steps:
+            return False
+        
+        # 保存初始 gripper 值（第一次调用时）
+        if self.initial_gripper_value is None:
+            self.initial_gripper_value = actual_gripper_pos
+            # 动态计算闭合阈值：基于 initial gripper 的 15%
+            self.gripper_close_threshold = self.initial_gripper_value
+            print(f"[GRIPPER] 初始 gripper 值: {self.initial_gripper_value:.2f}, close_threshold={self.gripper_close_threshold:.2f}")
+        
+        # 更新gripper状态机
+        self._update_gripper_state(actual_gripper_pos, self.step_counter)
+        
+        # 更新力判据
+        failure_reason = None
         if self.config.use_force_check:
-            need_rollback_force = self.check_force_rollback_condition(actual_force, predicted_force)
+            failure_reason = self._update_force_condition(
+                actual_force, predicted_force, actual_gripper_pos, predicted_gripper_pos, self.step_counter
+            )
         
-        # State 检测（条件B：gripper 减小趋势）
-        if self.config.use_state_check:
-            need_rollback_state = self.check_state_rollback_condition(actual_gripper_pos, predicted_gripper_pos)
+        # 判断是否需要回滚
+        need_rollback = False
         
-        # 条件A和条件B同时满足才触发回滚
-        need_rollback = need_rollback_force and need_rollback_state
-        
-        if need_rollback:
+        # 情况1：状态机直接判定失败
+        if failure_reason is not None:
+            need_rollback = True
             print(
-                f"[ROLLBACK TRIGGERED] 条件A(force)={need_rollback_force}, "
-                f"条件B(gripper)={need_rollback_state} -> 同时满足，触发回滚"
+                f"[ROLLBACK] ✗ 状态机失败: {failure_reason}, "
+                f"step={self.step_counter}"
+            )
+        
+        # 情况2：gripper状态为FAILED_NO_GRASP
+        if self.gripper_state == GripperState.FAILED_NO_GRASP:
+            need_rollback = True
+            print(
+                f"[ROLLBACK]gripper状态: {self.gripper_state.value}, "
+                f"step={self.step_counter}"
             )
         
         return need_rollback
@@ -436,8 +455,29 @@ class RollbackManager:
         self.rollback_limited = 0
         self.rollback_happened += 1
         self.g_seed += 1
-        self.actual_force_history.clear()
         self.steps_since_rollback = 0
+        
+        # 重置状态机
+        self.gripper_state = GripperState.CLOSING
+        self.stable_step_count = 0
+        self.force_sustain_count = 0
+        self.force_fail_count = 0
+        self.closing_start_step = self.step_counter
+        self.settle_step_count = 0
+        self.grasp_wait_counter = 0
+        self.gripper_max_value = None
+        self.gripper_has_closed = False
+        self.gripper_close_threshold = None
+        self.closing_detected_step = None
+        self.stable_candidate_start_step = None
+        
+        # 重置滤波器
+        self.actual_force_filter.reset()
+        self.predicted_force_filter.reset()
+        
+        # 清空历史
+        self.actual_gripper_history.clear()
+        self.predicted_norm_history.clear()
         
         print(
             f"[ROLLBACK RESET] 回滚 #{self.rollback_happened}, "
@@ -450,11 +490,35 @@ class RollbackManager:
         self.rollback_limited = 0
         self.rollback_happened = 0
         self.g_seed = 0
-        self.actual_force_history.clear()
-        self.predicted_force_15d_history.clear()
-        self.predicted_gripper_history.clear()
-        self.actual_gripper_history.clear()
         self.step_counter = 0
         self.steps_since_rollback = 999
         
+        # 重置状态机
+        self.gripper_state = GripperState.CLOSING
+        self.stable_step_count = 0
+        self.force_sustain_count = 0
+        self.force_fail_count = 0
+        self.closing_start_step = 0
+        self.settle_step_count = 0
+        self.initial_gripper_value = None
+        self.grasp_wait_counter = 0
+        self.gripper_max_value = None
+        self.gripper_has_closed = False
+        self.gripper_close_threshold = None
+        self.closing_detected_step = None
+        self.stable_candidate_start_step = None
+        
+        # 重置滤波器
+        self.actual_force_filter.reset()
+        self.predicted_force_filter.reset()
+        
+        # 清空历史
+        self.actual_gripper_history.clear()
+        self.predicted_norm_history.clear()
+        self.state_trajectory.clear()
+        
         print("[ROLLBACK RESET ALL] 完全重置所有状态")
+    
+    def get_state_trajectory(self) -> list:
+        """获取状态机轨迹（用于保存到npz文件）"""
+        return self.state_trajectory.copy()
