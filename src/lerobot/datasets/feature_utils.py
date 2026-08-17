@@ -137,6 +137,11 @@ def features_equal_for_merge(features_a: dict[str, dict], features_b: dict[str, 
                 info_key: info_value
                 for info_key, info_value in filtered_info.items()
                 if info_key not in VIDEO_ENCODER_INFO_KEYS
+                # # if info_key not in VIDEO_ENCODER_INFO_KEYS
+                # # 修改代码，因为合并数据集的时候出现报错说is_depth_map这个关键词不一致
+                # if info_key not in VIDEO_ENCODER_INFO_KEYS 
+                # and info_key != "is_depth_map" 
+                # and info_key != "video.is_depth_map"
             }
         return filtered
 

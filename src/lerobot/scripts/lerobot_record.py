@@ -289,7 +289,6 @@ def get_baseline(sensor_stream,average_num=5):
     从实时数据流中采集一定数量的样本，取平均作为新的 baseline
     """
     baseline_data = sensor_stream.get_data(num_samples=average_num)
-    print("baseline_data:", baseline_data)
     baseline_data = np.array(baseline_data)[:, 1:]  # 跳过时间戳列
     baseline = np.mean(baseline_data, axis=0)
     return baseline
@@ -441,11 +440,6 @@ def record_loop(
         timestamp = time.perf_counter() - start_episode_t
 
 
-def get_wowskin_baseline(sensor):
-    baseline_data = sensor.get_data(num_samples=5)
-    baseline_data = np.array(baseline_data)[:, 1:]
-    return np.mean(baseline_data, axis=0)
-
 
 @parser.wrap()
 def record(
@@ -478,7 +472,6 @@ def record(
             num_mags=cfg.wowskin.num_mags,
             port=cfg.wowskin.port,
         )
-        print("Starting WowSkin sensor process...")
         wowskin_sensor.start()
         time.sleep(1.0)
         wowskin_dataset_features = wowskin_force_feature_spec(
@@ -487,6 +480,7 @@ def record(
             feature_name=OBS_FORCE,
             feature_prefix="force",
         )
+        print("wowskin初始化结束")
 
     # Fall back to identity pipelines when the caller doesn't supply processors.
     if (
@@ -566,7 +560,9 @@ def record(
         # tripping a firmware watchdog) during teleop init. Matches lerobot_teleoperate.py.
         if teleop is not None:
             teleop.connect()
+            print("teleop连接ok")
         robot.connect()
+        print("follower连接ok")
 
         listener, events = init_keyboard_listener()
 

@@ -1,15 +1,6 @@
 #!/usr/bin/env python
 #这段代码是基于AnySkin的代码改写和优化
 
-
-# 这一段代码可以简写成
-# 1. 创建对象
-# 2. 获得baseline
-# 3. 实时数据减去baseline
-
-
-
-
 import time
 import numpy as np
 import os
@@ -152,9 +143,9 @@ def visualize(port, file=None, viz_mode="3axis", scaling=7.0, record=False):
     frame_num = 0
     running = True
     data = []      # 记录采样到的数据
-    data_len = 0   # 如果用加载文件的方式，这里控制索引
+    data_len = 30000  # 如果用加载文件的方式，这里控制索引
     clock = pygame.time.Clock()
-    FPS = 30
+    FPS = 60
 
     print("Pygame窗口已创建，请点击该窗口使其获取焦点。若需按键或按钮重置 baseline，请点击/按键。")
 
@@ -200,7 +191,7 @@ def visualize(port, file=None, viz_mode="3axis", scaling=7.0, record=False):
         if file is not None:
             # 假设一次只取一行数据
             sensor_data = load_data[data_len]
-            data_len += 1  # 这里原作者逻辑是每帧跳 24 行，你可自行调整
+            data_len += 24  # 这里原作者逻辑是每帧跳 24 行，你可自行调整
             # 若 baseline 未初始化，就初始化为 0
             if baseline is None:
                 baseline = np.zeros_like(sensor_data)

@@ -284,14 +284,18 @@ class DatasetWriter:
         episode_tasks = list(set(tasks))
         episode_index = episode_buffer["episode_index"]
 
-        episode_buffer["index"] = np.arange(self._meta.total_frames, self._meta.total_frames + episode_length)
-        episode_buffer["episode_index"] = np.full((episode_length,), episode_index)
+        episode_buffer["index"] = np.arange(
+            self._meta.total_frames, self._meta.total_frames + episode_length, dtype=np.int64
+        )
+        episode_buffer["episode_index"] = np.full((episode_length,), episode_index, dtype=np.int64)
 
         # Update tasks and task indices with new tasks if any
         self._meta.save_episode_tasks(episode_tasks)
 
         # Given tasks in natural language, find their corresponding task indices
-        episode_buffer["task_index"] = np.array([self._meta.get_task_index(task) for task in tasks])
+        episode_buffer["task_index"] = np.array(
+            [self._meta.get_task_index(task) for task in tasks], dtype=np.int64
+        )
 
         for key, ft in self._meta.features.items():
             if key in ["index", "episode_index", "task_index"] or ft["dtype"] in ["image", "video"]:

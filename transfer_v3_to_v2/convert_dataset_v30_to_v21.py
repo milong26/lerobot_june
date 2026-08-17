@@ -516,8 +516,9 @@ def convert_dataset(
             local_dir=root,
         )
 
-    # Output directory: original_path_v2
-    new_root = root.parent / f"{root.name}_v2"
+    # Output directory: parent_v2/dataset_name
+    # e.g., /home/qwe/shared_win/ep10/xxx -> /home/qwe/shared_win/ep10_v2/xxx
+    new_root = root.parent.parent / f"{root.parent.name}_v2" / root.name
 
     if new_root.exists():
         shutil.rmtree(new_root)
