@@ -155,7 +155,7 @@ def render_dual_camera(env_top, env_wrist, image_size=480):
         top_image = np.flip(top_image, (0, 1))
         top_image = resize_image(top_image, image_size)
 
-    # 渲染手腕相机（behindGripper）
+    # 渲染手腕相机（gripperPOV）
     wrist_image = env_wrist.render()
     if wrist_image is not None:
         wrist_image = resize_image(wrist_image, image_size)
