@@ -91,19 +91,7 @@ personal/work2/see_embedding/see_embedding_deep.py 更加深入。
 SmolVLM 的视觉编码器对 pick-and-place 任务中的物体位置变化不敏感。绝对不能mean pooling
 然后再选，但好像也选不出来什么？
 
-
-
-
-
-
-lerobot-eval \
-    --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model \
-    --env.type=metaworld \
-    --eval.batch_size=10 \
-    --eval.n_episodes=10 \
-    --policy.use_amp=false \
-    --policy.device=cuda
-
+TODO: 等能测试了再来继续刚这部分的代码
 
 
 
@@ -286,7 +274,8 @@ Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/duibi/uniform_42
  python personal/work2/dataset_lookin/see_uniform_dataset.py
 
 ## 测试eval能不能用
-lerobot-eval \
+但是测试应该不需要多少资源啊？
+CUDA_VISIBLE_DEVICES=2 MUJOCO_GL=egl PYOPENGL_PLATFORM=egl lerobot-eval \
     --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model \
     --env.type=metaworld \
     --env.task=metaworld-pick-place-v3 \
@@ -294,4 +283,20 @@ lerobot-eval \
     --eval.batch_size=10 \
     --eval.n_episodes=10 \
     --policy.use_amp=false \
-    --policy.device=cuda
+    --policy.device=cpu \
+    --rename_map='{"observation.pixels/top": "observation.images.camera1", "observation.pixels/wrist": "observation.images.camera2"}'
+
+测试的时候，batch_size=10是开启10个测试环境，max_episode_steps 默认self._max_episode_steps = 500 是从metaworld的环境来的
+
+
+如果能用cuda
+CUDA_VISIBLE_DEVICES=2 MUJOCO_GL=egl PYOPENGL_PLATFORM=egl lerobot-eval \
+    --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model \
+    --env.type=metaworld \
+    --env.task=metaworld-pick-place-v3 \
+    --env.camera_name=corner2,gripperPOV \
+    --eval.batch_size=10 \
+    --eval.n_episodes=10 \
+    --policy.use_amp=false \
+    --policy.device=cuda \
+    --rename_map='{"observation.pixels/top": "observation.images.camera1", "observation.pixels/wrist": "observation.images.camera2"}'

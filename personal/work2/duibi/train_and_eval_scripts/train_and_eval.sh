@@ -71,7 +71,7 @@ lerobot-train \
     --rename_map='{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \
     --env.type=metaworld \
     --env.task=pick-place-v3 \
-    --env.camera_name="corner2,behindGripper" \
+    --env.camera_name="corner2,gripperPOV" \
     --policy.vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct \
     --policy.freeze_vision_encoder=true \
     --policy.train_expert_only=true \

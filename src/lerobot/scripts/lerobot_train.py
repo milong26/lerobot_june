@@ -729,6 +729,10 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                         max_episodes_rendered=4,
                         start_seed=cfg.seed,
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
+                        env_rename_map={
+                            "observation.pixels/top": "observation.images.camera1",
+                            "observation.pixels/wrist": "observation.images.camera2",
+                        },
                     )
                 # overall metrics (suite-agnostic)
                 aggregated = eval_info["overall"]

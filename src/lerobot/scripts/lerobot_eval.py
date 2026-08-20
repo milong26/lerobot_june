@@ -1,10 +1,3 @@
-"""
-用下面这个指令测试
-python -c "from lerobot.scripts.lerobot_eval import eval_main, _save_eval_dataset; print('Import OK')"
-
-"""
-
-
 #!/usr/bin/env python
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
@@ -292,7 +285,34 @@ def rollout(
             # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
             observation = env_preprocessor(observation)
 
+            # DEBUG: Print observation keys before preprocessor
+            print(f"[DEBUG] Observation keys BEFORE preprocessor: {observation.keys()}")
+
             observation = preprocessor(observation)
+
+            # DEBUG: Print observation keys after preprocessor
+            print(f"[DEBUG] Observation keys AFTER preprocessor: {observation.keys()}")
+
+            # DEBUG: Save camera images for debugging
+            import os
+            from PIL import Image
+            save_dir = "debug_images"
+            os.makedirs(save_dir, exist_ok=True)
+            for key in observation:
+                if "pixels" in key or "camera" in key or "image" in key:
+                    img_tensor = observation[key]
+                    if isinstance(img_tensor, torch.Tensor):
+                        if img_tensor.ndim == 5:
+                            img_tensor = img_tensor[0, -1]  # First env, last time step
+                        elif img_tensor.ndim == 4:
+                            img_tensor = img_tensor[0]  # First env
+                        if img_tensor.shape[0] == 3:  # CHW -> HWC
+                            img_tensor = img_tensor.permute(1, 2, 0)
+                        img_np = (img_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
+                        safe_key = key.replace("/", "_").replace(".", "_")
+                        Image.fromarray(img_np).save(f"{save_dir}/step{step}_{safe_key}.png")
+                        print(f"[DEBUG] Saved image: {save_dir}/step{step}_{safe_key}.png (shape={img_np.shape})")
+
             with torch.inference_mode():
                 action = policy.select_action(observation)
             if predicted_latents_callback is not None:
@@ -304,12 +324,8 @@ def rollout(
             action = action_transition[ACTION]
 
             # Convert to CPU / numpy.
-            # action_numpy: np.ndarray = action.to("cpu").numpy()
-
-            # 之前直接执行，因为训练的时候采用兼容bf16的形式，直接转换会报错
-            action_numpy: np.ndarray = action.detach().float().cpu().numpy()
+            action_numpy: np.ndarray = action.to("cpu").numpy()
             assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
-            #
 
             # Apply the next action.
             observation, reward, terminated, truncated, info = env.step(action_numpy)
@@ -744,112 +760,6 @@ def _compile_episode_data(
     return data_dict
 
 
-def _save_eval_dataset(
-    episode_data: dict,
-    output_dir: Path,
-    env_cfg,
-) -> None:
-    """Save evaluation rollout data as a LeRobotDataset.
-
-    Converts the episode data collected during evaluation into the LeRobotDataset
-    format (parquet + video files) on disk.
-
-    Args:
-        episode_data: Dictionary of episode tensors returned by _compile_episode_data.
-            Contains keys like 'observation.image', 'observation.state', 'action',
-            'episode_index', 'frame_index', 'timestamp', 'next.done', 'next.success',
-            'next.reward', 'task', and 'index'.
-        output_dir: Directory where the dataset will be saved.
-        env_cfg: Environment configuration used during evaluation.
-    """
-    from lerobot.datasets import LeRobotDataset
-
-    # Build feature specification from the episode data
-    features = {}
-    for key, value in episode_data.items():
-        if key in ("episode_index", "frame_index", "index"):
-            continue
-        if isinstance(value, torch.Tensor):
-            val = value[0]
-            if val.ndim == 0:
-                features[key] = {"dtype": "float32", "shape": (1,)}
-            elif val.ndim == 1:
-                features[key] = {"dtype": "float32", "shape": (val.shape[0],)}
-            elif val.ndim == 2:
-                features[key] = {"dtype": "float32", "shape": (val.shape[0], val.shape[1])}
-            elif val.ndim == 3:
-                if val.dtype == torch.uint8:
-                    features[key] = {"dtype": "video", "shape": (val.shape[0], val.shape[1], val.shape[2]), "names": ["height", "width", "channels"]}
-                else:
-                    features[key] = {"dtype": "float32", "shape": (val.shape[0], val.shape[1], val.shape[2])}
-
-    # Fix dtype for specific known keys
-    if "next.success" in features:
-        features["next.success"]["dtype"] = "bool"
-    if "next.reward" in features:
-        features["next.reward"]["dtype"] = "float32"
-    if "next.done" in features:
-        features["next.done"]["dtype"] = "bool"
-    if "task" in features:
-        del features["task"]
-
-    # Determine FPS from environment config
-    fps = getattr(env_cfg, "fps", 30)
-
-    # Create the dataset
-    dataset = LeRobotDataset.create(
-        repo_id=f"eval/{output_dir.name}",
-        fps=fps,
-        features=features,
-        root=output_dir,
-        use_videos=True,
-    )
-
-    # Convert tensor data to numpy for dataset writing
-    num_frames = episode_data["index"].shape[0]
-    episode_indices = episode_data["episode_index"].numpy()
-    unique_episodes = np.unique(episode_indices)
-
-    current_episode = None
-    for i in range(num_frames):
-        frame = {}
-        for key in episode_data:
-            if key in ("episode_index", "frame_index", "index", "task"):
-                continue
-            value = episode_data[key]
-            if isinstance(value, torch.Tensor):
-                frame[key] = value[i].numpy()
-            else:
-                frame[key] = value[i]
-
-        # Add task string
-        if "task" in episode_data:
-            task_val = episode_data["task"][i]
-            if isinstance(task_val, torch.Tensor):
-                task_val = task_val.item()
-            if isinstance(task_val, (np.ndarray, np.generic)):
-                task_val = task_val.item()
-            if not isinstance(task_val, str):
-                task_val = str(task_val)
-            frame["task"] = task_val
-
-        dataset.add_frame(frame)
-
-        ep_idx = episode_indices[i]
-        if current_episode != ep_idx:
-            if current_episode is not None:
-                dataset.save_episode()
-            current_episode = ep_idx
-
-    # Save the last episode
-    dataset.save_episode()
-    dataset.finalize()
-
-    logging.info(
-        f"Saved evaluation dataset with {len(unique_episodes)} episodes and {num_frames} frames to {output_dir}"
-    )
-
-
 @parser.wrap()
 def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
@@ -873,6 +783,9 @@ def eval_main(cfg: EvalPipelineConfig):
 
     logging.info("Making policy.")
 
+    # DEBUG: Print rename_map
+    print(f"[DEBUG] cfg.rename_map = {cfg.rename_map}")
+
     policy = make_policy(
         cfg=cfg.policy,
         env_cfg=cfg.env,
@@ -887,16 +800,24 @@ def eval_main(cfg: EvalPipelineConfig):
         "rename_observations_processor": {"rename_map": cfg.rename_map},
     }
 
+    # DEBUG: Print preprocessor_overrides
+    print(f"[DEBUG] preprocessor_overrides = {preprocessor_overrides}")
+
     preprocessor, postprocessor = make_pre_post_processors(
         policy_cfg=cfg.policy,
         pretrained_path=cfg.policy.pretrained_path,
         preprocessor_overrides=preprocessor_overrides,
     )
 
+    # DEBUG: Print preprocessor steps
+    print(f"[DEBUG] preprocessor.steps = {[type(step).__name__ for step in preprocessor.steps]}")
+
     # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
     env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
 
-    return_episode_data = cfg.eval.save_dataset
+    recording_dir = Path(cfg.output_dir) / "recordings" if cfg.eval.recording else None
+    max_episodes_rendered = 0 if cfg.eval.recording else 10
+    videos_dir = None if cfg.eval.recording else Path(cfg.output_dir) / "videos"
 
     with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext():
         info = eval_policy_all(
@@ -909,9 +830,9 @@ def eval_main(cfg: EvalPipelineConfig):
             n_episodes=cfg.eval.n_episodes,
             max_episodes_rendered=max_episodes_rendered,
             videos_dir=videos_dir,
+            return_episode_data=False,
             start_seed=cfg.seed,
             max_parallel_tasks=cfg.env.max_parallel_tasks,
-            return_episode_data=return_episode_data,
             recording_dir=recording_dir,
             env_features=cfg.env.features if cfg.eval.recording else None,
             recording_repo_id=cfg.eval.recording_repo_id,
@@ -930,15 +851,6 @@ def eval_main(cfg: EvalPipelineConfig):
     # Save info
     with open(Path(cfg.output_dir) / "eval_info.json", "w") as f:
         json.dump(info, f, indent=2)
-
-    # Save evaluation rollout data as LeRobotDataset
-    if return_episode_data and "episodes" in info:
-        logging.info(colored("Saving evaluation data as LeRobotDataset...", "yellow", attrs=["bold"]))
-        _save_eval_dataset(
-            episode_data=info["episodes"],
-            output_dir=Path(cfg.output_dir) / "eval_dataset",
-            env_cfg=cfg.env,
-        )
 
     logging.info("End of eval")
 
@@ -972,17 +884,31 @@ def eval_one(
     env_features: dict | None = None,
     recording_repo_id: str | None = None,
     recording_private: bool = False,
+    env_rename_map: dict[str, str] | None = None,
 ) -> TaskMetrics:
     """Evaluates one task_id of one suite using the provided vec env."""
 
     task_videos_dir = videos_dir
+
+    # If env_rename_map is provided, create a preprocessor that includes the env rename step
+    eval_preprocessor = preprocessor
+    if env_rename_map:
+        from lerobot.processor.rename_processor import RenameObservationsProcessorStep
+
+        # Create a new preprocessor pipeline with the env rename step added at the beginning
+        rename_step = RenameObservationsProcessorStep(rename_map=env_rename_map)
+        eval_preprocessor = PolicyProcessorPipeline(
+            steps=[rename_step] + preprocessor.steps,
+            to_transition=preprocessor.to_transition,
+            to_output=preprocessor.to_output,
+        )
 
     task_result = eval_policy(
         env=env,
         policy=policy,
         env_preprocessor=env_preprocessor,
         env_postprocessor=env_postprocessor,
-        preprocessor=preprocessor,
+        preprocessor=eval_preprocessor,
         postprocessor=postprocessor,
         n_episodes=n_episodes,
         max_episodes_rendered=max_episodes_rendered,
@@ -1024,6 +950,7 @@ def run_one(
     env_features: dict | None = None,
     recording_repo_id: str | None = None,
     recording_private: bool = False,
+    env_rename_map: dict[str, str] | None = None,
 ):
     """
     Run eval_one for a single (task_group, task_id, env).
@@ -1058,6 +985,7 @@ def run_one(
         env_features=env_features,
         recording_repo_id=task_repo_id,
         recording_private=recording_private,
+        env_rename_map=env_rename_map,
     )
 
     if max_episodes_rendered > 0:
@@ -1084,6 +1012,7 @@ def eval_policy_all(
     return_episode_data: bool = False,
     start_seed: int | None = None,
     max_parallel_tasks: int = 1,
+    env_rename_map: dict[str, str] | None = None,
 ) -> dict:
     """
     Evaluate a nested `envs` dict: {task_group: {task_id: vec_env}}.
@@ -1143,6 +1072,7 @@ def eval_policy_all(
         env_features=env_features,
         recording_repo_id=recording_repo_id,
         recording_private=recording_private,
+        env_rename_map=env_rename_map,
     )
 
     # Set the shared policy's mode before launching any workers. Restoring it
