@@ -191,3 +191,8 @@ personal/work2/ours/all_frames/*
 personal/work2/ours/extract_embedding_by_episode/cache/*
 personal/work2/duibi/random/random_200_seed42/*
 personal/work2/duibi/random/random_100_seed42/*
+personal/work2/dataset_view/*
+personal/work2/ours/method/training_output/*
+personal/work2/duibi/random_42/*
+personal/work2/duibi/uniform_42/*
+personal/work2/see_embedding/embedding_deep_ep7_ep94.pt

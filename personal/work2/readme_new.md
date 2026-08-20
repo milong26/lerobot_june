@@ -10,16 +10,30 @@ metaworld+ppick-place-v3任务
 运行collect_metaworld_dataset.py，指令是
 python personal/work2/collect_metaworld_dataset.py \
     --task pick-place-v3 \
-    --num-episodes 500 \
-    --output-dir /data/zhonglinye/jun/lerobot/personal/work2/dataset \
-    --repo-id your-username/metaworld_pick_place \
+    --num-episodes 1 \
+    --output-dir /data/zhonglinye/jun/lerobot/personal/work2/dataset2 \
+    --repo-id work2/metaworld_pick_place \
     --randomize-obj \
     --seed-start 0 \
     --max-steps 500
 
+生成的时候是怎么指定工作空间的？用seed
+换一下相机再重新生成1episode的数据看看
+新相机更加符合我的需求，所以修改了代码以后重新采集
+python personal/work2/collect_metaworld_dataset.py \
+    --task pick-place-v3 \
+    --num-episodes 500 \
+    --output-dir /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pickplacev3 \
+    --repo-id work2/metaworld_pick_place \
+    --randomize-obj \
+    --seed-start 0 \
+    --max-steps 500
+
+
+
 然后检查这个数据集，运行代码可以看到它的初始位置分布
 python personal/work2/visualize_initial_positions.py \
-    --dataset-dir personal/work2/dataset \
+    --dataset-dir personal/work2/dataset_view/pickplacev3 \
     --output-dir personal/work2/dataset_lookin/
 
 新增代码personal/work2/dataset_lookin/inspect_dataset.py
@@ -66,6 +80,30 @@ Episode 0 Frame (episode_index check)
 ============================================================
 Episode Meta Details
 ============================================================
+
+## see_embedding
+因为之前extract embedding的时候不知道哪个方式更好，所以需要写代码验证
+personal/work2/see_embedding 在这个文件夹里面
+personal/work2/see_embedding/see_diff.py 这个代码大概比较了一下
+
+personal/work2/see_embedding/see_embedding_deep.py 更加深入。
+代码运行以后的结果是
+SmolVLM 的视觉编码器对 pick-and-place 任务中的物体位置变化不敏感。绝对不能mean pooling
+然后再选，但好像也选不出来什么？
+
+
+
+
+
+
+lerobot-eval \
+    --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model \
+    --env.type=metaworld \
+    --eval.batch_size=10 \
+    --eval.n_episodes=10 \
+    --policy.use_amp=false \
+    --policy.device=cuda
+
 
 
 
@@ -209,3 +247,51 @@ Highest position correlation on held-out episodes.
 ./jobs/run_random_200_seed42.sh
 和
 ./jobs/run_random_100_seed42.sh
+
+
+
+## 对比实验
+### 代码修改
+直接用lerobot_train的eval模式会报错，因为生成数据的时候可以提供top,wrist和state
+默认代码评估的时候，只能提供单张图image和state
+需要修改代码，最终得到image.top，image.wrist
+（可能要看情况进行rename）
+当lerobot_train 新增一个参数"use-self-mw"的时候，才用新的metaworld环境评估
+代码修改完成。
+lerobot-train \
+  --env.use_self_mw=true
+就能触发
+输出 observation.images.camera1 和 observation.images.camera2
+rename_map的时候要写camera1=top，caemra2=wrist
+
+### 训练脚本
+训练uniform，seed=42，100，200，挑选出100episode,200episode
+训练random，seed分别是42和100，挑选出100episode和200episode
+
+修改personal/work2/duibi/train_and_eval_scripts/train_and_eval.sh中的dataset等
+
+在lerobot目录下运行
+cd /data/zhonglinye/jun/lerobot/personal/work2/duibi/train_and_eval_scripts
+bash launch_uniform.sh 0
+出现
+Launched experiment: uniform_100_seed42
+tmux session: uniform_100_s42
+Output dir: /data/zhonglinye/jun/lerobot/personal/work2/duibi/uniform_42
+
+Monitor with: tmux attach -t uniform_100_s42
+Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/duibi/uniform_42/logs/uniform_100_seed42.log
+
+检查是不是在正常运行，比如bacth_size要不要改一下，看起来可以正常运行
+会首先生成subset，检查一下
+ python personal/work2/dataset_lookin/see_uniform_dataset.py
+
+## 测试eval能不能用
+lerobot-eval \
+    --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model \
+    --env.type=metaworld \
+    --env.task=metaworld-pick-place-v3 \
+    --env.camera_name=corner2,gripperPOV \
+    --eval.batch_size=10 \
+    --eval.n_episodes=10 \
+    --policy.use_amp=false \
+    --policy.device=cuda

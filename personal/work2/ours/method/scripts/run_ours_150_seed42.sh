@@ -51,7 +51,7 @@ lerobot-train \
     --policy.train_expert_only=true \
     --policy.train_state_proj=false \
     --policy.optimizer_lr=1e-4 \
-    --steps=20000 \
+    --steps=200 \
     --batch_size=64 \
     --eval.n_episodes=100 \
     --eval.batch_size=1 \

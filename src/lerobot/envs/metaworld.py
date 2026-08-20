@@ -22,6 +22,7 @@ from typing import Any
 import gymnasium as gym
 import metaworld
 import metaworld.policies as policies
+import mujoco
 import numpy as np
 from gymnasium import spaces
 
@@ -89,6 +90,7 @@ class MetaworldEnv(gym.Env):
         visualization_width=640,
         visualization_height=480,
         fixed_states: list[np.ndarray] | None = None,
+        use_self_mw: bool = False,
     ):
         super().__init__()
         self.task = task.replace("metaworld-", "")
@@ -98,6 +100,7 @@ class MetaworldEnv(gym.Env):
         self.observation_height = observation_height
         self.visualization_width = visualization_width
         self.visualization_height = visualization_height
+        self.use_self_mw = use_self_mw
 
         # Support multiple cameras (comma-separated, e.g., "corner2,behindGripper")
         self.camera_names = [c.strip() for c in camera_name.split(",")]
@@ -128,9 +131,33 @@ class MetaworldEnv(gym.Env):
                 }
             )
         elif self.obs_type == "pixels_agent_pos":
-            self.observation_space = spaces.Dict(
-                {
-                    "pixels": spaces.Box(
+            if self.use_self_mw:
+                self.observation_space = spaces.Dict(
+                    {
+                        "observation.images.camera1": spaces.Box(
+                            low=0,
+                            high=255,
+                            shape=(3, self.observation_height, self.observation_width),
+                            dtype=np.uint8,
+                        ),
+                        "observation.images.camera2": spaces.Box(
+                            low=0,
+                            high=255,
+                            shape=(3, self.observation_height, self.observation_width),
+                            dtype=np.uint8,
+                        ),
+                        "observation.state": spaces.Box(
+                            low=-1000.0,
+                            high=1000.0,
+                            shape=(OBS_DIM,),
+                            dtype=np.float32,
+                        ),
+                    }
+                )
+            else:
+                # Dual-camera mode: match actual observation keys returned by _format_raw_obs
+                obs_space_dict = {
+                    "pixels/top": spaces.Box(
                         low=0,
                         high=255,
                         shape=(self.observation_height, self.observation_width, 3),
@@ -143,7 +170,15 @@ class MetaworldEnv(gym.Env):
                         dtype=np.float64,
                     ),
                 }
-            )
+                # Add wrist camera if dual-camera mode
+                if len(self.camera_names) > 1:
+                    obs_space_dict["pixels/wrist"] = spaces.Box(
+                        low=0,
+                        high=255,
+                        shape=(self.observation_height, self.observation_width, 3),
+                        dtype=np.uint8,
+                    )
+                self.observation_space = spaces.Dict(obs_space_dict)
 
         self.action_space = spaces.Box(low=-1, high=1, shape=(ACTION_DIM,), dtype=np.float32)
 
@@ -166,9 +201,10 @@ class MetaworldEnv(gym.Env):
         env.seeded_rand_vec = True  # use seeded RNG so reset(seed=X) controls object positions
         self._env = env
 
-        # Create second camera environment if dual-camera mode
-        if len(self.camera_names) > 1:
-            env_wrist = mt1.train_classes[self._env_name](render_mode="rgb_array", camera_name=self.camera_names[1])
+        # Create second camera environment if dual-camera mode or use_self_mw mode
+        if len(self.camera_names) > 1 or self.use_self_mw:
+            wrist_camera = self.camera_names[1] if len(self.camera_names) > 1 else "gripperPOV"
+            env_wrist = mt1.train_classes[self._env_name](render_mode="rgb_array", camera_name=wrist_camera)
             env_wrist.set_task(mt1.train_tasks[0])
             env_wrist.reset()
             env_wrist._freeze_rand_vec = False
@@ -226,18 +262,27 @@ class MetaworldEnv(gym.Env):
                 "This likely means `env.render()` returned None or the environment was not provided."
             )
 
-            if self.obs_type == "pixels":
+            if self.use_self_mw:
+                # Convert HWC to CHW format for LeRobot compatibility
+                image_chw = np.transpose(image.copy(), (2, 0, 1))
+                obs = {
+                    "observation.images.camera1": image_chw,
+                    "observation.state": agent_pos.astype(np.float32),
+                }
+                if image_wrist is not None:
+                    image_wrist_chw = np.transpose(image_wrist.copy(), (2, 0, 1))
+                    obs["observation.images.camera2"] = image_wrist_chw
+            elif self.obs_type == "pixels":
                 obs = {"pixels/top": image.copy()}
-
             else:  # pixels_agent_pos
                 obs = {
                     "pixels/top": image.copy(),
                     "agent_pos": agent_pos,
                 }
 
-            # Add wrist camera image if dual-camera mode
-            if image_wrist is not None:
-                obs["pixels/wrist"] = image_wrist.copy()
+                # Add wrist camera image if dual-camera mode
+                if image_wrist is not None:
+                    obs["pixels/wrist"] = image_wrist.copy()
         else:
             raise ValueError(f"Unknown obs_type: {self.obs_type}")
         return obs

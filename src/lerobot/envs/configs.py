@@ -457,6 +457,7 @@ class MetaworldEnv(EnvConfig):
     render_mode: str = "rgb_array"
     camera_name: str = "corner2"  # Support dual cameras: "corner2,behindGripper"
     multitask_eval: bool = True
+    use_self_mw: bool = False  # Use self-collected Meta-World dataset format (dual camera, lerobot naming)
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
             "action": PolicyFeature(type=FeatureType.ACTION, shape=(4,)),
@@ -489,11 +490,14 @@ class MetaworldEnv(EnvConfig):
 
     @property
     def gym_kwargs(self) -> dict:
-        return {
+        kwargs = {
             "obs_type": self.obs_type,
             "render_mode": self.render_mode,
             "camera_name": self.camera_name,
         }
+        if self.use_self_mw:
+            kwargs["use_self_mw"] = True
+        return kwargs
 
     def create_envs(self, n_envs: int, use_async_envs: bool = False):
         from .metaworld import create_metaworld_envs
