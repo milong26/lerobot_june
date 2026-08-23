@@ -74,7 +74,7 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
         Dictionary of observation batches with keys renamed to LeRobot format and values as tensors.
     """
     # DEBUG: Print raw observation keys
-    print(f"[DEBUG preprocess_observation] Raw observation keys: {observations.keys()}")
+    # print(f"[DEBUG preprocess_observation] Raw observation keys: {observations.keys()}")
 
     # map to expected inputs for the policy
     return_observations = {}
@@ -109,7 +109,7 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
     # Handle flat pixel keys like "pixels/top", "pixels/wrist"
     pixel_keys = [k for k in observations if k.startswith("pixels/")]
     if pixel_keys:
-        print(f"[DEBUG preprocess_observation] Found flat pixel keys: {pixel_keys}")
+        # print(f"[DEBUG preprocess_observation] Found flat pixel keys: {pixel_keys}")
         for pixel_key in pixel_keys:
             img = observations[pixel_key]
             img_tensor = torch.from_numpy(img)
@@ -120,22 +120,22 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
             assert img_tensor.dtype == torch.uint8, f"expect torch.uint8, but instead {img_tensor.dtype=}"
             
             # Save raw images before conversion
-            import os
-            from PIL import Image
-            save_dir = "debug_raw_images"
-            os.makedirs(save_dir, exist_ok=True)
-            for env_idx in range(img_tensor.shape[0]):
-                img_np = img_tensor[env_idx].numpy()
-                safe_key = pixel_key.replace("/", "_")
-                Image.fromarray(img_np).save(f"{save_dir}/raw_{safe_key}_env{env_idx}.png")
-                print(f"[DEBUG] Saved raw image: {save_dir}/raw_{safe_key}_env{env_idx}.png (shape={img_np.shape})")
+            # import os
+            # from PIL import Image
+            # save_dir = "debug_raw_images"
+            # os.makedirs(save_dir, exist_ok=True)
+            # for env_idx in range(img_tensor.shape[0]):
+            #     img_np = img_tensor[env_idx].numpy()
+            #     safe_key = pixel_key.replace("/", "_")
+            #     Image.fromarray(img_np).save(f"{save_dir}/raw_{safe_key}_env{env_idx}.png")
+                # print(f"[DEBUG] Saved raw image: {save_dir}/raw_{safe_key}_env{env_idx}.png (shape={img_np.shape})")
             
             img_tensor = einops.rearrange(img_tensor, "b h w c -> b c h w").contiguous()
             img_tensor = img_tensor.type(torch.float32)
             img_tensor /= 255
             # Convert "pixels/top" -> "observation.pixels/top"
             return_observations[f"observation.{pixel_key}"] = img_tensor
-            print(f"[DEBUG preprocess_observation] Processed {pixel_key} -> observation.{pixel_key}, shape={img_tensor.shape}")
+            # print(f"[DEBUG preprocess_observation] Processed {pixel_key} -> observation.{pixel_key}, shape={img_tensor.shape}")
 
     if "environment_state" in observations:
         env_state = torch.from_numpy(observations["environment_state"]).float()

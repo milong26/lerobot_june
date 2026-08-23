@@ -324,10 +324,14 @@ class MetaworldEnv(gym.Env):
 
         observation = self._format_raw_obs(raw_obs)
 
+        # Store as instance attributes for env.call() access during eval
+        self.obj_init_pos = self._env.obj_init_pos.copy() if self._env.obj_init_pos is not None else None
+        self.goal_pos = self._env.goal.copy()
+
         info = {
             "is_success": False,
-            "obj_init_pos": self._env.obj_init_pos.copy() if self._env.obj_init_pos is not None else None,
-            "goal_pos": self._env.goal.copy(),
+            "obj_init_pos": self.obj_init_pos,
+            "goal_pos": self.goal_pos,
         }
         return observation, info
 
@@ -361,6 +365,7 @@ class MetaworldEnv(gym.Env):
                 "task": self.task,
                 "done": done,
                 "is_success": is_success,
+                "grasp_success": bool(info.get("grasp_success", 0)),
             }
         )
 
@@ -371,6 +376,7 @@ class MetaworldEnv(gym.Env):
                 "task": self.task,
                 "done": bool(done),
                 "is_success": bool(is_success),
+                "grasp_success": bool(info.get("grasp_success", 0)),
             }
             self.reset()
 

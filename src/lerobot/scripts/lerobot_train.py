@@ -725,8 +725,9 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                         preprocessor=preprocessor,
                         postprocessor=postprocessor,
                         n_episodes=cfg.eval.n_episodes,
-                        videos_dir=cfg.output_dir / "eval" / f"videos_step_{step_id}",
-                        max_episodes_rendered=4,
+                        videos_dir=None,
+                        max_episodes_rendered=0,
+                        results_dir=cfg.output_dir / "eval" / f"results_step_{step_id}",
                         start_seed=cfg.seed,
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
                         env_rename_map={
@@ -761,7 +762,9 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                 if wandb_logger:
                     wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
                     wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
-                    wandb_logger.log_video(eval_info["overall"]["video_paths"][0], step, mode="eval")
+                    video_paths = eval_info["overall"].get("video_paths", [])
+                    if video_paths:
+                        wandb_logger.log_video(video_paths[0], step, mode="eval")
 
             accelerator.wait_for_everyone()
 

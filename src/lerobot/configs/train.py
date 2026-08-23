@@ -371,4 +371,12 @@ class TrainPipelineConfig(HubMixin):
                     config_file = f.name
 
         with draccus.config_type("json"):
-            return draccus.parse(cls, config_file, args=cli_args)
+            cfg = draccus.parse(cls, config_file, args=cli_args)
+
+        # Auto-detect resume scenario: if pretrained_name_or_path is a pretrained_model directory,
+        # set checkpoint_path to its parent so load_training_state can find training_state/
+        if Path(model_id).is_dir() and TRAIN_CONFIG_NAME in os.listdir(model_id):
+            if Path(model_id).name == PRETRAINED_MODEL_DIR:
+                cfg.checkpoint_path = Path(model_id).parent
+
+        return cfg

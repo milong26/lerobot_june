@@ -37,16 +37,28 @@ EXP_OUTPUT_DIR="$OUTPUT_BASE_DIR/$EXP_NAME"
 LOG_FILE="$LOG_DIR/${EXP_NAME}.log"
 EVAL_FILE="$EVAL_DIR/${EXP_NAME}_eval.json"
 
-# Select episodes
-echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
-python "$SELECT_SCRIPT" \
-    --num-episodes "$NUM_EPISODES" \
-    --seed "$SEED" \
-    --dataset-root "$DATASET_DIR" \
-    --output-dir "$SUBSET_DIR"
+SUBSET_FILE="$SUBSET_DIR/${MODE}_${NUM_EPISODES}_seed${SEED}.json"
+
+# Auto-detect checkpoint for resume
+LATEST_CKPT=$(ls -d "$EXP_OUTPUT_DIR"/checkpoints/*/ 2>/dev/null | sort -V | tail -n1)
+RESUME_ARGS=""
+if [ -n "$LATEST_CKPT" ] && [ -f "$LATEST_CKPT/pretrained_model/train_config.json" ]; then
+    echo "=== Found existing checkpoint: $LATEST_CKPT ==="
+    echo "=== Resuming training from checkpoint ==="
+    RESUME_ARGS="--resume=true --config_path=$LATEST_CKPT/pretrained_model"
+    echo "=== Loading existing episode subset: $SUBSET_FILE ==="
+else
+    echo "=== No checkpoint found, starting fresh training ==="
+    # Select episodes
+    echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
+    python "$SELECT_SCRIPT" \
+        --num-episodes "$NUM_EPISODES" \
+        --seed "$SEED" \
+        --dataset-root "$DATASET_DIR" \
+        --output-dir "$SUBSET_DIR"
+fi
 
 # Load episode indices
-SUBSET_FILE="$SUBSET_DIR/${MODE}_${NUM_EPISODES}_seed${SEED}.json"
 EPISODES=$(python -c "import json; data=json.load(open('$SUBSET_FILE')); print('[' + ','.join(str(x) for x in data['selected_episode_indices']) + ']')")
 
 echo "=== Training with $NUM_EPISODES $MODE episodes (seed=$SEED) on GPU $GPU_ID ==="
@@ -79,15 +91,16 @@ lerobot-train \
     --policy.optimizer_lr=1e-4 \
     --steps=20000 \
     --batch_size=64 \
-    --eval.n_episodes=100 \
-    --eval.batch_size=1 \
-    --env_eval_freq=200 \
+    --eval.n_episodes=16 \
+    --eval.batch_size=16 \
+    --env_eval_freq=300 \
     --seed=$SEED \
     --job_name=smolvla_${EXP_NAME} \
     --output_dir=$EXP_OUTPUT_DIR \
     --remove_features='["observation.environment_state"]' \
     --wandb.enable=true \
-    2>&1 | tee "$LOG_FILE"
+    $RESUME_ARGS \
+    2>&1 | tee -a "$LOG_FILE"
 
 echo "=== Training complete: $EXP_NAME ==="
 echo "Log saved to: $LOG_FILE"

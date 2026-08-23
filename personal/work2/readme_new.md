@@ -257,8 +257,9 @@ rename_map的时候要写camera1=top，caemra2=wrist
 训练random，seed分别是42和100，挑选出100episode和200episode
 
 修改personal/work2/duibi/train_and_eval_scripts/train_and_eval.sh中的dataset等
-
 在lerobot目录下运行
+
+### uniform
 cd /data/zhonglinye/jun/lerobot/personal/work2/duibi/train_and_eval_scripts
 bash launch_uniform.sh 0
 出现
