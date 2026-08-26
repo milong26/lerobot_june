@@ -24,10 +24,10 @@
 
 使用示例（命令行）:
     # 采集10个episode的pick-place-v3数据（随机化物体和目标位置）
-    python collect_metaworld_dataset.py \
+    python personal/work2/collect_dataset/collect_metaworld_dataset.py \
         --task pick-place-v3 \
-        --num-episodes 10 \
-        --output-dir ./outputs/metaworld_pick_place \
+        --num-episodes 200 \
+        --output-dir personal/work2/dataset_view/pick_place_corner3/ \
         --repo-id your-username/metaworld_pick_place \
         --fps 80 \
         --image-size 480 \
@@ -69,7 +69,7 @@ os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).parent / "outputs")
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 # 加载metaworld配置
-CONFIG_PATH = Path(__file__).parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
+CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
 with open(CONFIG_PATH) as f:
     METAWORLD_CONFIG = json.load(f)
 
@@ -89,7 +89,7 @@ ENV_STATE_DESCRIPTION = {
 }
 
 
-def create_metaworld_env(task_name, seed=None, camera_name="corner2"):
+def create_metaworld_env(task_name, seed=None, camera_name="corner3"):
     """
     创建Meta-World环境，指定相机视角。
 
@@ -540,7 +540,7 @@ def main():
         seed = args.seed_start + ep_idx if randomize_obj else 42
 
         # 创建两个环境（不同相机视角）
-        env_top = create_metaworld_env(args.task, seed=seed, camera_name="corner2")
+        env_top = create_metaworld_env(args.task, seed=seed, camera_name="corner3")
         env_wrist = create_metaworld_env(args.task, seed=seed, camera_name="gripperPOV")
 
         # 运行episode

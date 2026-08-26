@@ -14,8 +14,8 @@ import numpy as np
 
 
 def fix_episode_initial_states(
-    dataset_path: str = "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pickplacev3",
-    json_path: str = "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pickplacev3/episode_initial_states.json",
+    dataset_path: str = "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_camcorner",
+    json_path: str = "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_camcorner/episode_initial_states.json",
     output_path: str | None = None,
     dry_run: bool = False,
 ):
@@ -117,13 +117,13 @@ def main():
     parser.add_argument(
         "--dataset",
         type=str,
-        default="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pickplacev3",
+        default="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_corner3",
         help="LeRobot 数据集根目录路径",
     )
     parser.add_argument(
         "--json",
         type=str,
-        default="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pickplacev3/episode_initial_states.json",
+        default="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_corner3/episode_initial_states.json",
         help="现有的 episode_initial_states.json 文件路径",
     )
     parser.add_argument(

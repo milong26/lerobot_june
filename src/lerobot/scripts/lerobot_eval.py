@@ -947,11 +947,12 @@ class TaskMetrics(TypedDict):
     sum_rewards: list[float]
     max_rewards: list[float]
     successes: list[bool]
+    grasp_successes: list[bool]
     video_paths: list[str]
     predicted_video_paths: list[str]
 
 
-ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "video_paths", "predicted_video_paths")
+ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "grasp_successes", "video_paths", "predicted_video_paths")
 
 
 def eval_one(
@@ -1015,6 +1016,7 @@ def eval_one(
         sum_rewards=[ep["sum_reward"] for ep in per_episode],
         max_rewards=[ep["max_reward"] for ep in per_episode],
         successes=[ep["success"] for ep in per_episode],
+        grasp_successes=[ep.get("grasp_success", False) for ep in per_episode],
         video_paths=task_result.get("video_paths", []),
         predicted_video_paths=task_result.get("predicted_video_paths", []),
     )
@@ -1146,6 +1148,7 @@ def eval_policy_all(
         _append("sum_rewards", metrics.get("sum_rewards"))
         _append("max_rewards", metrics.get("max_rewards"))
         _append("successes", metrics.get("successes"))
+        _append("grasp_successes", metrics.get("grasp_successes"))
         for key in ("video_paths", "predicted_video_paths"):
             paths = metrics.get(key, [])
             if paths:
@@ -1230,6 +1233,7 @@ def eval_policy_all(
             "avg_sum_reward": _agg_from_list(acc["sum_rewards"]),
             "avg_max_reward": _agg_from_list(acc["max_rewards"]),
             "pc_success": _agg_from_list(acc["successes"]) * 100 if acc["successes"] else float("nan"),
+            "pc_grasp_success": _agg_from_list(acc["grasp_successes"]) * 100 if acc["grasp_successes"] else float("nan"),
             "n_episodes": len(acc["sum_rewards"]),
             "video_paths": list(acc["video_paths"]),
             "predicted_video_paths": list(acc["predicted_video_paths"]),
@@ -1240,6 +1244,7 @@ def eval_policy_all(
         "avg_sum_reward": _agg_from_list(overall["sum_rewards"]),
         "avg_max_reward": _agg_from_list(overall["max_rewards"]),
         "pc_success": _agg_from_list(overall["successes"]) * 100 if overall["successes"] else float("nan"),
+        "pc_grasp_success": _agg_from_list(overall["grasp_successes"]) * 100 if overall["grasp_successes"] else float("nan"),
         "n_episodes": len(overall["sum_rewards"]),
         "eval_s": time.time() - start_t,
         "eval_ep_s": (time.time() - start_t) / max(1, len(overall["sum_rewards"])),

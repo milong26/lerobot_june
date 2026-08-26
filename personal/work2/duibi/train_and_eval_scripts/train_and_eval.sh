@@ -1,7 +1,7 @@
 #!/bin/bash
 # Train and evaluate with selected episodes
 # Usage: bash train_and_eval.sh <mode> <num_episodes> <seed> <gpu_id> <output_base_dir>
-#   mode: uniform or random
+#   mode: uniform, random, or dynamicanchor
 
 set -e
 
@@ -10,10 +10,12 @@ NUM_EPISODES=${2:-112}
 SEED=$3
 GPU_ID=$4
 OUTPUT_BASE_DIR=$5
+DATASET_NAME=${6:-corner3}
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pickplacev3"
+DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_${DATASET_NAME}"
+OUR_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our"
 SUBSET_DIR="$OUTPUT_BASE_DIR/subsets"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
 EVAL_DIR="$OUTPUT_BASE_DIR/eval_results"
@@ -28,8 +30,11 @@ if [ "$MODE" = "uniform" ]; then
 elif [ "$MODE" = "random" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT="$SCRIPT_DIR/select_random_episodes.py"
+elif [ "$MODE" = "dynamicanchor" ]; then
+    EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
+    SELECT_SCRIPT=""
 else
-    echo "Error: mode must be 'uniform' or 'random'"
+    echo "Error: mode must be 'uniform', 'random', or 'dynamicanchor'"
     exit 1
 fi
 
@@ -49,13 +54,49 @@ if [ -n "$LATEST_CKPT" ] && [ -f "$LATEST_CKPT/pretrained_model/train_config.jso
     echo "=== Loading existing episode subset: $SUBSET_FILE ==="
 else
     echo "=== No checkpoint found, starting fresh training ==="
-    # Select episodes
-    echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
-    python "$SELECT_SCRIPT" \
-        --num-episodes "$NUM_EPISODES" \
-        --seed "$SEED" \
-        --dataset-root "$DATASET_DIR" \
-        --output-dir "$SUBSET_DIR"
+    
+    if [ "$MODE" = "dynamicanchor" ]; then
+        # DynamicAnchor: extract embeddings, run offline simulation, select episodes
+        echo "=== Running DynamicAnchor pipeline ==="
+        
+        EMBEDDINGS_DIR="$OUTPUT_BASE_DIR/embeddings"
+        RESULTS_DIR="$OUTPUT_BASE_DIR/results"
+        PLANNING_RESULT="$RESULTS_DIR/planning_result.json"
+        
+        mkdir -p "$EMBEDDINGS_DIR" "$RESULTS_DIR"
+        
+        # Step 1: Extract embeddings
+        echo "=== Step 1: Extracting VLM embeddings ==="
+        python "$OUR_DIR/embeddings/extract_embeddings.py" \
+            --dataset-dir "$DATASET_DIR" \
+            --output-dir "$EMBEDDINGS_DIR" \
+            --n-components 32 \
+            --device cuda
+        
+        # Step 2: Run iterative SIC selection
+        echo "=== Step 2: Running iterative SIC episode selection ==="
+        python "$OUR_DIR/experiments/iterative_select_episodes.py" \
+            --embeddings-dir "$EMBEDDINGS_DIR" \
+            --output-dir "$RESULTS_DIR" \
+            --b0-size 18 \
+            --target-size "$NUM_EPISODES" \
+            --n-add-per-round 9 \
+            --seed "$SEED" \
+            --alpha 1.0 \
+            --lambda-wrist 1.0
+        
+        # Copy subset file to expected location
+        cp "$RESULTS_DIR/subset.json" "$SUBSET_FILE"
+        echo "=== Iterative selection complete ==="
+    else
+        # Select episodes using uniform or random
+        echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
+        python "$SELECT_SCRIPT" \
+            --num-episodes "$NUM_EPISODES" \
+            --seed "$SEED" \
+            --dataset-root "$DATASET_DIR" \
+            --output-dir "$SUBSET_DIR"
+    fi
 fi
 
 # Load episode indices
@@ -67,6 +108,11 @@ echo "Output: $EXP_OUTPUT_DIR"
 echo "Log: $LOG_FILE"
 
 # Training command
+# Fix torchcodec/FFmpeg library loading issues
+# 之前训练的时候一直报错
+export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
+export LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6
+
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export CUDA_VISIBLE_DEVICES=$GPU_ID
@@ -75,7 +121,6 @@ lerobot-train \
     --policy.path=lerobot/smolvla_base \
     --policy.device=cuda \
     --policy.push_to_hub=false \
-    --policy.empty_cameras=1 \
     --dataset.repo_id=lerobot/metaworld_pick_place \
     --dataset.root=$DATASET_DIR \
     --dataset.episodes="$EPISODES" \
@@ -83,17 +128,19 @@ lerobot-train \
     --rename_map='{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \
     --env.type=metaworld \
     --env.task=pick-place-v3 \
-    --env.camera_name="corner2,gripperPOV" \
+    --env.camera_name="corner,gripperPOV" \
     --policy.vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct \
     --policy.freeze_vision_encoder=true \
     --policy.train_expert_only=true \
     --policy.train_state_proj=false \
     --policy.optimizer_lr=1e-4 \
-    --steps=20000 \
+    --save_freq=2000 \
+    --steps=16000 \
     --batch_size=64 \
+    --num_workers=16 \
     --eval.n_episodes=16 \
     --eval.batch_size=16 \
-    --env_eval_freq=300 \
+    --env_eval_freq=16000 \
     --seed=$SEED \
     --job_name=smolvla_${EXP_NAME} \
     --output_dir=$EXP_OUTPUT_DIR \

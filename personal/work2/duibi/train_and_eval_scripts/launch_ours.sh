@@ -1,17 +1,19 @@
 #!/bin/bash
-# Launch random experiment in tmux
-# Usage: bash launch_random.sh <seed> <gpu_id> <dataset_name>
+# Launch dynamic anchor (ours) experiment in tmux
+# Usage: bash launch_ours.sh <num_episodes> <gpu_id> [seed] [dataset_name]
 
 set -e
 
-SEED=$1
+NUM_EPISODES=${1:-112}
 GPU_ID=${2:-0}
-DATASET_NAME=${3:-corner3}
+SEED=${3:-42}
+DATASET_NAME=${4:-corner3}
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_${SEED}_${DATASET_NAME}"
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
-EXP_NAME="random_112_seed${SEED}"
-TMUX_SESSION="random_112_s${SEED}_${DATASET_NAME}"
+EXP_NAME="dynamicanchor_${NUM_EPISODES}_seed${SEED}"
+TMUX_SESSION="ours_${NUM_EPISODES}_s${SEED}_${DATASET_NAME}"
 
 mkdir -p "$LOG_DIR"
 
@@ -27,14 +29,18 @@ cat > "$RUNNER_SCRIPT" << RUNNER_EOF
 eval "\$(conda shell.bash hook 2>/dev/null)"
 conda activate lb_server
 
+# Force unbuffered Python output for real-time logging
+export PYTHONUNBUFFERED=1
+
 # Change to lerobot root directory for module imports
 cd /data/zhonglinye/jun/lerobot
 
-EXP_NAME="random_112_seed${SEED}"
+EXP_NAME="dynamicanchor_${NUM_EPISODES}_seed${SEED}"
 GPU_ID=\$1
-SEED_VAL=\$2
-DATASET_NAME=\$3
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_\${SEED_VAL}_\${DATASET_NAME}"
+NUM_EPISODES=\$2
+SEED=\$3
+DATASET_NAME=\$4
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_\${NUM_EPISODES}_seed\${SEED}_\${DATASET_NAME}"
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
@@ -49,14 +55,15 @@ echo "PID: \$\$" >> "\$TIME_FILE"
 echo "========================================"
 echo "Experiment: \$EXP_NAME"
 echo "GPU: \$GPU_ID"
-echo "Seed: \$SEED_VAL"
+echo "Num Episodes: \$NUM_EPISODES"
+echo "Seed: \$SEED"
 echo "Dataset: \$DATASET_NAME"
 echo "PID: \$\$"
 echo "Started: \$(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
 echo ""
 
-bash "\$TRAIN_SCRIPT" random 112 \${SEED_VAL} \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
+bash "\$TRAIN_SCRIPT" dynamicanchor \$NUM_EPISODES \$SEED \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo "" >> "\$TIME_FILE"
 echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"
@@ -74,7 +81,7 @@ RUNNER_EOF
 chmod +x "$RUNNER_SCRIPT"
 
 # Launch in tmux
-tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $SEED $DATASET_NAME"
+tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $NUM_EPISODES $SEED $DATASET_NAME"
 
 echo "Launched experiment: $EXP_NAME"
 echo "tmux session: $TMUX_SESSION"

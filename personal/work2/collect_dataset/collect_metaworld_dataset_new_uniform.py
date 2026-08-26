@@ -9,11 +9,12 @@
 4. 最终得到均匀分布的 100 个 episode
 
 使用示例:
+cd /data/zhonglinye/jun/lerobot/personal/work2/collect_dataset
     python collect_metaworld_dataset_new_uniform.py \
         --task pick-place-v3 \
         --num-episodes 100 \
-        --output-dir /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/uniform_pickplacev3 \
-        --repo-id work2/metaworld_pick_place_uniform \
+        --output-dir /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_corner3/ \
+        --repo-id work2/pick_place_corner3 \
         --fps 80 \
         --image-size 480 \
         --max-steps 500
@@ -38,7 +39,7 @@ os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).parent / "outputs")
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-CONFIG_PATH = Path(__file__).parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
+CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
 with open(CONFIG_PATH) as f:
     METAWORLD_CONFIG = json.load(f)
 
@@ -60,7 +61,7 @@ OBJ_LOW = np.array([-0.1, 0.6, 0.02])
 OBJ_HIGH = np.array([0.1, 0.7, 0.02])
 
 
-def create_metaworld_env(task_name, seed=None, camera_name="corner2"):
+def create_metaworld_env(task_name, seed=None, camera_name="corner3"):
     mt1 = metaworld.MT1(task_name, seed=seed)
     env = mt1.train_classes[task_name](render_mode="rgb_array", camera_name=camera_name)
     task = mt1.train_tasks[0]
@@ -359,7 +360,7 @@ def main():
         print(f"\nCell {cell_idx + 1}/{len(grid_centers)} | Target: [{target_pos[0]:.3f}, {target_pos[1]:.3f}, {target_pos[2]:.3f}]")
 
         # 直接设置物体位置，不搜索 seed
-        env_top = create_metaworld_env(args.task, seed=42, camera_name="corner2")
+        env_top = create_metaworld_env(args.task, seed=42, camera_name="corner3")
         env_wrist = create_metaworld_env(args.task, seed=42, camera_name="gripperPOV")
 
         set_obj_position_directly(env_top, target_pos)

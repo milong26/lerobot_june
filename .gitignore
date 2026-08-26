@@ -198,3 +198,12 @@ personal/work2/duibi/uniform_42/*
 personal/work2/see_embedding/embedding_deep_ep7_ep94.pt
 debug_images/*
 debug_raw_images/*
+personal/work2/duibi/random_42_corner2/*
+personal/work2/duibi/uniform_42_corner2/*
+personal/work2/duibi/random_42_wrongdataset/*
+personal/work2/duibi/uniform_42_wrongdataset/*
+personal/work2/tanzhen/results/*
+personal/work2/duibi/uniform_42_corner3/*
+personal/work2/duibi/random_42_corner3/*
+personal/work2/duibi/ours_0_seed42/embeddings/*
+personal/work2/duibi/ours_112_seed42/embeddings/*

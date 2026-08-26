@@ -1,0 +1,11 @@
+{
+  "n_total_cells": 112,
+  "n_covered": 0,
+  "n_uncovered": 112,
+  "coverage_rate": 0.0,
+  "total_episodes": 0,
+  "avg_count": 0,
+  "max_count": 0,
+  "min_count": 0,
+  "grid_counts": {}
+}

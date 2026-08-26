@@ -292,7 +292,7 @@ CUDA_VISIBLE_DEVICES=2 MUJOCO_GL=egl PYOPENGL_PLATFORM=egl lerobot-eval \
 
 如果能用cuda
 CUDA_VISIBLE_DEVICES=2 MUJOCO_GL=egl PYOPENGL_PLATFORM=egl lerobot-eval \
-    --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model \
+    --policy.path=personal/work2/duibi/random_42/random_112_seed42/checkpoints/last/pretrained_model \
     --env.type=metaworld \
     --env.task=metaworld-pick-place-v3 \
     --env.camera_name=corner2,gripperPOV \
