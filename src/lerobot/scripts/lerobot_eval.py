@@ -64,6 +64,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import TYPE_CHECKING, Any, TypedDict
 
+import cv2
 import einops
 import gymnasium as gym
 import numpy as np
@@ -281,6 +282,11 @@ def rollout(
     done = np.array([False] * env.num_envs)
     max_steps = env.call("_max_episode_steps")[0]
     check_env_attributes_and_types(env)
+    
+    # 调试：创建保存observation图片的目录
+    # debug_dir = Path("personal/work2/eval_model/debug_observations")
+    # debug_dir.mkdir(parents=True, exist_ok=True)
+    debug_step_count = 0
     try:
         while not np.all(done) and step < max_steps:
             # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
@@ -301,33 +307,79 @@ def rollout(
             # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
             observation = env_preprocessor(observation)
 
-            # DEBUG: Print observation keys before preprocessor
-            # print(f"[DEBUG] Observation keys BEFORE preprocessor: {observation.keys()}")
+            # 调试：打印进入preprocessor之前的observation信息
+            # if debug_step_count < 5:  # 只打印前5步
+            #     logger.info(f"\n{'='*80}")
+            #     logger.info(f"[DEBUG] Step {debug_step_count} - Before preprocessor:")
+            #     logger.info(f"  Environment raw observation keys: {list(observation.keys())}")
+            #     for key, value in observation.items():
+            #         if isinstance(value, dict):
+            #             logger.info(f"  {key}: dict with keys {list(value.keys())}")
+            #         elif isinstance(value, torch.Tensor):
+            #             logger.info(f"  {key}: Tensor shape={value.shape}, dtype={value.dtype}, device={value.device}")
+            #             if 'image' in key:
+            #                 logger.info(f"    -> Image: min={value.min().item():.4f}, max={value.max().item():.4f}")
+            #         elif isinstance(value, np.ndarray):
+            #             logger.info(f"  {key}: ndarray shape={value.shape}, dtype={value.dtype}")
+            #             if 'image' in key or 'pixel' in key:
+            #                 logger.info(f"    -> Image: min={value.min()}, max={value.max()}")
+            #         elif isinstance(value, list):
+            #             logger.info(f"  {key}: list with {len(value)} items, sample={value[0] if len(value) > 0 else 'empty'}")
+            #         else:
+            #             logger.info(f"  {key}: {type(value)} = {value}")
+                
+                # 检查rename_map是否会匹配
+                # logger.info(f"\n  [DEBUG] Checking rename_map matching:")
+                # logger.info(f"    Available keys: {list(observation.keys())}")
+                # # 从preprocessor中获取rename_map
+                # for proc_step in preprocessor.steps:
+                #     if hasattr(proc_step, 'rename_map') and proc_step.rename_map:
+                #         logger.info(f"    Rename map: {proc_step.rename_map}")
+                #         for old_key in proc_step.rename_map.keys():
+                #             if old_key in observation:
+                #                 logger.info(f"      ✓ Key '{old_key}' FOUND - will be renamed to '{proc_step.rename_map[old_key]}'")
+                #             else:
+                #                 logger.info(f"      ✗ Key '{old_key}' NOT FOUND in observation!")
+                # logger.info(f"{'='*80}\n")
 
             observation = preprocessor(observation)
 
-            # DEBUG: Print observation keys after preprocessor
-            # print(f"[DEBUG] Observation keys AFTER preprocessor: {observation.keys()}")
-
-            # DEBUG: Save camera images for debugging
-            import os
-            from PIL import Image
-            # save_dir = "debug_images"
-            # os.makedirs(save_dir, exist_ok=True)
-            # for key in observation:
-            #     if "pixels" in key or "camera" in key or "image" in key:
-            #         img_tensor = observation[key]
-            #         if isinstance(img_tensor, torch.Tensor):
-            #             if img_tensor.ndim == 5:
-            #                 img_tensor = img_tensor[0, -1]  # First env, last time step
-            #             elif img_tensor.ndim == 4:
-            #                 img_tensor = img_tensor[0]  # First env
-            #             if img_tensor.shape[0] == 3:  # CHW -> HWC
-            #                 img_tensor = img_tensor.permute(1, 2, 0)
-            #             img_np = (img_tensor.cpu().numpy() * 255).clip(0, 255).astype(np.uint8)
-            #             safe_key = key.replace("/", "_").replace(".", "_")
-            #             Image.fromarray(img_np).save(f"{save_dir}/step{step}_{safe_key}.png")
-            #             print(f"[DEBUG] Saved image: {save_dir}/step{step}_{safe_key}.png (shape={img_np.shape})")
+            # # 调试：打印preprocessor之后的observation信息
+            # if debug_step_count < 5:
+            #     logger.info(f"\n{'='*80}")
+            #     logger.info(f"[DEBUG] Step {debug_step_count} - After preprocessor:")
+            #     for key, value in observation.items():
+            #         if isinstance(value, torch.Tensor):
+            #             logger.info(f"  {key}: Tensor shape={value.shape}, dtype={value.dtype}, device={value.device}")
+            #             if 'image' in key:
+            #                 logger.info(f"    -> Image: min={value.min().item():.4f}, max={value.max().item():.4f}")
+            #                 # 保存图片
+            #                 for b_idx in range(min(value.shape[0], 2)):  # 只保存前2个batch
+            #                     img = value[b_idx].cpu().numpy()
+            #                     # 从 (C, H, W) 转换到 (H, W, C)
+            #                     if img.shape[0] in [1, 3]:
+            #                         img = np.transpose(img, (1, 2, 0))
+            #                     # 归一化到0-255
+            #                     if img.max() <= 1.0:
+            #                         img = (img * 255).astype(np.uint8)
+            #                     elif img.max() <= 255.0:
+            #                         img = img.astype(np.uint8)
+            #                     # 如果是单通道，转成3通道
+            #                     if img.shape[-1] == 1:
+            #                         img = np.repeat(img, 3, axis=-1)
+            #                     # 确保是3通道
+            #                     if img.shape[-1] != 3:
+            #                         logger.warning(f"    -> Skipping save: unexpected channels {img.shape}")
+            #                         continue
+            #                     # BGR for cv2
+            #                     img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            #                     save_path = debug_dir / f"step{debug_step_count}_batch{b_idx}_{key}.png"
+            #                     cv2.imwrite(str(save_path), img_bgr)
+            #                     logger.info(f"    -> Saved image to {save_path}")
+            #         else:
+            #             logger.info(f"  {key}: {type(value)}")
+            #     logger.info(f"{'='*80}\n")
+            #     debug_step_count += 1
 
             with torch.inference_mode():
                 action = policy.select_action(observation)
@@ -535,6 +587,9 @@ def eval_policy(
     # divisible by env.num_envs we end up discarding some data in the last batch.
     n_batches = n_episodes // env.num_envs + int((n_episodes % env.num_envs) != 0)
 
+    # Progress bar for tracking evaluation progress
+    progress_bar = trange(n_batches, desc=f"Evaluating (0/{n_episodes} episodes)", position=0, leave=True)
+
     # Keep track of some metrics.
     sum_rewards = []
     max_rewards = []
@@ -650,6 +705,15 @@ def eval_policy(
                         **init_state,
                     })
 
+        # Update progress bar
+        current_episodes = min((batch_ix + 1) * env.num_envs, n_episodes)
+        current_success = sum(all_successes[-env.num_envs:]) if len(all_successes) >= env.num_envs else sum(all_successes)
+        progress_bar.set_description(
+            f"Evaluating ({current_episodes}/{n_episodes} episodes, "
+            f"success: {current_success}/{env.num_envs})"
+        )
+        progress_bar.update(1)
+
         # FIXME: episode_data is either None or it doesn't exist
         if return_episode_data:
             this_episode_data = _compile_episode_data(
@@ -724,6 +788,9 @@ def eval_policy(
     # Wait till all video rendering threads are done.
     for thread in threads:
         thread.join()
+
+    # Close progress bar
+    progress_bar.close()
 
     # Compile eval info.
     info = {
@@ -868,9 +935,6 @@ def eval_main(cfg: EvalPipelineConfig):
 
     logging.info("Making policy.")
 
-    # DEBUG: Print rename_map
-    # print(f"[DEBUG] cfg.rename_map = {cfg.rename_map}")
-
     policy = make_policy(
         cfg=cfg.policy,
         env_cfg=cfg.env,
@@ -885,17 +949,11 @@ def eval_main(cfg: EvalPipelineConfig):
         "rename_observations_processor": {"rename_map": cfg.rename_map},
     }
 
-    # DEBUG: Print preprocessor_overrides
-    # print(f"[DEBUG] preprocessor_overrides = {preprocessor_overrides}")
-
     preprocessor, postprocessor = make_pre_post_processors(
         policy_cfg=cfg.policy,
         pretrained_path=cfg.policy.pretrained_path,
         preprocessor_overrides=preprocessor_overrides,
     )
-
-    # DEBUG: Print preprocessor steps
-    # print(f"[DEBUG] preprocessor.steps = {[type(step).__name__ for step in preprocessor.steps]}")
 
     # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
     env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
@@ -1130,6 +1188,9 @@ def eval_policy_all(
     overall: dict[str, list] = {k: [] for k in ACC_KEYS}
     per_task_infos: list[dict] = []
 
+    # Progress bar for tracking evaluation progress across tasks
+    progress_bar = trange(len(tasks), desc="Evaluating tasks", position=0, leave=True)
+
     # small inline helper to accumulate one task's metrics into accumulators
     def _accumulate_to(group: str, metrics: dict):
         # metrics expected to contain 'sum_rewards', 'max_rewards', 'successes', optionally 'video_paths'
@@ -1193,6 +1254,13 @@ def eval_policy_all(
                     tg, tid, metrics = task_runner(task_group, task_id, env)
                     _accumulate_to(tg, metrics)
                     per_task_infos.append({"task_group": tg, "task_id": tid, "metrics": metrics})
+                    # Update progress bar
+                    current_success = sum(1 for s in overall.get("successes", []) if s)
+                    total_eps = len(overall.get("sum_rewards", []))
+                    progress_bar.set_description(
+                        f"Task {i+1}/{len(tasks)}: {tg} (episodes: {total_eps}, success: {current_success})"
+                    )
+                    progress_bar.update(1)
                 finally:
                     env.close()
                     # Prefetch next task's workers *after* closing current env to prevent
@@ -1203,6 +1271,7 @@ def eval_policy_all(
                             prefetch_thread = threading.Thread(target=next_env._ensure, daemon=True)
                             prefetch_thread.start()
         else:
+            completed = [0]
             with cf.ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
                 fut2meta = {}
                 for task_group, task_id, env in tasks:
@@ -1214,10 +1283,19 @@ def eval_policy_all(
                         tg, tid, metrics = fut.result()
                         _accumulate_to(tg, metrics)
                         per_task_infos.append({"task_group": tg, "task_id": tid, "metrics": metrics})
+                        # Update progress bar
+                        completed[0] += 1
+                        current_success = sum(1 for s in overall.get("successes", []) if s)
+                        total_eps = len(overall.get("sum_rewards", []))
+                        progress_bar.set_description(
+                            f"Task {completed[0]}/{len(tasks)}: {tg} (episodes: {total_eps}, success: {current_success})"
+                        )
+                        progress_bar.update(1)
                     finally:
                         env.close()
     finally:
         policy.train(was_training)
+        progress_bar.close()
 
     # compute aggregated metrics helper (robust to lists/scalars)
     def _agg_from_list(xs):

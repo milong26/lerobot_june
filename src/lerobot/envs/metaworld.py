@@ -235,7 +235,7 @@ class MetaworldEnv(gym.Env):
     def _render_camera(self, env, camera_name) -> np.ndarray:
         """Render a specific camera view."""
         image = env.render()
-        if camera_name == "corner2":
+        if camera_name in ["corner2", "corner", "corner3"]:
             image = np.flip(image, (0, 1))
         return image
 

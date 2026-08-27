@@ -73,9 +73,6 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
     Returns:
         Dictionary of observation batches with keys renamed to LeRobot format and values as tensors.
     """
-    # DEBUG: Print raw observation keys
-    # print(f"[DEBUG preprocess_observation] Raw observation keys: {observations.keys()}")
-
     # map to expected inputs for the policy
     return_observations = {}
     if "pixels" in observations:
@@ -165,6 +162,16 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
     _handled = {"pixels", "environment_state", "agent_pos", "robot_state", "policy", "camera_obs"}
     for key, value in observations.items():
         if key in _handled:
+            continue
+        # Skip keys that already have "observation." prefix (e.g., from use_self_mw=True)
+        if key.startswith("observation."):
+            if isinstance(value, np.ndarray):
+                val = torch.from_numpy(value).float()
+                if val.dim() == 1:
+                    val = val.unsqueeze(0)
+                return_observations[key] = val
+            elif isinstance(value, Tensor):
+                return_observations[key] = value.float()
             continue
         target = f"{OBS_STR}.{key}"
         if target in return_observations:

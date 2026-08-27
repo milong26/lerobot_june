@@ -474,7 +474,16 @@ class MetaworldEnv(EnvConfig):
 
     def __post_init__(self):
         cameras = [c.strip() for c in self.camera_name.split(",")]
-        if self.obs_type == "pixels":
+        if self.use_self_mw:
+            # Use self-collected Meta-World dataset format (direct observation.* naming)
+            self.features["observation.state"] = PolicyFeature(type=FeatureType.STATE, shape=(4,))
+            self.features["observation.images.camera1"] = PolicyFeature(type=FeatureType.VISUAL, shape=(3, 480, 480))
+            self.features_map["observation.state"] = OBS_STATE
+            self.features_map["observation.images.camera1"] = f"{OBS_IMAGES}.camera1"
+            if len(cameras) > 1:
+                self.features["observation.images.camera2"] = PolicyFeature(type=FeatureType.VISUAL, shape=(3, 480, 480))
+                self.features_map["observation.images.camera2"] = f"{OBS_IMAGES}.camera2"
+        elif self.obs_type == "pixels":
             self.features["top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
 
         elif self.obs_type == "pixels_agent_pos":

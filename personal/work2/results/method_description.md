@@ -1,1 +1,0 @@
-VLM Guided Coverage Expansion

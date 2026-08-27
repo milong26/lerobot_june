@@ -207,3 +207,12 @@ personal/work2/duibi/uniform_42_corner3/*
 personal/work2/duibi/random_42_corner3/*
 personal/work2/duibi/ours_0_seed42/embeddings/*
 personal/work2/duibi/ours_112_seed42/embeddings/*
+# 所有checkpoint和wandb目录
+**/checkpoints/
+**/wandb/
+**/results/
+**/subsets/
+
+# 排除所有 .npy 和 .log 文件
+*.npy
+*.logtests/data/aloha_sim_insertion_human/data_dict.pth

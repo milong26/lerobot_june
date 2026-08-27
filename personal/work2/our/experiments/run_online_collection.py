@@ -114,7 +114,7 @@ def collect_for_grid(
         seed_start: 起始seed
         task: 任务名称
     """
-    from collect_dataset.collect_metaworld_dataset import (
+    from personal.work2.collect_dataset.metaworld.collect_metaworld_dataset import (
         create_metaworld_env,
         run_episode,
         LeRobotDataset
