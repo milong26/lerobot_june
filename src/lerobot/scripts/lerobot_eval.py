@@ -1,10 +1,3 @@
-"""
-用下面这个指令测试
-python -c "from lerobot.scripts.lerobot_eval import eval_main, _save_eval_dataset; print('Import OK')"
-
-"""
-
-
 #!/usr/bin/env python
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
@@ -69,8 +62,9 @@ from dataclasses import asdict
 from functools import partial
 from pathlib import Path
 from pprint import pformat
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
+import cv2
 import einops
 import gymnasium as gym
 import numpy as np
@@ -79,8 +73,9 @@ from termcolor import colored
 from torch import Tensor, nn
 from tqdm import trange
 
-from lerobot.configs import parser
+from lerobot.configs import FeatureType, parser
 from lerobot.configs.eval import EvalPipelineConfig
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
 from lerobot.envs import (
     check_env_attributes_and_types,
     close_envs,
@@ -88,18 +83,85 @@ from lerobot.envs import (
     make_env_pre_post_processors,
     preprocess_observation,
 )
+from lerobot.lerobot_types import PolicyAction
 from lerobot.policies import PreTrainedPolicy, make_policy, make_pre_post_processors
 from lerobot.processor import PolicyProcessorPipeline
-from lerobot.types import PolicyAction
-from lerobot.utils.constants import ACTION, DONE, OBS_STR, REWARD
+from lerobot.utils.constants import ACTION, DONE, OBS_IMAGE, OBS_IMAGES, OBS_STR, REWARD
 from lerobot.utils.device_utils import get_safe_torch_device
-from lerobot.utils.import_utils import register_third_party_plugins
+from lerobot.utils.import_utils import _peft_available, register_third_party_plugins, require_package
 from lerobot.utils.io_utils import write_video
 from lerobot.utils.random_utils import set_seed
 from lerobot.utils.utils import (
     init_logging,
     inside_slurm,
 )
+
+if TYPE_CHECKING or _peft_available:
+    from peft import PeftModel
+else:
+    PeftModel = None
+
+
+logger = logging.getLogger(__name__)
+
+
+def _env_features_to_dataset_features(env_features: dict) -> dict:
+    """Convert EnvConfig.features to the dict format expected by LeRobotDataset.create()."""
+    features = {}
+    for key, ft in env_features.items():
+        shape = tuple(ft.shape)
+        if ft.type is FeatureType.VISUAL:
+            features[key] = {"dtype": "video", "shape": shape, "names": ["height", "width", "channel"]}
+        else:
+            features[key] = {"dtype": "float32", "shape": shape, "names": None}
+    features["next.reward"] = {"dtype": "float32", "shape": (1,), "names": None}
+    features["next.success"] = {"dtype": "bool", "shape": (1,), "names": None}
+    features["next.done"] = {"dtype": "bool", "shape": (1,), "names": None}
+    return features
+
+
+def _build_raw_frame(
+    raw_obs: dict,
+    env_idx: int,
+    action: np.ndarray,
+    reward: float,
+    success: bool,
+    done: bool,
+    task: str,
+    env_features: dict,
+) -> dict:
+    """Build a dataset frame from raw env observations for one env index.
+
+    Keys in the frame match the keys in env_features so they align with the
+    dataset schema created by _env_features_to_dataset_features().
+    """
+    frame: dict[str, Any] = {}
+    for key in env_features:
+        if key == ACTION:
+            continue
+        if key.startswith("next."):
+            continue
+        if "pixels" in raw_obs and isinstance(raw_obs["pixels"], dict):
+            for cam_name, img in raw_obs["pixels"].items():
+                candidate = f"{OBS_IMAGES}.{cam_name}"
+                if candidate == key:
+                    frame[key] = img[env_idx]
+            if key in frame:
+                continue
+        if "pixels" in raw_obs and not isinstance(raw_obs["pixels"], dict) and key in ("pixels", OBS_IMAGE):
+            frame[key] = raw_obs["pixels"][env_idx]
+            continue
+        if key in raw_obs and isinstance(raw_obs[key], np.ndarray):
+            val = raw_obs[key][env_idx]
+            if val.dtype == np.float64:
+                val = val.astype(np.float32)
+            frame[key] = val
+    frame[ACTION] = action
+    frame["next.reward"] = np.atleast_1d(np.float32(reward))
+    frame["next.success"] = np.atleast_1d(np.bool_(success))
+    frame["next.done"] = np.atleast_1d(np.bool_(done))
+    frame["task"] = task
+    return frame
 
 
 def rollout(
@@ -112,6 +174,11 @@ def rollout(
     seeds: list[int] | None = None,
     return_observations: bool = False,
     render_callback: Callable[[gym.vector.VectorEnv], None] | None = None,
+    recording_dir: Path | None = None,
+    env_features: dict | None = None,
+    recording_repo_id: str | None = None,
+    recording_private: bool = False,
+    predicted_latents_callback: Callable[[PreTrainedPolicy], None] | None = None,
 ) -> dict:
     """Run a batched policy rollout once through a batch of environments.
 
@@ -141,6 +208,9 @@ def rollout(
             are returned optionally because they typically take more memory to cache. Defaults to False.
         render_callback: Optional rendering callback to be used after the environments are reset, and after
             every step.
+        predicted_latents_callback: Optional callback invoked after every ``select_action`` with the policy
+            itself. World-model policies (e.g. LingBot-VA) stash predicted video latents on
+            ``policy.last_predicted_latents``; this lets the caller concatenate chunks and decode once.
     Returns:
         The dictionary described above.
     """
@@ -152,99 +222,283 @@ def rollout(
     if render_callback is not None:
         render_callback(env)
 
+    recording_datasets: list[LeRobotDataset] | None = None
+    raw_observation = None
+    task_desc = ""
+    if recording_dir is not None and env_features is not None:
+        features = _env_features_to_dataset_features(env_features)
+        fps = env.unwrapped.metadata.get("render_fps", 30)
+        recording_datasets = []
+        multi_env = env.num_envs > 1
+        base_repo_id = recording_repo_id or "eval_recording"
+        for i in range(env.num_envs):
+            root = str(recording_dir / f"env_{i}") if multi_env else str(recording_dir)
+            repo_id = f"{base_repo_id}_env_{i}" if multi_env else base_repo_id
+            recording_datasets.append(
+                LeRobotDataset.create(
+                    repo_id=repo_id,
+                    fps=fps,
+                    features=features,
+                    root=root,
+                    use_videos=True,
+                )
+            )
+        raw_observation = deepcopy(observation)
+        try:
+            task_desc = list(env.call("task_description"))[0]
+        except (AttributeError, NotImplementedError):
+            task_desc = ""
+
     all_observations = []
     all_actions = []
     all_rewards = []
     all_successes = []
     all_dones = []
+    all_grasp_successes = []
+
+    # Capture initial scene settings for each environment
+    all_initial_states = []
+    multi_env = env.num_envs > 1
+    try:
+        obj_init_pos_list = env.call("obj_init_pos")
+        goal_pos_list = env.call("goal_pos")
+        for env_idx in range(env.num_envs):
+            obj_pos = obj_init_pos_list[env_idx]
+            if hasattr(obj_pos, "tolist"):
+                obj_pos = obj_pos.tolist()
+            goal = goal_pos_list[env_idx]
+            if hasattr(goal, "tolist"):
+                goal = goal.tolist()
+            all_initial_states.append({
+                "env_idx": env_idx,
+                "obj_init_pos": obj_pos,
+                "goal_pos": goal,
+            })
+    except (AttributeError, NotImplementedError):
+        all_initial_states = None
 
     step = 0
     # Keep track of which environments are done.
     done = np.array([False] * env.num_envs)
     max_steps = env.call("_max_episode_steps")[0]
-    progbar = trange(
-        max_steps,
-        desc=f"Running rollout with at most {max_steps} steps",
-        disable=inside_slurm(),  # we dont want progress bar when we use slurm, since it clutters the logs
-        leave=False,
-    )
     check_env_attributes_and_types(env)
-    while not np.all(done) and step < max_steps:
-        # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
-        observation = preprocess_observation(observation)
-        if return_observations:
-            all_observations.append(deepcopy(observation))
+    
+    # 调试：创建保存observation图片的目录
+    # debug_dir = Path("personal/work2/eval_model/debug_observations")
+    # debug_dir.mkdir(parents=True, exist_ok=True)
+    debug_step_count = 0
+    try:
+        while not np.all(done) and step < max_steps:
+            # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
+            observation = preprocess_observation(observation)
+            if return_observations:
+                all_observations.append(deepcopy(observation))
 
-        # Infer "task" from sub-environments (prefer natural language description).
-        # env.call() works with both SyncVectorEnv and AsyncVectorEnv.
-        try:
-            observation["task"] = list(env.call("task_description"))
-        except (AttributeError, NotImplementedError):
+            # Infer "task" from sub-environments (prefer natural language description).
+            # env.call() works with both SyncVectorEnv and AsyncVectorEnv.
             try:
-                observation["task"] = list(env.call("task"))
+                observation["task"] = list(env.call("task_description"))
             except (AttributeError, NotImplementedError):
-                observation["task"] = [""] * env.num_envs
+                try:
+                    observation["task"] = list(env.call("task"))
+                except (AttributeError, NotImplementedError):
+                    observation["task"] = [""] * env.num_envs
 
-        # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
-        observation = env_preprocessor(observation)
+            # Apply environment-specific preprocessing (e.g., LiberoProcessorStep for LIBERO)
+            observation = env_preprocessor(observation)
 
-        observation = preprocessor(observation)
-        with torch.inference_mode():
-            action = policy.select_action(observation)
-        action = postprocessor(action)
+            # 调试：打印进入preprocessor之前的observation信息
+            # if debug_step_count < 5:  # 只打印前5步
+            #     logger.info(f"\n{'='*80}")
+            #     logger.info(f"[DEBUG] Step {debug_step_count} - Before preprocessor:")
+            #     logger.info(f"  Environment raw observation keys: {list(observation.keys())}")
+            #     for key, value in observation.items():
+            #         if isinstance(value, dict):
+            #             logger.info(f"  {key}: dict with keys {list(value.keys())}")
+            #         elif isinstance(value, torch.Tensor):
+            #             logger.info(f"  {key}: Tensor shape={value.shape}, dtype={value.dtype}, device={value.device}")
+            #             if 'image' in key:
+            #                 logger.info(f"    -> Image: min={value.min().item():.4f}, max={value.max().item():.4f}")
+            #         elif isinstance(value, np.ndarray):
+            #             logger.info(f"  {key}: ndarray shape={value.shape}, dtype={value.dtype}")
+            #             if 'image' in key or 'pixel' in key:
+            #                 logger.info(f"    -> Image: min={value.min()}, max={value.max()}")
+            #         elif isinstance(value, list):
+            #             logger.info(f"  {key}: list with {len(value)} items, sample={value[0] if len(value) > 0 else 'empty'}")
+            #         else:
+            #             logger.info(f"  {key}: {type(value)} = {value}")
+                
+                # 检查rename_map是否会匹配
+                # logger.info(f"\n  [DEBUG] Checking rename_map matching:")
+                # logger.info(f"    Available keys: {list(observation.keys())}")
+                # # 从preprocessor中获取rename_map
+                # for proc_step in preprocessor.steps:
+                #     if hasattr(proc_step, 'rename_map') and proc_step.rename_map:
+                #         logger.info(f"    Rename map: {proc_step.rename_map}")
+                #         for old_key in proc_step.rename_map.keys():
+                #             if old_key in observation:
+                #                 logger.info(f"      ✓ Key '{old_key}' FOUND - will be renamed to '{proc_step.rename_map[old_key]}'")
+                #             else:
+                #                 logger.info(f"      ✗ Key '{old_key}' NOT FOUND in observation!")
+                # logger.info(f"{'='*80}\n")
 
-        action_transition = {ACTION: action}
-        action_transition = env_postprocessor(action_transition)
-        action = action_transition[ACTION]
+            observation = preprocessor(observation)
 
-        # Convert to CPU / numpy.
-        # action_numpy: np.ndarray = action.to("cpu").numpy()
-        # 之前直接执行，因为训练的时候采用兼容bf16的形式，直接转换会报错
-        action_numpy: np.ndarray = action.detach().float().cpu().numpy()
-        assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
+            # # 调试：打印preprocessor之后的observation信息
+            # if debug_step_count < 5:
+            #     logger.info(f"\n{'='*80}")
+            #     logger.info(f"[DEBUG] Step {debug_step_count} - After preprocessor:")
+            #     for key, value in observation.items():
+            #         if isinstance(value, torch.Tensor):
+            #             logger.info(f"  {key}: Tensor shape={value.shape}, dtype={value.dtype}, device={value.device}")
+            #             if 'image' in key:
+            #                 logger.info(f"    -> Image: min={value.min().item():.4f}, max={value.max().item():.4f}")
+            #                 # 保存图片
+            #                 for b_idx in range(min(value.shape[0], 2)):  # 只保存前2个batch
+            #                     img = value[b_idx].cpu().numpy()
+            #                     # 从 (C, H, W) 转换到 (H, W, C)
+            #                     if img.shape[0] in [1, 3]:
+            #                         img = np.transpose(img, (1, 2, 0))
+            #                     # 归一化到0-255
+            #                     if img.max() <= 1.0:
+            #                         img = (img * 255).astype(np.uint8)
+            #                     elif img.max() <= 255.0:
+            #                         img = img.astype(np.uint8)
+            #                     # 如果是单通道，转成3通道
+            #                     if img.shape[-1] == 1:
+            #                         img = np.repeat(img, 3, axis=-1)
+            #                     # 确保是3通道
+            #                     if img.shape[-1] != 3:
+            #                         logger.warning(f"    -> Skipping save: unexpected channels {img.shape}")
+            #                         continue
+            #                     # BGR for cv2
+            #                     img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            #                     save_path = debug_dir / f"step{debug_step_count}_batch{b_idx}_{key}.png"
+            #                     cv2.imwrite(str(save_path), img_bgr)
+            #                     logger.info(f"    -> Saved image to {save_path}")
+            #         else:
+            #             logger.info(f"  {key}: {type(value)}")
+            #     logger.info(f"{'='*80}\n")
+            #     debug_step_count += 1
 
-        # Apply the next action.
-        observation, reward, terminated, truncated, info = env.step(action_numpy)
-        if render_callback is not None:
-            render_callback(env)
+            with torch.inference_mode():
+                action = policy.select_action(observation)
+            if predicted_latents_callback is not None:
+                predicted_latents_callback(policy)
+            action = postprocessor(action)
 
-        # VectorEnv stores is_success in `info["final_info"][env_index]["is_success"]`. "final_info" isn't
-        # available if none of the envs finished.
-        if "final_info" in info:
-            final_info = info["final_info"]
-            if not isinstance(final_info, dict):
-                raise RuntimeError(
-                    "Unsupported `final_info` format: expected dict (Gymnasium >= 1.0). "
-                    "You're likely using an older version of gymnasium (< 1.0). Please upgrade."
+            action_transition = {ACTION: action}
+            action_transition = env_postprocessor(action_transition)
+            action = action_transition[ACTION]
+
+            # Convert to CPU / numpy.
+            action_numpy: np.ndarray = action.to("cpu").numpy()
+            assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
+
+            # Apply the next action.
+            observation, reward, terminated, truncated, info = env.step(action_numpy)
+            if render_callback is not None:
+                render_callback(env)
+
+            # VectorEnv stores is_success in `info["final_info"][env_index]["is_success"]`. "final_info" isn't
+            # available if none of the envs finished.
+            if "final_info" in info:
+                final_info = info["final_info"]
+                if isinstance(final_info, dict):
+                    is_success = final_info.get("is_success", [False] * env.num_envs)
+                    successes = (
+                        is_success.tolist()
+                        if hasattr(is_success, "tolist")
+                        else [bool(is_success)] * env.num_envs
+                    )
+                else:
+                    # Gymnasium < 1.0 returns final_info as a per-env sequence/object array,
+                    # with entries set to a dict only for envs that just finished.
+                    successes = []
+                    for item in final_info:
+                        if isinstance(item, dict) and "is_success" in item:
+                            successes.append(bool(item["is_success"]))
+                        else:
+                            successes.append(False)
+            elif "is_success" in info:
+                is_success = info["is_success"]
+                successes = (
+                    is_success.tolist()
+                    if hasattr(is_success, "tolist")
+                    else [bool(is_success)] * env.num_envs
                 )
-            successes = final_info["is_success"].tolist()
-        elif "is_success" in info:
-            is_success = info["is_success"]
-            successes = (
-                is_success.tolist() if hasattr(is_success, "tolist") else [bool(is_success)] * env.num_envs
+            else:
+                successes = [False] * env.num_envs
+
+            if recording_datasets is not None and raw_observation is not None:
+                prev_done = done.copy()
+                for env_idx in range(env.num_envs):
+                    if prev_done[env_idx]:
+                        continue
+                    frame = _build_raw_frame(
+                        raw_observation,
+                        env_idx,
+                        action_numpy[env_idx],
+                        reward[env_idx],
+                        successes[env_idx],
+                        bool(terminated[env_idx] | truncated[env_idx]),
+                        task_desc,
+                        recording_datasets[env_idx].features,
+                    )
+                    recording_datasets[env_idx].add_frame(frame)
+                    if terminated[env_idx] or truncated[env_idx]:
+                        recording_datasets[env_idx].save_episode()
+                raw_observation = deepcopy(observation)
+
+            # Keep track of which environments are done so far.
+            # Mark the episode as done if we reach the maximum step limit.
+            # This ensures that the rollout always terminates cleanly at `max_steps`,
+            # and allows logging/saving (e.g., videos) to be triggered consistently.
+            done = terminated | truncated | done
+            if step + 1 == max_steps:
+                done = np.ones_like(done, dtype=bool)
+
+            all_actions.append(torch.from_numpy(action_numpy))
+            all_rewards.append(torch.from_numpy(reward))
+            all_dones.append(torch.from_numpy(done))
+            all_successes.append(torch.tensor(successes))
+
+            # Collect grasp_success if available
+            if "grasp_success" in info:
+                gs_data = info["grasp_success"]
+                if hasattr(gs_data, "tolist"):
+                    all_grasp_successes.append(torch.tensor(gs_data.tolist()))
+                else:
+                    all_grasp_successes.append(torch.tensor([bool(gs_data)] * env.num_envs))
+            elif "final_info" in info:
+                final_info = info["final_info"]
+                if isinstance(final_info, dict):
+                    gs = final_info.get("grasp_success", [False] * env.num_envs)
+                    all_grasp_successes.append(torch.tensor(gs.tolist() if hasattr(gs, "tolist") else [bool(gs)] * env.num_envs))
+                else:
+                    gs_list = []
+                    for item in final_info:
+                        if isinstance(item, dict) and "grasp_success" in item:
+                            gs_list.append(bool(item["grasp_success"]))
+                        else:
+                            gs_list.append(False)
+                    all_grasp_successes.append(torch.tensor(gs_list))
+            else:
+                all_grasp_successes.append(torch.tensor([False] * env.num_envs))
+
+            step += 1
+            running_success_rate = (
+                einops.reduce(torch.stack(all_successes, dim=1), "b n -> b", "any").numpy().mean()
             )
-        else:
-            successes = [False] * env.num_envs
-
-        # Keep track of which environments are done so far.
-        # Mark the episode as done if we reach the maximum step limit.
-        # This ensures that the rollout always terminates cleanly at `max_steps`,
-        # and allows logging/saving (e.g., videos) to be triggered consistently.
-        done = terminated | truncated | done
-        if step + 1 == max_steps:
-            done = np.ones_like(done, dtype=bool)
-
-        all_actions.append(torch.from_numpy(action_numpy))
-        all_rewards.append(torch.from_numpy(reward))
-        all_dones.append(torch.from_numpy(done))
-        all_successes.append(torch.tensor(successes))
-
-        step += 1
-        running_success_rate = (
-            einops.reduce(torch.stack(all_successes, dim=1), "b n -> b", "any").numpy().mean()
-        )
-        progbar.set_postfix({"running_success_rate": f"{running_success_rate.item() * 100:.1f}%"})
-        progbar.update()
+    finally:
+        if recording_datasets is not None:
+            for ds in recording_datasets:
+                ds.finalize()
+                if recording_repo_id is not None:
+                    if ds.num_episodes > 0:
+                        ds.push_to_hub(private=recording_private)
+                    else:
+                        logging.warning("No episodes recorded for %s — skipping push to hub.", ds.repo_id)
 
     # Track the final observation.
     if return_observations:
@@ -257,6 +511,8 @@ def rollout(
         "reward": torch.stack(all_rewards, dim=1),
         "success": torch.stack(all_successes, dim=1),
         "done": torch.stack(all_dones, dim=1),
+        "grasp_success": torch.stack(all_grasp_successes, dim=1),
+        "initial_states": all_initial_states,
     }
     if return_observations:
         stacked_observations = {}
@@ -280,8 +536,14 @@ def eval_policy(
     n_episodes: int,
     max_episodes_rendered: int = 0,
     videos_dir: Path | None = None,
+    results_dir: Path | None = None,
     return_episode_data: bool = False,
     start_seed: int | None = None,
+    recording_dir: Path | None = None,
+    env_features: dict | None = None,
+    recording_repo_id: str | None = None,
+    recording_private: bool = False,
+    save_predicted_video: bool = False,
 ) -> dict:
     """
     Args:
@@ -300,30 +562,41 @@ def eval_policy(
     if max_episodes_rendered > 0 and not videos_dir:
         raise ValueError("If max_episodes_rendered > 0, videos_dir must be provided.")
 
+    # World-model policies (e.g. LingBot-VA) opt into predicted-video saving via their config.
+    save_predicted_video = save_predicted_video or bool(
+        getattr(getattr(policy, "config", None), "save_predicted_video", False)
+    )
+
     if not isinstance(policy, PreTrainedPolicy):
         exc = ValueError(
             f"Policy of type 'PreTrainedPolicy' is expected, but type '{type(policy)}' was provided."
         )
-        try:
-            from peft import PeftModel
-
-            if not isinstance(policy, PeftModel):
-                raise exc
-        except ImportError:
-            raise exc from None
+        if not _peft_available:
+            raise exc
+        require_package("peft", extra="peft")
+        if not isinstance(policy, PeftModel):
+            raise exc
 
     start = time.time()
+    # Preserve the mode for direct callers. eval_policy_all scopes the mode
+    # around all tasks so parallel evaluations cannot race with each other.
+    was_training = policy.training
     policy.eval()
 
     # Determine how many batched rollouts we need to get n_episodes. Note that if n_episodes is not evenly
     # divisible by env.num_envs we end up discarding some data in the last batch.
     n_batches = n_episodes // env.num_envs + int((n_episodes % env.num_envs) != 0)
 
+    # Progress bar for tracking evaluation progress
+    progress_bar = trange(n_batches, desc=f"Evaluating (0/{n_episodes} episodes)", position=0, leave=True)
+
     # Keep track of some metrics.
     sum_rewards = []
     max_rewards = []
     all_successes = []
+    all_grasp_successes = []
     all_seeds = []
+    all_initial_states = []  # Capture scene settings per episode
     threads = []  # for video saving threads
     n_episodes_rendered = 0  # for saving the correct number of videos
 
@@ -343,16 +616,33 @@ def eval_policy(
     if max_episodes_rendered > 0:
         video_paths: list[str] = []
 
+    if save_predicted_video:
+        if not videos_dir:
+            raise ValueError("If save_predicted_video is True, videos_dir must be provided.")
+        predicted_video_paths: list[str] = []
+        n_predicted_rendered = 0
+
+    # Collect predicted-video latents across a rollout (world-model policies only). The latents are
+    # concatenated and decoded once after the rollout, matching upstream LingBot-VA's visualization path.
+    def collect_predicted_latents(policy: PreTrainedPolicy):
+        latents = getattr(policy, "last_predicted_latents", None)
+        if latents is not None:
+            pred_latents.append(
+                latents.detach().to("cpu") if hasattr(latents, "detach") else torch.as_tensor(latents).cpu()
+            )
+            policy.last_predicted_latents = None
+
     if return_episode_data:
         episode_data: dict | None = None
 
-    # we dont want progress bar when we use slurm, since it clutters the logs
-    progbar = trange(n_batches, desc="Stepping through eval batches", disable=inside_slurm())
-    for batch_ix in progbar:
+    for batch_ix in range(n_batches):
         # Cache frames for rendering videos. Each item will be (b, h, w, c), and the list indexes the rollout
         # step.
         if max_episodes_rendered > 0:
             ep_frames: list[np.ndarray] = []
+
+        if save_predicted_video:
+            pred_latents: list[torch.Tensor] = []
 
         if start_seed is None:
             seeds = None
@@ -370,6 +660,11 @@ def eval_policy(
             seeds=list(seeds) if seeds else None,
             return_observations=return_episode_data,
             render_callback=render_frame if max_episodes_rendered > 0 else None,
+            recording_dir=recording_dir,
+            env_features=env_features,
+            recording_repo_id=recording_repo_id,
+            recording_private=recording_private,
+            predicted_latents_callback=collect_predicted_latents if save_predicted_video else None,
         )
 
         # Figure out where in each rollout sequence the first done condition was encountered (results after
@@ -388,10 +683,36 @@ def eval_policy(
         max_rewards.extend(batch_max_rewards.tolist())
         batch_successes = einops.reduce((rollout_data["success"] * mask), "b n -> b", "any")
         all_successes.extend(batch_successes.tolist())
+        # Collect grasp_success
+        if "grasp_success" in rollout_data:
+            batch_grasp_successes = einops.reduce((rollout_data["grasp_success"] * mask), "b n -> b", "any")
+            all_grasp_successes.extend(batch_grasp_successes.tolist())
+        else:
+            all_grasp_successes.extend([False] * env.num_envs)
         if seeds:
             all_seeds.extend(seeds)
         else:
-            all_seeds.append(None)
+            all_seeds.extend([None] * env.num_envs)
+
+        # Capture initial states for each episode in this batch
+        if "initial_states" in rollout_data and rollout_data["initial_states"] is not None:
+            for env_idx in range(env.num_envs):
+                ep_global_ix = batch_ix * env.num_envs + env_idx
+                if ep_global_ix < n_episodes:
+                    init_state = rollout_data["initial_states"][env_idx]
+                    all_initial_states.append({
+                        "episode_ix": ep_global_ix,
+                        **init_state,
+                    })
+
+        # Update progress bar
+        current_episodes = min((batch_ix + 1) * env.num_envs, n_episodes)
+        current_success = sum(all_successes[-env.num_envs:]) if len(all_successes) >= env.num_envs else sum(all_successes)
+        progress_bar.set_description(
+            f"Evaluating ({current_episodes}/{n_episodes} episodes, "
+            f"success: {current_success}/{env.num_envs})"
+        )
+        progress_bar.update(1)
 
         # FIXME: episode_data is either None or it doesn't exist
         if return_episode_data:
@@ -435,13 +756,41 @@ def eval_policy(
                 threads.append(thread)
                 n_episodes_rendered += 1
 
-        progbar.set_postfix(
-            {"running_success_rate": f"{np.mean(all_successes[:n_episodes]).item() * 100:.1f}%"}
-        )
+        # Maybe save the policy's predicted (imagined) video for this batch's rollout.
+        if save_predicted_video and len(pred_latents) > 0:
+            predicted_latent = torch.cat(pred_latents, dim=2)
+            decoder = getattr(policy, "decode_predicted_latents", None) or getattr(
+                policy, "_decode_predicted_video", None
+            )
+            if decoder is None:
+                raise AttributeError(
+                    "Policy config requested predicted-video saving, but the policy does not expose "
+                    "`decode_predicted_latents` or `_decode_predicted_video`."
+                )
+            predicted_video = decoder(predicted_latent)
+            if hasattr(predicted_video, "detach"):
+                predicted_video = predicted_video.detach().to("cpu").numpy()
+            videos_dir.mkdir(parents=True, exist_ok=True)
+            predicted_video_path = videos_dir / f"pred_episode_{n_predicted_rendered}.mp4"
+            predicted_video_paths.append(str(predicted_video_path))
+            thread = threading.Thread(
+                target=write_video,
+                args=(
+                    str(predicted_video_path),
+                    predicted_video,
+                    env.unwrapped.metadata["render_fps"],
+                ),
+            )
+            thread.start()
+            threads.append(thread)
+            n_predicted_rendered += 1
 
     # Wait till all video rendering threads are done.
     for thread in threads:
         thread.join()
+
+    # Close progress bar
+    progress_bar.close()
 
     # Compile eval info.
     info = {
@@ -451,13 +800,16 @@ def eval_policy(
                 "sum_reward": sum_reward,
                 "max_reward": max_reward,
                 "success": success,
+                "grasp_success": grasp_success,
                 "seed": seed,
+                "initial_state": all_initial_states[i] if i < len(all_initial_states) else None,
             }
-            for i, (sum_reward, max_reward, success, seed) in enumerate(
+            for i, (sum_reward, max_reward, success, grasp_success, seed) in enumerate(
                 zip(
                     sum_rewards[:n_episodes],
                     max_rewards[:n_episodes],
                     all_successes[:n_episodes],
+                    all_grasp_successes[:n_episodes],
                     all_seeds[:n_episodes],
                     strict=True,
                 )
@@ -467,6 +819,7 @@ def eval_policy(
             "avg_sum_reward": float(np.nanmean(sum_rewards[:n_episodes])),
             "avg_max_reward": float(np.nanmean(max_rewards[:n_episodes])),
             "pc_success": float(np.nanmean(all_successes[:n_episodes]) * 100),
+            "pc_grasp_success": float(np.nanmean(all_grasp_successes[:n_episodes]) * 100),
             "eval_s": time.time() - start,
             "eval_ep_s": (time.time() - start) / n_episodes,
         },
@@ -477,6 +830,39 @@ def eval_policy(
 
     if max_episodes_rendered > 0:
         info["video_paths"] = video_paths
+
+    if save_predicted_video:
+        info["predicted_video_paths"] = predicted_video_paths
+
+    # Save per-episode results with scene settings and success/failure
+    if results_dir is not None:
+        results_dir.mkdir(parents=True, exist_ok=True)
+        episode_results = []
+        for ep in info["per_episode"]:
+            episode_results.append({
+                "episode_ix": ep["episode_ix"],
+                "success": ep["success"],
+                "grasp_success": ep.get("grasp_success", False),
+                "sum_reward": ep["sum_reward"],
+                "max_reward": ep["max_reward"],
+                "seed": ep["seed"],
+                "initial_state": ep.get("initial_state"),
+            })
+
+        results_file = results_dir / "eval_episode_results.json"
+        with open(results_file, "w") as f:
+            json.dump({
+                "num_episodes": len(episode_results),
+                "success_count": sum(1 for ep in episode_results if ep["success"]),
+                "grasp_success_count": sum(1 for ep in episode_results if ep.get("grasp_success", False)),
+                "fail_count": sum(1 for ep in episode_results if not ep["success"]),
+                "success_rate": sum(1 for ep in episode_results if ep["success"]) / max(1, len(episode_results)),
+                "grasp_success_rate": sum(1 for ep in episode_results if ep.get("grasp_success", False)) / max(1, len(episode_results)),
+                "episodes": episode_results,
+            }, f, indent=2)
+        logging.info(f"Saved per-episode eval results to {results_file}")
+
+    policy.train(was_training)
 
     return info
 
@@ -526,112 +912,6 @@ def _compile_episode_data(
     return data_dict
 
 
-def _save_eval_dataset(
-    episode_data: dict,
-    output_dir: Path,
-    env_cfg,
-) -> None:
-    """Save evaluation rollout data as a LeRobotDataset.
-
-    Converts the episode data collected during evaluation into the LeRobotDataset
-    format (parquet + video files) on disk.
-
-    Args:
-        episode_data: Dictionary of episode tensors returned by _compile_episode_data.
-            Contains keys like 'observation.image', 'observation.state', 'action',
-            'episode_index', 'frame_index', 'timestamp', 'next.done', 'next.success',
-            'next.reward', 'task', and 'index'.
-        output_dir: Directory where the dataset will be saved.
-        env_cfg: Environment configuration used during evaluation.
-    """
-    from lerobot.datasets import LeRobotDataset
-
-    # Build feature specification from the episode data
-    features = {}
-    for key, value in episode_data.items():
-        if key in ("episode_index", "frame_index", "index"):
-            continue
-        if isinstance(value, torch.Tensor):
-            val = value[0]
-            if val.ndim == 0:
-                features[key] = {"dtype": "float32", "shape": (1,)}
-            elif val.ndim == 1:
-                features[key] = {"dtype": "float32", "shape": (val.shape[0],)}
-            elif val.ndim == 2:
-                features[key] = {"dtype": "float32", "shape": (val.shape[0], val.shape[1])}
-            elif val.ndim == 3:
-                if val.dtype == torch.uint8:
-                    features[key] = {"dtype": "video", "shape": (val.shape[0], val.shape[1], val.shape[2]), "names": ["height", "width", "channels"]}
-                else:
-                    features[key] = {"dtype": "float32", "shape": (val.shape[0], val.shape[1], val.shape[2])}
-
-    # Fix dtype for specific known keys
-    if "next.success" in features:
-        features["next.success"]["dtype"] = "bool"
-    if "next.reward" in features:
-        features["next.reward"]["dtype"] = "float32"
-    if "next.done" in features:
-        features["next.done"]["dtype"] = "bool"
-    if "task" in features:
-        del features["task"]
-
-    # Determine FPS from environment config
-    fps = getattr(env_cfg, "fps", 30)
-
-    # Create the dataset
-    dataset = LeRobotDataset.create(
-        repo_id=f"eval/{output_dir.name}",
-        fps=fps,
-        features=features,
-        root=output_dir,
-        use_videos=True,
-    )
-
-    # Convert tensor data to numpy for dataset writing
-    num_frames = episode_data["index"].shape[0]
-    episode_indices = episode_data["episode_index"].numpy()
-    unique_episodes = np.unique(episode_indices)
-
-    current_episode = None
-    for i in range(num_frames):
-        frame = {}
-        for key in episode_data:
-            if key in ("episode_index", "frame_index", "index", "task"):
-                continue
-            value = episode_data[key]
-            if isinstance(value, torch.Tensor):
-                frame[key] = value[i].numpy()
-            else:
-                frame[key] = value[i]
-
-        # Add task string
-        if "task" in episode_data:
-            task_val = episode_data["task"][i]
-            if isinstance(task_val, torch.Tensor):
-                task_val = task_val.item()
-            if isinstance(task_val, (np.ndarray, np.generic)):
-                task_val = task_val.item()
-            if not isinstance(task_val, str):
-                task_val = str(task_val)
-            frame["task"] = task_val
-
-        dataset.add_frame(frame)
-
-        ep_idx = episode_indices[i]
-        if current_episode != ep_idx:
-            if current_episode is not None:
-                dataset.save_episode()
-            current_episode = ep_idx
-
-    # Save the last episode
-    dataset.save_episode()
-    dataset.finalize()
-
-    logging.info(
-        f"Saved evaluation dataset with {len(unique_episodes)} episodes and {num_frames} frames to {output_dir}"
-    )
-
-
 @parser.wrap()
 def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
@@ -678,7 +958,10 @@ def eval_main(cfg: EvalPipelineConfig):
     # Create environment-specific preprocessor and postprocessor (e.g., for LIBERO environments)
     env_preprocessor, env_postprocessor = make_env_pre_post_processors(env_cfg=cfg.env, policy_cfg=cfg.policy)
 
-    return_episode_data = cfg.eval.save_dataset
+    recording_dir = Path(cfg.output_dir) / "recordings" if cfg.eval.recording else None
+    max_episodes_rendered = 0  # Disable video rendering
+    videos_dir = None
+    results_dir = Path(cfg.output_dir) / "eval_results"
 
     with torch.no_grad(), torch.autocast(device_type=device.type) if cfg.policy.use_amp else nullcontext():
         info = eval_policy_all(
@@ -689,34 +972,30 @@ def eval_main(cfg: EvalPipelineConfig):
             preprocessor=preprocessor,
             postprocessor=postprocessor,
             n_episodes=cfg.eval.n_episodes,
-            max_episodes_rendered=10,
-            videos_dir=Path(cfg.output_dir) / "videos",
+            max_episodes_rendered=max_episodes_rendered,
+            videos_dir=videos_dir,
+            results_dir=results_dir,
+            return_episode_data=False,
             start_seed=cfg.seed,
             max_parallel_tasks=cfg.env.max_parallel_tasks,
-            return_episode_data=return_episode_data,
+            recording_dir=recording_dir,
+            env_features=cfg.env.features if cfg.eval.recording else None,
+            recording_repo_id=cfg.eval.recording_repo_id,
+            recording_private=cfg.eval.recording_private,
         )
-        print("Overall Aggregated Metrics:")
-        print(info["overall"])
+        logger.info("Overall Aggregated Metrics:")
+        logger.info(info["overall"])
 
         # Print per-suite stats
         for task_group, task_group_info in info.items():
-            print(f"\nAggregated Metrics for {task_group}:")
-            print(task_group_info)
+            logger.info(f"\nAggregated Metrics for {task_group}:")
+            logger.info(task_group_info)
     # Close all vec envs
     close_envs(envs)
 
     # Save info
     with open(Path(cfg.output_dir) / "eval_info.json", "w") as f:
         json.dump(info, f, indent=2)
-
-    # Save evaluation rollout data as LeRobotDataset
-    if return_episode_data and "episodes" in info:
-        logging.info(colored("Saving evaluation data as LeRobotDataset...", "yellow", attrs=["bold"]))
-        _save_eval_dataset(
-            episode_data=info["episodes"],
-            output_dir=Path(cfg.output_dir) / "eval_dataset",
-            env_cfg=cfg.env,
-        )
 
     logging.info("End of eval")
 
@@ -726,10 +1005,12 @@ class TaskMetrics(TypedDict):
     sum_rewards: list[float]
     max_rewards: list[float]
     successes: list[bool]
+    grasp_successes: list[bool]
     video_paths: list[str]
+    predicted_video_paths: list[str]
 
 
-ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "video_paths")
+ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "grasp_successes", "video_paths", "predicted_video_paths")
 
 
 def eval_one(
@@ -743,25 +1024,49 @@ def eval_one(
     n_episodes: int,
     max_episodes_rendered: int,
     videos_dir: Path | None,
+    results_dir: Path | None = None,
     return_episode_data: bool,
     start_seed: int | None,
+    recording_dir: Path | None = None,
+    env_features: dict | None = None,
+    recording_repo_id: str | None = None,
+    recording_private: bool = False,
+    env_rename_map: dict[str, str] | None = None,
 ) -> TaskMetrics:
     """Evaluates one task_id of one suite using the provided vec env."""
 
     task_videos_dir = videos_dir
+
+    # If env_rename_map is provided, create a preprocessor that includes the env rename step
+    eval_preprocessor = preprocessor
+    if env_rename_map:
+        from lerobot.processor.rename_processor import RenameObservationsProcessorStep
+
+        # Create a new preprocessor pipeline with the env rename step added at the beginning
+        rename_step = RenameObservationsProcessorStep(rename_map=env_rename_map)
+        eval_preprocessor = PolicyProcessorPipeline(
+            steps=[rename_step] + preprocessor.steps,
+            to_transition=preprocessor.to_transition,
+            to_output=preprocessor.to_output,
+        )
 
     task_result = eval_policy(
         env=env,
         policy=policy,
         env_preprocessor=env_preprocessor,
         env_postprocessor=env_postprocessor,
-        preprocessor=preprocessor,
+        preprocessor=eval_preprocessor,
         postprocessor=postprocessor,
         n_episodes=n_episodes,
         max_episodes_rendered=max_episodes_rendered,
         videos_dir=task_videos_dir,
+        results_dir=results_dir,
         return_episode_data=return_episode_data,
         start_seed=start_seed,
+        recording_dir=recording_dir,
+        env_features=env_features,
+        recording_repo_id=recording_repo_id,
+        recording_private=recording_private,
     )
 
     per_episode = task_result["per_episode"]
@@ -769,7 +1074,9 @@ def eval_one(
         sum_rewards=[ep["sum_reward"] for ep in per_episode],
         max_rewards=[ep["max_reward"] for ep in per_episode],
         successes=[ep["success"] for ep in per_episode],
+        grasp_successes=[ep.get("grasp_success", False) for ep in per_episode],
         video_paths=task_result.get("video_paths", []),
+        predicted_video_paths=task_result.get("predicted_video_paths", []),
     )
 
 
@@ -786,8 +1093,14 @@ def run_one(
     n_episodes: int,
     max_episodes_rendered: int,
     videos_dir: Path | None,
+    results_dir: Path | None = None,
     return_episode_data: bool,
     start_seed: int | None,
+    recording_dir: Path | None = None,
+    env_features: dict | None = None,
+    recording_repo_id: str | None = None,
+    recording_private: bool = False,
+    env_rename_map: dict[str, str] | None = None,
 ):
     """
     Run eval_one for a single (task_group, task_id, env).
@@ -799,7 +1112,18 @@ def run_one(
         task_videos_dir = videos_dir / f"{task_group}_{task_id}"
         task_videos_dir.mkdir(parents=True, exist_ok=True)
 
-    # Call the existing eval_one (assumed to return TaskMetrics-like dict)
+    task_results_dir = None
+    if results_dir is not None:
+        task_results_dir = results_dir / f"{task_group}_{task_id}"
+        task_results_dir.mkdir(parents=True, exist_ok=True)
+
+    task_recording_dir = None
+    task_repo_id = None
+    if recording_dir is not None and env_features is not None:
+        task_recording_dir = recording_dir / f"{task_group}_{task_id}"
+        if recording_repo_id is not None:
+            task_repo_id = f"{recording_repo_id}_{task_group}_{task_id}"
+
     metrics = eval_one(
         env,
         policy=policy,
@@ -810,12 +1134,19 @@ def run_one(
         n_episodes=n_episodes,
         max_episodes_rendered=max_episodes_rendered,
         videos_dir=task_videos_dir,
+        results_dir=task_results_dir,
         return_episode_data=return_episode_data,
         start_seed=start_seed,
+        recording_dir=task_recording_dir,
+        env_features=env_features,
+        recording_repo_id=task_repo_id,
+        recording_private=recording_private,
+        env_rename_map=env_rename_map,
     )
-    # ensure we always provide video_paths key to simplify accumulation
+
     if max_episodes_rendered > 0:
         metrics.setdefault("video_paths", [])
+    metrics.setdefault("predicted_video_paths", [])
     return task_group, task_id, metrics
 
 
@@ -829,10 +1160,16 @@ def eval_policy_all(
     n_episodes: int,
     *,
     max_episodes_rendered: int = 0,
+    recording_dir: Path | None = None,
+    env_features: dict | None = None,
+    recording_repo_id: str | None = None,
+    recording_private: bool = False,
     videos_dir: Path | None = None,
+    results_dir: Path | None = None,
     return_episode_data: bool = False,
     start_seed: int | None = None,
     max_parallel_tasks: int = 1,
+    env_rename_map: dict[str, str] | None = None,
 ) -> dict:
     """
     Evaluate a nested `envs` dict: {task_group: {task_id: vec_env}}.
@@ -850,6 +1187,9 @@ def eval_policy_all(
     group_acc: dict[str, dict[str, list]] = defaultdict(lambda: {k: [] for k in ACC_KEYS})
     overall: dict[str, list] = {k: [] for k in ACC_KEYS}
     per_task_infos: list[dict] = []
+
+    # Progress bar for tracking evaluation progress across tasks
+    progress_bar = trange(len(tasks), desc="Evaluating tasks", position=0, leave=True)
 
     # small inline helper to accumulate one task's metrics into accumulators
     def _accumulate_to(group: str, metrics: dict):
@@ -869,11 +1209,12 @@ def eval_policy_all(
         _append("sum_rewards", metrics.get("sum_rewards"))
         _append("max_rewards", metrics.get("max_rewards"))
         _append("successes", metrics.get("successes"))
-        # video_paths is list-like
-        paths = metrics.get("video_paths", [])
-        if paths:
-            group_acc[group]["video_paths"].extend(paths)
-            overall["video_paths"].extend(paths)
+        _append("grasp_successes", metrics.get("grasp_successes"))
+        for key in ("video_paths", "predicted_video_paths"):
+            paths = metrics.get(key, [])
+            if paths:
+                group_acc[group][key].extend(paths)
+                overall[key].extend(paths)
 
     # Choose runner (sequential vs threaded)
     task_runner = partial(
@@ -886,44 +1227,75 @@ def eval_policy_all(
         n_episodes=n_episodes,
         max_episodes_rendered=max_episodes_rendered,
         videos_dir=videos_dir,
+        results_dir=results_dir,
         return_episode_data=return_episode_data,
         start_seed=start_seed,
+        recording_dir=recording_dir,
+        env_features=env_features,
+        recording_repo_id=recording_repo_id,
+        recording_private=recording_private,
+        env_rename_map=env_rename_map,
     )
 
-    if max_parallel_tasks <= 1:
-        prefetch_thread: threading.Thread | None = None
-        for i, (task_group, task_id, env) in enumerate(tasks):
-            if prefetch_thread is not None:
-                prefetch_thread.join()
-                prefetch_thread = None
+    # Set the shared policy's mode before launching any workers. Restoring it
+    # inside individual tasks would let one task enable training mode while
+    # another task is still evaluating.
+    was_training = policy.training
+    policy.eval()
+    try:
+        if max_parallel_tasks <= 1:
+            prefetch_thread: threading.Thread | None = None
+            for i, (task_group, task_id, env) in enumerate(tasks):
+                if prefetch_thread is not None:
+                    prefetch_thread.join()
+                    prefetch_thread = None
 
-            try:
-                tg, tid, metrics = task_runner(task_group, task_id, env)
-                _accumulate_to(tg, metrics)
-                per_task_infos.append({"task_group": tg, "task_id": tid, "metrics": metrics})
-            finally:
-                env.close()
-                # Prefetch next task's workers *after* closing current env to prevent
-                # GPU memory overlap between consecutive tasks.
-                if i + 1 < len(tasks):
-                    next_env = tasks[i + 1][2]
-                    if hasattr(next_env, "_ensure"):
-                        prefetch_thread = threading.Thread(target=next_env._ensure, daemon=True)
-                        prefetch_thread.start()
-    else:
-        with cf.ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
-            fut2meta = {}
-            for task_group, task_id, env in tasks:
-                fut = executor.submit(task_runner, task_group, task_id, env)
-                fut2meta[fut] = (task_group, task_id, env)
-            for fut in cf.as_completed(fut2meta):
-                tg, tid, env = fut2meta[fut]
                 try:
-                    tg, tid, metrics = fut.result()
+                    tg, tid, metrics = task_runner(task_group, task_id, env)
                     _accumulate_to(tg, metrics)
                     per_task_infos.append({"task_group": tg, "task_id": tid, "metrics": metrics})
+                    # Update progress bar
+                    current_success = sum(1 for s in overall.get("successes", []) if s)
+                    total_eps = len(overall.get("sum_rewards", []))
+                    progress_bar.set_description(
+                        f"Task {i+1}/{len(tasks)}: {tg} (episodes: {total_eps}, success: {current_success})"
+                    )
+                    progress_bar.update(1)
                 finally:
                     env.close()
+                    # Prefetch next task's workers *after* closing current env to prevent
+                    # GPU memory overlap between consecutive tasks.
+                    if i + 1 < len(tasks):
+                        next_env = tasks[i + 1][2]
+                        if hasattr(next_env, "_ensure"):
+                            prefetch_thread = threading.Thread(target=next_env._ensure, daemon=True)
+                            prefetch_thread.start()
+        else:
+            completed = [0]
+            with cf.ThreadPoolExecutor(max_workers=max_parallel_tasks) as executor:
+                fut2meta = {}
+                for task_group, task_id, env in tasks:
+                    fut = executor.submit(task_runner, task_group, task_id, env)
+                    fut2meta[fut] = (task_group, task_id, env)
+                for fut in cf.as_completed(fut2meta):
+                    tg, tid, env = fut2meta[fut]
+                    try:
+                        tg, tid, metrics = fut.result()
+                        _accumulate_to(tg, metrics)
+                        per_task_infos.append({"task_group": tg, "task_id": tid, "metrics": metrics})
+                        # Update progress bar
+                        completed[0] += 1
+                        current_success = sum(1 for s in overall.get("successes", []) if s)
+                        total_eps = len(overall.get("sum_rewards", []))
+                        progress_bar.set_description(
+                            f"Task {completed[0]}/{len(tasks)}: {tg} (episodes: {total_eps}, success: {current_success})"
+                        )
+                        progress_bar.update(1)
+                    finally:
+                        env.close()
+    finally:
+        policy.train(was_training)
+        progress_bar.close()
 
     # compute aggregated metrics helper (robust to lists/scalars)
     def _agg_from_list(xs):
@@ -939,8 +1311,10 @@ def eval_policy_all(
             "avg_sum_reward": _agg_from_list(acc["sum_rewards"]),
             "avg_max_reward": _agg_from_list(acc["max_rewards"]),
             "pc_success": _agg_from_list(acc["successes"]) * 100 if acc["successes"] else float("nan"),
+            "pc_grasp_success": _agg_from_list(acc["grasp_successes"]) * 100 if acc["grasp_successes"] else float("nan"),
             "n_episodes": len(acc["sum_rewards"]),
             "video_paths": list(acc["video_paths"]),
+            "predicted_video_paths": list(acc["predicted_video_paths"]),
         }
 
     # overall aggregates
@@ -948,17 +1322,51 @@ def eval_policy_all(
         "avg_sum_reward": _agg_from_list(overall["sum_rewards"]),
         "avg_max_reward": _agg_from_list(overall["max_rewards"]),
         "pc_success": _agg_from_list(overall["successes"]) * 100 if overall["successes"] else float("nan"),
+        "pc_grasp_success": _agg_from_list(overall["grasp_successes"]) * 100 if overall["grasp_successes"] else float("nan"),
         "n_episodes": len(overall["sum_rewards"]),
         "eval_s": time.time() - start_t,
         "eval_ep_s": (time.time() - start_t) / max(1, len(overall["sum_rewards"])),
         "video_paths": list(overall["video_paths"]),
+        "predicted_video_paths": list(overall["predicted_video_paths"]),
     }
 
-    return {
+    result = {
         "per_task": per_task_infos,
         "per_group": groups_aggregated,
         "overall": overall_agg,
     }
+
+    # Save per-episode results with scene settings and success/failure
+    if results_dir is not None:
+        results_dir.mkdir(parents=True, exist_ok=True)
+        episode_results = []
+        for task_info in per_task_infos:
+            metrics = task_info["metrics"]
+            if "per_episode" in metrics:
+                for ep in metrics["per_episode"]:
+                    episode_results.append({
+                        "task_group": task_info["task_group"],
+                        "task_id": task_info["task_id"],
+                        "episode_ix": ep["episode_ix"],
+                        "success": ep["success"],
+                        "sum_reward": ep["sum_reward"],
+                        "max_reward": ep["max_reward"],
+                        "seed": ep["seed"],
+                        "initial_state": ep.get("initial_state"),
+                    })
+
+        results_file = results_dir / "eval_episode_results.json"
+        with open(results_file, "w") as f:
+            json.dump({
+                "num_episodes": len(episode_results),
+                "success_count": sum(1 for ep in episode_results if ep["success"]),
+                "fail_count": sum(1 for ep in episode_results if not ep["success"]),
+                "success_rate": sum(1 for ep in episode_results if ep["success"]) / max(1, len(episode_results)),
+                "episodes": episode_results,
+            }, f, indent=2)
+        logging.info(f"Saved per-episode eval results to {results_file}")
+
+    return result
 
 
 def main():

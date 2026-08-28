@@ -322,7 +322,7 @@ class HILSerlRobotEnvConfig(EnvConfig):
 class LiberoEnv(EnvConfig):
     task: str = "libero_10"  # can also choose libero_spatial, libero_object, etc.
     task_ids: list[int] | None = None
-    fps: int = 30
+    fps: int = 20  # Must match robosuite's default control_freq (20 Hz)
     episode_length: int | None = None
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
@@ -354,6 +354,9 @@ class LiberoEnv(EnvConfig):
     control_mode: str = "relative"  # or "absolute"
 
     def __post_init__(self):
+        if self.fps <= 0:
+            raise ValueError(f"fps must be positive, got {self.fps}")
+
         if self.obs_type == "pixels":
             self.features[LIBERO_KEY_PIXELS_AGENTVIEW] = PolicyFeature(
                 type=FeatureType.VISUAL, shape=(self.observation_height, self.observation_width, 3)
@@ -412,6 +415,7 @@ class LiberoEnv(EnvConfig):
             "render_mode": self.render_mode,
             "observation_height": self.observation_height,
             "observation_width": self.observation_width,
+            "control_freq": self.fps,
         }
         if self.task_ids is not None:
             kwargs["task_ids"] = self.task_ids
@@ -451,7 +455,9 @@ class MetaworldEnv(EnvConfig):
     episode_length: int = 400
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
+    camera_name: str = "corner2"  # Support dual cameras: "corner2,behindGripper"
     multitask_eval: bool = True
+    use_self_mw: bool = False  # Use self-collected Meta-World dataset format (dual camera, lerobot naming)
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
             "action": PolicyFeature(type=FeatureType.ACTION, shape=(4,)),
@@ -462,27 +468,45 @@ class MetaworldEnv(EnvConfig):
             "action": ACTION,
             "agent_pos": OBS_STATE,
             "top": f"{OBS_IMAGE}",
-            "pixels/top": f"{OBS_IMAGE}",
+            "pixels/top": f"{OBS_IMAGES}.top",
         }
     )
 
     def __post_init__(self):
-        if self.obs_type == "pixels":
+        cameras = [c.strip() for c in self.camera_name.split(",")]
+        if self.use_self_mw:
+            # Use self-collected Meta-World dataset format (direct observation.* naming)
+            self.features["observation.state"] = PolicyFeature(type=FeatureType.STATE, shape=(4,))
+            self.features["observation.images.camera1"] = PolicyFeature(type=FeatureType.VISUAL, shape=(3, 480, 480))
+            self.features_map["observation.state"] = OBS_STATE
+            self.features_map["observation.images.camera1"] = f"{OBS_IMAGES}.camera1"
+            if len(cameras) > 1:
+                self.features["observation.images.camera2"] = PolicyFeature(type=FeatureType.VISUAL, shape=(3, 480, 480))
+                self.features_map["observation.images.camera2"] = f"{OBS_IMAGES}.camera2"
+        elif self.obs_type == "pixels":
             self.features["top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
 
         elif self.obs_type == "pixels_agent_pos":
             self.features["agent_pos"] = PolicyFeature(type=FeatureType.STATE, shape=(4,))
             self.features["pixels/top"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
+            # Add wrist camera feature if dual-camera mode
+            if len(cameras) > 1:
+                self.features["pixels/wrist"] = PolicyFeature(type=FeatureType.VISUAL, shape=(480, 480, 3))
+                self.features_map["pixels/wrist"] = f"{OBS_IMAGES}.wrist"
 
         else:
             raise ValueError(f"Unsupported obs_type: {self.obs_type}")
 
     @property
     def gym_kwargs(self) -> dict:
-        return {
+        kwargs = {
             "obs_type": self.obs_type,
             "render_mode": self.render_mode,
+            "camera_name": self.camera_name,
         }
+        if self.use_self_mw:
+            kwargs["use_self_mw"] = True
+        return kwargs
 
     def create_envs(self, n_envs: int, use_async_envs: bool = False):
         from .metaworld import create_metaworld_envs
@@ -503,7 +527,7 @@ class MetaworldEnv(EnvConfig):
 class RoboCasaEnv(EnvConfig):
     task: str = "CloseFridge"
     fps: int = 20
-    episode_length: int = 1000
+    episode_length: int | None = None
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
     camera_name: str = "robot0_agentview_left,robot0_eye_in_hand,robot0_agentview_right"
@@ -757,7 +781,7 @@ class RoboTwinEnvConfig(EnvConfig):
 
     task: str = "beat_block_hammer"  # single task or comma-separated list
     fps: int = 25
-    episode_length: int = 300
+    episode_length: int = 1200
     obs_type: str = "pixels_agent_pos"
     render_mode: str = "rgb_array"
     # Available cameras from RoboTwin's aloha-agilex embodiment: head_camera
@@ -768,6 +792,9 @@ class RoboTwinEnvConfig(EnvConfig):
     # must equal what SAPIEN actually renders.
     observation_height: int = 240
     observation_width: int = 320
+    # "joint": 14-d joint-space control. "ee": 16-d end-effector-pose deltas executed via CuRobo IK
+    # (for world-model policies like LingBot-VA that predict per-arm xyz+quaternion+gripper poses).
+    action_mode: str = "joint"
     features: dict[str, PolicyFeature] = field(
         default_factory=lambda: {
             ACTION: PolicyFeature(type=FeatureType.ACTION, shape=(14,)),
@@ -784,6 +811,8 @@ class RoboTwinEnvConfig(EnvConfig):
     )
 
     def __post_init__(self):
+        if self.action_mode == "ee":
+            self.features[ACTION] = PolicyFeature(type=FeatureType.ACTION, shape=(16,))
         cam_list = [c.strip() for c in self.camera_names.split(",") if c.strip()]
         for cam in cam_list:
             self.features[f"pixels/{cam}"] = PolicyFeature(
@@ -826,6 +855,7 @@ class RoboTwinEnvConfig(EnvConfig):
             observation_height=self.observation_height,
             observation_width=self.observation_width,
             episode_length=self.episode_length,
+            action_mode=self.action_mode,
         )
 
 

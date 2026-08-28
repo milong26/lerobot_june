@@ -1,0 +1,110 @@
+# 探针实验配置 (Tanzhen Probe Experiment)
+# 用于 personal/work2/tanzhen 实验
+
+# 实验说明：
+# - 目标：诊断单任务微调模型在真实部署会遇到的维度上是否有弱点
+# - 这一轮只用一个checkpoint跑通，暂不做两个checkpoint的横向对比
+
+# 要测试的checkpoint列表
+checkpoints:
+  # random_42:
+  #   path: "personal/work2/duibi/random_42/random_112_seed42/checkpoints/last/pretrained_model"
+  #   subset_file: "personal/work2/duibi/random_42/subsets/random_112_seed42.json"
+  uniform_42:
+    path: "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/last/pretrained_model"
+    subset_file: "personal/work2/duibi/uniform_42/subsets/uniform_112_seed42.json"
+
+# 当前使用的checkpoint（这轮只用一个）
+active_checkpoint: "uniform_42"
+
+# 训练集元数据（用于计算覆盖空隙）
+dataset_metadata: "personal/work2/dataset_view/pickplacev3/episode_initial_states.json"
+
+# 扰动配置
+perturbations:
+  noise:
+    enabled: true
+    levels:
+      L0:
+        description: "无扰动（baseline）"
+        params: {}
+      L1:
+        description: "轻度高斯模糊"
+        params:
+          type: "gaussian_blur"
+          kernel_size: 5
+          sigma_x: 1.5
+          sigma_y: 1.5
+      L2:
+        description: "重度高斯模糊"
+        params:
+          type: "gaussian_blur"
+          kernel_size: 9
+          sigma_x: 3.0
+          sigma_y: 3.0
+
+  layout:
+    enabled: true
+    description: "目标位置扰动（goal position perturbation）"
+    levels:
+      L0:
+        description: "原始目标位置"
+        params:
+          goal_offset: [0, 0, 0]
+      L1:
+        description: "轻度目标偏移"
+        params:
+          goal_offset_range: [0.02, 0.02, 0.02]
+      L2:
+        description: "重度目标偏移"
+        params:
+          goal_offset_range: [0.04, 0.04, 0.04]
+
+  camera:
+    enabled: false  # 已废弃：对固定摄像头的单任务部署没有诊断价值
+    camera_name: "corner2"
+    levels:
+      L0:
+        description: "原始相机视角"
+        params:
+          azimuth_offset: 0
+          elevation_offset: 0
+          distance_offset: 0
+      L1:
+        description: "轻度相机偏移"
+        params:
+          azimuth_offset: 5
+          elevation_offset: 3
+          distance_offset: 0.1
+      L2:
+        description: "重度相机偏移"
+        params:
+          azimuth_offset: 10
+          elevation_offset: 6
+          distance_offset: 0.2
+
+# Rollout配置
+rollout:
+  n_repeats_smoke: 1  # 冒烟测试次数
+  n_repeats_final: 3  # 正式测试次数
+  max_steps: 200  # 每个episode最大步数
+  success_threshold: 1.0  # 成功判定阈值
+
+# 分析配置
+analysis:
+  beta: 1.0  # 脆弱度权重缩放系数
+  correlation_method: "spearman"  # 相关性检验方法
+  significance_threshold: 0.05  # p值显著性阈值
+  rho_threshold: 0.3  # 相关系数阈值
+
+# GPU配置
+gpu:
+  device_id: 1  # TODO: 指定gpu id，默认用0
+  device: "cuda"  # 自动使用cuda:{device_id}
+
+# 输出路径
+output:
+  raw_dir: "personal/work2/tanzhen/results/probe_raw"
+  figures_dir: "personal/work2/tanzhen/results/figures"
+  report_file: "personal/work2/tanzhen/results/REPORT.md"
+  weakness_file: "personal/work2/tanzhen/results/weakness_scores.json"

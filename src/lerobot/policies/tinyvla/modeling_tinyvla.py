@@ -258,9 +258,9 @@ class TinyVLAPolicy(PreTrainedPolicy):
             }
         ]
 
-    def _save_pretrained(self, save_directory: Path) -> None:
+    def _save_pretrained(self, save_directory: Path, state_dict: dict[str, Tensor] | None = None) -> None:
         """Save the policy model and configuration to a directory."""
-        super()._save_pretrained(save_directory)
+        super()._save_pretrained(save_directory, state_dict=state_dict)  
         logger.info(f"Saved TinyVLA policy to {save_directory}")
 
     @classmethod

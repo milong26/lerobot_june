@@ -103,6 +103,37 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
 
             return_observations[imgkey] = img_tensor
 
+    # Handle flat pixel keys like "pixels/top", "pixels/wrist"
+    pixel_keys = [k for k in observations if k.startswith("pixels/")]
+    if pixel_keys:
+        # print(f"[DEBUG preprocess_observation] Found flat pixel keys: {pixel_keys}")
+        for pixel_key in pixel_keys:
+            img = observations[pixel_key]
+            img_tensor = torch.from_numpy(img)
+            if img_tensor.ndim == 3:
+                img_tensor = img_tensor.unsqueeze(0)
+            _, h, w, c = img_tensor.shape
+            assert c < h and c < w, f"expect channel last images, but instead got {img_tensor.shape=}"
+            assert img_tensor.dtype == torch.uint8, f"expect torch.uint8, but instead {img_tensor.dtype=}"
+            
+            # Save raw images before conversion
+            # import os
+            # from PIL import Image
+            # save_dir = "debug_raw_images"
+            # os.makedirs(save_dir, exist_ok=True)
+            # for env_idx in range(img_tensor.shape[0]):
+            #     img_np = img_tensor[env_idx].numpy()
+            #     safe_key = pixel_key.replace("/", "_")
+            #     Image.fromarray(img_np).save(f"{save_dir}/raw_{safe_key}_env{env_idx}.png")
+                # print(f"[DEBUG] Saved raw image: {save_dir}/raw_{safe_key}_env{env_idx}.png (shape={img_np.shape})")
+            
+            img_tensor = einops.rearrange(img_tensor, "b h w c -> b c h w").contiguous()
+            img_tensor = img_tensor.type(torch.float32)
+            img_tensor /= 255
+            # Convert "pixels/top" -> "observation.pixels/top"
+            return_observations[f"observation.{pixel_key}"] = img_tensor
+            # print(f"[DEBUG preprocess_observation] Processed {pixel_key} -> observation.{pixel_key}, shape={img_tensor.shape}")
+
     if "environment_state" in observations:
         env_state = torch.from_numpy(observations["environment_state"]).float()
         if env_state.dim() == 1:
@@ -125,6 +156,36 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
 
     if "camera_obs" in observations:
         return_observations[f"{OBS_STR}.camera_obs"] = observations["camera_obs"]
+
+    # Pass through any remaining ndarray/tensor keys not already handled above,
+    # so env plugins can expose extra observation keys via get_env_processors().
+    _handled = {"pixels", "environment_state", "agent_pos", "robot_state", "policy", "camera_obs"}
+    for key, value in observations.items():
+        if key in _handled:
+            continue
+        # Skip keys that already have "observation." prefix (e.g., from use_self_mw=True)
+        if key.startswith("observation."):
+            if isinstance(value, np.ndarray):
+                val = torch.from_numpy(value).float()
+                if val.dim() == 1:
+                    val = val.unsqueeze(0)
+                return_observations[key] = val
+            elif isinstance(value, Tensor):
+                return_observations[key] = value.float()
+            continue
+        target = f"{OBS_STR}.{key}"
+        if target in return_observations:
+            continue
+        if isinstance(value, np.ndarray):
+            val = torch.from_numpy(value).float()
+            if val.dim() == 1:
+                val = val.unsqueeze(0)
+            return_observations[target] = val
+        elif isinstance(value, Tensor):
+            val = value.float()
+            if val.dim() == 1:
+                val = val.unsqueeze(0)
+            return_observations[target] = val
 
     return return_observations
 

@@ -25,7 +25,7 @@ from ..rtc.configuration_rtc import RTCConfig
 @dataclass
 class SmolVLAConfig(PreTrainedConfig):
     # Input / output structure.
-    n_obs_steps: int = 1
+    n_obs_steps: int = 1 #这个代码是什么功能？
     chunk_size: int = 50
     n_action_steps: int = 50
 
