@@ -166,12 +166,26 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
         # Skip keys that already have "observation." prefix (e.g., from use_self_mw=True)
         if key.startswith("observation."):
             if isinstance(value, np.ndarray):
-                val = torch.from_numpy(value).float()
+                val = torch.from_numpy(value)
+                if key.startswith(f"{OBS_IMAGES}."):
+                    if val.dtype == torch.uint8:
+                        val = val.to(torch.float32) / 255.0
+                    else:
+                        val = val.to(torch.float32)
+                else:
+                    val = val.float()
                 if val.dim() == 1:
                     val = val.unsqueeze(0)
                 return_observations[key] = val
             elif isinstance(value, Tensor):
-                return_observations[key] = value.float()
+                if key.startswith(f"{OBS_IMAGES}."):
+                    if value.dtype == torch.uint8:
+                        val = value.float() / 255.0
+                    else:
+                        val = value.float()
+                else:
+                    val = value.float()
+                return_observations[key] = val
             continue
         target = f"{OBS_STR}.{key}"
         if target in return_observations:
