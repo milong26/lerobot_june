@@ -291,6 +291,19 @@ def rollout(
         while not np.all(done) and step < max_steps:
             # Numpy array to tensor and changing dictionary keys to LeRobot policy format.
             observation = preprocess_observation(observation)
+
+            # 临时测试，用后删除
+            # for key, value in observation.items():
+            #     if key.startswith("observation.images."):
+            #         print(
+            #             "[IMAGE DEBUG]",
+            #             key,
+            #             "shape=", tuple(value.shape),
+            #             "dtype=", value.dtype,
+            #             "min=", value.min().item(),
+            #             "max=", value.max().item(),
+            #             "mean=", value.mean().item(),
+            #         )
             if return_observations:
                 all_observations.append(deepcopy(observation))
 

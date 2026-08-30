@@ -272,3 +272,99 @@ def test_make_env_from_hub_async():
 
     # clean up
     env.close()
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for preprocess_observation with observation.images.* keys
+# (use_self_mw=True MetaWorld path)
+# ---------------------------------------------------------------------------
+
+
+def test_preprocess_observation_observation_images_uint8():
+    """Case A: uint8 observation.images.* should become float32 in [0,1]."""
+    rng = np.random.default_rng(42)
+    obs = {
+        "observation.images.camera1": rng.integers(0, 256, (2, 3, 480, 480), dtype=np.uint8),
+    }
+    out = preprocess_observation(obs)
+    img = out["observation.images.camera1"]
+    assert img.dtype == torch.float32
+    assert img.shape == (2, 3, 480, 480)
+    assert img.min() >= 0.0
+    assert img.max() <= 1.0
+    expected = torch.from_numpy(obs["observation.images.camera1"]).to(torch.float32) / 255.0
+    torch.testing.assert_close(img, expected)
+
+
+def test_preprocess_observation_observation_images_float_already_normalized():
+    """Case B: float32 observation.images.* in [0,1] must NOT be divided by 255 again."""
+    img_in = torch.tensor(
+        [[[[0.0, 0.5],
+           [1.0, 0.3]]]],
+        dtype=torch.float32,
+    ).expand(-1, 3, -1, -1).clone()
+
+    obs = {
+        "observation.images.camera1": img_in,
+    }
+    out = preprocess_observation(obs)
+    img_out = out["observation.images.camera1"]
+
+    assert img_out.dtype == torch.float32
+    assert img_out.shape == (1, 3, 2, 2)
+
+    torch.testing.assert_close(img_out, img_in)
+
+    assert img_out.min() >= 0.0
+    assert img_out.max() <= 1.0
+
+
+def test_preprocess_observation_observation_state_unchanged():
+    """Case C: observation.state must NOT be divided by 255."""
+    obs = {
+        "observation.state": np.array([[0.1, 0.2, 0.3, 0.4]], dtype=np.float32),
+    }
+    out = preprocess_observation(obs)
+    state = out["observation.state"]
+    assert state.dtype == torch.float32
+    expected = torch.tensor([[0.1, 0.2, 0.3, 0.4]])
+    torch.testing.assert_close(state, expected)
+
+
+def test_preprocess_observation_mixed_keys():
+    """Case D: camera1/camera2 uint8 -> [0,1], state unchanged."""
+    rng = np.random.default_rng(7)
+    obs = {
+        "observation.images.camera1": rng.integers(0, 256, (2, 3, 64, 64), dtype=np.uint8),
+        "observation.images.camera2": rng.integers(0, 256, (2, 3, 64, 64), dtype=np.uint8),
+        "observation.state": np.array([[0.5, -0.3, 0.1, 0.0], [0.0, 0.0, 0.0, 0.0]], dtype=np.float32),
+    }
+    out = preprocess_observation(obs)
+
+    for cam_key in ["observation.images.camera1", "observation.images.camera2"]:
+        img = out[cam_key]
+        assert img.dtype == torch.float32
+        assert img.shape == (2, 3, 64, 64)
+        assert img.min() >= 0.0
+        assert img.max() <= 1.0
+        expected = torch.from_numpy(obs[cam_key]).to(torch.float32) / 255.0
+        torch.testing.assert_close(img, expected)
+
+    state = out["observation.state"]
+    assert state.dtype == torch.float32
+    expected_state = torch.tensor([[0.5, -0.3, 0.1, 0.0], [0.0, 0.0, 0.0, 0.0]])
+    torch.testing.assert_close(state, expected_state)
+
+
+def test_preprocess_observation_observation_images_tensor_uint8():
+    """Extra: torch.Tensor uint8 observation.images.* should also be normalized."""
+    arr = torch.randint(0, 256, (1, 3, 32, 32), dtype=torch.uint8)
+    obs = {"observation.images.camera1": arr}
+    out = preprocess_observation(obs)
+    img = out["observation.images.camera1"]
+    assert img.dtype == torch.float32
+    assert img.shape == (1, 3, 32, 32)
+    assert img.min() >= 0.0
+    assert img.max() <= 1.0
+    expected = arr.to(torch.float32) / 255.0
+    torch.testing.assert_close(img, expected)

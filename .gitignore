@@ -216,3 +216,5 @@ personal/work2/duibi/ours_112_seed42/embeddings/*
 # 排除所有 .npy 和 .log 文件
 *.npy
 *.logtests/data/aloha_sim_insertion_human/data_dict.pth
+*.png
+
