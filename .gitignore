@@ -182,39 +182,41 @@ tinyvla_reference_code/
 
 # 数据集
 personal/work1/ep10_all/
+personal/work2/dataset_view/*
 
 修改提示.md
-personal/work2/ours/pool/*
-personal/work2/ours/pca/k5/*
-personal/work2/ours/pca/k7/*
-personal/work2/ours/all_frames/*
-personal/work2/ours/extract_embedding_by_episode/cache/*
-personal/work2/duibi/random/random_200_seed42/*
-personal/work2/duibi/random/random_100_seed42/*
-personal/work2/dataset_view/*
-personal/work2/ours/method/training_output/*
-personal/work2/duibi/random_42/*
-personal/work2/duibi/uniform_42/*
-personal/work2/see_embedding/embedding_deep_ep7_ep94.pt
-debug_images/*
-debug_raw_images/*
-personal/work2/duibi/random_42_corner2/*
-personal/work2/duibi/uniform_42_corner2/*
-personal/work2/duibi/random_42_wrongdataset/*
-personal/work2/duibi/uniform_42_wrongdataset/*
-personal/work2/tanzhen/results/*
-personal/work2/duibi/uniform_42_corner3/*
-personal/work2/duibi/random_42_corner3/*
-personal/work2/duibi/ours_0_seed42/embeddings/*
-personal/work2/duibi/ours_112_seed42/embeddings/*
+# personal/work2/ours/pool/*
+# personal/work2/ours/pca/k5/*
+# personal/work2/ours/pca/k7/*
+# personal/work2/ours/all_frames/*
+# personal/work2/ours/extract_embedding_by_episode/cache/*
+# personal/work2/duibi/random/random_200_seed42/*
+# personal/work2/duibi/random/random_100_seed42/*
+# personal/work2/dataset_view/*
+# personal/work2/ours/method/training_output/*
+# personal/work2/duibi/random_42/*
+# personal/work2/duibi/uniform_42/*
+# personal/work2/see_embedding/embedding_deep_ep7_ep94.pt
+# debug_images/*
+# debug_raw_images/*
+# personal/work2/duibi/random_42_corner2/*
+# personal/work2/duibi/uniform_42_corner2/*
+# personal/work2/duibi/random_42_wrongdataset/*
+# personal/work2/duibi/uniform_42_wrongdataset/*
+# personal/work2/tanzhen/results/*
+# personal/work2/duibi/uniform_42_corner3/*
+# personal/work2/duibi/random_42_corner3/*
+# personal/work2/duibi/ours_0_seed42/embeddings/*
+# personal/work2/duibi/ours_112_seed42/embeddings/*
 # 所有checkpoint和wandb目录
 **/checkpoints/
 **/wandb/
-**/results/
-**/subsets/
+# **/results/
+# **/subsets/
 
 # 排除所有 .npy 和 .log 文件
 *.npy
 *.logtests/data/aloha_sim_insertion_human/data_dict.pth
 *.png
+
 

@@ -1,0 +1,647 @@
+{
+  "selected_episodes": [
+    0,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    14,
+    15,
+    19,
+    20,
+    21,
+    23,
+    26,
+    29,
+    30,
+    31,
+    33,
+    34,
+    36,
+    37,
+    39,
+    40,
+    44,
+    49,
+    50,
+    56,
+    57,
+    59,
+    60,
+    62,
+    64,
+    67,
+    73,
+    74,
+    75,
+    77,
+    80,
+    83,
+    85,
+    89,
+    90,
+    91,
+    92,
+    93,
+    97,
+    98,
+    101,
+    103,
+    104,
+    105,
+    107,
+    108,
+    109,
+    112,
+    115,
+    116,
+    118,
+    119,
+    121,
+    122,
+    125,
+    127,
+    129,
+    130,
+    131,
+    135,
+    136,
+    137,
+    138,
+    139,
+    143,
+    146,
+    147,
+    148,
+    149,
+    150,
+    152,
+    154,
+    156,
+    157,
+    158,
+    159,
+    160,
+    164,
+    165,
+    166,
+    167,
+    168,
+    169,
+    172,
+    173,
+    179,
+    181,
+    182,
+    183,
+    184,
+    186,
+    187,
+    188,
+    189,
+    190,
+    191,
+    192,
+    195,
+    197,
+    265,
+    278,
+    281
+  ],
+  "b0_episodes": [
+    5,
+    9,
+    57,
+    60,
+    77,
+    93,
+    97,
+    108,
+    109,
+    147,
+    154,
+    164,
+    173,
+    184,
+    195,
+    265,
+    278,
+    281
+  ],
+  "selection_log": [
+    {
+      "round": 1,
+      "n_selected": 27,
+      "n_added": 9,
+      "sic_score": 43.148548005503116,
+      "sic_gain": 16.95885564332228,
+      "time_seconds": 2.1513895988464355,
+      "added_episodes": [
+        {
+          "episode_index": 21,
+          "sic_score": 28.107393013096654
+        },
+        {
+          "episode_index": 40,
+          "sic_score": 28.105686938129196
+        },
+        {
+          "episode_index": 125,
+          "sic_score": 28.079999533327104
+        },
+        {
+          "episode_index": 127,
+          "sic_score": 28.06418698302791
+        },
+        {
+          "episode_index": 74,
+          "sic_score": 28.062053296181407
+        },
+        {
+          "episode_index": 103,
+          "sic_score": 28.060799331825198
+        },
+        {
+          "episode_index": 4,
+          "sic_score": 28.057430548989547
+        },
+        {
+          "episode_index": 189,
+          "sic_score": 28.05389649151894
+        },
+        {
+          "episode_index": 67,
+          "sic_score": 28.050967229320644
+        }
+      ]
+    },
+    {
+      "round": 2,
+      "n_selected": 36,
+      "n_added": 9,
+      "sic_score": 60.346028042721244,
+      "sic_gain": 17.197480037218128,
+      "time_seconds": 4.139241933822632,
+      "added_episodes": [
+        {
+          "episode_index": 85,
+          "sic_score": 45.08949924116116
+        },
+        {
+          "episode_index": 167,
+          "sic_score": 45.07366761749106
+        },
+        {
+          "episode_index": 101,
+          "sic_score": 45.06899264581422
+        },
+        {
+          "episode_index": 188,
+          "sic_score": 45.06810497083519
+        },
+        {
+          "episode_index": 6,
+          "sic_score": 45.066368513939054
+        },
+        {
+          "episode_index": 0,
+          "sic_score": 45.065091462415324
+        },
+        {
+          "episode_index": 181,
+          "sic_score": 45.06370153013841
+        },
+        {
+          "episode_index": 169,
+          "sic_score": 45.05994921040672
+        },
+        {
+          "episode_index": 190,
+          "sic_score": 45.05842406287266
+        }
+      ]
+    },
+    {
+      "round": 3,
+      "n_selected": 45,
+      "n_added": 9,
+      "sic_score": 77.76632970387308,
+      "sic_gain": 17.42030166115184,
+      "time_seconds": 6.969783782958984,
+      "added_episodes": [
+        {
+          "episode_index": 3,
+          "sic_score": 62.29146752481624
+        },
+        {
+          "episode_index": 150,
+          "sic_score": 62.29022657103748
+        },
+        {
+          "episode_index": 152,
+          "sic_score": 62.289768997077644
+        },
+        {
+          "episode_index": 91,
+          "sic_score": 62.28378613099618
+        },
+        {
+          "episode_index": 37,
+          "sic_score": 62.27316518404174
+        },
+        {
+          "episode_index": 165,
+          "sic_score": 62.272940596636786
+        },
+        {
+          "episode_index": 104,
+          "sic_score": 62.2717696485385
+        },
+        {
+          "episode_index": 49,
+          "sic_score": 62.270899886576444
+        },
+        {
+          "episode_index": 136,
+          "sic_score": 62.2694976613259
+        }
+      ]
+    },
+    {
+      "round": 4,
+      "n_selected": 54,
+      "n_added": 9,
+      "sic_score": 95.26754570931541,
+      "sic_gain": 17.50121600544233,
+      "time_seconds": 10.293187141418457,
+      "added_episodes": [
+        {
+          "episode_index": 149,
+          "sic_score": 79.71043920382701
+        },
+        {
+          "episode_index": 159,
+          "sic_score": 79.70887520417917
+        },
+        {
+          "episode_index": 172,
+          "sic_score": 79.70600279931719
+        },
+        {
+          "episode_index": 20,
+          "sic_score": 79.70468162311072
+        },
+        {
+          "episode_index": 73,
+          "sic_score": 79.70182412739047
+        },
+        {
+          "episode_index": 14,
+          "sic_score": 79.7009210664402
+        },
+        {
+          "episode_index": 121,
+          "sic_score": 79.70039075246639
+        },
+        {
+          "episode_index": 146,
+          "sic_score": 79.69985713460082
+        },
+        {
+          "episode_index": 15,
+          "sic_score": 79.6993908537045
+        }
+      ]
+    },
+    {
+      "round": 5,
+      "n_selected": 63,
+      "n_added": 9,
+      "sic_score": 112.76149095916767,
+      "sic_gain": 17.49394524985226,
+      "time_seconds": 14.00813913345337,
+      "added_episodes": [
+        {
+          "episode_index": 183,
+          "sic_score": 97.22055456434107
+        },
+        {
+          "episode_index": 30,
+          "sic_score": 97.20745950602611
+        },
+        {
+          "episode_index": 129,
+          "sic_score": 97.20635266844187
+        },
+        {
+          "episode_index": 115,
+          "sic_score": 97.20598912682388
+        },
+        {
+          "episode_index": 62,
+          "sic_score": 97.20553896182773
+        },
+        {
+          "episode_index": 112,
+          "sic_score": 97.20415457388174
+        },
+        {
+          "episode_index": 31,
+          "sic_score": 97.20340844385515
+        },
+        {
+          "episode_index": 160,
+          "sic_score": 97.20336038303364
+        },
+        {
+          "episode_index": 33,
+          "sic_score": 97.20242131698718
+        }
+      ]
+    },
+    {
+      "round": 6,
+      "n_selected": 72,
+      "n_added": 9,
+      "sic_score": 130.24711150181977,
+      "sic_gain": 17.4856205426521,
+      "time_seconds": 18.468491077423096,
+      "added_episodes": [
+        {
+          "episode_index": 11,
+          "sic_score": 114.72243103723159
+        },
+        {
+          "episode_index": 19,
+          "sic_score": 114.71683678696162
+        },
+        {
+          "episode_index": 7,
+          "sic_score": 114.71031095878851
+        },
+        {
+          "episode_index": 118,
+          "sic_score": 114.7083686136195
+        },
+        {
+          "episode_index": 135,
+          "sic_score": 114.70528206936376
+        },
+        {
+          "episode_index": 187,
+          "sic_score": 114.70414236287189
+        },
+        {
+          "episode_index": 8,
+          "sic_score": 114.70366371436948
+        },
+        {
+          "episode_index": 23,
+          "sic_score": 114.7004972918656
+        },
+        {
+          "episode_index": 148,
+          "sic_score": 114.6983502253682
+        }
+      ]
+    },
+    {
+      "round": 7,
+      "n_selected": 81,
+      "n_added": 9,
+      "sic_score": 147.78235217922594,
+      "sic_gain": 17.535240677406165,
+      "time_seconds": 22.97818946838379,
+      "added_episodes": [
+        {
+          "episode_index": 139,
+          "sic_score": 132.1999852651105
+        },
+        {
+          "episode_index": 59,
+          "sic_score": 132.19389510939277
+        },
+        {
+          "episode_index": 137,
+          "sic_score": 132.19372725385185
+        },
+        {
+          "episode_index": 191,
+          "sic_score": 132.19161374437826
+        },
+        {
+          "episode_index": 182,
+          "sic_score": 132.18799065605137
+        },
+        {
+          "episode_index": 158,
+          "sic_score": 132.18792110178663
+        },
+        {
+          "episode_index": 83,
+          "sic_score": 132.18642006811575
+        },
+        {
+          "episode_index": 131,
+          "sic_score": 132.18458911361483
+        },
+        {
+          "episode_index": 64,
+          "sic_score": 132.184557062816
+        }
+      ]
+    },
+    {
+      "round": 8,
+      "n_selected": 90,
+      "n_added": 9,
+      "sic_score": 165.38010544154162,
+      "sic_gain": 17.597753262315678,
+      "time_seconds": 27.32646679878235,
+      "added_episodes": [
+        {
+          "episode_index": 34,
+          "sic_score": 149.74190133800704
+        },
+        {
+          "episode_index": 179,
+          "sic_score": 149.73976107853957
+        },
+        {
+          "episode_index": 138,
+          "sic_score": 149.73796372707113
+        },
+        {
+          "episode_index": 36,
+          "sic_score": 149.7358186993464
+        },
+        {
+          "episode_index": 186,
+          "sic_score": 149.73145637993622
+        },
+        {
+          "episode_index": 80,
+          "sic_score": 149.7310993984534
+        },
+        {
+          "episode_index": 90,
+          "sic_score": 149.72777158460246
+        },
+        {
+          "episode_index": 157,
+          "sic_score": 149.7234970889623
+        },
+        {
+          "episode_index": 197,
+          "sic_score": 149.7226364383883
+        }
+      ]
+    },
+    {
+      "round": 9,
+      "n_selected": 99,
+      "n_added": 9,
+      "sic_score": 182.92142810934683,
+      "sic_gain": 17.54132266780522,
+      "time_seconds": 31.965352058410645,
+      "added_episodes": [
+        {
+          "episode_index": 98,
+          "sic_score": 167.33432858828064
+        },
+        {
+          "episode_index": 130,
+          "sic_score": 167.3315952223109
+        },
+        {
+          "episode_index": 29,
+          "sic_score": 167.32796023455325
+        },
+        {
+          "episode_index": 156,
+          "sic_score": 167.32405200989282
+        },
+        {
+          "episode_index": 75,
+          "sic_score": 167.3240309162698
+        },
+        {
+          "episode_index": 10,
+          "sic_score": 167.322971428764
+        },
+        {
+          "episode_index": 105,
+          "sic_score": 167.32158569861937
+        },
+        {
+          "episode_index": 166,
+          "sic_score": 167.32072414874375
+        },
+        {
+          "episode_index": 168,
+          "sic_score": 167.3202493916532
+        }
+      ]
+    },
+    {
+      "round": 10,
+      "n_selected": 108,
+      "n_added": 9,
+      "sic_score": 200.47682545609027,
+      "sic_gain": 17.555397346743433,
+      "time_seconds": 36.94516897201538,
+      "added_episodes": [
+        {
+          "episode_index": 50,
+          "sic_score": 184.87308852195622
+        },
+        {
+          "episode_index": 107,
+          "sic_score": 184.8716321625363
+        },
+        {
+          "episode_index": 116,
+          "sic_score": 184.87109398783164
+        },
+        {
+          "episode_index": 89,
+          "sic_score": 184.8708130099816
+        },
+        {
+          "episode_index": 56,
+          "sic_score": 184.86823558742833
+        },
+        {
+          "episode_index": 143,
+          "sic_score": 184.8675248984614
+        },
+        {
+          "episode_index": 92,
+          "sic_score": 184.86682321053055
+        },
+        {
+          "episode_index": 39,
+          "sic_score": 184.86444388953078
+        },
+        {
+          "episode_index": 122,
+          "sic_score": 184.8631190344508
+        }
+      ]
+    },
+    {
+      "round": 11,
+      "n_selected": 112,
+      "n_added": 4,
+      "sic_score": 208.29124152952687,
+      "sic_gain": 7.814416073436604,
+      "time_seconds": 42.1676139831543,
+      "added_episodes": [
+        {
+          "episode_index": 119,
+          "sic_score": 202.4387034778278
+        },
+        {
+          "episode_index": 192,
+          "sic_score": 202.4325263840678
+        },
+        {
+          "episode_index": 26,
+          "sic_score": 202.42520233596912
+        },
+        {
+          "episode_index": 44,
+          "sic_score": 202.4229740343254
+        }
+      ]
+    }
+  ],
+  "sic_history": [
+    26.189692362180836,
+    43.148548005503116,
+    60.346028042721244,
+    77.76632970387308,
+    95.26754570931541,
+    112.76149095916767,
+    130.24711150181977,
+    147.78235217922594,
+    165.38010544154162,
+    182.92142810934683,
+    200.47682545609027,
+    208.29124152952687
+  ],
+  "initial_sic": 26.189692362180836,
+  "final_sic": 208.29124152952687,
+  "total_rounds": 11,
+  "target_size": 112,
+  "b0_size": 18,
+  "n_add_per_round": 9,
+  "alpha": 1.0,
+  "lambda_wrist": 1.0,
+  "seed": 42
+}

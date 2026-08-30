@@ -1,0 +1,11 @@
+{
+  "experiment": "random_112_seed42",
+  "mode": "random",
+  "num_episodes": 112,
+  "seed": 42,
+  "gpu_id": 1,
+  "success_rates": [],
+  "final_success_rate": null,
+  "max_success_rate": null,
+  "avg_success_rate": null
+}
