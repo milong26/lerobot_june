@@ -1410,6 +1410,7 @@ def test_35_report_regression_no_crash():
                     "n_random": 0,
                     "n_poor": 0,
                     "evidence_families": {"coverage_quality": 6, "max_radius_tail": 3, "redundancy": 3, "fixed_sic": 1},
+                    "evidence_families_detail": {"coverage_quality": [], "max_radius_tail": [], "redundancy": [], "fixed_sic": []},
                 },
                 "description": "Ours subset 是否显著优于 random coverage？",
             },

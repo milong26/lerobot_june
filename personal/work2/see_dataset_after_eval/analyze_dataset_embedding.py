@@ -29,7 +29,7 @@ from sklearn.linear_model import Ridge
 from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
 from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
 from sklearn.decomposition import PCA
-from sklearn.metrics import r2_score, mean_absolute_error, accuracy_score, balanced_accuracy_score
+from sklearn.metrics import r2_score, mean_absolute_error
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -39,7 +39,7 @@ sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, str(Path(__file__).parent))
 
 from sic_v2 import check_embeddings_valid, compute_dbar_from_embeddings, build_kernel_matrices
-from analysis_utils import compute_fixed_universe_sic, compute_fixed_universe_sic_from_indices
+from analysis_utils import compute_fixed_universe_sic_from_indices
 
 
 def load_subset_episode_indices(path: Path) -> List[int]:
@@ -1688,6 +1688,7 @@ def evaluate_h3(analysis_results: Dict) -> Dict:
         "evidence": {
             "core_metrics": all_core_metrics,
             "evidence_families": {k: len(v) for k, v in evidence_families.items()},
+            "evidence_families_detail": {k: v for k, v in evidence_families.items()},
             "n_strong_families": n_strong_families,
             "n_weak_families": n_weak_families,
             "n_random": n_random,
@@ -1927,9 +1928,11 @@ def generate_report(
                 f.write(f"- Weak evidence families: {ev.get('n_weak_families', 0)}\n")
                 f.write(f"- Random-range metrics: {ev.get('n_random', 0)}\n")
                 f.write(f"- Poor metrics: {ev.get('n_poor', 0)}\n")
-                families_detail = ev.get("evidence_families", {})
+                families_detail = ev.get("evidence_families_detail", {})
                 if families_detail:
-                    f.write(f"- Evidence families detail: {families_detail}\n")
+                    f.write(f"- Evidence families detail:\n")
+                    for fam_name, fam_items in families_detail.items():
+                        f.write(f"  - {fam_name}: {fam_items}\n")
             f.write("\n")
 
         f.write("## Phase Representation Warning\n\n")

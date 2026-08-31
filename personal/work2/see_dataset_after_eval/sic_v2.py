@@ -190,38 +190,57 @@ def check_embeddings_valid(
 
     def count_exact_duplicates(phi):
         # 使用 np.unique 进行精确重复检测
+        # 返回的是 exact duplicate groups 数量（即出现次数>1的unique vector group数量）
         unique_arr, counts = np.unique(phi, axis=0, return_counts=True)
         return int(np.sum(counts > 1))
 
+    def count_near_duplicate_pairs(phi, threshold):
+        # 统计 near duplicate pair 数量，排除 exact duplicate
+        # 使用 np.unique 获取 exact duplicate group id
+        unique_arr, inverse_indices = np.unique(phi, axis=0, return_inverse=True)
+        
+        # 归一化后计算 cosine similarity
+        norms = np.linalg.norm(phi, axis=1)
+        if norms.min() < 1e-10:
+            return 0
+        phi_norm = phi / norms[:, None]
+        cos_sim = phi_norm @ phi_norm.T
+        
+        n = len(phi)
+        near_dup_pairs = 0
+        for i in range(n):
+            for j in range(i + 1, n):
+                # 排除 exact duplicate（同一 group）
+                if inverse_indices[i] == inverse_indices[j]:
+                    continue
+                if cos_sim[i, j] > threshold:
+                    near_dup_pairs += 1
+        return near_dup_pairs
+
     result["stats"]["n_exact_dup_global"] = count_exact_duplicates(phi_globals)
     result["stats"]["n_exact_dup_wrist"] = count_exact_duplicates(phi_wrists)
+    result["stats"]["n_exact_duplicate_groups_global"] = result["stats"]["n_exact_dup_global"]
+    result["stats"]["n_exact_duplicate_groups_wrist"] = result["stats"]["n_exact_dup_wrist"]
 
     if result["stats"]["n_exact_dup_global"] > 0:
-        result["warnings"].append(f"{result['stats']['n_exact_dup_global']} exact duplicate phi_globals")
+        result["warnings"].append(f"{result['stats']['n_exact_dup_global']} exact duplicate groups in phi_globals")
     if result["stats"]["n_exact_dup_wrist"] > 0:
-        result["warnings"].append(f"{result['stats']['n_exact_dup_wrist']} exact duplicate phi_wrists")
+        result["warnings"].append(f"{result['stats']['n_exact_dup_wrist']} exact duplicate groups in phi_wrists")
 
     if norms_global.min() > 1e-10 and norms_wrist.min() > 1e-10:
-        phi_g_norm = phi_globals / norms_global[:, None]
-        phi_w_norm = phi_wrists / norms_wrist[:, None]
+        near_dup_pairs_g = count_near_duplicate_pairs(phi_globals, near_dup_cosine_threshold)
+        near_dup_pairs_w = count_near_duplicate_pairs(phi_wrists, near_dup_cosine_threshold)
 
-        cos_sim_g = phi_g_norm @ phi_g_norm.T
-        cos_sim_w = phi_w_norm @ phi_w_norm.T
+        result["stats"]["n_near_dup_global"] = near_dup_pairs_g
+        result["stats"]["n_near_dup_wrist"] = near_dup_pairs_w
+        result["stats"]["n_near_duplicate_pairs_global"] = near_dup_pairs_g
+        result["stats"]["n_near_duplicate_pairs_wrist"] = near_dup_pairs_w
 
-        np.fill_diagonal(cos_sim_g, -1.0)
-        np.fill_diagonal(cos_sim_w, -1.0)
-
-        near_g = int(np.sum(cos_sim_g > near_dup_cosine_threshold))
-        near_w = int(np.sum(cos_sim_w > near_dup_cosine_threshold))
-
-        result["stats"]["n_near_dup_global"] = near_g // 2
-        result["stats"]["n_near_dup_wrist"] = near_w // 2
-
-        if near_g > 0 or near_w > 0:
+        if near_dup_pairs_g > 0 or near_dup_pairs_w > 0:
             result["warnings"].append(
-                f"Near-duplicate embeddings detected: "
-                f"global={result['stats']['n_near_dup_global']}, "
-                f"wrist={result['stats']['n_near_dup_wrist']}"
+                f"Near-duplicate embedding pairs detected (excluding exact duplicates): "
+                f"global={near_dup_pairs_g}, "
+                f"wrist={near_dup_pairs_w}"
             )
 
     return result

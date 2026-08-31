@@ -1289,6 +1289,246 @@ def compute_image_checksum(tensor):
     return float(tensor.detach().float().cpu().sum().item())
 
 
+def tensor_sha256(tensor):
+    """Compute SHA256 hash of a tensor's raw bytes.
+
+    More robust than checksum (sum) as it has negligible collision probability.
+
+    Args:
+        tensor: Tensor to hash.
+
+    Returns:
+        Hex digest string.
+    """
+    import hashlib
+    arr = tensor.detach().contiguous().float().cpu().numpy()
+    return hashlib.sha256(arr.tobytes()).hexdigest()
+
+
+def numpy_sha256(array):
+    """Compute SHA256 hash of a numpy array's raw bytes.
+
+    Args:
+        array: numpy array to hash.
+
+    Returns:
+        Hex digest string.
+    """
+    import hashlib
+    arr = array.copy()
+    return hashlib.sha256(arr.tobytes()).hexdigest()
+
+
+def clone_shared_model_data_for_policy(shared_model_data, device):
+    """Clone shared raw observation data for use by a different policy checkpoint.
+
+    Each checkpoint in a camera group must use its own preprocessing (processor,
+    tokenizer, config). We clone the raw observation tensors so that each policy
+    gets semantically identical inputs without sharing mutable state.
+
+    Args:
+        shared_model_data: Dict from create_metaworld_input() with raw observation.
+        device: Target device for cloned tensors.
+
+    Returns:
+        New model_data dict with cloned observation tensors.
+        The "env" field is set to None since inference_trace mode does not need it.
+    """
+    result = {}
+    for key, value in shared_model_data.items():
+        if key == "env":
+            result[key] = None
+        elif isinstance(value, torch.Tensor):
+            result[key] = value.detach().clone().to(device)
+        elif isinstance(value, np.ndarray):
+            result[key] = value.copy()
+        elif isinstance(value, dict):
+            result[key] = dict(value)
+        else:
+            result[key] = value
+    return result
+
+
+def build_input_signature(model_data, batch, policy, shared_noise):
+    """Build a deterministic signature of the model input for cross-check validation.
+
+    The signature captures raw observation state and preprocessed inputs so we can
+    verify that different checkpoints in the same camera group receive identical inputs.
+
+    Args:
+        model_data: Raw observation dict from create_metaworld_input().
+        batch: Preprocessed batch from prepare_batch_for_model().
+        policy: SmolVLAPolicy instance used for preprocessing.
+        shared_noise: Initial noise tensor.
+
+    Returns:
+        Dict containing:
+            - obj_init_pos: (3,) numpy array
+            - goal_pos: (3,) numpy array
+            - camera1_raw_sha256, camera2_raw_sha256, state_sha256
+            - camera1_prepared_sha256, camera2_prepared_sha256
+            - language_tokens_sha256, language_mask_sha256
+            - noise_sha256
+            - camera1_raw_shape, camera2_raw_shape, state_shape
+            - language_tokens_shape, noise_shape
+    """
+    import hashlib
+
+    images, _ = policy.prepare_images(batch)
+    state = policy.prepare_state(batch)
+    lang_tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
+    lang_masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
+
+    cam1_raw = model_data.get("observation.images.camera1")
+    cam2_raw = model_data.get("observation.images.camera2")
+    state_raw = model_data.get("state")
+
+    sig = {}
+
+    obj_init = model_data.get("info", {}).get("obj_init_pos")
+    goal = model_data.get("info", {}).get("goal_pos")
+    if obj_init is not None:
+        sig["obj_init_pos"] = np.array(obj_init).tobytes()
+    if goal is not None:
+        sig["goal_pos"] = np.array(goal).tobytes()
+
+    if cam1_raw is not None:
+        if isinstance(cam1_raw, torch.Tensor):
+            sig["camera1_raw_sha256"] = tensor_sha256(cam1_raw)
+            sig["camera1_raw_shape"] = list(cam1_raw.shape)
+        elif isinstance(cam1_raw, np.ndarray):
+            sig["camera1_raw_sha256"] = numpy_sha256(cam1_raw)
+            sig["camera1_raw_shape"] = list(cam1_raw.shape)
+
+    if cam2_raw is not None:
+        if isinstance(cam2_raw, torch.Tensor):
+            sig["camera2_raw_sha256"] = tensor_sha256(cam2_raw)
+            sig["camera2_raw_shape"] = list(cam2_raw.shape)
+        elif isinstance(cam2_raw, np.ndarray):
+            sig["camera2_raw_sha256"] = numpy_sha256(cam2_raw)
+            sig["camera2_raw_shape"] = list(cam2_raw.shape)
+
+    if state_raw is not None:
+        if isinstance(state_raw, torch.Tensor):
+            sig["state_sha256"] = tensor_sha256(state_raw)
+            sig["state_shape"] = list(state_raw.shape)
+        elif isinstance(state_raw, np.ndarray):
+            sig["state_sha256"] = numpy_sha256(state_raw)
+            sig["state_shape"] = list(state_raw.shape)
+
+    if images and len(images) > 0:
+        sig["camera1_prepared_sha256"] = tensor_sha256(images[0])
+        sig["camera1_prepared_shape"] = list(images[0].shape)
+    if images and len(images) > 1:
+        sig["camera2_prepared_sha256"] = tensor_sha256(images[1])
+        sig["camera2_prepared_shape"] = list(images[1].shape)
+
+    if lang_tokens is not None:
+        sig["language_tokens_sha256"] = tensor_sha256(lang_tokens)
+        sig["language_tokens_shape"] = list(lang_tokens.shape)
+
+    if lang_masks is not None:
+        sig["language_mask_sha256"] = tensor_sha256(lang_masks)
+        sig["language_mask_shape"] = list(lang_masks.shape)
+
+    sig["noise_sha256"] = tensor_sha256(shared_noise)
+    sig["noise_shape"] = list(shared_noise.shape)
+
+    return sig
+
+
+def validate_shared_input_signature(reference, current, model_name, camera_group):
+    """Validate that current input signature matches reference signature.
+
+    Performs strict equality checks on all fields. If any check fails, raises
+    RuntimeError with a detailed message. This ensures fair comparison where
+    only model weights differ across checkpoints.
+
+    Args:
+        reference: Signature dict from the first model in the camera group.
+        current: Signature dict from the current model.
+        model_name: Name of the current model (for error messages).
+        camera_group: Camera group name (for error messages).
+
+    Raises:
+        RuntimeError: If any field mismatch is detected.
+    """
+    fields_to_check = [
+        ("obj_init_pos", "obj_init_pos"),
+        ("goal_pos", "goal_pos"),
+        ("camera1_raw_sha256", "camera1 raw image"),
+        ("camera2_raw_sha256", "camera2 raw image"),
+        ("state_sha256", "state"),
+        ("camera1_prepared_sha256", "camera1 prepared image"),
+        ("camera2_prepared_sha256", "camera2 prepared image"),
+        ("language_tokens_sha256", "language tokens"),
+        ("language_mask_sha256", "language attention mask"),
+        ("noise_sha256", "initial noise"),
+    ]
+
+    mismatches = []
+    for ref_key, display_name in fields_to_check:
+        ref_val = reference.get(ref_key)
+        cur_val = current.get(ref_key)
+        if ref_val is None and cur_val is None:
+            continue
+        if ref_val != cur_val:
+            mismatches.append(
+                f"  - {display_name}: reference={ref_val}, current={cur_val}"
+            )
+
+    shape_fields = [
+        ("camera1_raw_shape", "camera1 raw shape"),
+        ("camera2_raw_shape", "camera2 raw shape"),
+        ("state_shape", "state shape"),
+        ("language_tokens_shape", "language tokens shape"),
+        ("noise_shape", "noise shape"),
+    ]
+    for ref_key, display_name in shape_fields:
+        ref_val = reference.get(ref_key)
+        cur_val = current.get(ref_key)
+        if ref_val is None and cur_val is None:
+            continue
+        if ref_val != cur_val:
+            mismatches.append(
+                f"  - {display_name}: reference={ref_val}, current={cur_val}"
+            )
+
+    if mismatches:
+        msg = (
+            f"Shared input validation failed for model '{model_name}' "
+            f"in camera group '{camera_group}'.\n"
+            "All models in the same camera group must use identical observation, "
+            "state, language, and noise inputs.\n"
+            "Mismatches detected:\n" + "\n".join(mismatches)
+        )
+        raise RuntimeError(msg)
+
+
+def print_input_signature_comparison(reference, current, title=""):
+    """Print a formatted comparison of two input signatures.
+
+    Args:
+        reference: Reference signature dict.
+        current: Current signature dict.
+        title: Optional title string.
+    """
+    if title:
+        print(f"  {title}")
+    fields = [
+        ("camera1_raw_sha256", "camera1 SHA256"),
+        ("camera2_raw_sha256", "camera2 SHA256"),
+        ("state_sha256", "state SHA256"),
+        ("language_tokens_sha256", "language SHA256"),
+        ("noise_sha256", "noise SHA256"),
+    ]
+    for key, label in fields:
+        ref_val = reference.get(key, "N/A")[:16] if reference.get(key) else "N/A"
+        cur_val = current.get(key, "N/A")[:16] if current.get(key) else "N/A"
+        match = "✓" if reference.get(key) == current.get(key) else "✗"
+        print(f"    {match} {label}: {ref_val} | {cur_val}")
+
+
 def parse_heatmap_steps(heatmap_steps_str):
     """Parse heatmap step specification string.
 
@@ -1927,6 +2167,7 @@ def _plot_pairwise_action_divergence(model_names, all_model_traces, plots_dir, g
 def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                         layer_indices, average_heads, max_steps,
                         noise_seed=None, heatmap_steps_str=None, shared_noise=None,
+                        shared_model_data=None, reference_input_signature=None,
                         do_sanity_check=False):
     """Process a single model checkpoint."""
     model_name = model_cfg["name"]
@@ -1983,14 +2224,16 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
 
     all_metrics_rows = []
     env = None
+    trace_result = None
 
     try:
         if mode == "inference_trace":
-            model_data = create_metaworld_input(TASK, seed, camera_name, device)
-            env = model_data["env"]
-            metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
-            metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
-            metadata["state"] = model_data["state"].tolist()
+            if shared_model_data is not None:
+                model_data = clone_shared_model_data_for_policy(shared_model_data, device)
+                print(f"  Using shared observation (cloned from camera group reference)")
+            else:
+                model_data = create_metaworld_input(TASK, seed, camera_name, device)
+                env = model_data["env"]
 
             batch = prepare_batch_for_model(model_data, policy, device)
 
@@ -2002,6 +2245,40 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                     ns,
                     device,
                 )
+
+            if reference_input_signature is not None:
+                current_signature = build_input_signature(
+                    model_data, batch, policy, shared_noise
+                )
+                print(f"  Validating input consistency against reference...")
+                print_input_signature_comparison(
+                    reference_input_signature, current_signature,
+                    title=f"  Camera group input comparison for {model_name}"
+                )
+                validate_shared_input_signature(
+                    reference_input_signature, current_signature,
+                    model_name, camera_name
+                )
+                print(f"  ✓ All inputs identical to reference")
+
+                metadata["shared_input_validation"] = {
+                    "passed": True,
+                    "camera_group": camera_name,
+                    "reference_model": list(reference_input_signature.keys()),
+                    "raw_observation_identical": True,
+                    "state_identical": True,
+                    "language_identical": True,
+                    "prepared_images_identical": True,
+                    "noise_identical": True,
+                }
+                metadata["reference_input_signature"] = {
+                    k: (v[:16] + "..." if isinstance(v, str) and len(v) > 16 else v)
+                    for k, v in reference_input_signature.items()
+                }
+                metadata["current_input_signature"] = {
+                    k: (v[:16] + "..." if isinstance(v, str) and len(v) > 16 else v)
+                    for k, v in current_signature.items()
+                }
 
             if do_sanity_check:
                 print(f"  Running sanity check (sample_actions vs sample_actions_with_trace)...")
@@ -2031,8 +2308,12 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
             all_metrics_rows = trace_result["attention_rows"]
 
             print(f"  Saved trace.pt to {model_dir / 'trace.pt'}")
-            print(f"  Saved metadata.json to {model_dir / 'metadata.json'}")
             print(f"  Captured {len(all_metrics_rows)} attention rows")
+
+            metadata_path = model_dir / "metadata.json"
+            with open(metadata_path, "w") as f:
+                json.dump(metadata, f, indent=2, default=str)
+            print(f"  Saved metadata.json to {metadata_path}")
 
             return all_metrics_rows, trace_result
 
@@ -2167,17 +2448,16 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
             except Exception as e:
                 print(f"  WARNING: Failed to close environment: {e}")
 
-    metadata_path = model_dir / "metadata.json"
-    with open(metadata_path, "w") as f:
-        json.dump(metadata, f, indent=2, default=str)
-    print(f"  Saved metadata to {metadata_path}")
+    if mode != "inference_trace":
+        metadata_path = model_dir / "metadata.json"
+        with open(metadata_path, "w") as f:
+            json.dump(metadata, f, indent=2, default=str)
+        print(f"  Saved metadata to {metadata_path}")
 
     del policy
     torch.cuda.empty_cache()
 
-    if mode == "inference_trace":
-        return all_metrics_rows, None
-    return all_metrics_rows
+    return all_metrics_rows, (trace_result if mode == "inference_trace" else None)
 
 
 def main():
@@ -2268,7 +2548,8 @@ def main():
 
             shared_noise = None
             shared_model_data = None
-            shared_batch = None
+            reference_input_signature = None
+            shared_env = None
             first_policy = None
 
             if first_model_cfg is not None:
@@ -2281,6 +2562,7 @@ def main():
                     first_policy.eval()
 
                     shared_model_data = create_metaworld_input(TASK, args.seed, cam_group, device)
+                    shared_env = shared_model_data["env"]
                     shared_batch = prepare_batch_for_model(shared_model_data, first_policy, device)
 
                     shared_noise = create_shared_initial_noise(
@@ -2290,15 +2572,20 @@ def main():
                         device,
                     )
 
-                    print(f"  Shared noise shape: {shared_noise.shape}")
-                    print(f"  Shared noise checksum: {compute_tensor_checksum(shared_noise):.4f}")
-                    print(f"  Image checksums:")
-                    for img_idx, img_key in enumerate(first_policy.config.image_features):
-                        images, _ = first_policy.prepare_images(shared_batch)
-                        if img_idx < len(images):
-                            print(f"    {img_key}: {compute_image_checksum(images[img_idx]):.4f}")
+                    reference_input_signature = build_input_signature(
+                        shared_model_data, shared_batch, first_policy, shared_noise
+                    )
+
+                    print(f"\n  Camera group '{cam_group}' reference input signature:")
+                    for key in ["camera1_raw_sha256", "camera2_raw_sha256", "state_sha256",
+                                "language_tokens_sha256", "noise_sha256"]:
+                        val = reference_input_signature.get(key, "N/A")
+                        if isinstance(val, str) and len(val) > 16:
+                            val = val[:16] + "..."
+                        print(f"    {key}: {val}")
 
                     del first_policy
+                    first_policy = None
                     torch.cuda.empty_cache()
 
             for model_cfg in models_to_process:
@@ -2311,6 +2598,8 @@ def main():
                     noise_seed=noise_seed,
                     heatmap_steps_str=args.trace_heatmap_steps,
                     shared_noise=shared_noise,
+                    shared_model_data=shared_model_data,
+                    reference_input_signature=reference_input_signature,
                     do_sanity_check=args.sanity_check,
                 )
 
@@ -2321,9 +2610,14 @@ def main():
                     if trace_result is not None:
                         all_model_traces[model_cfg["name"]] = trace_result
 
-                del shared_model_data
-                del shared_batch
                 torch.cuda.empty_cache()
+
+            if shared_env is not None:
+                try:
+                    shared_env.close()
+                except Exception:
+                    pass
+                shared_env = None
 
         if all_model_traces:
             generate_inference_trace_summary_plots(
