@@ -1,1 +1,3 @@
 step,pc_success,pc_grasp_success,avg_sum_reward,avg_max_reward,n_episodes,status
+002000,26.0,60.0,260.1630536797099,2.3638303956462785,50,ok
+004000,36.0,94.0,768.5495783049377,4.395868152467713,50,ok

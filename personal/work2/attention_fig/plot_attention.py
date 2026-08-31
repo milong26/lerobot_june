@@ -162,7 +162,8 @@ class AttentionExtractor:
 
             extractor.captured_attentions.append({
                 "call_index": extractor.call_index,
-                "layer_index": extractor.call_index,
+                "layer_index": None,
+                "source": "unknown",
                 "probs": probs.detach().cpu(),
                 "query_length": query_states.shape[1],
                 "key_length": key_states.shape[1],
@@ -183,6 +184,103 @@ class AttentionExtractor:
 
     def restore(self):
         self.vlm_with_expert.eager_attention_forward = self.original_method
+
+
+def annotate_attention_calls(vlm_with_expert, captured, prefix_length, suffix_length):
+    """Map captured attention calls to real model layers and attention sources.
+
+    Replicates the logic from SmolVLMWithExpert.forward() to determine which
+    layer uses forward_attn_layer (joint_self) vs forward_cross_attn_layer
+    (prefix_self + expert_cross).
+
+    Returns the same captured list with layer_index and source annotated.
+    """
+    num_layers = vlm_with_expert.num_vlm_layers
+    attention_mode = vlm_with_expert.attention_mode
+    self_attn_every_n = vlm_with_expert.self_attn_every_n_layers
+
+    models = [vlm_with_expert.get_vlm_model().text_model, vlm_with_expert.lm_expert]
+    model_layers = vlm_with_expert.get_model_layers(models)
+
+    total_seq = prefix_length + suffix_length
+    fill_kv_cache = False  # use_cache=False in our probe call
+
+    cursor = 0
+
+    for layer_idx in range(num_layers):
+        use_joint = (
+            fill_kv_cache
+            or "cross" not in attention_mode
+            or (self_attn_every_n > 0 and layer_idx % self_attn_every_n == 0)
+        )
+
+        if use_joint:
+            # forward_attn_layer: joint self-attention over prefix+suffix
+            if cursor >= len(captured):
+                raise RuntimeError(
+                    f"Expected joint_self call at layer {layer_idx} but only {len(captured)} "
+                    f"calls captured (cursor={cursor}). num_layers={num_layers}, "
+                    f"attention_mode={attention_mode}, self_attn_every_n={self_attn_every_n}"
+                )
+            call = captured[cursor]
+            call["layer_index"] = layer_idx
+            call["source"] = "joint_self"
+
+            if call["query_length"] != total_seq or call["key_length"] != total_seq:
+                raise RuntimeError(
+                    f"joint_self shape mismatch at layer {layer_idx}: "
+                    f"q={call['query_length']}, k={call['key_length']}, "
+                    f"expected q=k={total_seq}"
+                )
+            cursor += 1
+        else:
+            # forward_cross_attn_layer: prefix_self + (optionally) expert_cross
+            if cursor >= len(captured):
+                raise RuntimeError(
+                    f"Expected prefix_self call at layer {layer_idx} but only {len(captured)} "
+                    f"calls captured (cursor={cursor})."
+                )
+            call = captured[cursor]
+            call["layer_index"] = layer_idx
+            call["source"] = "prefix_self"
+
+            if call["query_length"] != prefix_length or call["key_length"] != prefix_length:
+                raise RuntimeError(
+                    f"prefix_self shape mismatch at layer {layer_idx}: "
+                    f"q={call['query_length']}, k={call['key_length']}, "
+                    f"expected q=k={prefix_length}"
+                )
+            cursor += 1
+
+            # Check if expert layer exists for this model layer
+            has_expert = model_layers[1][layer_idx] is not None
+            if has_expert:
+                if cursor >= len(captured):
+                    raise RuntimeError(
+                        f"Expected expert_cross call at layer {layer_idx} but only {len(captured)} "
+                        f"calls captured (cursor={cursor})."
+                    )
+                call = captured[cursor]
+                call["layer_index"] = layer_idx
+                call["source"] = "expert_cross"
+
+                if call["query_length"] != suffix_length or call["key_length"] != prefix_length:
+                    raise RuntimeError(
+                        f"expert_cross shape mismatch at layer {layer_idx}: "
+                        f"q={call['query_length']}, k={call['key_length']}, "
+                        f"expected q={suffix_length}, k={prefix_length}"
+                    )
+                cursor += 1
+
+    if cursor != len(captured):
+        raise RuntimeError(
+            f"Call count mismatch: consumed {cursor} calls but captured {len(captured)}. "
+            f"num_layers={num_layers}, attention_mode={attention_mode}, "
+            f"self_attn_every_n={self_attn_every_n}, "
+            f"captured_count={len(captured)}, consumed_count={cursor}"
+        )
+
+    return captured
 
 
 # ============================================================
@@ -488,6 +586,9 @@ def extract_attention_from_model(policy, batch, device):
 
         captured = extractor.captured_attentions
 
+        # Annotate captured calls with real model layer indices and attention sources
+        captured = annotate_attention_calls(vlm_with_expert, captured, prefix_length, suffix_length)
+
         print(f"  Captured {len(captured)} attention calls")
         if captured:
             print(f"  Attention[0] probs shape: {captured[0]['probs'].shape}")
@@ -497,6 +598,12 @@ def extract_attention_from_model(policy, batch, device):
             cap_key_len = captured[0]["key_length"]
             if cap_key_len != expected_total:
                 print(f"  WARNING: captured key_length {cap_key_len} != expected total {expected_total}")
+
+        # Print attention topology summary
+        print(f"  Attention topology ({len(captured)} calls):")
+        for call in captured:
+            print(f"    call={call['call_index']} layer={call['layer_index']} "
+                  f"source={call['source']} q={call['query_length']} k={call['key_length']}")
 
         return captured, spans, prefix_length, suffix_length, image_token_counts, image_grids
 
@@ -724,18 +831,92 @@ def compute_attention_mass(attn_probs, spans, prefix_length, suffix_length, quer
     return masses
 
 
-def get_query_indices(mode, prefix_length, suffix_length):
-    """Get query token indices based on aggregation strategy."""
-    total_seq = prefix_length + suffix_length
+def get_query_indices_for_call(mode, attn_data, prefix_length, suffix_length):
+    """Get query token indices based on aggregation strategy AND the current attention call.
 
-    if mode == "last":
-        return [total_seq - 1]
-    elif mode == "mean_suffix":
-        return list(range(prefix_length, total_seq))
-    elif mode == "mean_all":
-        return list(range(total_seq))
+    Query indices are in the coordinate system of THIS attention call's query tensor,
+    NOT the full sequence. This is critical because:
+    - joint_self: query = full sequence [0..prefix+suffix-1], suffix starts at prefix_length
+    - expert_cross: query = only suffix tokens [0..suffix_length-1], index 0 = first suffix token
+    - prefix_self: query = only prefix tokens [0..prefix_length-1], no suffix queries exist
+    """
+    source = attn_data.get("source", "unknown")
+    query_length = attn_data["query_length"]
+
+    if source == "joint_self":
+        # Query is full sequence: [0 .. prefix+suffix-1]
+        total_seq = prefix_length + suffix_length
+        if mode == "last":
+            return [query_length - 1]
+        elif mode == "mean_suffix":
+            start = prefix_length
+            end = min(prefix_length + suffix_length, query_length)
+            return list(range(start, end))
+        elif mode == "mean_all":
+            return list(range(query_length))
+        else:
+            return [query_length - 1]
+
+    elif source == "expert_cross":
+        # Query is only suffix tokens: [0 .. suffix_length-1]
+        # Index 0 corresponds to the first action/suffix token
+        if mode == "last":
+            return [query_length - 1]
+        elif mode == "mean_suffix":
+            return list(range(query_length))
+        elif mode == "mean_all":
+            return list(range(query_length))
+        else:
+            return [query_length - 1]
+
+    elif source == "prefix_self":
+        # Query is only prefix tokens: no suffix/action queries exist
+        # mean_suffix is unsupported for prefix_self
+        if mode == "last":
+            return [query_length - 1]
+        elif mode == "mean_suffix":
+            return []  # No suffix queries in prefix_self
+        elif mode == "mean_all":
+            return list(range(query_length))
+        else:
+            return [query_length - 1]
+
     else:
-        return [total_seq - 1]
+        # Unknown source: fallback to full query range
+        if mode == "last":
+            return [query_length - 1]
+        elif mode == "mean_suffix":
+            return list(range(query_length))
+        elif mode == "mean_all":
+            return list(range(query_length))
+        else:
+            return [query_length - 1]
+
+
+def select_action_attention_for_layer(captured, layer_idx):
+    """Select the best attention call for policy action visualization at a given model layer.
+
+    Priority:
+    1. expert_cross: query = action suffix, key = prefix observation (best for action attention)
+    2. joint_self: query = full sequence including suffix, key = full sequence
+    3. prefix_self: NOT selected (no action/suffix queries)
+
+    Returns the attention call dict, or None if no action-related call exists.
+    """
+    layer_calls = [c for c in captured if c.get("layer_index") == layer_idx]
+
+    # Priority 1: expert_cross
+    for call in layer_calls:
+        if call.get("source") == "expert_cross":
+            return call
+
+    # Priority 2: joint_self
+    for call in layer_calls:
+        if call.get("source") == "joint_self":
+            return call
+
+    # No action-related attention call for this layer
+    return None
 
 
 # ============================================================
@@ -786,6 +967,12 @@ def generate_summary_figure(phase_data, model_name, method, phase_name, layer_in
     image_token_counts = phase_data.get("image_token_counts", {})
     image_grids = phase_data.get("image_grids", {})
 
+    # Determine camera keys from actual spans/image_grids (not from config order)
+    image_feature_keys = list(image_features.keys()) if isinstance(image_features, dict) else list(image_features)
+    available_cam_keys = [k for k in image_feature_keys if k in spans and k in image_grids]
+    cam1_key = available_cam_keys[0] if len(available_cam_keys) > 0 else None
+    cam2_key = available_cam_keys[1] if len(available_cam_keys) > 1 else None
+
     n_layers_viz = len(layer_indices)
     n_cols = 3
     n_rows = n_layers_viz + 1
@@ -807,41 +994,77 @@ def generate_summary_figure(phase_data, model_name, method, phase_name, layer_in
 
     axes[0, 2].axis("off")
 
-    query_indices = get_query_indices(query_mode, prefix_length, suffix_length)
-
     all_metrics = []
 
     for viz_idx, layer_idx in enumerate(layer_indices):
-        if layer_idx >= len(captured):
-            for c in range(n_cols):
-                axes[viz_idx + 1, c].axis("off")
+        # Select the best action-related attention call for this model layer
+        attn_data = select_action_attention_for_layer(captured, layer_idx)
+
+        if attn_data is None:
+            # No action-related attention call for this layer
+            axes[viz_idx + 1, 0].text(0.5, 0.5, f"No action-related\nattention call\nfor layer {layer_idx}",
+                                      ha='center', va='center', transform=axes[viz_idx + 1, 0].transAxes,
+                                      fontsize=10)
+            axes[viz_idx + 1, 0].axis("off")
+            axes[viz_idx + 1, 1].axis("off")
+            axes[viz_idx + 1, 2].axis("off")
+            all_metrics.append({
+                "layer_index": layer_idx,
+                "attention_source": "none",
+                "query_length": None,
+                "key_length": None,
+                "query_count": 0,
+                "masses": {},
+            })
             continue
 
-        attn_data = captured[layer_idx]
         attn_probs = attn_data["probs"]
+        source = attn_data.get("source", "unknown")
+        query_length = attn_data["query_length"]
+        key_length = attn_data["key_length"]
 
         if attn_probs.ndim != 4:
             continue
 
+        # Get query indices in THIS call's coordinate system
+        query_indices = get_query_indices_for_call(query_mode, attn_data, prefix_length, suffix_length)
+
+        if not query_indices:
+            axes[viz_idx + 1, 0].text(0.5, 0.5, f"No valid queries\nfor layer {layer_idx}\n({source}, {query_mode})",
+                                      ha='center', va='center', transform=axes[viz_idx + 1, 0].transAxes,
+                                      fontsize=10)
+            axes[viz_idx + 1, 0].axis("off")
+            axes[viz_idx + 1, 1].axis("off")
+            axes[viz_idx + 1, 2].axis("off")
+            all_metrics.append({
+                "layer_index": layer_idx,
+                "attention_source": source,
+                "query_length": query_length,
+                "key_length": key_length,
+                "query_count": 0,
+                "masses": {},
+            })
+            continue
+
+        # Validate query indices are within bounds
+        if any(i < 0 or i >= query_length for i in query_indices):
+            print(f"  WARNING: query indices out of bounds for layer {layer_idx} ({source})")
+            query_indices = [i for i in query_indices if 0 <= i < query_length]
+            if not query_indices:
+                continue
+
+        # Aggregate attention over selected queries
         if average_heads:
-            avg_attn = attn_probs.mean(dim=1)
-            attn_for_viz = avg_attn[0, query_indices, :]
+            avg_attn = attn_probs.mean(dim=1)  # [B, Q, K]
+            attn_for_viz = avg_attn[0, query_indices, :]  # [Q_selected, K]
             if attn_for_viz.ndim == 2:
-                attn_1d = attn_for_viz.mean(dim=0).cpu().numpy()
+                attn_1d = attn_for_viz.mean(dim=0).cpu().numpy()  # [K]
             else:
                 attn_1d = attn_for_viz.cpu().numpy()
         else:
-            attn_1d = attn_probs[0, 0, query_indices[0], :].cpu().numpy()
-
-        cam1_key = None
-        cam2_key = None
-        for key in image_features:
-            if key in spans:
-                if cam1_key is None:
-                    cam1_key = key
-                else:
-                    cam2_key = key
-                    break
+            # Use head 0, but average over all selected query indices
+            head0_attn = attn_probs[0, 0, query_indices, :]  # [Q_selected, K]
+            attn_1d = head0_attn.mean(dim=0).cpu().numpy()  # [K]
 
         cam1_overlay = None
         cam2_overlay = None
@@ -868,22 +1091,29 @@ def generate_summary_figure(phase_data, model_name, method, phase_name, layer_in
 
         if cam1_overlay is not None:
             axes[viz_idx + 1, 0].imshow(cam1_overlay)
-            axes[viz_idx + 1, 0].set_title(f"Layer {layer_idx} - Camera 1 Attention", fontsize=10)
+            axes[viz_idx + 1, 0].set_title(f"Layer {layer_idx} ({source}) - Camera 1 Attention", fontsize=10)
             axes[viz_idx + 1, 0].axis("off")
         else:
             axes[viz_idx + 1, 0].axis("off")
 
         if cam2_overlay is not None:
             axes[viz_idx + 1, 1].imshow(cam2_overlay)
-            axes[viz_idx + 1, 1].set_title(f"Layer {layer_idx} - Camera 2 Attention", fontsize=10)
+            axes[viz_idx + 1, 1].set_title(f"Layer {layer_idx} ({source}) - Camera 2 Attention", fontsize=10)
             axes[viz_idx + 1, 1].axis("off")
         else:
             axes[viz_idx + 1, 1].axis("off")
 
         masses = compute_attention_mass(attn_probs, spans, prefix_length, suffix_length, query_indices)
-        all_metrics.append(masses)
+        all_metrics.append({
+            "layer_index": layer_idx,
+            "attention_source": source,
+            "query_length": query_length,
+            "key_length": key_length,
+            "query_count": len(query_indices),
+            "masses": masses,
+        })
 
-        mass_text = []
+        mass_text = [f"source={source}", f"q={query_length}, k={key_length}", f"queries={len(query_indices)}"]
         for k, v in masses.items():
             if k.endswith("_mass"):
                 mass_text.append(f"{k.replace('_mass', '')}: {v:.3f}")
@@ -1003,7 +1233,12 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                 )
 
                 if metrics:
-                    for layer_idx, m in zip(layer_indices, metrics):
+                    image_feature_keys = list(policy.config.image_features.keys()) if isinstance(policy.config.image_features, dict) else list(policy.config.image_features)
+                    cam1_key = image_feature_keys[0] if len(image_feature_keys) > 0 else None
+                    cam2_key = image_feature_keys[1] if len(image_feature_keys) > 1 else None
+
+                    for metric_record in metrics:
+                        masses = metric_record.get("masses", {})
                         row = {
                             "model_name": model_name,
                             "method": method,
@@ -1012,13 +1247,17 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                             "phase": phase_name,
                             "success": episode_metrics.get("success", False),
                             "grasp_reached": episode_metrics.get("grasp_reached", False),
-                            "layer": layer_idx,
-                            "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
-                            "camera2_mass": m.get("camera2_mass", 0),
-                            "language_mass": m.get("language_mass", 0),
-                            "state_mass": m.get("state_mass", 0),
-                            "suffix_mass": m.get("suffix_mass", 0),
-                            "other_mass": m.get("other_mass", 0),
+                            "layer": metric_record["layer_index"],
+                            "attention_source": metric_record.get("attention_source", "unknown"),
+                            "query_length": metric_record.get("query_length"),
+                            "key_length": metric_record.get("key_length"),
+                            "query_count": metric_record.get("query_count", 0),
+                            "camera1_mass": masses.get(f"{cam1_key}_mass", 0.0) if cam1_key else 0.0,
+                            "camera2_mass": masses.get(f"{cam2_key}_mass", 0.0) if cam2_key else 0.0,
+                            "language_mass": masses.get("language_mass", 0),
+                            "state_mass": masses.get("state_mass", 0),
+                            "suffix_mass": masses.get("suffix_mass", 0),
+                            "other_mass": masses.get("other_mass", 0),
                         }
                         all_metrics_rows.append(row)
 
@@ -1054,7 +1293,12 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
             )
 
             if metrics:
-                for layer_idx, m in zip(layer_indices, metrics):
+                image_feature_keys = list(policy.config.image_features.keys()) if isinstance(policy.config.image_features, dict) else list(policy.config.image_features)
+                cam1_key = image_feature_keys[0] if len(image_feature_keys) > 0 else None
+                cam2_key = image_feature_keys[1] if len(image_feature_keys) > 1 else None
+
+                for metric_record in metrics:
+                    masses = metric_record.get("masses", {})
                     row = {
                         "model_name": model_name,
                         "method": method,
@@ -1063,13 +1307,17 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                         "phase": "initial",
                         "success": None,
                         "grasp_reached": None,
-                        "layer": layer_idx,
-                        "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
-                        "camera2_mass": m.get("camera2_mass", 0),
-                        "language_mass": m.get("language_mass", 0),
-                        "state_mass": m.get("state_mass", 0),
-                        "suffix_mass": m.get("suffix_mass", 0),
-                        "other_mass": m.get("other_mass", 0),
+                        "layer": metric_record["layer_index"],
+                        "attention_source": metric_record.get("attention_source", "unknown"),
+                        "query_length": metric_record.get("query_length"),
+                        "key_length": metric_record.get("key_length"),
+                        "query_count": metric_record.get("query_count", 0),
+                        "camera1_mass": masses.get(f"{cam1_key}_mass", 0.0) if cam1_key else 0.0,
+                        "camera2_mass": masses.get(f"{cam2_key}_mass", 0.0) if cam2_key else 0.0,
+                        "language_mass": masses.get("language_mass", 0),
+                        "state_mass": masses.get("state_mass", 0),
+                        "suffix_mass": masses.get("suffix_mass", 0),
+                        "other_mass": masses.get("other_mass", 0),
                     }
                     all_metrics_rows.append(row)
 
@@ -1159,6 +1407,7 @@ def main():
         fieldnames = [
             "model_name", "method", "camera", "seed", "phase",
             "success", "grasp_reached", "layer",
+            "attention_source", "query_length", "key_length", "query_count",
             "camera1_mass", "camera2_mass", "language_mass", "state_mass",
             "suffix_mass", "other_mass"
         ]

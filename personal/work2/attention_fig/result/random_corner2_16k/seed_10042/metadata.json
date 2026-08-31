@@ -1,0 +1,31 @@
+{
+  "model_name": "random_corner2_16k",
+  "method": "random",
+  "camera_name": "corner2,gripperPOV",
+  "seed": 10042,
+  "mode": "probe",
+  "query_mode": "mean_suffix",
+  "layer_indices": [
+    0,
+    3,
+    7,
+    11
+  ],
+  "average_heads": true,
+  "max_steps": 500,
+  "phase_detection_thresholds": {
+    "gripper_object_dist_pre_grasp": 0.15,
+    "object_height_post_grasp": 0.02,
+    "object_goal_dist_pre_place": 0.12
+  },
+  "phases": {},
+  "episode_metrics": {},
+  "obj_init_pos": "[-0.04702116  0.68871057  0.02      ]",
+  "goal_pos": "[0.1 0.8 0.2]",
+  "state": [
+    0.0047398237114848725,
+    0.6013941554408069,
+    0.1951077138533845,
+    1.0
+  ]
+}
