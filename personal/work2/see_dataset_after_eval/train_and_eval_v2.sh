@@ -14,9 +14,11 @@ DATASET_NAME=${6:-corner3}
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_${DATASET_NAME}"
 OUR_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our"
 V2_DIR="/data/zhonglinye/jun/lerobot/personal/work2/see_dataset_after_eval"
+TRAIN_SCRIPT_DIR="$PROJECT_ROOT/duibi/train_and_eval_scripts"
 SUBSET_DIR="$OUTPUT_BASE_DIR/subsets"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
 EVAL_DIR="$OUTPUT_BASE_DIR/eval_results"
@@ -27,10 +29,10 @@ mkdir -p "$SUBSET_DIR" "$OUTPUT_BASE_DIR" "$LOG_DIR" "$EVAL_DIR"
 # Experiment name
 if [ "$MODE" = "uniform" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
-    SELECT_SCRIPT="$SCRIPT_DIR/select_uniform_episodes.py"
+    SELECT_SCRIPT="$TRAIN_SCRIPT_DIR/select_uniform_episodes.py"
 elif [ "$MODE" = "random" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
-    SELECT_SCRIPT="$SCRIPT_DIR/select_random_episodes.py"
+    SELECT_SCRIPT="$TRAIN_SCRIPT_DIR/select_random_episodes.py"
 elif [ "$MODE" = "dynamicanchor" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT=""

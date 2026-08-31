@@ -53,44 +53,39 @@ DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "personal/work2/attention_fig/result"
 GRIPPER_OBJECT_DIST_PRE_GRASP = 0.15
 OBJECT_HEIGHT_POST_GRASP = 0.02
 OBJECT_GOAL_DIST_PRE_PLACE = 0.12
-
 MODEL_CONFIGS = [
     {
         "name": "random_corner_16k",
         "method": "random",
         "camera_name": "corner,gripperPOV",
-        "path": "personal/work2/duibi/random_42/random_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/random_42_corner/random_112_seed42/checkpoints/016000/pretrained_model",
     },
     {
         "name": "uniform_corner_16k",
         "method": "uniform",
         "camera_name": "corner,gripperPOV",
-        "path": "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/uniform_42_corner/uniform_112_seed42/checkpoints/016000/pretrained_model",
     },
     {
         "name": "ours_corner_16k",
         "method": "ours",
         "camera_name": "corner,gripperPOV",
-        "path": "personal/work2/duibi/ours_42/ours_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/ours_112_seed42_corner/dynamicanchor_112_seed42/checkpoints/016000/pretrained_model",
     },
+
     {
         "name": "random_corner2_16k",
         "method": "random",
         "camera_name": "corner2,gripperPOV",
-        "path": "personal/work2/duibi/random_42_corner3/random_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/random_42_corner2/random_112_seed42/checkpoints/016000/pretrained_model",
     },
     {
         "name": "uniform_corner2_16k",
         "method": "uniform",
         "camera_name": "corner2,gripperPOV",
-        "path": "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/uniform_42_corner2/uniform_112_seed42/checkpoints/016000/pretrained_model",
     },
-    {
-        "name": "ours_corner2_16k",
-        "method": "ours",
-        "camera_name": "corner2,gripperPOV",
-        "path": "personal/work2/duibi/ours_42/ours_112_seed42/checkpoints/016000/pretrained_model",
-    },
+
     {
         "name": "random_corner3_16k",
         "method": "random",
@@ -101,13 +96,13 @@ MODEL_CONFIGS = [
         "name": "uniform_corner3_16k",
         "method": "uniform",
         "camera_name": "corner3,gripperPOV",
-        "path": "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/uniform_42_corner3/uniform_112_seed42/checkpoints/016000/pretrained_model",
     },
     {
         "name": "ours_corner3_16k",
         "method": "ours",
         "camera_name": "corner3,gripperPOV",
-        "path": "personal/work2/duibi/ours_42/ours_112_seed42/checkpoints/016000/pretrained_model",
+        "path": "personal/work2/duibi/ours_112_seed42_corner3/dynamicanchor_112_seed42/checkpoints/016000/pretrained_model",
     },
 ]
 

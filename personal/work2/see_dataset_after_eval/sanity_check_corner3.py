@@ -28,7 +28,9 @@ from sic_v2 import FixedAnchorSIC
 from iterative_select_episodes_v2 import (
     load_embeddings,
     select_initial_b0_random,
-    sequential_greedy_select,
+    sequential_greedy_select
+)
+from analysis_utils import (
     compute_fixed_universe_sic,
     compute_pairwise_redundancy,
     compute_mean_nearest_selected_distance

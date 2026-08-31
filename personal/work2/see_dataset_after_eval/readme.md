@@ -153,3 +153,78 @@ V2 的 `--b0-strategy random --seed 42` 产生的 B0 与 V1 的 `rng.choice()` �
 - 现有训练好的 checkpoint：未修改
 - Ours-v1 结果：未修改
 - `extract_embeddings.py`：未修改
+
+## WARNING: Training-time camera mismatch
+
+`train_and_eval_v2.sh` 中的 training-time env eval camera 仍写死为 `corner`：
+
+```bash
+--env.camera_name="corner,gripperPOV"
+```
+
+因此 corner2 / corner3 的内置 16-episode eval **不能作为最终 benchmark**。
+
+最终 benchmark 应继续使用 standalone `lerobot-eval`。
+
+## 两个独立的研究问题
+
+本项目涉及两个独立但相关的问题：
+
+### A. Ours-v2 selection algorithm
+
+通过固定 reference anchor universe 和预计算 kernel matrix，
+实现更公平、更高效的 SIC-based episode selection。
+
+### B. Dataset / embedding hypothesis validation
+
+验证 SmolVLM 提取出的 episode embedding 是否真的构成一个
+与 MetaWorld task state 有意义对应的表示空间。
+
+**重要：** Ours-v2 fixed SIC 更高，不代表 policy success 一定更高。
+必须先验证 embedding representation 本身是否与 task-state structure 相关。
+
+只有当 embedding 确实编码了有意义的 task-state geometry 后，
+继续优化 SIC episode selection 才有研究意义。
+
+## Dataset Embedding Analysis
+
+新增 `analyze_dataset_embedding.py` 用于验证 embedding 的 distinguishability 和 coverage。
+
+### 运行示例
+
+```bash
+python personal/work2/see_dataset_after_eval/analyze_dataset_embedding.py \
+    --dataset-root /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_corner3 \
+    --embeddings-dir /path/to/existing/embeddings \
+    --random-subset /path/to/random_subset.json \
+    --uniform-subset /path/to/uniform_subset.json \
+    --ours-subset /path/to/ours_subset.json \
+    --output-dir personal/work2/see_dataset_after_eval/analysis_results/corner3 \
+    --n-bootstrap 1000 \
+    --seed 42
+```
+
+### 输出文件
+
+每个 dataset 输出：
+- `analysis_summary.json` - 完整分析结果
+- `embedding_metrics.csv` - embedding 统计指标
+- `coverage_comparison.csv` - subset coverage 比较
+- `analysis_report.md` - 人类可读报告（包含表格和假设评估）
+- `figures/` - 可视化图表
+
+### 核心假设
+
+- **H1**: Embedding 是否具有可区分性？
+- **H2**: Embedding distance 是否具有 task-state geometry？
+- **H3**: Ours subset 是否显著优于 random coverage？
+
+### Phase representation warning
+
+当前 embedding 主要验证 initial/pre-grasp representation，
+不能证明 transport/place phase representation 充分。
+
+建议后续工作：
+1. 提取不同 phase 的 embedding 并分别分析
+2. 验证 embedding 是否编码 transport/place phase 信息
+3. 分析 phase representation 与 task success 的关系

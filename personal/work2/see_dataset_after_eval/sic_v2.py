@@ -113,28 +113,127 @@ def build_kernel_matrices(
 
 def check_embeddings_valid(
     phi_globals: np.ndarray,
-    phi_wrists: np.ndarray
-) -> Tuple[bool, str]:
+    phi_wrists: np.ndarray,
+    near_dup_cosine_threshold: float = 0.99999
+) -> Dict:
     """
-    检查 embedding 是否有 NaN / Inf / duplicate
+    检查 embedding 是否有 NaN / Inf / zero-norm / duplicate
 
     返回:
-        (is_valid, error_message)
+        {
+            "valid": bool,
+            "errors": [],
+            "warnings": [],
+            "stats": {
+                "n_episodes": int,
+                "global_dim": int,
+                "wrist_dim": int,
+                "n_exact_dup_global": int,
+                "n_exact_dup_wrist": int,
+                "n_near_dup_global": int,
+                "n_near_dup_wrist": int,
+                "zero_norm_global": int,
+                "zero_norm_wrist": int,
+            }
+        }
     """
+    result = {
+        "valid": True,
+        "errors": [],
+        "warnings": [],
+        "stats": {
+            "n_episodes": len(phi_globals),
+            "global_dim": phi_globals.shape[1],
+            "wrist_dim": phi_wrists.shape[1],
+            "n_exact_dup_global": 0,
+            "n_exact_dup_wrist": 0,
+            "n_near_dup_global": 0,
+            "n_near_dup_wrist": 0,
+            "zero_norm_global": 0,
+            "zero_norm_wrist": 0,
+        }
+    }
+
     if np.any(np.isnan(phi_globals)):
-        return False, "phi_globals contains NaN"
+        result["valid"] = False
+        result["errors"].append("phi_globals contains NaN")
     if np.any(np.isnan(phi_wrists)):
-        return False, "phi_wrists contains NaN"
+        result["valid"] = False
+        result["errors"].append("phi_wrists contains NaN")
     if np.any(np.isinf(phi_globals)):
-        return False, "phi_globals contains Inf"
+        result["valid"] = False
+        result["errors"].append("phi_globals contains Inf")
     if np.any(np.isinf(phi_wrists)):
-        return False, "phi_wrists contains Inf"
+        result["valid"] = False
+        result["errors"].append("phi_wrists contains Inf")
 
     n = len(phi_globals)
     if n == 0:
-        return False, "No embeddings provided"
+        result["valid"] = False
+        result["errors"].append("No embeddings provided")
+        return result
 
-    return True, ""
+    norms_global = np.linalg.norm(phi_globals, axis=1)
+    norms_wrist = np.linalg.norm(phi_wrists, axis=1)
+
+    zero_g = int(np.sum(norms_global < 1e-10))
+    zero_w = int(np.sum(norms_wrist < 1e-10))
+    result["stats"]["zero_norm_global"] = zero_g
+    result["stats"]["zero_norm_wrist"] = zero_w
+
+    if zero_g > 0:
+        result["valid"] = False
+        result["errors"].append(f"{zero_g} phi_globals have zero norm")
+    if zero_w > 0:
+        result["valid"] = False
+        result["errors"].append(f"{zero_w} phi_wrists have zero norm")
+
+    def count_exact_duplicates(phi):
+        n_eps = len(phi)
+        seen = set()
+        dup_count = 0
+        for i in range(n_eps):
+            key = tuple(phi[i].round(decimals=8))
+            if key in seen:
+                dup_count += 1
+            else:
+                seen.add(key)
+        return dup_count
+
+    result["stats"]["n_exact_dup_global"] = count_exact_duplicates(phi_globals)
+    result["stats"]["n_exact_dup_wrist"] = count_exact_duplicates(phi_wrists)
+
+    if result["stats"]["n_exact_dup_global"] > 0:
+        result["valid"] = False
+        result["errors"].append(f"{result['stats']['n_exact_dup_global']} exact duplicate phi_globals")
+    if result["stats"]["n_exact_dup_wrist"] > 0:
+        result["valid"] = False
+        result["errors"].append(f"{result['stats']['n_exact_dup_wrist']} exact duplicate phi_wrists")
+
+    if norms_global.min() > 1e-10 and norms_wrist.min() > 1e-10:
+        phi_g_norm = phi_globals / norms_global[:, None]
+        phi_w_norm = phi_wrists / norms_wrist[:, None]
+
+        cos_sim_g = phi_g_norm @ phi_g_norm.T
+        cos_sim_w = phi_w_norm @ phi_w_norm.T
+
+        np.fill_diagonal(cos_sim_g, -1.0)
+        np.fill_diagonal(cos_sim_w, -1.0)
+
+        near_g = int(np.sum(cos_sim_g > near_dup_cosine_threshold))
+        near_w = int(np.sum(cos_sim_w > near_dup_cosine_threshold))
+
+        result["stats"]["n_near_dup_global"] = near_g // 2
+        result["stats"]["n_near_dup_wrist"] = near_w // 2
+
+        if near_g > 0 or near_w > 0:
+            result["warnings"].append(
+                f"Near-duplicate embeddings detected: "
+                f"global={result['stats']['n_near_dup_global']}, "
+                f"wrist={result['stats']['n_near_dup_wrist']}"
+            )
+
+    return result
 
 
 class FixedAnchorSIC:
@@ -170,9 +269,9 @@ class FixedAnchorSIC:
             alpha: 次数软化系数
             lambda_wrist: wrist 权重
         """
-        valid, err = check_embeddings_valid(phi_globals, phi_wrists)
-        if not valid:
-            raise ValueError(f"Invalid embeddings: {err}")
+        validation_result = check_embeddings_valid(phi_globals, phi_wrists)
+        if not validation_result["valid"]:
+            raise ValueError(f"Invalid embeddings: {validation_result['errors']}")
 
         self.episode_indices = list(episode_indices)
         self.n_episodes = len(episode_indices)
