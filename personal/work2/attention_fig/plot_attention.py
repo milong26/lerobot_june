@@ -1,16 +1,27 @@
 """
-功能：代码中定义模型路径列表比如personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model
-根据模型路径，采用lerobot的形式加载模型
-利用metaworld生成pick-place-v3随机种子（定义10042）的场景的第一张top和wrist图以及state和task作为输入
-绘制不同模型的注意力图。
-要求标注英文
-图片保存在personal/work2/attention_fig/result中，以模型文件名random_112_seed42命名
+本工具用于分析 policy-level attention / input utilization，不用于证明 embedding separability 或 SIC coverage。
+
+目标：对已训练好的 SmolVLA checkpoint 做 attention 分析，研究 Random / Uniform / Ours 模型在
+MetaWorld pick-place-v3 中到底关注了哪些输入，尤其关注为什么当前模型 grasp success 很高，
+但最终 task success 明显更低的问题。
+
+回答的研究问题：
+1. 模型在 initial 阶段主要看 global camera 还是 wrist camera？
+2. pre-grasp 阶段 wrist attention 是否上升？
+3. grasp 后模型是否增加对 global scene / goal-related visual tokens 的关注？
+4. Random / Uniform / Ours 在 post-grasp / pre-place 阶段的 attention pattern 是否不同？
+5. Ours 是否因为训练数据选择导致模型过度关注某一路视觉输入？
+6. attention pattern 是否和最终 success / failure 有关系？
 """
 
 import os
 import sys
 import argparse
+import json
+import csv
+import types
 from pathlib import Path
+from dataclasses import dataclass, field
 
 import cv2
 import matplotlib
@@ -19,12 +30,10 @@ import numpy as np
 import torch
 from PIL import Image
 
-# 设置环境变量 - 必须在导入mujoco/gymnasium之前设置
 os.environ["MUJOCO_GL"] = "egl"
 os.environ["PYOPENGL_PLATFORM"] = "egl"
 os.environ["EGL_DEVICE_ID"] = "0"
 
-# 添加lerobot到路径
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
@@ -33,235 +42,367 @@ from lerobot.envs.metaworld import MetaworldEnv
 from lerobot.utils.constants import OBS_LANGUAGE_TOKENS, OBS_LANGUAGE_ATTENTION_MASK, OBS_STATE
 
 # ============================================================
-# 配置
+# Configuration constants
 # ============================================================
 
-# 模型路径列表 - 在此添加你的模型路径
-MODEL_PATHS = [
-    "personal/work2/duibi/random_42/random_112_seed42/checkpoints/000200/pretrained_model",
-    # 可以添加更多模型路径
-    "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/000200/pretrained_model",
+TASK = "pick-place-v3"
+DEFAULT_SEED = 10042
+DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "personal/work2/attention_fig/result"
+
+# Phase detection thresholds
+GRIPPER_OBJECT_DIST_PRE_GRASP = 0.15
+OBJECT_HEIGHT_POST_GRASP = 0.02
+OBJECT_GOAL_DIST_PRE_PLACE = 0.12
+
+MODEL_CONFIGS = [
+    {
+        "name": "random_corner_16k",
+        "method": "random",
+        "camera_name": "corner,gripperPOV",
+        "path": "personal/work2/duibi/random_42/random_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "uniform_corner_16k",
+        "method": "uniform",
+        "camera_name": "corner,gripperPOV",
+        "path": "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "ours_corner_16k",
+        "method": "ours",
+        "camera_name": "corner,gripperPOV",
+        "path": "personal/work2/duibi/ours_42/ours_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "random_corner2_16k",
+        "method": "random",
+        "camera_name": "corner2,gripperPOV",
+        "path": "personal/work2/duibi/random_42_corner3/random_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "uniform_corner2_16k",
+        "method": "uniform",
+        "camera_name": "corner2,gripperPOV",
+        "path": "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "ours_corner2_16k",
+        "method": "ours",
+        "camera_name": "corner2,gripperPOV",
+        "path": "personal/work2/duibi/ours_42/ours_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "random_corner3_16k",
+        "method": "random",
+        "camera_name": "corner3,gripperPOV",
+        "path": "personal/work2/duibi/random_42_corner3/random_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "uniform_corner3_16k",
+        "method": "uniform",
+        "camera_name": "corner3,gripperPOV",
+        "path": "personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/016000/pretrained_model",
+    },
+    {
+        "name": "ours_corner3_16k",
+        "method": "ours",
+        "camera_name": "corner3,gripperPOV",
+        "path": "personal/work2/duibi/ours_42/ours_112_seed42/checkpoints/016000/pretrained_model",
+    },
 ]
 
-# MetaWorld 配置
-TASK = "pick-place-v3"
-SEED = 10042
-CAMERA_NAMES = "corner2,gripperPOV"  # top相机和wrist相机
+PHASES = ["initial", "pre_grasp", "post_grasp", "pre_place"]
 
-# 输出目录
-OUTPUT_DIR = PROJECT_ROOT / "personal/work2/attention_fig/result"
-OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-
-# 注意力可视化配置
-N_VIZ_LAYERS = 4  # 可视化前4层
-N_VIZ_HEADS = 4   # 每层可视化前4个头
+DEFAULT_LAYERS = [0, 3, 7, 11]
 
 
 # ============================================================
-# 注意力提取 Hook
+# Attention capture hook
 # ============================================================
-
-class AttentionCaptureHook:
-    """Hook to capture attention weights from SmolVLA's eager_attention_forward."""
-    
-    def __init__(self, vlm_with_expert):
-        self.vlm_with_expert = vlm_with_expert
-        self.attentions = []
-        self.hooks = []
-        self.layer_counter = 0
-        self._register_hooks()
-    
-    def _register_hooks(self):
-        """Register forward hooks on the self_attn modules to capture Q, K, V before attention computation."""
-        vlm_model = self.vlm_with_expert.get_vlm_model()
-        text_layers = vlm_model.text_model.layers
-        
-        # Hook on each VLM layer's self_attn to capture inputs
-        for layer_idx, layer in enumerate(text_layers):
-            # Hook on the entire self_attn module's forward
-            hook = layer.self_attn.register_forward_hook(
-                self._make_vlm_hook(layer_idx)
-            )
-            self.hooks.append(hook)
-        
-        # Hook on expert layers
-        for layer_idx, layer in enumerate(self.vlm_with_expert.lm_expert.layers):
-            if layer is not None:
-                hook = layer.self_attn.register_forward_hook(
-                    self._make_expert_hook(layer_idx)
-                )
-                self.hooks.append(hook)
-    
-    def _make_vlm_hook(self, layer_idx):
-        """Create hook for VLM self-attention layer."""
-        def hook_fn(module, args, kwargs, output):
-            # args contains: (hidden_states, ...), but we need to capture from the forward call
-            # The self_attn forward receives hidden_states and optional args
-            pass
-        return hook_fn
-    
-    def _make_expert_hook(self, layer_idx):
-        """Create hook for expert self-attention layer."""
-        def hook_fn(module, args, kwargs, output):
-            pass
-        return hook_fn
-    
-    def clear(self):
-        self.attentions = []
-        self.layer_counter = 0
-    
-    def remove_hooks(self):
-        for hook in self.hooks:
-            hook.remove()
-        self.hooks = []
-
 
 class AttentionExtractor:
-    """Extract attention weights by wrapping the eager_attention_forward method."""
-    
+    """Extract attention weights by wrapping eager_attention_forward with full metadata."""
+
     def __init__(self, vlm_with_expert):
         self.vlm_with_expert = vlm_with_expert
         self.original_method = vlm_with_expert.eager_attention_forward
         self.captured_attentions = []
-        self.layer_idx = 0
+        self.call_index = 0
         self._wrap_method()
-    
+
     def _wrap_method(self):
-        """Wrap the eager_attention_forward to capture attention weights."""
         extractor = self
-        
+
         def wrapped_attention_forward(attention_mask, batch_size, head_dim, query_states, key_states, value_states):
-            # Convert attention_mask to boolean BEFORE calling original method
             if attention_mask.dtype != torch.bool:
                 attention_mask_bool = attention_mask.bool()
             else:
                 attention_mask_bool = attention_mask
-            
-            # Call original method with converted mask
+
             att_output = extractor.original_method(
                 attention_mask_bool, batch_size, head_dim, query_states, key_states, value_states
             )
-            
-            # Capture attention weights
+
             num_att_heads = extractor.vlm_with_expert.num_attention_heads
             num_key_value_heads = extractor.vlm_with_expert.num_key_value_heads
             num_key_value_groups = num_att_heads // num_key_value_heads
             sequence_length = key_states.shape[1]
-            
-            # Expand key_states to match query shape
+
             key_states_exp = key_states[:, :, :, None, :].expand(
                 batch_size, sequence_length, num_key_value_heads, num_key_value_groups, head_dim
             )
             key_states_exp = key_states_exp.reshape(
-                batch_size, sequence_length, num_key_value_heads * num_key_value_groups, head_dim
+                batch_size, sequence_length, num_att_heads, head_dim
             )
-            
-            # Compute attention weights
+
             query_states_fp32 = query_states.to(dtype=torch.float32).transpose(1, 2)
             key_states_fp32 = key_states_exp.to(dtype=torch.float32).transpose(1, 2)
-            
+
             att_weights = torch.matmul(query_states_fp32, key_states_fp32.transpose(2, 3))
             att_weights *= head_dim ** -0.5
-            
-            # Apply mask
+
             big_neg = torch.finfo(att_weights.dtype).min
             masked_att_weights = torch.where(attention_mask_bool[:, None, :, :], att_weights, big_neg)
             probs = torch.nn.functional.softmax(masked_att_weights, dim=-1)
-            
-            # Store attention weights
-            extractor.captured_attentions.append((extractor.layer_idx, probs.detach().cpu()))
-            extractor.layer_idx += 1
-            
+
+            extractor.captured_attentions.append({
+                "call_index": extractor.call_index,
+                "layer_index": extractor.call_index,
+                "probs": probs.detach().cpu(),
+                "query_length": query_states.shape[1],
+                "key_length": key_states.shape[1],
+                "num_heads": num_att_heads,
+            })
+            extractor.call_index += 1
+
             return att_output
-        
-        # Replace the method
-        import types
+
         extractor.vlm_with_expert.eager_attention_forward = types.MethodType(
             lambda self, *args, **kwargs: wrapped_attention_forward(*args, **kwargs),
             extractor.vlm_with_expert
         )
-    
+
     def reset(self):
-        """Reset captured attentions and layer counter."""
         self.captured_attentions = []
-        self.layer_idx = 0
-    
-    def get_attentions(self):
-        """Get captured attentions organized by layer."""
-        # Group by layer index
-        layer_attentions = {}
-        for layer_idx, attn_weights in self.captured_attentions:
-            if layer_idx not in layer_attentions:
-                layer_attentions[layer_idx] = []
-            layer_attentions[layer_idx].append(attn_weights)
-        
-        # Return list of attention tensors per layer
-        result = []
-        for layer_idx in sorted(layer_attentions.keys()):
-            # Average attention across calls in the same layer (if multiple)
-            avg_attn = torch.stack(layer_attentions[layer_idx]).mean(dim=0)
-            result.append(avg_attn)
-        
-        return result
-    
+        self.call_index = 0
+
     def restore(self):
-        """Restore original method."""
         self.vlm_with_expert.eager_attention_forward = self.original_method
 
 
 # ============================================================
-# 注意力提取
+# Token span tracking
+# ============================================================
+
+def compute_token_spans(policy, images, img_masks, lang_tokens, lang_masks, state):
+    """Compute exact token spans for each modality in the prefix sequence.
+
+    Returns dict with keys: camera1, camera2, language, state, each with (start, end).
+    Also returns total prefix length and image token counts per camera.
+    """
+    vlm = policy.model.vlm_with_expert
+    bsize = state.shape[0]
+    device = state.device
+
+    spans = {}
+    current_pos = 0
+    image_token_counts = {}
+
+    for img_idx, img_key in enumerate(policy.config.image_features):
+        if img_idx >= len(images):
+            break
+
+        special_token_count = 0
+        if policy.model.add_image_special_tokens:
+            special_token_count += 2
+
+        img_emb = policy.model.vlm_with_expert.embed_image(images[img_idx])
+        num_img_tokens = img_emb.shape[1]
+        image_token_counts[img_key] = num_img_tokens
+
+        end_special = 1 if policy.model.add_image_special_tokens else 0
+
+        span_start = current_pos + special_token_count
+        span_end = span_start + num_img_tokens
+
+        spans[img_key] = (span_start, span_end)
+        current_pos = span_start + num_img_tokens + end_special
+
+    lang_emb = vlm.embed_language_tokens(lang_tokens)
+    num_lang_tokens = lang_emb.shape[1]
+    spans["language"] = (current_pos, current_pos + num_lang_tokens)
+    current_pos += num_lang_tokens
+
+    state_emb = policy.model.state_proj(state)
+    if state_emb.ndim == 2:
+        state_emb = state_emb[:, None, :]
+    num_state_tokens = state_emb.shape[1]
+    spans["state"] = (current_pos, current_pos + num_state_tokens)
+    current_pos += num_state_tokens
+
+    prefix_length = current_pos
+    suffix_length = policy.config.chunk_size
+
+    return spans, prefix_length, suffix_length, image_token_counts
+
+
+def get_image_grid_from_model(vlm_with_expert):
+    """Determine the image token grid layout from the VLM's vision encoder.
+
+    SmolVLM2-500M uses SigLIP with a ViT backbone. The connector maps patch tokens
+    to a sequence. We determine the grid by probing with a dummy image.
+    """
+    dummy = torch.zeros(1, 3, 224, 224, device=vlm_with_expert.vlm.device, dtype=vlm_with_expert.vlm.dtype)
+    with torch.no_grad():
+        emb = vlm_with_expert.embed_image(dummy)
+    n_tokens = emb.shape[1]
+
+    grid_size = int(round(n_tokens ** 0.5))
+    if grid_size * grid_size == n_tokens:
+        return grid_size, grid_size, n_tokens, False
+
+    vision_model = vlm_with_expert.get_vlm_model().vision_model
+    if hasattr(vision_model, 'config'):
+        vcfg = vision_model.config
+        if hasattr(vcfg, 'image_size') and hasattr(vcfg, 'patch_size'):
+            grid = vcfg.image_size // vcfg.patch_size
+            if grid * grid == n_tokens:
+                return grid, grid, n_tokens, False
+
+    return None, None, n_tokens, False
+
+
+# ============================================================
+# Environment and input creation
+# ============================================================
+
+def create_metaworld_input(task, seed, camera_name, device):
+    """Create MetaWorld environment and get observation.
+
+    Images are converted: uint8 [0,255] -> float32 / 255.0 -> [0,1]
+    This matches the real eval pipeline where prepare_images() does img * 2 - 1.
+    """
+    env = MetaworldEnv(
+        task=task,
+        camera_name=camera_name,
+        obs_type="pixels_agent_pos",
+        render_mode="rgb_array",
+        observation_width=480,
+        observation_height=480,
+    )
+
+    obs, info = env.reset(seed=seed)
+
+    top_image_raw = obs["pixels/top"]
+    wrist_image_raw = obs["pixels/wrist"] if "pixels/wrist" in obs else None
+    state = obs["agent_pos"]
+
+    top_image_np = top_image_raw.copy()
+    wrist_image_np = wrist_image_raw.copy() if wrist_image_raw is not None else None
+
+    top_img_chw = np.transpose(top_image_raw, (2, 0, 1))
+    top_img_tensor = torch.from_numpy(top_img_chw).unsqueeze(0).unsqueeze(0).float() / 255.0
+
+    if wrist_image_np is not None:
+        wrist_img_chw = np.transpose(wrist_image_np, (2, 0, 1))
+        wrist_img_tensor = torch.from_numpy(wrist_img_chw).unsqueeze(0).unsqueeze(0).float() / 255.0
+    else:
+        wrist_img_tensor = None
+
+    state_tensor = torch.from_numpy(state.copy()).unsqueeze(0).float()
+
+    print(f"  camera1 (top) shape={top_img_tensor.shape} dtype={top_img_tensor.dtype} "
+          f"min={top_img_tensor.min().item():.4f} max={top_img_tensor.max().item():.4f}")
+    if wrist_img_tensor is not None:
+        print(f"  camera2 (wrist) shape={wrist_img_tensor.shape} dtype={wrist_img_tensor.dtype} "
+              f"min={wrist_img_tensor.min().item():.4f} max={wrist_img_tensor.max().item():.4f}")
+
+    return {
+        "observation.images.camera1": top_img_tensor.to(device),
+        "observation.images.camera2": wrist_img_tensor.to(device) if wrist_img_tensor is not None else None,
+        "observation.state": state_tensor.to(device),
+        "task": env.task_description,
+        "top_image_np": top_image_np,
+        "wrist_image_np": wrist_image_np,
+        "state": state,
+        "env": env,
+        "info": info,
+    }
+
+
+def prepare_batch_for_model(model_data, policy, device):
+    """Prepare batch in the format expected by the policy."""
+    batch = {}
+
+    for img_key in policy.config.image_features:
+        if img_key in model_data and model_data[img_key] is not None:
+            batch[img_key] = model_data[img_key]
+
+    batch["observation.state"] = model_data["observation.state"]
+
+    processor = policy.model.vlm_with_expert.processor
+    task = model_data["task"]
+
+    text_inputs = processor.tokenizer(
+        task,
+        return_tensors="pt",
+        padding="max_length",
+        max_length=processor.tokenizer.model_max_length if hasattr(processor.tokenizer, 'model_max_length') else 512,
+        truncation=True,
+    )
+
+    batch["observation.language.tokens"] = text_inputs["input_ids"].to(device)
+    batch["observation.language.attention_mask"] = text_inputs["attention_mask"].to(device)
+
+    return batch
+
+
+# ============================================================
+# Attention extraction
 # ============================================================
 
 def extract_attention_from_model(policy, batch, device):
-    """
-    Extract attention weights from SmolVLA model using wrapped attention method.
-    Runs a forward pass through the model to capture attention weights.
+    """Extract attention weights from SmolVLA model.
+
+    Runs in eval mode (not training mode) to avoid dropout effects.
     """
     vlm_with_expert = policy.model.vlm_with_expert
-    
-    # Create attention extractor
+
     extractor = AttentionExtractor(vlm_with_expert)
-    
+
     try:
-        # Prepare inputs using policy methods (not policy.model)
         images, img_masks = policy.prepare_images(batch)
         state = policy.prepare_state(batch)
         lang_tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
         lang_masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
-        
-        # Run a forward pass (training mode to get attention)
-        # We use the model's forward method which calls vlm_with_expert.forward
-        # This will capture attention weights through our wrapped method
-        extractor.reset()
-        
-        # Embed prefix
+
+        spans, prefix_length, suffix_length, image_token_counts = compute_token_spans(
+            policy, images, img_masks, lang_tokens, lang_masks, state
+        )
+
         prefix_embs, prefix_pad_masks, prefix_att_masks = policy.model.embed_prefix(
             images, img_masks, lang_tokens, lang_masks, state=state
         )
-        
-        # Create dummy actions and timestep for suffix
+
         bsize = state.shape[0]
         chunk_size = policy.config.chunk_size
         max_action_dim = policy.config.max_action_dim
         dummy_actions = torch.zeros(bsize, chunk_size, max_action_dim, device=device)
         dummy_timestep = torch.zeros(bsize, device=device)
-        
-        # Embed suffix
+
         suffix_embs, suffix_pad_masks, suffix_att_masks = policy.model.embed_suffix(
             dummy_actions, dummy_timestep
         )
-        
-        # Combine prefix and suffix
+
         pad_masks = torch.cat([prefix_pad_masks, suffix_pad_masks], dim=1)
         att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)
-        
+
         from lerobot.policies.common.vla_utils import make_att_2d_masks
         att_2d_masks = make_att_2d_masks(pad_masks, att_masks)
         position_ids = torch.cumsum(pad_masks, dim=1) - 1
-        
-        # Run forward through vlm_with_expert to capture attention
-        # This simulates what happens in the model's forward pass
+
+        extractor.reset()
+
         with torch.no_grad():
             outputs, _ = vlm_with_expert.forward(
                 attention_mask=att_2d_masks,
@@ -270,347 +411,674 @@ def extract_attention_from_model(policy, batch, device):
                 inputs_embeds=[prefix_embs, suffix_embs],
                 use_cache=False,
             )
-        
-        # Get captured attentions
-        attentions = extractor.get_attentions()
-        
-        print(f"Captured {len(attentions)} layers of attention weights")
-        if len(attentions) > 0:
-            print(f"Attention[0] shape: {attentions[0].shape}")
-        
-        return attentions
-        
+
+        captured = extractor.captured_attentions
+
+        print(f"  Captured {len(captured)} attention calls")
+        if captured:
+            print(f"  Attention[0] probs shape: {captured[0]['probs'].shape}")
+            print(f"  query_length={captured[0]['query_length']}, key_length={captured[0]['key_length']}")
+
+        return captured, spans, prefix_length, suffix_length, image_token_counts
+
     except Exception as e:
-        print(f"Error during attention extraction: {e}")
+        print(f"  Error during attention extraction: {e}")
         import traceback
         traceback.print_exc()
-        return []
+        return [], {}, 0, 0, {}
     finally:
-        # Restore original method
         extractor.restore()
 
 
 # ============================================================
-# 环境设置
+# Phase detection
 # ============================================================
 
-def create_metaworld_input(task, seed, device):
-    """Create metaworld environment and get first frame input."""
-    env = MetaworldEnv(
-        task=task,
-        camera_name="corner2,gripperPOV",
-        obs_type="pixels_agent_pos",
-        render_mode="rgb_array",
-        observation_width=480,
-        observation_height=480,
-    )
-    
-    obs, info = env.reset(seed=seed)
-    
-    # 获取top和wrist图像 - 根据metaworld.py的_format_raw_obs返回格式
-    top_image = obs["pixels/top"]  # HWC format, uint8
-    wrist_image = obs["pixels/wrist"]  # HWC format, uint8
-    state = obs["agent_pos"]  # 4-dim state
-    
-    # 保存原始图像用于可视化（保持HWC格式）
-    top_image_np = top_image.copy()
-    wrist_image_np = wrist_image.copy()
-    
-    # 转换为模型需要的格式 - 添加batch和time维度
-    # 模型期望: (batch, time, channels, height, width) 或 (batch, channels, height, width)
-    # 先转换为CHW格式
-    top_img_chw = np.transpose(top_image.copy(), (2, 0, 1))  # HWC -> CHW
-    wrist_img_chw = np.transpose(wrist_image.copy(), (2, 0, 1))
-    
-    # 转换为tensor并添加维度
-    top_img_tensor = torch.from_numpy(top_img_chw).unsqueeze(0).unsqueeze(0).float().to(device)  # (1, 1, 3, H, W)
-    wrist_img_tensor = torch.from_numpy(wrist_img_chw).unsqueeze(0).unsqueeze(0).float().to(device)
-    
-    state_tensor = torch.from_numpy(state.copy()).unsqueeze(0).float().to(device)
-    
-    task_description = env.task_description
-    
-    return {
-        "observation.images.camera1": top_img_tensor,
-        "observation.images.camera2": wrist_img_tensor,
-        "observation.state": state_tensor,
-        "task": task_description,
-        "top_image_np": top_image_np,
-        "wrist_image_np": wrist_image_np,
-        "state": state,
+def detect_phase_from_env(env, step, max_steps):
+    """Detect which phase the current step belongs to based on environment state.
+
+    Uses gripper-object distance, object height, and object-goal distance.
+    Returns phase name or None if no phase matches.
+    """
+    try:
+        mjc = env._env
+        if mjc is None:
+            return None
+
+        qpos = mjc.data.qpos.copy()
+
+        gripper_pos = qpos[:3]
+        object_pos = mjc.obj_init_pos.copy() if hasattr(mjc, 'obj_init_pos') and mjc.obj_init_pos is not None else None
+        goal_pos = mjc.goal.copy() if hasattr(mjc, 'goal') and mjc.goal is not None else None
+
+        if object_pos is None or goal_pos is None:
+            return None
+
+        gripper_object_dist = np.linalg.norm(gripper_pos - object_pos)
+        object_goal_dist = np.linalg.norm(object_pos - goal_pos)
+
+        object_z = object_pos[2] if len(object_pos) > 2 else 0.0
+
+        if step == 0:
+            return "initial"
+
+        if gripper_object_dist < GRIPPER_OBJECT_DIST_PRE_GRASP and object_z < OBJECT_HEIGHT_POST_GRASP:
+            return "pre_grasp"
+
+        if object_z > OBJECT_HEIGHT_POST_GRASP:
+            return "post_grasp"
+
+        if object_z > OBJECT_HEIGHT_POST_GRASP and object_goal_dist < OBJECT_GOAL_DIST_PRE_PLACE:
+            return "pre_place"
+
+        return None
+
+    except Exception as e:
+        print(f"  Warning: phase detection failed: {e}")
+        return None
+
+
+def run_rollout_with_phases(policy, env, model_data, device, max_steps, mode):
+    """Run a rollout and collect observations at different phases.
+
+    Returns dict of phase -> observation data.
+    """
+    phase_data = {}
+    phases_seen = set()
+    episode_metrics = {
+        "first_grasp_step": None,
+        "grasp_reached": False,
+        "max_object_height": 0.0,
+        "min_object_goal_distance_after_grasp": None,
+        "final_object_goal_distance": None,
+        "success": False,
+        "episode_length": 0,
+        "post_grasp_drop": None,
+        "release_detected": None,
     }
 
+    obs = model_data
+    step = 0
+    grasp_detected = False
+    prev_object_z = 0.0
 
-def prepare_batch_for_model(model_data, policy, device):
-    """Prepare batch in the format expected by the policy."""
-    # 根据模型的image_features配置构建batch
-    batch = {}
-    
-    # 处理图像 - 使用模型配置中的image_features
-    for img_key in policy.config.image_features:
-        if img_key in model_data:
-            batch[img_key] = model_data[img_key]
-    
-    # 处理state
-    batch["observation.state"] = model_data["observation.state"]
-    
-    # 处理language/task
-    processor = policy.model.vlm_with_expert.processor
-    task = model_data["task"]
-    
-    text_inputs = processor.tokenizer(
-        task,
-        return_tensors="pt",
-        padding="max_length",
-        max_length=processor.tokenizer.model_max_length if hasattr(processor.tokenizer, 'model_max_length') else 512,
-        truncation=True,
+    for step in range(max_steps):
+        phase = detect_phase_from_env(env, step, max_steps)
+
+        if phase and phase not in phases_seen:
+            phases_seen.add(phase)
+
+            batch = prepare_batch_for_model(obs, policy, device)
+            captured, spans, prefix_len, suffix_len, img_token_counts = extract_attention_from_model(
+                policy, batch, device
+            )
+
+            phase_data[phase] = {
+                "captured": captured,
+                "spans": spans,
+                "prefix_length": prefix_len,
+                "suffix_length": suffix_len,
+                "image_token_counts": img_token_counts,
+                "top_image": obs["top_image_np"].copy(),
+                "wrist_image": obs["wrist_image_np"].copy() if obs["wrist_image_np"] is not None else None,
+                "step": step,
+                "state": obs["state"].copy(),
+            }
+
+            print(f"  Phase '{phase}' detected at step {step}")
+
+        try:
+            mjc = env._env
+            if mjc is not None:
+                qpos = mjc.data.qpos.copy()
+                object_pos = mjc.obj_init_pos.copy() if hasattr(mjc, 'obj_init_pos') and mjc.obj_init_pos is not None else None
+                goal_pos = mjc.goal.copy() if hasattr(mjc, 'goal') and mjc.goal is not None else None
+
+                if object_pos is not None:
+                    object_z = object_pos[2] if len(object_pos) > 2 else 0.0
+                    episode_metrics["max_object_height"] = max(episode_metrics["max_object_height"], object_z)
+
+                    if object_z > OBJECT_HEIGHT_POST_GRASP:
+                        if not grasp_detected:
+                            grasp_detected = True
+                            episode_metrics["first_grasp_step"] = step
+                            episode_metrics["grasp_reached"] = True
+
+                    if grasp_detected and goal_pos is not None:
+                        obj_goal_dist = np.linalg.norm(object_pos[:2] - goal_pos[:2])
+                        if episode_metrics["min_object_goal_distance_after_grasp"] is None:
+                            episode_metrics["min_object_goal_distance_after_grasp"] = obj_goal_dist
+                        else:
+                            episode_metrics["min_object_goal_distance_after_grasp"] = min(
+                                episode_metrics["min_object_goal_distance_after_grasp"], obj_goal_dist
+                            )
+
+                    if goal_pos is not None:
+                        episode_metrics["final_object_goal_distance"] = np.linalg.norm(
+                            object_pos[:2] - goal_pos[:2]
+                        )
+
+                    prev_object_z = object_z
+        except Exception:
+            pass
+
+        batch = prepare_batch_for_model(obs, policy, device)
+        with torch.no_grad():
+            actions = policy.predict_action_chunk(batch)
+        action = actions[0, 0].cpu().numpy()
+
+        obs_raw, reward, terminated, truncated, info = env.step(action)
+        episode_metrics["episode_length"] = step + 1
+
+        if info.get("grasp_success", 0):
+            episode_metrics["grasp_reached"] = True
+            if not grasp_detected:
+                episode_metrics["first_grasp_step"] = step
+                grasp_detected = True
+
+        if info.get("is_success", False):
+            episode_metrics["success"] = True
+
+        obs = {
+            "observation.images.camera1": torch.from_numpy(
+                np.transpose(obs_raw["pixels/top"], (2, 0, 1))
+            ).unsqueeze(0).unsqueeze(0).float() / 255.0,
+            "observation.images.camera2": torch.from_numpy(
+                np.transpose(obs_raw["pixels/wrist"], (2, 0, 1))
+            ).unsqueeze(0).unsqueeze(0).float() / 255.0 if "pixels/wrist" in obs_raw else None,
+            "observation.state": torch.from_numpy(obs_raw["agent_pos"]).unsqueeze(0).float(),
+            "task": obs["task"],
+            "top_image_np": obs_raw["pixels/top"].copy(),
+            "wrist_image_np": obs_raw["pixels/wrist"].copy() if "pixels/wrist" in obs_raw else None,
+            "state": obs_raw["agent_pos"].copy(),
+            "env": env,
+            "info": info,
+        }
+
+        if terminated or truncated:
+            break
+
+    for phase in PHASES:
+        if phase not in phase_data:
+            phase_data[phase] = {"reached": False}
+
+    return phase_data, episode_metrics
+
+
+# ============================================================
+# Attention analysis
+# ============================================================
+
+def compute_attention_mass(attn_probs, spans, prefix_length, suffix_length, query_indices):
+    """Compute attention mass for each token span.
+
+    attn_probs: (batch, heads, query_len, key_len)
+    spans: dict of token_name -> (start, end)
+    query_indices: indices of query tokens to aggregate over
+    """
+    if len(attn_probs.shape) != 4:
+        return {}
+
+    probs = attn_probs[0]
+    selected = probs[:, query_indices, :]
+
+    masses = {}
+    total = 0.0
+
+    for name, (start, end) in spans.items():
+        if start < selected.shape[-1] and end <= selected.shape[-1]:
+            mass = selected[:, :, start:end].sum(dim=-1).mean().item()
+            masses[f"{name}_mass"] = mass
+            total += mass
+
+    suffix_start = prefix_length
+    suffix_end = prefix_length + suffix_length
+    if suffix_start < selected.shape[-1] and suffix_end <= selected.shape[-1]:
+        mass = selected[:, :, suffix_start:suffix_end].sum(dim=-1).mean().item()
+        masses["suffix_mass"] = mass
+        total += mass
+
+    masses["total_accounted"] = total
+    masses["other_mass"] = max(0.0, 1.0 - total)
+
+    return masses
+
+
+def get_query_indices(mode, prefix_length, suffix_length):
+    """Get query token indices based on aggregation strategy."""
+    total_seq = prefix_length + suffix_length
+
+    if mode == "last":
+        return [total_seq - 1]
+    elif mode == "mean_suffix":
+        return list(range(prefix_length, total_seq))
+    elif mode == "mean_all":
+        return list(range(total_seq))
+    else:
+        return [total_seq - 1]
+
+
+# ============================================================
+# Visualization
+# ============================================================
+
+def create_heatmap_from_attention(attn_1d, original_image, grid_h, grid_w):
+    """Create a heatmap overlay from 1D attention vector using known grid layout."""
+    h_img, w_img = original_image.shape[:2]
+
+    attn_2d = attn_1d[:grid_h * grid_w].reshape(grid_h, grid_w)
+    attn_2d = (attn_2d - attn_2d.min()) / (attn_2d.max() - attn_2d.min() + 1e-8)
+
+    attn_resized = cv2.resize(attn_2d, (w_img, h_img), interpolation=cv2.INTER_CUBIC)
+    attn_norm = (attn_resized - attn_resized.min()) / (attn_resized.max() - attn_resized.min() + 1e-8)
+    heatmap = cv2.applyColorMap((attn_norm * 255).astype(np.uint8), cv2.COLORMAP_JET)
+    heatmap = cv2.cvtColor(heatmap, cv2.COLOR_BGR2RGB)
+    overlay = cv2.addWeighted(original_image, 0.5, heatmap, 0.5, 0)
+
+    return overlay, attn_2d
+
+
+def generate_summary_figure(phase_data, model_name, method, phase_name, layer_indices,
+                           average_heads, query_mode, output_path, image_features):
+    """Generate a summary figure for one model/phase."""
+    if "reached" in phase_data and not phase_data["reached"]:
+        return None
+
+    captured = phase_data.get("captured", [])
+    if not captured:
+        return None
+
+    spans = phase_data.get("spans", {})
+    prefix_length = phase_data.get("prefix_length", 0)
+    suffix_length = phase_data.get("suffix_length", 0)
+    top_image = phase_data.get("top_image")
+    wrist_image = phase_data.get("wrist_image")
+    image_token_counts = phase_data.get("image_token_counts", {})
+
+    grid_h, grid_w, n_tokens, is_sqrt = get_image_grid_from_model(
+        phase_data.get("_vlm", None)
     )
-    
-    batch["observation.language.tokens"] = text_inputs["input_ids"].to(device)
-    batch["observation.language.attention_mask"] = text_inputs["attention_mask"].to(device)
-    
-    return batch
 
+    n_layers_viz = len(layer_indices)
+    n_cols = 3
+    n_rows = n_layers_viz + 1
 
-# ============================================================
-# 注意力可视化
-# ============================================================
-
-def visualize_attention(attentions, top_image, wrist_image, model_name, output_path):
-    """Visualize attention maps overlaid on images."""
-    if not attentions:
-        print(f"No attention maps to visualize for {model_name}")
-        return
-    
-    n_layers = len(attentions)
-    n_layers_viz = min(N_VIZ_LAYERS, n_layers)
-    
-    if n_layers_viz == 0:
-        print(f"No valid attention layers for {model_name}")
-        return
-    
-    # 获取第一个attention的shape来确定head数量
-    first_attn = attentions[0]
-    n_heads = first_attn.shape[1] if first_attn.ndim >= 2 else 1
-    n_heads_viz = min(N_VIZ_HEADS, n_heads)
-    
-    # 创建图形
-    fig_cols = n_heads_viz
-    fig_rows = n_layers_viz * 2 + 1  # +1 for original images
-    
-    fig, axes = plt.subplots(fig_rows, fig_cols, figsize=(fig_cols * 4, fig_rows * 3.5))
-    
-    if fig_rows == 1 and fig_cols == 1:
-        axes = np.array([[axes]])
-    elif fig_rows == 1:
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(n_cols * 5, n_rows * 4.5))
+    if n_rows == 1:
         axes = axes[np.newaxis, :]
-    elif fig_cols == 1:
-        axes = axes[:, np.newaxis]
-    
-    # 第一行显示原始图像
-    ax_wrist = axes[0, 0]
-    ax_wrist.imshow(wrist_image)
-    ax_wrist.set_title("Wrist Camera View", fontsize=12, fontweight='bold')
-    ax_wrist.axis("off")
-    
-    if fig_cols > 1:
-        ax_top = axes[0, 1]
-        ax_top.imshow(top_image)
-        ax_top.set_title("Top Camera View", fontsize=12, fontweight='bold')
-        ax_top.axis("off")
-    
-    # 隐藏第一行其他子图
-    for c in range(2, fig_cols):
-        axes[0, c].axis("off")
-    
-    # 获取图像尺寸
-    h_wrist, w_wrist = wrist_image.shape[:2]
-    h_top, w_top = top_image.shape[:2]
-    
-    # 可视化注意力
-    for layer_idx in range(n_layers_viz):
-        attn = attentions[layer_idx]
-        
-        for head_idx in range(n_heads_viz):
-            # 获取注意力权重 (batch, heads, seq_q, seq_k)
-            if attn.ndim == 4:
-                attn_map = attn[0, head_idx].cpu().float().numpy()
+
+    axes[0, 0].imshow(top_image)
+    axes[0, 0].set_title("Camera 1 (Top)", fontsize=12, fontweight='bold')
+    axes[0, 0].axis("off")
+
+    if wrist_image is not None:
+        axes[0, 1].imshow(wrist_image)
+        axes[0, 1].set_title("Camera 2 (Wrist)", fontsize=12, fontweight='bold')
+        axes[0, 1].axis("off")
+    else:
+        axes[0, 1].axis("off")
+
+    axes[0, 2].axis("off")
+
+    query_indices = get_query_indices(query_mode, prefix_length, suffix_length)
+
+    all_metrics = []
+
+    for viz_idx, layer_idx in enumerate(layer_indices):
+        if layer_idx >= len(captured):
+            for c in range(n_cols):
+                axes[viz_idx + 1, c].axis("off")
+            continue
+
+        attn_data = captured[layer_idx]
+        attn_probs = attn_data["probs"]
+
+        if attn_probs.ndim != 4:
+            continue
+
+        if average_heads:
+            avg_attn = attn_probs.mean(dim=1)
+            attn_for_viz = avg_attn[0, query_indices, :]
+            if attn_for_viz.ndim == 2:
+                attn_1d = attn_for_viz.mean(dim=0).cpu().numpy()
             else:
-                continue
-            
-            # 取最后一个query token的注意力分布（通常是最有信息的）
-            if attn_map.ndim == 2:
-                # attn_map shape: (seq_q, seq_k)
-                # Take attention from the last query token
-                attn_1d = attn_map[-1]  # Last row
-            else:
-                attn_1d = attn_map.flatten()
-            
-            # 将1D注意力重塑为2D网格（近似图像空间）
-            n_tokens = len(attn_1d)
-            grid_size = int(np.ceil(np.sqrt(n_tokens)))
-            attn_2d = np.zeros((grid_size, grid_size))
-            attn_2d.flat[:n_tokens] = attn_1d
-            
-            # 归一化
-            attn_2d = (attn_2d - attn_2d.min()) / (attn_2d.max() - attn_2d.min() + 1e-8)
-            
-            # 调整到图像尺寸 - Wrist
-            attn_wrist = cv2.resize(attn_2d, (w_wrist, h_wrist), interpolation=cv2.INTER_CUBIC)
-            attn_wrist_norm = (attn_wrist - attn_wrist.min()) / (attn_wrist.max() - attn_wrist.min() + 1e-8)
-            heatmap_wrist = cv2.applyColorMap((attn_wrist_norm * 255).astype(np.uint8), cv2.COLORMAP_JET)
-            heatmap_wrist = cv2.cvtColor(heatmap_wrist, cv2.COLOR_BGR2RGB)
-            overlay_wrist = cv2.addWeighted(wrist_image, 0.5, heatmap_wrist, 0.5, 0)
-            
-            # 调整到图像尺寸 - Top
-            attn_top = cv2.resize(attn_2d, (w_top, h_top), interpolation=cv2.INTER_CUBIC)
-            attn_top_norm = (attn_top - attn_top.min()) / (attn_top.max() - attn_top.min() + 1e-8)
-            heatmap_top = cv2.applyColorMap((attn_top_norm * 255).astype(np.uint8), cv2.COLORMAP_JET)
-            heatmap_top = cv2.cvtColor(heatmap_top, cv2.COLOR_BGR2RGB)
-            overlay_top = cv2.addWeighted(top_image, 0.5, heatmap_top, 0.5, 0)
-            
-            # 绘制Wrist注意力
-            row_wrist = layer_idx * 2 + 1
-            col = head_idx
-            ax = axes[row_wrist, col]
-            ax.imshow(overlay_wrist)
-            ax.set_title(f"Layer {layer_idx} / Head {head_idx}\n(Wrist Attention)", fontsize=10)
-            ax.axis("off")
-            
-            # 绘制Top注意力
-            row_top = row_wrist + 1
-            ax2 = axes[row_top, col]
-            ax2.imshow(overlay_top)
-            ax2.set_title(f"Layer {layer_idx} / Head {head_idx}\n(Top Attention)", fontsize=10)
-            ax2.axis("off")
-    
-    plt.suptitle(f"Attention Visualization - {model_name}", fontsize=14, fontweight='bold', y=1.01)
+                attn_1d = attn_for_viz.cpu().numpy()
+        else:
+            attn_1d = attn_probs[0, 0, query_indices[0], :].cpu().numpy()
+
+        cam1_key = None
+        cam2_key = None
+        for key in image_features:
+            if key in spans:
+                if cam1_key is None:
+                    cam1_key = key
+                else:
+                    cam2_key = key
+                    break
+
+        cam1_overlay = None
+        cam2_overlay = None
+
+        if cam1_key and cam1_key in spans:
+            c1_start, c1_end = spans[cam1_key]
+            cam1_attn = attn_1d[c1_start:c1_end]
+            if grid_h and grid_w:
+                cam1_overlay, _ = create_heatmap_from_attention(cam1_attn, top_image, grid_h, grid_w)
+
+        if cam2_key and cam2_key in spans and wrist_image is not None:
+            c2_start, c2_end = spans[cam2_key]
+            cam2_attn = attn_1d[c2_start:c2_end]
+            if grid_h and grid_w:
+                cam2_overlay, _ = create_heatmap_from_attention(cam2_attn, wrist_image, grid_h, grid_w)
+
+        if cam1_overlay is not None:
+            axes[viz_idx + 1, 0].imshow(cam1_overlay)
+            axes[viz_idx + 1, 0].set_title(f"Layer {layer_idx} - Camera 1 Attention", fontsize=10)
+            axes[viz_idx + 1, 0].axis("off")
+        else:
+            axes[viz_idx + 1, 0].axis("off")
+
+        if cam2_overlay is not None:
+            axes[viz_idx + 1, 1].imshow(cam2_overlay)
+            axes[viz_idx + 1, 1].set_title(f"Layer {layer_idx} - Camera 2 Attention", fontsize=10)
+            axes[viz_idx + 1, 1].axis("off")
+        else:
+            axes[viz_idx + 1, 1].axis("off")
+
+        masses = compute_attention_mass(attn_probs, spans, prefix_length, suffix_length, query_indices)
+        all_metrics.append(masses)
+
+        mass_text = []
+        for k, v in masses.items():
+            if k.endswith("_mass"):
+                mass_text.append(f"{k.replace('_mass', '')}: {v:.3f}")
+        axes[viz_idx + 1, 2].text(0.05, 0.95, "\n".join(mass_text),
+                                  transform=axes[viz_idx + 1, 2].transAxes,
+                                  fontsize=8, verticalalignment='top',
+                                  fontfamily='monospace')
+        axes[viz_idx + 1, 2].axis("off")
+
+    plt.suptitle(
+        f"{model_name} ({method}) - {phase_name} phase\n"
+        f"query_mode={query_mode}, layers={layer_indices}, avg_heads={average_heads}",
+        fontsize=13, fontweight='bold', y=1.01
+    )
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
-    
-    print(f"Saved attention visualization to {output_path}")
+
+    return all_metrics
 
 
 # ============================================================
-# 主函数
+# Main processing
 # ============================================================
 
-def process_model(model_path, device):
-    """Process a single model: load, extract attention, visualize."""
+def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
+                        layer_indices, average_heads, max_steps):
+    """Process a single model checkpoint."""
+    model_name = model_cfg["name"]
+    method = model_cfg["method"]
+    camera_name = model_cfg["camera_name"]
+    model_path = model_cfg["path"]
+
+    p = Path(model_path)
+    if not p.is_absolute():
+        p = PROJECT_ROOT / p
+
+    if not p.exists():
+        print(f"  WARNING: Model path does not exist: {p}")
+        return None
+
     print(f"\n{'='*80}")
-    print(f"Processing model: {model_path}")
+    print(f"Model: {model_name}")
+    print(f"Method: {method}")
+    print(f"Camera: {camera_name}")
+    print(f"Path: {p}")
+    print(f"Seed: {seed}")
+    print(f"Mode: {mode}")
+    print(f"Query mode: {query_mode}")
     print(f"{'='*80}")
-    
-    # 从路径提取模型名称
-    model_name = Path(model_path).parent.parent.name  # e.g., "random_112_seed42"
-    output_path = OUTPUT_DIR / f"{model_name}_attention.png"
-    
-    # 加载模型
-    print(f"Loading model from {model_path}...")
-    policy = SmolVLAPolicy.from_pretrained(model_path)
+
+    policy = SmolVLAPolicy.from_pretrained(str(p))
     policy = policy.to(device)
     policy.eval()
-    print(f"Model loaded successfully. Config type: {policy.config.type}")
-    print(f"Image features: {policy.config.image_features}")
-    
-    # 创建MetaWorld输入
-    print(f"Creating MetaWorld environment with seed {SEED}...")
-    model_data = create_metaworld_input(TASK, SEED, device)
-    print(f"Task: {model_data['task']}")
-    print(f"State shape: {model_data['state'].shape}")
-    print(f"Top image shape: {model_data['top_image_np'].shape}")
-    print(f"Wrist image shape: {model_data['wrist_image_np'].shape}")
-    
-    # 准备batch
-    print("Preparing batch for model...")
-    batch = prepare_batch_for_model(model_data, policy, device)
-    print(f"Batch keys: {batch.keys()}")
-    
-    # 提取注意力
-    print("Extracting attention maps...")
-    try:
-        attentions = extract_attention_from_model(policy, batch, device)
-        print(f"Extracted {len(attentions)} attention layers")
-        
-        if len(attentions) > 0:
-            print(f"Attention[0] shape: {attentions[0].shape}")
-    except Exception as e:
-        print(f"Error extracting attention: {e}")
-        import traceback
-        traceback.print_exc()
-        attentions = []
-    
-    # 可视化
-    if attentions:
-        print("Visualizing attention maps...")
-        visualize_attention(
-            attentions,
-            model_data["top_image_np"],
-            model_data["wrist_image_np"],
-            model_name,
-            output_path
+
+    print(f"  policy.config.image_features: {policy.config.image_features}")
+    print(f"  Task: {TASK}")
+
+    model_dir = output_dir / model_name / f"seed_{seed}"
+    model_dir.mkdir(parents=True, exist_ok=True)
+
+    metadata = {
+        "model_name": model_name,
+        "method": method,
+        "camera_name": camera_name,
+        "seed": seed,
+        "mode": mode,
+        "query_mode": query_mode,
+        "layer_indices": layer_indices,
+        "average_heads": average_heads,
+        "max_steps": max_steps,
+        "phase_detection_thresholds": {
+            "gripper_object_dist_pre_grasp": GRIPPER_OBJECT_DIST_PRE_GRASP,
+            "object_height_post_grasp": OBJECT_HEIGHT_POST_GRASP,
+            "object_goal_dist_pre_place": OBJECT_GOAL_DIST_PRE_PLACE,
+        },
+        "phases": {},
+        "episode_metrics": {},
+    }
+
+    all_metrics_rows = []
+
+    if mode == "rollout":
+        model_data = create_metaworld_input(TASK, seed, camera_name, device)
+        metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
+        metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
+        metadata["state"] = model_data["state"].tolist()
+
+        phase_data, episode_metrics = run_rollout_with_phases(
+            policy, model_data["env"], model_data, device, max_steps, mode
         )
+
+        metadata["episode_metrics"] = episode_metrics
+
+        for phase_name in PHASES:
+            pdata = phase_data.get(phase_name, {})
+            if "reached" in pdata and not pdata["reached"]:
+                metadata["phases"][phase_name] = {"reached": False}
+                print(f"  Phase '{phase_name}': not_reached")
+                continue
+
+            if "captured" not in pdata or not pdata["captured"]:
+                metadata["phases"][phase_name] = {"reached": False}
+                continue
+
+            metadata["phases"][phase_name] = {"reached": True, "step": pdata.get("step")}
+            print(f"  Phase '{phase_name}': reached at step {pdata.get('step')}")
+
+            output_path = model_dir / f"{phase_name}_summary.png"
+            pdata["_vlm"] = policy.model.vlm_with_expert
+
+            metrics = generate_summary_figure(
+                pdata, model_name, method, phase_name, layer_indices,
+                average_heads, query_mode, output_path, policy.config.image_features
+            )
+
+            if metrics:
+                for layer_idx, m in zip(layer_indices, metrics):
+                    row = {
+                        "model_name": model_name,
+                        "method": method,
+                        "camera": camera_name,
+                        "seed": seed,
+                        "phase": phase_name,
+                        "success": episode_metrics.get("success", False),
+                        "grasp_reached": episode_metrics.get("grasp_reached", False),
+                        "layer": layer_idx,
+                        "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
+                        "camera2_mass": m.get("camera2_mass", 0),
+                        "language_mass": m.get("language_mass", 0),
+                        "state_mass": m.get("state_mass", 0),
+                        "suffix_mass": m.get("suffix_mass", 0),
+                        "other_mass": m.get("other_mass", 0),
+                    }
+                    all_metrics_rows.append(row)
+
+        model_data["env"].close()
+
     else:
-        print(f"WARNING: No attention maps extracted for {model_name}")
-    
-    # 清理
+        model_data = create_metaworld_input(TASK, seed, camera_name, device)
+        metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
+        metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
+        metadata["state"] = model_data["state"].tolist()
+
+        batch = prepare_batch_for_model(model_data, policy, device)
+        captured, spans, prefix_len, suffix_len, img_token_counts = extract_attention_from_model(
+            policy, batch, device
+        )
+
+        print(f"  Prefix length: {prefix_len}")
+        print(f"  Suffix length: {suffix_len}")
+        print(f"  Token spans: {spans}")
+        print(f"  Image token counts: {img_token_counts}")
+
+        phase_data = {
+            "captured": captured,
+            "spans": spans,
+            "prefix_length": prefix_len,
+            "suffix_length": suffix_len,
+            "image_token_counts": img_token_counts,
+            "top_image": model_data["top_image_np"].copy(),
+            "wrist_image": model_data["wrist_image_np"].copy() if model_data["wrist_image_np"] is not None else None,
+            "step": 0,
+            "state": model_data["state"].copy(),
+            "_vlm": policy.model.vlm_with_expert,
+        }
+
+        output_path = model_dir / "initial_summary.png"
+        metrics = generate_summary_figure(
+            phase_data, model_name, method, "initial (probe)", layer_indices,
+            average_heads, query_mode, output_path, policy.config.image_features
+        )
+
+        if metrics:
+            for layer_idx, m in zip(layer_indices, metrics):
+                row = {
+                    "model_name": model_name,
+                    "method": method,
+                    "camera": camera_name,
+                    "seed": seed,
+                    "phase": "initial",
+                    "success": None,
+                    "grasp_reached": None,
+                    "layer": layer_idx,
+                    "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
+                    "camera2_mass": m.get("camera2_mass", 0),
+                    "language_mass": m.get("language_mass", 0),
+                    "state_mass": m.get("state_mass", 0),
+                    "suffix_mass": m.get("suffix_mass", 0),
+                    "other_mass": m.get("other_mass", 0),
+                }
+                all_metrics_rows.append(row)
+
+        model_data["env"].close()
+
+    metadata_path = model_dir / "metadata.json"
+    with open(metadata_path, "w") as f:
+        json.dump(metadata, f, indent=2, default=str)
+    print(f"  Saved metadata to {metadata_path}")
+
     del policy
     torch.cuda.empty_cache()
-    
-    return output_path
+
+    return all_metrics_rows
 
 
 def main():
-    """Main function to process all models."""
-    # 解析命令行参数
-    parser = argparse.ArgumentParser(description="Extract and visualize attention maps from SmolVLA models")
-    parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"],
-                        help="Device to use for inference (default: cuda)")
+    parser = argparse.ArgumentParser(
+        description="SmolVLA attention analysis tool for MetaWorld pick-place-v3"
+    )
+    parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"])
+    parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--mode", type=str, default="probe", choices=["probe", "rollout"])
+    parser.add_argument("--query-mode", type=str, default="mean_suffix",
+                        choices=["last", "mean_suffix", "mean_all"])
+    parser.add_argument("--output-dir", type=str, default=None)
+    parser.add_argument("--model-path", type=str, default=None,
+                        help="Single model path. If not provided, uses MODEL_CONFIGS.")
+    parser.add_argument("--camera-name", type=str, default=None,
+                        help="Override camera name for single model.")
+    parser.add_argument("--max-steps", type=int, default=500)
+    parser.add_argument("--layers", type=str, default=None,
+                        help="Comma-separated layer indices, e.g. 0,3,7,11")
+    parser.add_argument("--heads", type=str, default="all",
+                        help="'all' or comma-separated head indices")
+    parser.add_argument("--average-heads", action="store_true", default=True,
+                        help="Average attention across heads (default: True)")
+    parser.add_argument("--no-average-heads", action="store_true",
+                        help="Do not average heads, show individual heads")
+
     args = parser.parse_args()
-    
-    # 设置设备
+
     device = args.device
     if device == "cuda" and not torch.cuda.is_available():
-        print("WARNING: CUDA requested but not available, falling back to CPU")
+        print("WARNING: CUDA not available, falling back to CPU")
         device = "cpu"
-    print(f"Using device: {device}")
-    
-    # 确保输出目录存在
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # 转换路径为绝对路径
-    abs_model_paths = []
-    for path in MODEL_PATHS:
-        p = Path(path)
-        if not p.is_absolute():
-            p = PROJECT_ROOT / p
-        if p.exists():
-            abs_model_paths.append(str(p))
-        else:
-            print(f"WARNING: Model path does not exist: {p}")
-    
-    if not abs_model_paths:
-        print("ERROR: No valid model paths found. Please update MODEL_PATHS in the script.")
-        sys.exit(1)
-    
-    print(f"Found {len(abs_model_paths)} model(s) to process")
-    
-    # 处理每个模型
-    results = []
-    for model_path in abs_model_paths:
-        output_path = process_model(model_path, device)
-        results.append((model_path, output_path))
-    
-    # 打印总结
+
+    output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_DIR
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.layers:
+        layer_indices = [int(x) for x in args.layers.split(",")]
+    else:
+        layer_indices = DEFAULT_LAYERS
+
+    average_heads = args.average_heads and not args.no_average_heads
+
+    if args.model_path:
+        model_cfg = {
+            "name": Path(args.model_path).parent.parent.name,
+            "method": "custom",
+            "camera_name": args.camera_name or "corner2,gripperPOV",
+            "path": args.model_path,
+        }
+        models_to_process = [model_cfg]
+    else:
+        models_to_process = MODEL_CONFIGS
+
+    all_rows = []
+
+    for model_cfg in models_to_process:
+        rows = process_single_model(
+            model_cfg, device, args.seed, args.mode, args.query_mode,
+            output_dir, layer_indices, average_heads, args.max_steps
+        )
+        if rows:
+            all_rows.extend(rows)
+
+    if all_rows:
+        summary_csv = output_dir / "attention_summary.csv"
+        fieldnames = [
+            "model_name", "method", "camera", "seed", "phase",
+            "success", "grasp_reached", "layer",
+            "camera1_mass", "camera2_mass", "language_mass", "state_mass",
+            "suffix_mass", "other_mass"
+        ]
+        with open(summary_csv, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_rows)
+        print(f"\nSaved summary to {summary_csv}")
+
+        summary_json = output_dir / "attention_metrics.json"
+        with open(summary_json, "w") as f:
+            json.dump(all_rows, f, indent=2)
+        print(f"Saved metrics JSON to {summary_json}")
+
     print(f"\n{'='*80}")
-    print("SUMMARY")
+    print("DONE")
     print(f"{'='*80}")
-    for model_path, output_path in results:
-        status = "SUCCESS" if output_path and output_path.exists() else "FAILED"
-        print(f"[{status}] {model_path}")
-        if output_path:
-            print(f"  -> {output_path}")
 
 
 if __name__ == "__main__":
