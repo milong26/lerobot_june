@@ -207,17 +207,17 @@ def compute_token_spans(policy, images, img_masks, lang_tokens, lang_masks, stat
         if img_idx >= len(images):
             break
 
-        special_token_count = 0
-        if policy.model.add_image_special_tokens:
-            special_token_count += 2
+        # When add_image_special_tokens=True, embed_prefix adds:
+        #   [image_start_token] [image_tokens...] [image_end_token]
+        # The image span should cover only the image tokens, not the special tokens.
+        start_special = 1 if policy.model.add_image_special_tokens else 0
+        end_special = 1 if policy.model.add_image_special_tokens else 0
 
         img_emb = policy.model.vlm_with_expert.embed_image(images[img_idx])
         num_img_tokens = img_emb.shape[1]
         image_token_counts[img_key] = num_img_tokens
 
-        end_special = 1 if policy.model.add_image_special_tokens else 0
-
-        span_start = current_pos + special_token_count
+        span_start = current_pos + start_special
         span_end = span_start + num_img_tokens
 
         spans[img_key] = (span_start, span_end)
@@ -241,30 +241,51 @@ def compute_token_spans(policy, images, img_masks, lang_tokens, lang_masks, stat
     return spans, prefix_length, suffix_length, image_token_counts
 
 
-def get_image_grid_from_model(vlm_with_expert):
-    """Determine the image token grid layout from the VLM's vision encoder.
+def get_image_grid_from_model(vlm_with_expert, prepared_image, n_tokens):
+    """Determine the image token grid layout from the VLM's vision encoder and connector.
 
-    SmolVLM2-500M uses SigLIP with a ViT backbone. The connector maps patch tokens
-    to a sequence. We determine the grid by probing with a dummy image.
+    Uses the REAL prepared image (from policy.prepare_images) and the REAL n_tokens
+    (from embed_image output) to derive the grid. Does NOT create a dummy image.
+
+    The grid is derived from:
+      1. prepared image H/W -> vision encoder patch grid (via patch_size)
+      2. patch grid -> connector output grid (via connector scale_factor)
+      3. verify: grid_h * grid_w == n_tokens
     """
-    dummy = torch.zeros(1, 3, 224, 224, device=vlm_with_expert.vlm.device, dtype=vlm_with_expert.vlm.dtype)
-    with torch.no_grad():
-        emb = vlm_with_expert.embed_image(dummy)
-    n_tokens = emb.shape[1]
+    vlm_model = vlm_with_expert.get_vlm_model()
+    h, w = prepared_image.shape[-2:]
 
+    vision_cfg = vlm_model.vision_model.config
+    patch_size = vision_cfg.patch_size
+    if isinstance(patch_size, (list, tuple)):
+        patch_h, patch_w = patch_size[0], patch_size[1]
+    else:
+        patch_h, patch_w = patch_size, patch_size
+
+    patch_grid_h = h // patch_h
+    patch_grid_w = w // patch_w
+
+    connector = vlm_model.connector
+    scale_factor = getattr(connector, "scale_factor", None)
+
+    if scale_factor is not None:
+        if patch_grid_h % scale_factor == 0 and patch_grid_w % scale_factor == 0:
+            grid_h = patch_grid_h // scale_factor
+            grid_w = patch_grid_w // scale_factor
+            if grid_h * grid_w == n_tokens:
+                return grid_h, grid_w, n_tokens, False
+
+    # Strict fallback: only when n_tokens is a perfect square
     grid_size = int(round(n_tokens ** 0.5))
     if grid_size * grid_size == n_tokens:
-        return grid_size, grid_size, n_tokens, False
+        return grid_size, grid_size, n_tokens, True
 
-    vision_model = vlm_with_expert.get_vlm_model().vision_model
-    if hasattr(vision_model, 'config'):
-        vcfg = vision_model.config
-        if hasattr(vcfg, 'image_size') and hasattr(vcfg, 'patch_size'):
-            grid = vcfg.image_size // vcfg.patch_size
-            if grid * grid == n_tokens:
-                return grid, grid, n_tokens, False
-
-    return None, None, n_tokens, False
+    raise RuntimeError(
+        f"Cannot determine image grid: prepared_image HxW={h}x{w}, "
+        f"patch_size={patch_size}, n_tokens={n_tokens}, "
+        f"connector scale_factor={scale_factor}, "
+        f"patch_grid={patch_grid_h}x{patch_grid_w}"
+    )
 
 
 # ============================================================
@@ -326,7 +347,13 @@ def create_metaworld_input(task, seed, camera_name, device):
 
 
 def prepare_batch_for_model(model_data, policy, device):
-    """Prepare batch in the format expected by the policy."""
+    """Prepare batch in the format expected by the policy.
+
+    Mirrors the real SmolVLA preprocessor pipeline from processor_smolvla.py:
+      1. NewLineTaskProcessorStep: ensure task ends with '\n'
+      2. TokenizerProcessorStep: tokenize with config.pad_language_to, padding_side='right',
+         max_length=config.tokenizer_max_length
+    """
     batch = {}
 
     for img_key in policy.config.image_features:
@@ -338,16 +365,30 @@ def prepare_batch_for_model(model_data, policy, device):
     processor = policy.model.vlm_with_expert.processor
     task = model_data["task"]
 
+    # NewLineTaskProcessorStep equivalent: ensure task ends with '\n'
+    if not task.endswith("\n"):
+        task = task + "\n"
+
+    # TokenizerProcessorStep equivalent: use config values, NOT processor.tokenizer.model_max_length
     text_inputs = processor.tokenizer(
         task,
         return_tensors="pt",
-        padding="max_length",
-        max_length=processor.tokenizer.model_max_length if hasattr(processor.tokenizer, 'model_max_length') else 512,
+        padding=policy.config.pad_language_to,
+        padding_side="right",
+        max_length=policy.config.tokenizer_max_length,
         truncation=True,
     )
 
     batch["observation.language.tokens"] = text_inputs["input_ids"].to(device)
     batch["observation.language.attention_mask"] = text_inputs["attention_mask"].to(device)
+
+    # Runtime sanity check
+    lang_seq_len = text_inputs["input_ids"].shape[1]
+    lang_non_pad = text_inputs["attention_mask"].sum().item()
+    print(f"  Language tensor shape: {text_inputs['input_ids'].shape}")
+    print(f"  Non-padding language tokens: {lang_non_pad}")
+    print(f"  policy.config.tokenizer_max_length: {policy.config.tokenizer_max_length}")
+    print(f"  policy.config.pad_language_to: {policy.config.pad_language_to}")
 
     return batch
 
@@ -374,6 +415,44 @@ def extract_attention_from_model(policy, batch, device):
         spans, prefix_length, suffix_length, image_token_counts = compute_token_spans(
             policy, images, img_masks, lang_tokens, lang_masks, state
         )
+
+        # Compute image grids using real prepared images and real n_tokens
+        image_grids = {}
+        for img_idx, img_key in enumerate(policy.config.image_features):
+            if img_idx >= len(images):
+                break
+            n_tokens = image_token_counts[img_key]
+            grid_h, grid_w, _, is_sqrt = get_image_grid_from_model(
+                vlm_with_expert, images[img_idx], n_tokens
+            )
+            image_grids[img_key] = {
+                "grid_h": grid_h,
+                "grid_w": grid_w,
+                "n_tokens": n_tokens,
+                "prepared_height": int(images[img_idx].shape[-2]),
+                "prepared_width": int(images[img_idx].shape[-1]),
+                "is_sqrt_fallback": is_sqrt,
+            }
+            print(f"  Image grid {img_key}: {grid_h}x{grid_w}, tokens={n_tokens}, "
+                  f"prepared={images[img_idx].shape[-2]}x{images[img_idx].shape[-1]}")
+
+        # Token span sanity checks
+        lang_span = spans.get("language")
+        if lang_span:
+            lang_span_len = lang_span[1] - lang_span[0]
+            print(f"  Language span: {lang_span}, length={lang_span_len}")
+            if lang_span_len > policy.config.tokenizer_max_length:
+                raise RuntimeError(
+                    f"Language span length {lang_span_len} exceeds config tokenizer_max_length "
+                    f"{policy.config.tokenizer_max_length}. Tokenizer config mismatch."
+                )
+
+        expected_total = prefix_length + suffix_length
+        print(f"  Prefix length: {prefix_length}")
+        print(f"  Suffix length: {suffix_length}")
+        print(f"  Expected total sequence: {expected_total}")
+        print(f"  Token spans: {spans}")
+        print(f"  Image token counts: {image_token_counts}")
 
         prefix_embs, prefix_pad_masks, prefix_att_masks = policy.model.embed_prefix(
             images, img_masks, lang_tokens, lang_masks, state=state
@@ -414,13 +493,18 @@ def extract_attention_from_model(policy, batch, device):
             print(f"  Attention[0] probs shape: {captured[0]['probs'].shape}")
             print(f"  query_length={captured[0]['query_length']}, key_length={captured[0]['key_length']}")
 
-        return captured, spans, prefix_length, suffix_length, image_token_counts
+            # Sanity check: captured attention shape vs expected total
+            cap_key_len = captured[0]["key_length"]
+            if cap_key_len != expected_total:
+                print(f"  WARNING: captured key_length {cap_key_len} != expected total {expected_total}")
+
+        return captured, spans, prefix_length, suffix_length, image_token_counts, image_grids
 
     except Exception as e:
         print(f"  Error during attention extraction: {e}")
         import traceback
         traceback.print_exc()
-        return [], {}, 0, 0, {}
+        return [], {}, 0, 0, {}, {}
     finally:
         extractor.restore()
 
@@ -504,7 +588,7 @@ def run_rollout_with_phases(policy, env, model_data, device, max_steps, mode):
             phases_seen.add(phase)
 
             batch = prepare_batch_for_model(obs, policy, device)
-            captured, spans, prefix_len, suffix_len, img_token_counts = extract_attention_from_model(
+            captured, spans, prefix_len, suffix_len, img_token_counts, img_grids = extract_attention_from_model(
                 policy, batch, device
             )
 
@@ -514,6 +598,7 @@ def run_rollout_with_phases(policy, env, model_data, device, max_steps, mode):
                 "prefix_length": prefix_len,
                 "suffix_length": suffix_len,
                 "image_token_counts": img_token_counts,
+                "image_grids": img_grids,
                 "top_image": obs["top_image_np"].copy(),
                 "wrist_image": obs["wrist_image_np"].copy() if obs["wrist_image_np"] is not None else None,
                 "step": step,
@@ -658,10 +743,20 @@ def get_query_indices(mode, prefix_length, suffix_length):
 # ============================================================
 
 def create_heatmap_from_attention(attn_1d, original_image, grid_h, grid_w):
-    """Create a heatmap overlay from 1D attention vector using known grid layout."""
+    """Create a heatmap overlay from 1D attention vector using known grid layout.
+
+    Strictly checks that len(attn_1d) == grid_h * grid_w. No silent truncation.
+    """
+    expected = grid_h * grid_w
+    if len(attn_1d) != expected:
+        raise ValueError(
+            f"Image attention token count mismatch: got {len(attn_1d)}, "
+            f"expected {expected} for grid {grid_h}x{grid_w}"
+        )
+
     h_img, w_img = original_image.shape[:2]
 
-    attn_2d = attn_1d[:grid_h * grid_w].reshape(grid_h, grid_w)
+    attn_2d = attn_1d.reshape(grid_h, grid_w)
     attn_2d = (attn_2d - attn_2d.min()) / (attn_2d.max() - attn_2d.min() + 1e-8)
 
     attn_resized = cv2.resize(attn_2d, (w_img, h_img), interpolation=cv2.INTER_CUBIC)
@@ -689,10 +784,7 @@ def generate_summary_figure(phase_data, model_name, method, phase_name, layer_in
     top_image = phase_data.get("top_image")
     wrist_image = phase_data.get("wrist_image")
     image_token_counts = phase_data.get("image_token_counts", {})
-
-    grid_h, grid_w, n_tokens, is_sqrt = get_image_grid_from_model(
-        phase_data.get("_vlm", None)
-    )
+    image_grids = phase_data.get("image_grids", {})
 
     n_layers_viz = len(layer_indices)
     n_cols = 3
@@ -754,17 +846,25 @@ def generate_summary_figure(phase_data, model_name, method, phase_name, layer_in
         cam1_overlay = None
         cam2_overlay = None
 
-        if cam1_key and cam1_key in spans:
+        if cam1_key and cam1_key in spans and cam1_key in image_grids:
             c1_start, c1_end = spans[cam1_key]
             cam1_attn = attn_1d[c1_start:c1_end]
-            if grid_h and grid_w:
+            grid_h = image_grids[cam1_key]["grid_h"]
+            grid_w = image_grids[cam1_key]["grid_w"]
+            if len(cam1_attn) == grid_h * grid_w:
                 cam1_overlay, _ = create_heatmap_from_attention(cam1_attn, top_image, grid_h, grid_w)
+            else:
+                print(f"  WARNING: camera1 attention token count {len(cam1_attn)} != grid {grid_h}x{grid_w}={grid_h*grid_w}")
 
-        if cam2_key and cam2_key in spans and wrist_image is not None:
+        if cam2_key and cam2_key in spans and cam2_key in image_grids and wrist_image is not None:
             c2_start, c2_end = spans[cam2_key]
             cam2_attn = attn_1d[c2_start:c2_end]
-            if grid_h and grid_w:
+            grid_h = image_grids[cam2_key]["grid_h"]
+            grid_w = image_grids[cam2_key]["grid_w"]
+            if len(cam2_attn) == grid_h * grid_w:
                 cam2_overlay, _ = create_heatmap_from_attention(cam2_attn, wrist_image, grid_h, grid_w)
+            else:
+                print(f"  WARNING: camera2 attention token count {len(cam2_attn)} != grid {grid_h}x{grid_w}={grid_h*grid_w}")
 
         if cam1_overlay is not None:
             axes[viz_idx + 1, 0].imshow(cam1_overlay)
@@ -865,38 +965,91 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
     }
 
     all_metrics_rows = []
+    env = None
 
-    if mode == "rollout":
-        model_data = create_metaworld_input(TASK, seed, camera_name, device)
-        metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
-        metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
-        metadata["state"] = model_data["state"].tolist()
+    try:
+        if mode == "rollout":
+            model_data = create_metaworld_input(TASK, seed, camera_name, device)
+            env = model_data["env"]
+            metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
+            metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
+            metadata["state"] = model_data["state"].tolist()
 
-        phase_data, episode_metrics = run_rollout_with_phases(
-            policy, model_data["env"], model_data, device, max_steps, mode
-        )
+            phase_data, episode_metrics = run_rollout_with_phases(
+                policy, model_data["env"], model_data, device, max_steps, mode
+            )
 
-        metadata["episode_metrics"] = episode_metrics
+            metadata["episode_metrics"] = episode_metrics
 
-        for phase_name in PHASES:
-            pdata = phase_data.get(phase_name, {})
-            if "reached" in pdata and not pdata["reached"]:
-                metadata["phases"][phase_name] = {"reached": False}
-                print(f"  Phase '{phase_name}': not_reached")
-                continue
+            for phase_name in PHASES:
+                pdata = phase_data.get(phase_name, {})
+                if "reached" in pdata and not pdata["reached"]:
+                    metadata["phases"][phase_name] = {"reached": False}
+                    print(f"  Phase '{phase_name}': not_reached")
+                    continue
 
-            if "captured" not in pdata or not pdata["captured"]:
-                metadata["phases"][phase_name] = {"reached": False}
-                continue
+                if "captured" not in pdata or not pdata["captured"]:
+                    metadata["phases"][phase_name] = {"reached": False}
+                    continue
 
-            metadata["phases"][phase_name] = {"reached": True, "step": pdata.get("step")}
-            print(f"  Phase '{phase_name}': reached at step {pdata.get('step')}")
+                metadata["phases"][phase_name] = {"reached": True, "step": pdata.get("step")}
+                print(f"  Phase '{phase_name}': reached at step {pdata.get('step')}")
 
-            output_path = model_dir / f"{phase_name}_summary.png"
-            pdata["_vlm"] = policy.model.vlm_with_expert
+                output_path = model_dir / f"{phase_name}_summary.png"
 
+                metrics = generate_summary_figure(
+                    pdata, model_name, method, phase_name, layer_indices,
+                    average_heads, query_mode, output_path, policy.config.image_features
+                )
+
+                if metrics:
+                    for layer_idx, m in zip(layer_indices, metrics):
+                        row = {
+                            "model_name": model_name,
+                            "method": method,
+                            "camera": camera_name,
+                            "seed": seed,
+                            "phase": phase_name,
+                            "success": episode_metrics.get("success", False),
+                            "grasp_reached": episode_metrics.get("grasp_reached", False),
+                            "layer": layer_idx,
+                            "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
+                            "camera2_mass": m.get("camera2_mass", 0),
+                            "language_mass": m.get("language_mass", 0),
+                            "state_mass": m.get("state_mass", 0),
+                            "suffix_mass": m.get("suffix_mass", 0),
+                            "other_mass": m.get("other_mass", 0),
+                        }
+                        all_metrics_rows.append(row)
+
+        else:
+            model_data = create_metaworld_input(TASK, seed, camera_name, device)
+            env = model_data["env"]
+            metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
+            metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
+            metadata["state"] = model_data["state"].tolist()
+
+            batch = prepare_batch_for_model(model_data, policy, device)
+            captured, spans, prefix_len, suffix_len, img_token_counts, img_grids = extract_attention_from_model(
+                policy, batch, device
+            )
+
+            phase_data = {
+                "captured": captured,
+                "spans": spans,
+                "prefix_length": prefix_len,
+                "suffix_length": suffix_len,
+                "image_token_counts": img_token_counts,
+                "image_grids": img_grids,
+                "top_image": model_data["top_image_np"].copy(),
+                "wrist_image": model_data["wrist_image_np"].copy() if model_data["wrist_image_np"] is not None else None,
+                "step": 0,
+                "state": model_data["state"].copy(),
+            }
+
+            output_path = model_dir / "initial_summary.png"
             metrics = generate_summary_figure(
-                pdata, model_name, method, phase_name, layer_indices,
+                phase_data, model_name, method, "initial (probe)", layer_indices,
                 average_heads, query_mode, output_path, policy.config.image_features
             )
 
@@ -907,9 +1060,9 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                         "method": method,
                         "camera": camera_name,
                         "seed": seed,
-                        "phase": phase_name,
-                        "success": episode_metrics.get("success", False),
-                        "grasp_reached": episode_metrics.get("grasp_reached", False),
+                        "phase": "initial",
+                        "success": None,
+                        "grasp_reached": None,
                         "layer": layer_idx,
                         "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
                         "camera2_mass": m.get("camera2_mass", 0),
@@ -920,64 +1073,13 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                     }
                     all_metrics_rows.append(row)
 
-        model_data["env"].close()
-
-    else:
-        model_data = create_metaworld_input(TASK, seed, camera_name, device)
-        metadata["obj_init_pos"] = model_data["info"].get("obj_init_pos", None)
-        metadata["goal_pos"] = model_data["info"].get("goal_pos", None)
-        metadata["state"] = model_data["state"].tolist()
-
-        batch = prepare_batch_for_model(model_data, policy, device)
-        captured, spans, prefix_len, suffix_len, img_token_counts = extract_attention_from_model(
-            policy, batch, device
-        )
-
-        print(f"  Prefix length: {prefix_len}")
-        print(f"  Suffix length: {suffix_len}")
-        print(f"  Token spans: {spans}")
-        print(f"  Image token counts: {img_token_counts}")
-
-        phase_data = {
-            "captured": captured,
-            "spans": spans,
-            "prefix_length": prefix_len,
-            "suffix_length": suffix_len,
-            "image_token_counts": img_token_counts,
-            "top_image": model_data["top_image_np"].copy(),
-            "wrist_image": model_data["wrist_image_np"].copy() if model_data["wrist_image_np"] is not None else None,
-            "step": 0,
-            "state": model_data["state"].copy(),
-            "_vlm": policy.model.vlm_with_expert,
-        }
-
-        output_path = model_dir / "initial_summary.png"
-        metrics = generate_summary_figure(
-            phase_data, model_name, method, "initial (probe)", layer_indices,
-            average_heads, query_mode, output_path, policy.config.image_features
-        )
-
-        if metrics:
-            for layer_idx, m in zip(layer_indices, metrics):
-                row = {
-                    "model_name": model_name,
-                    "method": method,
-                    "camera": camera_name,
-                    "seed": seed,
-                    "phase": "initial",
-                    "success": None,
-                    "grasp_reached": None,
-                    "layer": layer_idx,
-                    "camera1_mass": m.get("camera1_mass", m.get(f"{policy.config.image_features[0]}_mass", 0)),
-                    "camera2_mass": m.get("camera2_mass", 0),
-                    "language_mass": m.get("language_mass", 0),
-                    "state_mass": m.get("state_mass", 0),
-                    "suffix_mass": m.get("suffix_mass", 0),
-                    "other_mass": m.get("other_mass", 0),
-                }
-                all_metrics_rows.append(row)
-
-        model_data["env"].close()
+    finally:
+        if env is not None:
+            try:
+                env.close()
+                print(f"  Environment closed successfully")
+            except Exception as e:
+                print(f"  WARNING: Failed to close environment: {e}")
 
     metadata_path = model_dir / "metadata.json"
     with open(metadata_path, "w") as f:
