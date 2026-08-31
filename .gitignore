@@ -217,6 +217,6 @@ personal/work2/dataset_view/*
 # 排除所有 .npy 和 .log 文件
 *.npy
 *.logtests/data/aloha_sim_insertion_human/data_dict.pth
-*.png
+personal/work2/dataset_lookin/first_frame/*
 
 
