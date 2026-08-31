@@ -1,5 +1,39 @@
 # Ours / DynamicAnchor V2 Episode Selection
 
+## 本次修复说明
+
+### 路径修复
+- `train_and_eval_v2.sh`：修复 `PROJECT_ROOT` 路径错误，改用 `WORK2_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"`，所有路径基于 `WORK2_ROOT` 而非写死绝对路径
+
+### Bootstrap 扩展
+- `random_bootstrap_analysis()` 现在分别对 global/wrist/combined 三种 representation 运行
+- Bootstrap 同时覆盖 coverage (mean/p95/max)、redundancy、fixed-universe SIC
+- 使用向量化计算 (`dist_matrix[:, sample_indices].min(axis=1)`) 提升性能
+- 所有 bootstrap subset 复用同一 dbar/kernel matrix，确保公平比较
+
+### 假设评估逻辑重构
+- H1/H2/H3 由 `evaluate_h1()`/`evaluate_h2()`/`evaluate_h3()` 独立函数计算，不硬编码在 `generate_report()` 中
+- H1 基于 embedding validity、position probe vs shuffled、neighbor overlap vs random 三种证据
+- H2 基于 Spearman + permutation test、position probe、neighbor overlap，不再使用固定 rho 阈值
+- H3 基于 bootstrap better-than-random fractions，50% random-level 结果判为 NOT SUPPORTED 而非 WEAK
+
+### Duplicate 检测
+- `load_embeddings()` 和 `load_episode_metadata()` 检测并记录重复 episode_index
+- `sic_v2.py` 的 exact duplicate 改用 `np.unique(phi, axis=0)` 严格比较
+- Exact duplicate 改为 warning 而非 error，不阻止分析继续
+
+### Grid Sparse CV 修复
+- `grid_classifiability()` 当最小类别样本数 <2 时返回 `status="insufficient_samples"` 而非 accuracy=0
+- 使用 `StratifiedKFold(n_splits=min(5, min_class_count))` 适配稀疏类别
+
+### 新增分析
+- 增加 `global_normalized` 和 `wrist_normalized` representation 诊断
+- 增加 Ours vs Uniform overlap 与 coverage delta 分析
+- `compute_subset_coverage()` 和 `compute_workspace_coverage()` 同时输出 all-reference 和 unselected-only 两组指标
+
+### 报告字段修复
+- `generate_report()` Table 2 现在读取 `coverage_global`/`redundancy_global` 等正确字段，不再显示 N/A
+
 ## 新增文件清单
 
 | 文件 | 说明 |

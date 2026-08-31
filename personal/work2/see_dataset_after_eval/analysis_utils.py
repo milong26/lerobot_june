@@ -76,6 +76,54 @@ def compute_pairwise_redundancy(
     }
 
 
+def compute_fixed_universe_sic_from_indices(
+    selected_episodes: List[int],
+    all_episode_indices: List[int],
+    K_global: np.ndarray,
+    K_wrist: np.ndarray,
+    dbar_global: float,
+    dbar_wrist: float,
+    alpha: float = 1.0,
+    lambda_wrist: float = 1.0
+) -> Dict:
+    """
+    Compute SIC for a subset from pre-computed kernel matrices and dbar.
+    This allows reusing the same fixed universe across multiple bootstrap subsets.
+    """
+    from sic_v2 import tau
+
+    episode_to_idx = {ep: i for i, ep in enumerate(all_episode_indices)}
+    n_episodes = len(all_episode_indices)
+
+    selected_indices = set()
+    sigma_global = np.zeros(n_episodes)
+    sigma_wrist = np.zeros(n_episodes)
+
+    tau_1 = tau(1, alpha)
+
+    for ep in selected_episodes:
+        if ep in episode_to_idx:
+            idx = episode_to_idx[ep]
+            selected_indices.add(idx)
+            sigma_global += tau_1 * K_global[:, idx]
+            sigma_wrist += tau_1 * K_wrist[:, idx]
+
+    def sat(x):
+        return x / (1.0 + x)
+
+    final_sic = float(np.sum(sat(sigma_global)) + lambda_wrist * np.sum(sat(sigma_wrist)))
+    n_ref = n_episodes
+    normalized_sic = final_sic / (n_ref * (1 + lambda_wrist))
+
+    return {
+        "fixed_universe_sic": final_sic,
+        "normalized_sic": normalized_sic,
+        "reference_anchor_count": n_ref,
+        "dbar_global": dbar_global,
+        "dbar_wrist": dbar_wrist,
+    }
+
+
 def compute_mean_nearest_selected_distance(
     all_episode_indices: List[int],
     selected_episodes: List[int],

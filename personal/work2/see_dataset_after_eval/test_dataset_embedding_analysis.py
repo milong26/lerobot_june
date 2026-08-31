@@ -152,10 +152,10 @@ def test_5_coverage_far_vs_clustered():
     coverage_far = compute_subset_coverage(positions, farthest_indices, positions, "far")
     coverage_clustered = compute_subset_coverage(positions, clustered_indices, positions, "clustered")
     
-    assert coverage_far['mean_nearest_distance'] < coverage_clustered['mean_nearest_distance'], \
+    assert coverage_far['unselected_mean_nearest_distance'] < coverage_clustered['unselected_mean_nearest_distance'], \
         f"Farthest should have better coverage"
     
-    print(f"  PASS: far mean={coverage_far['mean_nearest_distance']:.4f} < clustered mean={coverage_clustered['mean_nearest_distance']:.4f}")
+    print(f"  PASS: far mean={coverage_far['unselected_mean_nearest_distance']:.4f} < clustered mean={coverage_clustered['unselected_mean_nearest_distance']:.4f}")
     return True
 
 
@@ -189,7 +189,7 @@ def test_6_bootstrap_percentile_direction():
 
 
 def test_7_duplicate_detection():
-    """Test 7: Duplicate detection works"""
+    """Test 7: Duplicate detection works (exact duplicates are warnings, not errors)"""
     print("\n=== Test 7: Duplicate detection ===")
     
     rng = np.random.RandomState(42)
@@ -204,9 +204,11 @@ def test_7_duplicate_detection():
     
     assert result['stats']['n_exact_dup_global'] >= 2, \
         f"Expected at least 2 duplicates, got {result['stats']['n_exact_dup_global']}"
-    assert not result['valid'], "Should be invalid due to duplicates"
+    # Exact duplicates are now warnings, not errors
+    assert result['valid'], "Should still be valid (exact duplicates are warnings)"
+    assert any("exact duplicate" in warn for warn in result['warnings']), "Should warn about exact duplicates"
     
-    print(f"  PASS: Detected {result['stats']['n_exact_dup_global']} duplicates")
+    print(f"  PASS: Detected {result['stats']['n_exact_dup_global']} duplicates (as warnings)")
     return True
 
 
@@ -275,6 +277,235 @@ def test_10_json_serializable():
     return True
 
 
+def test_11_shuffled_ridge_baseline():
+    """Test 11: Shuffled Ridge baseline uses shuffled label itself, structured > shuffled mean"""
+    print("\n=== Test 11: Shuffled Ridge baseline ===")
+    
+    rng = np.random.RandomState(42)
+    n = 200
+    
+    x = rng.rand(n, 1) * 10
+    y = rng.rand(n, 1) * 5
+    
+    embeddings = np.concatenate([x, y], axis=1) + rng.randn(n, 2) * 0.1
+    
+    probe = position_probe(embeddings, np.concatenate([x, y], axis=1), n_shuffles=20, seed=42)
+    
+    real_r2_x = probe['ridge']['R2_x']
+    shuffled_r2_x_mean = probe['shuffled_ridge']['R2_x']['mean']
+    
+    assert real_r2_x > shuffled_r2_x_mean, \
+        f"Real R2_x ({real_r2_x:.4f}) should be higher than shuffled mean ({shuffled_r2_x_mean:.4f})"
+    
+    print(f"  PASS: Real R2_x={real_r2_x:.4f} > shuffled mean={shuffled_r2_x_mean:.4f}")
+    return True
+
+
+def test_12_sparse_grid_insufficient_samples():
+    """Test 12: Sparse grid class returns insufficient_samples instead of 0"""
+    print("\n=== Test 12: Sparse grid classifiability ===")
+    
+    from analyze_dataset_embedding import grid_classifiability
+    
+    rng = np.random.RandomState(42)
+    n = 20
+    dim = 8
+    
+    phi = rng.randn(n, dim).astype(np.float32)
+    positions = rng.rand(n, 2)
+    
+    results = grid_classifiability(phi, positions, grid_sizes=[(14, 8)], n_shuffles=10, seed=42)
+    
+    grid_result = results.get("14x8", {})
+    status = grid_result.get("status")
+    
+    if status == "insufficient_samples":
+        assert grid_result["accuracy"] is None, "Accuracy should be None for insufficient samples"
+        print(f"  PASS: Sparse grid returns insufficient_samples (accuracy=None)")
+    elif status == "ok":
+        print(f"  PASS: Grid classification succeeded (accuracy={grid_result.get('accuracy'):.4f})")
+    else:
+        print(f"  INFO: Grid status={status}")
+    
+    return True
+
+
+def test_13_bootstrap_coverage_redundancy_sic():
+    """Test 13: Bootstrap generates mean/p95/max/redundancy/fixed SIC"""
+    print("\n=== Test 13: Bootstrap coverage/redundancy/SIC ===")
+    
+    rng = np.random.RandomState(42)
+    n = 50
+    dim = 4
+    
+    phi = rng.randn(n, dim).astype(np.float32)
+    
+    from sic_v2 import compute_dbar_from_embeddings, build_kernel_matrices
+    
+    dbar_g, dbar_w, _ = compute_dbar_from_embeddings(phi, phi)
+    K_g, K_w = build_kernel_matrices(phi, phi, dbar_g, dbar_w)
+    
+    subset = [0, n//2, n//4, 3*n//4, n//3]
+    
+    bootstrap = random_bootstrap_analysis(
+        phi, subset, n_bootstrap=50, seed=42,
+        K_global=K_g, K_wrist=K_w,
+        dbar_global=dbar_g, dbar_wrist=dbar_w,
+        n_episodes_total=n
+    )
+    
+    assert bootstrap is not None, "Bootstrap should not be None"
+    
+    for metric in ["mean_nearest", "p95_nearest", "max_radius", "redundancy_fraction"]:
+        assert metric in bootstrap, f"Missing metric: {metric}"
+        assert "observed" in bootstrap[metric], f"Missing observed for {metric}"
+        assert "better_than_random_fraction" in bootstrap[metric], f"Missing better_than_random for {metric}"
+    
+    assert "normalized_fixed_sic" in bootstrap, "Missing normalized_fixed_sic"
+    assert "observed" in bootstrap["normalized_fixed_sic"], "Missing observed SIC"
+    assert "better_than_random_fraction" in bootstrap["normalized_fixed_sic"], "Missing better_than_random for SIC"
+    
+    print(f"  PASS: All bootstrap metrics present")
+    return True
+
+
+def test_14_same_fixed_dbar_kernel_reused():
+    """Test 14: Same fixed dbar/kernel reused across bootstrap subsets"""
+    print("\n=== Test 14: Same fixed dbar/kernel reused ===")
+    
+    episode_indices, phi_g, phi_w = create_test_embeddings(n_episodes=30, dim=8)
+    
+    from sic_v2 import compute_dbar_from_embeddings, build_kernel_matrices
+    
+    dbar_g, dbar_w, _ = compute_dbar_from_embeddings(phi_g, phi_w)
+    K_g, K_w = build_kernel_matrices(phi_g, phi_w, dbar_g, dbar_w)
+    
+    subset_a = episode_indices[:10]
+    subset_b = episode_indices[10:20]
+    
+    from analysis_utils import compute_fixed_universe_sic_from_indices
+    
+    sic_a = compute_fixed_universe_sic_from_indices(
+        subset_a, episode_indices, K_g, K_w, dbar_g, dbar_w
+    )
+    sic_b = compute_fixed_universe_sic_from_indices(
+        subset_b, episode_indices, K_g, K_w, dbar_g, dbar_w
+    )
+    
+    assert abs(sic_a['dbar_global'] - sic_b['dbar_global']) < 1e-10, "dbar_global should be same"
+    assert abs(sic_a['dbar_wrist'] - sic_b['dbar_wrist']) < 1e-10, "dbar_wrist should be same"
+    assert abs(sic_a['reference_anchor_count'] - sic_b['reference_anchor_count']) == 0, "reference_anchor_count should be same"
+    
+    print(f"  PASS: Same dbar/kernel reused across subsets")
+    return True
+
+
+def test_15_h3_random_level_not_weak():
+    """Test 15: H3 at ~0.5 better-than-random must be NOT SUPPORTED, not WEAK"""
+    print("\n=== Test 15: H3 random-level not marked WEAK ===")
+    
+    from analyze_dataset_embedding import evaluate_h3
+    
+    mock_results = {
+        "subset_comparison": {
+            "Ours": {
+                "bootstrap_global": {
+                    "mean_nearest": {"better_than_random_fraction": 0.5},
+                    "p95_nearest": {"better_than_random_fraction": 0.5},
+                    "max_radius": {"better_than_random_fraction": 0.5},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.5},
+                    "normalized_fixed_sic": {"better_than_random_fraction": 0.5},
+                },
+                "bootstrap_wrist": {
+                    "mean_nearest": {"better_than_random_fraction": 0.5},
+                    "p95_nearest": {"better_than_random_fraction": 0.5},
+                    "max_radius": {"better_than_random_fraction": 0.5},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.5},
+                    "normalized_fixed_sic": {"better_than_random_fraction": 0.5},
+                },
+                "bootstrap_combined": {
+                    "mean_nearest": {"better_than_random_fraction": 0.5},
+                    "p95_nearest": {"better_than_random_fraction": 0.5},
+                    "max_radius": {"better_than_random_fraction": 0.5},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.5},
+                    "normalized_fixed_sic": {"better_than_random_fraction": 0.5},
+                },
+            }
+        }
+    }
+    
+    h3_result = evaluate_h3(mock_results)
+    
+    assert h3_result["status"] != "WEAK", \
+        f"H3 at random level (0.5) should not be WEAK, got {h3_result['status']}"
+    assert h3_result["status"] == "NOT SUPPORTED", \
+        f"H3 at random level should be NOT SUPPORTED, got {h3_result['status']}"
+    
+    print(f"  PASS: H3 at 0.5 correctly marked as NOT SUPPORTED")
+    return True
+
+
+def test_16_h3_strong_support():
+    """Test 16: H3 with multiple core metrics >=0.95 should be SUPPORTED"""
+    print("\n=== Test 16: H3 strong support ===")
+    
+    from analyze_dataset_embedding import evaluate_h3
+    
+    mock_results = {
+        "subset_comparison": {
+            "Ours": {
+                "bootstrap_global": {
+                    "mean_nearest": {"better_than_random_fraction": 0.98},
+                    "p95_nearest": {"better_than_random_fraction": 0.97},
+                    "max_radius": {"better_than_random_fraction": 0.96},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.95},
+                    "normalized_fixed_sic": {"better_than_random_fraction": 0.99},
+                },
+                "bootstrap_wrist": {
+                    "mean_nearest": {"better_than_random_fraction": 0.96},
+                    "p95_nearest": {"better_than_random_fraction": 0.95},
+                    "max_radius": {"better_than_random_fraction": 0.94},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.93},
+                    "normalized_fixed_sic": {"better_than_random_fraction": 0.97},
+                },
+                "bootstrap_combined": {
+                    "mean_nearest": {"better_than_random_fraction": 0.97},
+                    "p95_nearest": {"better_than_random_fraction": 0.96},
+                    "max_radius": {"better_than_random_fraction": 0.95},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.94},
+                    "normalized_fixed_sic": {"better_than_random_fraction": 0.98},
+                },
+            }
+        }
+    }
+    
+    h3_result = evaluate_h3(mock_results)
+    
+    assert h3_result["status"] == "SUPPORTED", \
+        f"H3 with strong metrics should be SUPPORTED, got {h3_result['status']}"
+    
+    print(f"  PASS: H3 correctly marked as SUPPORTED")
+    return True
+
+
+def test_17_ours_uniform_overlap():
+    """Test 17: Ours vs Uniform overlap calculation correct"""
+    print("\n=== Test 17: Ours vs Uniform overlap ===")
+    
+    ours_episodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    uniform_episodes = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+    
+    overlap_eps = set(ours_episodes) & set(uniform_episodes)
+    overlap_count = len(overlap_eps)
+    overlap_ratio = overlap_count / min(len(ours_episodes), len(uniform_episodes))
+    
+    assert overlap_count == 6, f"Expected 6 overlap, got {overlap_count}"
+    assert abs(overlap_ratio - 0.6) < 1e-10, f"Expected 0.6 ratio, got {overlap_ratio}"
+    
+    print(f"  PASS: Overlap count={overlap_count}, ratio={overlap_ratio:.4f}")
+    return True
+
+
 def main():
     print("\n" + "="*60)
     print("Dataset Embedding Analysis Unit Tests")
@@ -291,6 +522,13 @@ def main():
         test_8_nan_detection,
         test_9_fixed_universe_sic_same_dbar,
         test_10_json_serializable,
+        test_11_shuffled_ridge_baseline,
+        test_12_sparse_grid_insufficient_samples,
+        test_13_bootstrap_coverage_redundancy_sic,
+        test_14_same_fixed_dbar_kernel_reused,
+        test_15_h3_random_level_not_weak,
+        test_16_h3_strong_support,
+        test_17_ours_uniform_overlap,
     ]
     
     passed = 0

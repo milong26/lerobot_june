@@ -189,26 +189,17 @@ def check_embeddings_valid(
         result["errors"].append(f"{zero_w} phi_wrists have zero norm")
 
     def count_exact_duplicates(phi):
-        n_eps = len(phi)
-        seen = set()
-        dup_count = 0
-        for i in range(n_eps):
-            key = tuple(phi[i].round(decimals=8))
-            if key in seen:
-                dup_count += 1
-            else:
-                seen.add(key)
-        return dup_count
+        # 使用 np.unique 进行精确重复检测
+        unique_arr, counts = np.unique(phi, axis=0, return_counts=True)
+        return int(np.sum(counts > 1))
 
     result["stats"]["n_exact_dup_global"] = count_exact_duplicates(phi_globals)
     result["stats"]["n_exact_dup_wrist"] = count_exact_duplicates(phi_wrists)
 
     if result["stats"]["n_exact_dup_global"] > 0:
-        result["valid"] = False
-        result["errors"].append(f"{result['stats']['n_exact_dup_global']} exact duplicate phi_globals")
+        result["warnings"].append(f"{result['stats']['n_exact_dup_global']} exact duplicate phi_globals")
     if result["stats"]["n_exact_dup_wrist"] > 0:
-        result["valid"] = False
-        result["errors"].append(f"{result['stats']['n_exact_dup_wrist']} exact duplicate phi_wrists")
+        result["warnings"].append(f"{result['stats']['n_exact_dup_wrist']} exact duplicate phi_wrists")
 
     if norms_global.min() > 1e-10 and norms_wrist.min() > 1e-10:
         phi_g_norm = phi_globals / norms_global[:, None]
