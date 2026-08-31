@@ -1379,11 +1379,13 @@ def build_input_signature(model_data, batch, policy, shared_noise):
     lang_tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
     lang_masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
 
+    sig = {}
+    sig["state_prepared_sha256"] = tensor_sha256(state)
+    sig["state_prepared_shape"] = list(state.shape)
+
     cam1_raw = model_data.get("observation.images.camera1")
     cam2_raw = model_data.get("observation.images.camera2")
     state_raw = model_data.get("state")
-
-    sig = {}
 
     obj_init = model_data.get("info", {}).get("obj_init_pos")
     goal = model_data.get("info", {}).get("goal_pos")
@@ -1459,6 +1461,7 @@ def validate_shared_input_signature(reference, current, model_name, camera_group
         ("camera1_raw_sha256", "camera1 raw image"),
         ("camera2_raw_sha256", "camera2 raw image"),
         ("state_sha256", "state"),
+        ("state_prepared_sha256", "prepared state"),
         ("camera1_prepared_sha256", "camera1 prepared image"),
         ("camera2_prepared_sha256", "camera2 prepared image"),
         ("language_tokens_sha256", "language tokens"),
@@ -1481,6 +1484,7 @@ def validate_shared_input_signature(reference, current, model_name, camera_group
         ("camera1_raw_shape", "camera1 raw shape"),
         ("camera2_raw_shape", "camera2 raw shape"),
         ("state_shape", "state shape"),
+        ("state_prepared_shape", "prepared state shape"),
         ("language_tokens_shape", "language tokens shape"),
         ("noise_shape", "noise shape"),
     ]
@@ -2168,7 +2172,7 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                         layer_indices, average_heads, max_steps,
                         noise_seed=None, heatmap_steps_str=None, shared_noise=None,
                         shared_model_data=None, reference_input_signature=None,
-                        do_sanity_check=False):
+                        reference_model_name=None, do_sanity_check=False):
     """Process a single model checkpoint."""
     model_name = model_cfg["name"]
     method = model_cfg["method"]
@@ -2264,7 +2268,7 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                 metadata["shared_input_validation"] = {
                     "passed": True,
                     "camera_group": camera_name,
-                    "reference_model": list(reference_input_signature.keys()),
+                    "reference_model": reference_model_name,
                     "raw_observation_identical": True,
                     "state_identical": True,
                     "language_identical": True,
@@ -2304,6 +2308,16 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
             metadata["noise_seed"] = noise_seed if noise_seed is not None else seed
             metadata["noise_checksum"] = trace_result["metadata"]["noise_checksum"]
             metadata["input_checksums"] = trace_result["metadata"]["input_checksums"]
+
+            preserved_keys = {
+                "shared_input_validation",
+                "reference_input_signature",
+                "current_input_signature",
+                "sanity_check",
+            }
+            for key, value in trace_result["metadata"].items():
+                if key not in preserved_keys:
+                    metadata[key] = value
 
             all_metrics_rows = trace_result["attention_rows"]
 
@@ -2588,36 +2602,38 @@ def main():
                     first_policy = None
                     torch.cuda.empty_cache()
 
-            for model_cfg in models_to_process:
-                if model_cfg["name"] not in model_names_in_group:
-                    continue
+            try:
+                for model_cfg in models_to_process:
+                    if model_cfg["name"] not in model_names_in_group:
+                        continue
 
-                result = process_single_model(
-                    model_cfg, device, args.seed, args.mode, args.query_mode,
-                    output_dir, layer_indices, average_heads, args.max_steps,
-                    noise_seed=noise_seed,
-                    heatmap_steps_str=args.trace_heatmap_steps,
-                    shared_noise=shared_noise,
-                    shared_model_data=shared_model_data,
-                    reference_input_signature=reference_input_signature,
-                    do_sanity_check=args.sanity_check,
-                )
+                    result = process_single_model(
+                        model_cfg, device, args.seed, args.mode, args.query_mode,
+                        output_dir, layer_indices, average_heads, args.max_steps,
+                        noise_seed=noise_seed,
+                        heatmap_steps_str=args.trace_heatmap_steps,
+                        shared_noise=shared_noise,
+                        shared_model_data=shared_model_data,
+                        reference_input_signature=reference_input_signature,
+                        reference_model_name=first_model_cfg["name"] if first_model_cfg else None,
+                        do_sanity_check=args.sanity_check,
+                    )
 
-                if result is not None:
-                    rows, trace_result = result
-                    if rows:
-                        all_rows.extend(rows)
-                    if trace_result is not None:
-                        all_model_traces[model_cfg["name"]] = trace_result
+                    if result is not None:
+                        rows, trace_result = result
+                        if rows:
+                            all_rows.extend(rows)
+                        if trace_result is not None:
+                            all_model_traces[model_cfg["name"]] = trace_result
 
-                torch.cuda.empty_cache()
-
-            if shared_env is not None:
-                try:
-                    shared_env.close()
-                except Exception:
-                    pass
-                shared_env = None
+                    torch.cuda.empty_cache()
+            finally:
+                if shared_env is not None:
+                    try:
+                        shared_env.close()
+                    except Exception:
+                        pass
+                    shared_env = None
 
         if all_model_traces:
             generate_inference_trace_summary_plots(

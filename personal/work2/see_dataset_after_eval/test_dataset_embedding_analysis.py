@@ -338,7 +338,7 @@ def test_12_sparse_grid_insufficient_samples():
 
 
 def test_13_bootstrap_coverage_redundancy_sic():
-    """Test 13: Bootstrap generates mean/p95/max/redundancy/fixed SIC"""
+    """Test 13: Bootstrap generates coverage/redundancy metrics; Fixed SIC is separate."""
     print("\n=== Test 13: Bootstrap coverage/redundancy/SIC ===")
     
     rng = np.random.RandomState(42)
@@ -348,6 +348,7 @@ def test_13_bootstrap_coverage_redundancy_sic():
     phi = rng.randn(n, dim).astype(np.float32)
     
     from sic_v2 import compute_dbar_from_embeddings, build_kernel_matrices
+    from analyze_dataset_embedding import random_bootstrap_fixed_sic, generate_bootstrap_subsets
     
     dbar_g, dbar_w, _ = compute_dbar_from_embeddings(phi, phi)
     K_g, K_w = build_kernel_matrices(phi, phi, dbar_g, dbar_w)
@@ -358,7 +359,6 @@ def test_13_bootstrap_coverage_redundancy_sic():
         phi, subset, n_bootstrap=50, seed=42,
         K_global=K_g, K_wrist=K_w,
         dbar_global=dbar_g, dbar_wrist=dbar_w,
-        n_episodes_total=n
     )
     
     assert bootstrap is not None, "Bootstrap should not be None"
@@ -368,9 +368,25 @@ def test_13_bootstrap_coverage_redundancy_sic():
         assert "observed" in bootstrap[metric], f"Missing observed for {metric}"
         assert "better_than_random_fraction" in bootstrap[metric], f"Missing better_than_random for {metric}"
     
-    assert "normalized_fixed_sic" in bootstrap, "Missing normalized_fixed_sic"
-    assert "observed" in bootstrap["normalized_fixed_sic"], "Missing observed SIC"
-    assert "better_than_random_fraction" in bootstrap["normalized_fixed_sic"], "Missing better_than_random for SIC"
+    # Fixed SIC bootstrap is a separate, once-computed evidence item.
+    assert "normalized_fixed_sic" not in bootstrap, (
+        "random_bootstrap_analysis should NOT contain fixed SIC; "
+        "Fixed SIC is computed once via random_bootstrap_fixed_sic()"
+    )
+    
+    pre_subsets = generate_bootstrap_subsets(n_total=n, subset_size=len(subset), n_bootstrap=50, seed=42)
+    fixed_sic_boot = random_bootstrap_fixed_sic(
+        subset_indices=subset,
+        all_episode_indices=list(range(n)),
+        K_global=K_g, K_wrist=K_w,
+        dbar_global=dbar_g, dbar_wrist=dbar_w,
+        n_bootstrap=50, seed=42,
+        alpha=1.0, lambda_wrist=1.0,
+        pre_generated_subsets=pre_subsets,
+    )
+    assert fixed_sic_boot is not None, "Fixed SIC bootstrap should not be None"
+    assert "observed" in fixed_sic_boot, "Missing observed SIC"
+    assert "better_than_random_fraction" in fixed_sic_boot, "Missing better_than_random for SIC"
     
     print(f"  PASS: All bootstrap metrics present")
     return True
@@ -421,22 +437,20 @@ def test_15_h3_random_level_not_weak():
                     "p95_nearest": {"better_than_random_fraction": 0.5},
                     "max_radius": {"better_than_random_fraction": 0.5},
                     "redundancy_fraction": {"better_than_random_fraction": 0.5},
-                    "normalized_fixed_sic": {"better_than_random_fraction": 0.5},
                 },
                 "bootstrap_wrist": {
                     "mean_nearest": {"better_than_random_fraction": 0.5},
                     "p95_nearest": {"better_than_random_fraction": 0.5},
                     "max_radius": {"better_than_random_fraction": 0.5},
                     "redundancy_fraction": {"better_than_random_fraction": 0.5},
-                    "normalized_fixed_sic": {"better_than_random_fraction": 0.5},
                 },
                 "bootstrap_combined": {
                     "mean_nearest": {"better_than_random_fraction": 0.5},
                     "p95_nearest": {"better_than_random_fraction": 0.5},
                     "max_radius": {"better_than_random_fraction": 0.5},
                     "redundancy_fraction": {"better_than_random_fraction": 0.5},
-                    "normalized_fixed_sic": {"better_than_random_fraction": 0.5},
                 },
+                "bootstrap_fixed_sic": {"better_than_random_fraction": 0.5},
             }
         }
     }
@@ -466,22 +480,20 @@ def test_16_h3_strong_support():
                     "p95_nearest": {"better_than_random_fraction": 0.97},
                     "max_radius": {"better_than_random_fraction": 0.96},
                     "redundancy_fraction": {"better_than_random_fraction": 0.95},
-                    "normalized_fixed_sic": {"better_than_random_fraction": 0.99},
                 },
                 "bootstrap_wrist": {
                     "mean_nearest": {"better_than_random_fraction": 0.96},
                     "p95_nearest": {"better_than_random_fraction": 0.95},
                     "max_radius": {"better_than_random_fraction": 0.94},
                     "redundancy_fraction": {"better_than_random_fraction": 0.93},
-                    "normalized_fixed_sic": {"better_than_random_fraction": 0.97},
                 },
                 "bootstrap_combined": {
                     "mean_nearest": {"better_than_random_fraction": 0.97},
                     "p95_nearest": {"better_than_random_fraction": 0.96},
                     "max_radius": {"better_than_random_fraction": 0.95},
                     "redundancy_fraction": {"better_than_random_fraction": 0.94},
-                    "normalized_fixed_sic": {"better_than_random_fraction": 0.98},
                 },
+                "bootstrap_fixed_sic": {"better_than_random_fraction": 0.99},
             }
         }
     }
@@ -937,11 +949,14 @@ def test_28_alignment_duplicate_from_load_info():
 
     load_info = {
         "duplicate_episode_indices": [5, 10],
-        "invalid_files": ["bad_file.npy"],
+        "invalid_files": [{"file": "bad_file.npy", "reason": "missing phi_global"}],
         "file_count": 22,
+        "npy_file_count": 22,
+        "valid_record_count": 20,
     }
     meta_info = {
         "duplicate_episode_indices": [3, 7],
+        "record_count": 20,
     }
 
     episode_indices, phi_g, phi_w, init_pos, goal_pos, alignment_info = \
@@ -949,7 +964,12 @@ def test_28_alignment_duplicate_from_load_info():
 
     assert alignment_info["duplicate_embedding_episode_index"] == [5, 10], "Should use load_info duplicates"
     assert alignment_info["duplicate_metadata_episode_index"] == [3, 7], "Should use meta_info duplicates"
-    assert alignment_info["invalid_embedding_files"] == ["bad_file.npy"], "Should use load_info invalid files"
+    assert alignment_info["invalid_embedding_files"] == [{"file": "bad_file.npy", "reason": "missing phi_global"}], \
+        "Should use load_info invalid files with file+reason structure"
+    assert alignment_info["embedding_npy_file_count"] == 22, "Should use load_info npy_file_count"
+    assert alignment_info["embedding_valid_record_count"] == 20, "Should use load_info valid_record_count"
+    assert alignment_info["metadata_episode_count"] == 20, "metadata_episode_count should be raw record count"
+    assert alignment_info["metadata_unique_episode_count"] == 20, "metadata_unique_episode_count should be unique count"
 
     print(f"  PASS: Alignment duplicate info from load_info/meta_info")
     return True
@@ -1579,6 +1599,268 @@ def test_39_grid_shuffled_balanced_accuracy():
     return True
 
 
+def test_40_alignment_raw_vs_unique_counts():
+    """Test 40: metadata raw record count vs unique count are separate."""
+    print("\n=== Test 40: Alignment raw vs unique counts ===")
+
+    from analyze_dataset_embedding import align_embeddings_with_metadata
+
+    rng = np.random.RandomState(42)
+    n = 10
+    dim = 4
+
+    embeddings = {i: {"phi_global": rng.randn(dim).astype(np.float32), "phi_wrist": rng.randn(dim).astype(np.float32)} for i in range(n)}
+    metadata = {i: {"obj_init_pos": rng.rand(2), "goal_pos": rng.rand(2)} for i in range(n)}
+
+    load_info = {
+        "npy_file_count": 15,
+        "valid_record_count": 12,
+        "file_count": 12,
+        "duplicate_episode_indices": [],
+        "invalid_files": [],
+    }
+    meta_info = {
+        "duplicate_episode_indices": [],
+        "record_count": 13,
+    }
+
+    _, _, _, _, _, alignment_info = align_embeddings_with_metadata(
+        embeddings, metadata, load_info=load_info, meta_info=meta_info
+    )
+
+    assert alignment_info["metadata_episode_count"] == 13, "metadata_episode_count should be raw record count"
+    assert alignment_info["metadata_unique_episode_count"] == 10, "metadata_unique_episode_count should be unique count"
+    assert alignment_info["embedding_npy_file_count"] == 15, "embedding_npy_file_count should be scanned .npy count"
+    assert alignment_info["embedding_valid_record_count"] == 12, "embedding_valid_record_count should be valid records"
+    assert alignment_info["embedding_unique_episode_count"] == 10, "embedding_unique_episode_count should be unique"
+
+    print(f"  PASS: raw and unique counts are separate")
+    return True
+
+
+def test_41_missing_episode_index_marked_invalid():
+    """Test 41: embedding file without episode_index is marked invalid, not silently skipped."""
+    print("\n=== Test 41: Missing episode_index marked invalid ===")
+
+    import tempfile
+    from analyze_dataset_embedding import load_embeddings
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        emb_dir = Path(tmpdir)
+        bad = {"phi_global": np.zeros(2, dtype=np.float32), "phi_wrist": np.zeros(2, dtype=np.float32)}
+        np.save(emb_dir / "bad.npy", bad, allow_pickle=True)
+
+        good = {"episode_index": 0, "phi_global": np.zeros(2, dtype=np.float32), "phi_wrist": np.zeros(2, dtype=np.float32)}
+        np.save(emb_dir / "good.npy", good, allow_pickle=True)
+
+        embeddings, load_info = load_embeddings(emb_dir)
+
+        assert load_info["npy_file_count"] == 2, "Should scan both .npy files"
+        assert load_info["valid_record_count"] == 1, "Only the good file should be a valid record"
+        assert len(load_info["invalid_files"]) == 1, "Bad file should be in invalid_files"
+        assert load_info["invalid_files"][0]["file"] == "bad.npy", "Should record bad file name"
+        assert load_info["invalid_files"][0]["reason"] == "missing episode_index", "Should record reason"
+        assert 0 in embeddings, "Good file should be loaded"
+
+    print(f"  PASS: Missing episode_index marked invalid with reason")
+    return True
+
+
+def test_42_subset_duplicate_rejected():
+    """Test 42: subset with duplicated episodes raises ValueError."""
+    print("\n=== Test 42: Subset duplicate rejected ===")
+
+    import tempfile
+    test_data = {"selected_episode_indices": [1, 2, 2, 3]}
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        temp_path = Path(f.name)
+
+    try:
+        try:
+            load_subset_episode_indices(temp_path)
+            raise AssertionError("Should have raised ValueError for duplicates")
+        except ValueError as e:
+            assert "duplicate" in str(e).lower(), f"Should mention duplicates: {e}"
+            print(f"  PASS: Subset duplicate rejected: {e}")
+    finally:
+        temp_path.unlink()
+
+    return True
+
+
+def test_43_subset_path_missing_raises():
+    """Test 43: explicitly provided subset path that is missing raises FileNotFoundError."""
+    print("\n=== Test 43: Missing subset path raises ===")
+
+    from analyze_dataset_embedding import load_subset_if_provided
+
+    missing_path = Path("/nonexistent/random_112_seed42.json")
+
+    try:
+        load_subset_if_provided(missing_path)
+        raise AssertionError("Should have raised FileNotFoundError")
+    except FileNotFoundError as e:
+        assert "not found" in str(e).lower(), f"Should mention not found: {e}"
+        print(f"  PASS: Missing subset path raises FileNotFoundError")
+
+    assert load_subset_if_provided(None) is None, "None path should be skipped gracefully"
+    print(f"  PASS: None subset path returns None")
+    return True
+
+
+def test_44_subset_universe_mismatch_raises():
+    """Test 44: subset episode not in aligned universe raises, no silent shrink."""
+    print("\n=== Test 44: Subset universe mismatch raises ===")
+
+    all_episode_indices = [0, 1, 2, 3, 4, 5]
+    subset_with_missing = [1, 2, 99]
+
+    try:
+        match_subset_to_indices(subset_with_missing, all_episode_indices)
+        raise AssertionError("Should have raised ValueError for missing episode")
+    except ValueError as e:
+        assert "not in aligned dataset" in str(e), f"Should mention aligned dataset: {e}"
+        print(f"  PASS: Subset universe mismatch raises ValueError")
+
+    return True
+
+
+def test_45_h1_wrist_included_in_final_judgment():
+    """Test 45: wrist evidence participates in H1 final counts."""
+    print("\n=== Test 45: H1 wrist evidence participates ===")
+
+    # Global/combined NOT significant; wrist significant. Status must be WEAK,
+    # proving wrist is included in n_probe_sig / n_neighbor_sig.
+    mock_results = {
+        "validation": {"valid": True},
+        "global_stats": {"effective_rank": 10.0, "dimension": 100},
+        "wrist_stats": {"effective_rank": 10.0, "dimension": 100},
+        "combined_stats": {"effective_rank": 10.0, "dimension": 100},
+        "probe": {
+            "global": {"ridge": {"R2_x": 0.1, "R2_y": 0.1}, "shuffled_ridge": {
+                "R2_x": {"empirical_p_value": 0.9}, "R2_y": {"empirical_p_value": 0.9}}},
+            "wrist": {"ridge": {"R2_x": 0.9, "R2_y": 0.9}, "shuffled_ridge": {
+                "R2_x": {"empirical_p_value": 0.01}, "R2_y": {"empirical_p_value": 0.02}}},
+            "combined": {"ridge": {"R2_x": 0.1, "R2_y": 0.1}, "shuffled_ridge": {
+                "R2_x": {"empirical_p_value": 0.9}, "R2_y": {"empirical_p_value": 0.9}}},
+        },
+        "neighbor_overlap": {
+            "global": {"neighbor_overlap@10": 0.1, "random_neighbor_overlap@10": 0.1,
+                        "neighbor_overlap@10_null": {"empirical_p_value": 0.9}},
+            "wrist": {"neighbor_overlap@10": 0.5, "random_neighbor_overlap@10": 0.1,
+                       "neighbor_overlap@10_null": {"empirical_p_value": 0.01}},
+            "combined": {"neighbor_overlap@10": 0.1, "random_neighbor_overlap@10": 0.1,
+                          "neighbor_overlap@10_null": {"empirical_p_value": 0.9}},
+        },
+    }
+
+    h1_result = evaluate_h1(mock_results)
+    assert h1_result["status"] == "WEAK", (
+        f"Wrist-only significance should yield WEAK (wrist participates), got {h1_result['status']}"
+    )
+
+    print(f"  PASS: wrist evidence included in H1 final judgment")
+    return True
+
+
+def test_46_h2_wrist_included_in_final_judgment():
+    """Test 46: wrist evidence participates in H2 final counts."""
+    print("\n=== Test 46: H2 wrist evidence participates ===")
+
+    mock_results = {
+        "spearman": {
+            "global": {"rho": 0.6, "p_value": 1e-10},
+            "wrist": {"rho": 0.55, "p_value": 1e-8},
+            "combined": {"rho": 0.6, "p_value": 1e-10},
+        },
+        "permutation_tests": {
+            "global": {"permutation_p_value": 0.001},
+            "wrist": {"permutation_p_value": 0.001},
+            "combined": {"permutation_p_value": 0.001},
+        },
+        "probe": {
+            "global": {"ridge": {"R2_x": 0.1, "R2_y": 0.1}, "shuffled_ridge": {
+                "R2_x": {"empirical_p_value": 0.9}, "R2_y": {"empirical_p_value": 0.9}}},
+            "wrist": {"ridge": {"R2_x": 0.9, "R2_y": 0.9}, "shuffled_ridge": {
+                "R2_x": {"empirical_p_value": 0.01}, "R2_y": {"empirical_p_value": 0.02}}},
+            "combined": {"ridge": {"R2_x": 0.1, "R2_y": 0.1}, "shuffled_ridge": {
+                "R2_x": {"empirical_p_value": 0.9}, "R2_y": {"empirical_p_value": 0.9}}},
+        },
+        "neighbor_overlap": {
+            "global": {"neighbor_overlap@10": 0.1, "random_neighbor_overlap@10": 0.1,
+                        "neighbor_overlap@10_null": {"empirical_p_value": 0.9}},
+            "wrist": {"neighbor_overlap@10": 0.5, "random_neighbor_overlap@10": 0.1,
+                       "neighbor_overlap@10_null": {"empirical_p_value": 0.01}},
+            "combined": {"neighbor_overlap@10": 0.1, "random_neighbor_overlap@10": 0.1,
+                          "neighbor_overlap@10_null": {"empirical_p_value": 0.9}},
+        },
+    }
+
+    h2_result = evaluate_h2(mock_results)
+    assert h2_result["n_sig_spearman"] == 3, "All three reps have significant spearman"
+    # With 3 significant Spearman reps + wrist probe/neighbor evidence, multiple
+    # independent evidence families are present -> SUPPORTED. Wrist participation is
+    # proven because without wrist, n_probe_sig/n_neighbor_sig would be 0.
+    assert h2_result["status"] == "SUPPORTED", (
+        f"Spearman all + wrist probe/neighbor should be SUPPORTED, got {h2_result['status']}"
+    )
+    probe_sig_reps = [r for r in ["global", "wrist", "combined"]
+                      if h2_result["evidence"][r]["probe_x_significant"] and h2_result["evidence"][r]["probe_y_significant"]]
+    assert "wrist" in probe_sig_reps, f"Wrist probe should be significant: {probe_sig_reps}"
+
+    print(f"  PASS: wrist evidence included in H2 final judgment")
+    return True
+
+
+def test_47_json_summary_no_default_str():
+    """Test 47: analysis_summary.json does not rely on default=str."""
+    print("\n=== Test 47: JSON summary no default=str ===")
+
+    import tempfile
+    from analyze_dataset_embedding import save_analysis_summary
+
+    analysis_results = {
+        "n_episodes": 10,
+        "alignment": {"metadata_episode_count": 10, "metadata_unique_episode_count": 10},
+        "validation": {"valid": True, "stats": {}, "errors": [], "warnings": []},
+        "global_stats": {"dimension": 4, "effective_rank": 2.0},
+        "wrist_stats": {"dimension": 4, "effective_rank": 2.0},
+        "combined_stats": {"dimension": 8, "effective_rank": 4.0},
+        "global_normalized_stats": {"effective_rank": 2.0},
+        "wrist_normalized_stats": {"effective_rank": 2.0},
+        "spearman": {},
+        "permutation_tests": {},
+        "probe": {},
+        "neighbor_overlap": {},
+        "grid_classifiability": {},
+        "subset_comparison": {},
+        "ours_uniform_comparison": {},
+        "hypothesis_evaluation": {},
+        "analysis_config": {"seed": 42, "n_bootstrap": 1000, "alpha": 1.0, "lambda_wrist": 1.0},
+        "fixed_universe": {"reference_episode_count": 10, "dbar_global": 1.0, "dbar_wrist": 1.0, "dbar_fallback_used": False},
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_dir = Path(tmpdir)
+        save_analysis_summary(analysis_results, out_dir)
+
+        summary_path = out_dir / "analysis_summary.json"
+        assert summary_path.exists(), "analysis_summary.json should exist"
+
+        # Plain json.load (no default=str) must succeed, proving no numpy/object leakage.
+        with open(summary_path) as f:
+            data = json.load(f)
+
+        assert data["analysis_config"]["n_bootstrap"] == 1000, "analysis_config should contain n_bootstrap"
+        assert data["fixed_universe"]["reference_episode_count"] == 10, "fixed_universe should be recorded"
+        assert data["alignment"]["metadata_unique_episode_count"] == 10
+
+    print(f"  PASS: JSON summary serializes without default=str")
+    return True
+
+
 def main():
     print("\n" + "="*60)
     print("Dataset Embedding Analysis Unit Tests")
@@ -1624,6 +1906,14 @@ def main():
         test_37_fixed_sic_bootstrap_single_evidence,
         test_38_exact_duplicate_not_near_duplicate,
         test_39_grid_shuffled_balanced_accuracy,
+        test_40_alignment_raw_vs_unique_counts,
+        test_41_missing_episode_index_marked_invalid,
+        test_42_subset_duplicate_rejected,
+        test_43_subset_path_missing_raises,
+        test_44_subset_universe_mismatch_raises,
+        test_45_h1_wrist_included_in_final_judgment,
+        test_46_h2_wrist_included_in_final_judgment,
+        test_47_json_summary_no_default_str,
     ]
     
     passed = 0

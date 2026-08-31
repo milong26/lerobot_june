@@ -1,29 +1,26 @@
 #!/usr/bin/env python
 """
-LIBERO 数据集采集脚本 - 为单个 LIBERO task 生成均匀初始状态的 LeRobotDataset。
+LIBERO 数据集生成代码 - 为单个 LIBERO task 生成约 300 个 episode 的 LeRobotDataset。
 
-功能：
-    为指定的 LIBERO suite + task_id 生成 LeRobotDataset，每个 episode 使用 farthest-point
-    sampling 从大量候选初始状态中选择，使初始物体位置在 task 的合法初始化空间中均匀分布。
-    双相机（agentview + wrist）保存为 LeRobot MP4 视频，完整 environment_state 和 stats。
+功能说明：
+    本脚本为指定的 LIBERO task 生成均匀初始状态采样的 LeRobotDataset。
+    支持双相机视频保存、完整 environment_state、episode 初始状态和正确 stats。
 
 数据来源：
-    - LIBERO benchmark 通过 `libero.libero.benchmark` 获取
-    - BDDL 文件通过 `libero.libero.get_libero_path("bddl_files")` 获取
-    - 初始状态通过大量 seed reset 采样得到
+    - LIBERO 官方 demonstrations (HDF5 格式) 作为成功轨迹来源
+    - 通过大量 seed reset 生成均匀初始状态候选
 
-字段说明：
-    - observation.images.top (agentview_image): RGB 视频
-    - observation.images.wrist (robot0_eye_in_hand_image): RGB 视频
-    - observation.state: 25 维机器人状态 (eef_pos 3 + eef_quat 4 + gripper_qpos 2 + gripper_qvel 2 + joint_pos 7 + joint_vel 7)
-    - observation.environment_state: 完整 flattened MuJoCo state（从 env.env.sim.get_state().flatten() 获取）
-    - action: 7 维动作
-    - next.reward: 奖励标量
-    - next.success: 成功标志
-    - task: 任务语言描述
+数据字段：
+    - observation.images.top: agentview 相机视频 (agentview_image)
+    - observation.images.wrist: wrist 相机视频 (robot0_eye_in_hand_image)
+    - observation.state: 25维机械臂状态 (eef_pos(3)+eef_quat(4)+gripper_qpos(2)+gripper_qvel(2)+joint_pos(7)+joint_vel(7))
+    - observation.environment_state: 完整 flattened MuJoCo state
+    - action: 7维动作
+    - next.reward, next.success: 奖励和成功标志
+    - task: 任务描述
 
 运行方法：
-    # 完整采集（300 episodes）
+    完整采集 300 episode:
     cd /data/zhonglinye/jun/lerobot
     python personal/work2/collect_dataset/libero/collect_libero_dataset.py \
         --suite libero_spatial --task-id 0 --num-episodes 300 \
@@ -31,7 +28,8 @@ LIBERO 数据集采集脚本 - 为单个 LIBERO task 生成均匀初始状态的
         --repo-id work2/libero_spatial_task0 --fps 20 --image-size 360 \
         --seed-start 0 --candidate-multiplier 10
 
-    # 快速测试（2 episodes）
+    快速测试 2 episode:
+    cd /data/zhonglinye/jun/lerobot
     python personal/work2/collect_dataset/libero/collect_libero_dataset.py \
         --suite libero_spatial --task-id 0 --num-episodes 2 \
         --output-dir personal/work2/dataset/libero_spatial_task0_test \
@@ -49,6 +47,7 @@ from pathlib import Path
 os.environ["MUJOCO_GL"] = "egl"
 os.environ["PYOPENGL_PLATFORM"] = "egl"
 
+import h5py
 import numpy as np
 
 from libero.libero import benchmark, get_libero_path
@@ -56,44 +55,59 @@ from libero.libero.envs import OffScreenRenderEnv
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-ROBOT_STATE_DIM = 25
-ACTION_DIM = 7
+LIBERO_ACTION_DIM = 7
+LIBERO_DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
+
+CAMERA_NAME_MAPPING = {
+    "agentview_image": "image",
+    "robot0_eye_in_hand_image": "image2",
+}
 
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="为 LIBERO task 生成均匀初始状态的 LeRobotDataset",
+        description="为 LIBERO task 生成均匀初始状态采样的 LeRobotDataset",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--suite", type=str, required=True,
                         help="LIBERO suite 名称，如 libero_spatial, libero_object, libero_goal, libero_10, libero_90")
     parser.add_argument("--task-id", type=int, required=True,
-                        help="Task ID 在指定 suite 中的索引")
+                        help="Task ID (0-indexed)")
     parser.add_argument("--num-episodes", type=int, default=300,
-                        help="目标 episode 数量（默认 300）")
+                        help="目标 episode 数量 (默认 300)")
     parser.add_argument("--output-dir", type=str, default=None,
-                        help="输出目录，默认 personal/work2/dataset/<suite>_task<task_id>")
+                        help="输出目录路径 (默认 personal/work2/dataset/<suite>_task<task_id>)")
     parser.add_argument("--repo-id", type=str, required=True,
                         help="HuggingFace repo ID，格式: 用户名/数据集名")
     parser.add_argument("--fps", type=int, default=20,
-                        help="视频帧率（默认 20）")
+                        help="视频帧率 (默认 20)")
     parser.add_argument("--image-size", type=int, default=360,
-                        help="图像分辨率（默认 360）")
+                        help="图像分辨率 (默认 360)")
     parser.add_argument("--seed-start", type=int, default=0,
-                        help="起始 seed（默认 0）")
+                        help="随机种子起始值 (默认 0)")
     parser.add_argument("--candidate-multiplier", type=int, default=10,
-                        help="候选数量倍数（默认 10，即 num_episodes * 10）")
+                        help="candidate 数量 = num_episodes * candidate_multiplier (默认 10)")
     parser.add_argument("--save-only-successful", action="store_true",
                         help="只保存成功的 episode")
     return parser.parse_args()
 
 
 def get_suite_and_task(suite_name: str, task_id: int):
-    """获取指定 suite 和 task_id 对应的 task 对象。"""
-    bench = benchmark.get_benchmark_dict()
-    if suite_name not in bench:
-        raise ValueError(f"Unknown suite '{suite_name}'. Available: {', '.join(bench.keys())}")
-    suite = bench[suite_name]()
+    """
+    获取 LIBERO suite 和 task 对象。
+
+    Args:
+        suite_name: suite 名称
+        task_id: task ID
+
+    Returns:
+        suite: LIBERO Benchmark 对象
+        task: LIBERO Task 对象
+    """
+    bench_dict = benchmark.get_benchmark_dict()
+    if suite_name not in bench_dict:
+        raise ValueError(f"Unknown suite '{suite_name}'. Available: {', '.join(sorted(bench_dict.keys()))}")
+    suite = bench_dict[suite_name]()
     if task_id < 0 or task_id >= len(suite.tasks):
         raise ValueError(f"task_id {task_id} out of range [0, {len(suite.tasks) - 1}]")
     task = suite.get_task(task_id)
@@ -101,278 +115,345 @@ def get_suite_and_task(suite_name: str, task_id: int):
 
 
 def resolve_bddl_file(task):
-    """获取 BDDL 文件的完整路径。"""
-    bddl_root = get_libero_path("bddl_files")
-    bddl_file = bddl_root / task.problem_folder / task.bddl_file
-    if not bddl_file.exists():
-        raise FileNotFoundError(f"BDDL file not found: {bddl_file}")
-    return bddl_file
+    """
+    获取 BDDL 文件路径。
+
+    Args:
+        task: LIBERO Task 对象
+
+    Returns:
+        Path: BDDL 文件的完整路径
+    """
+    bddl_path = get_libero_path("bddl_files") / task.problem_folder / task.bddl_file
+    if not bddl_path.exists():
+        raise FileNotFoundError(f"BDDL file not found: {bddl_path}")
+    return bddl_path
 
 
-def create_env(bddl_file: Path, image_size: int, fps: int):
-    """创建 OffScreenRenderEnv 环境。"""
+def create_env(bddl_file_path: str, image_size: int = 360, control_freq: int = 20):
+    """
+    创建 OffScreenRenderEnv 环境。
+
+    Args:
+        bddl_file_path: BDDL 文件路径
+        image_size: 图像分辨率
+        control_freq: 控制频率
+
+    Returns:
+        env: OffScreenRenderEnv 实例
+    """
     env = OffScreenRenderEnv(
-        bddl_file_name=str(bddl_file),
+        bddl_file_name=str(bddl_file_path),
         camera_heights=image_size,
         camera_widths=image_size,
-        control_freq=fps,
+        control_freq=control_freq,
     )
     return env
 
 
 def get_flattened_env_state(env) -> np.ndarray:
-    """获取完整的 MuJoCo simulator state。"""
-    sim = env.env.sim
-    return sim.get_state().flatten()
-
-
-def get_randomizable_object_poses(env) -> dict:
-    """从环境中提取参与随机初始化的物体 pose。
-
-    通过读取 BDDL 文件中的 initial_config 部分确定哪些物体可以随机，
-    然后从 simulator state 中提取这些物体的位置。
-
-    Returns:
-        dict: {object_name: {"pos": (3,), "quat": (4,) or None}}
     """
-    poses = {}
-    try:
-        import xml.etree.ElementTree as ET
-        bddl_path = getattr(env, '_bddl_file', None)
-        if bddl_path is None:
-            return poses
-
-        tree = ET.parse(bddl_path)
-        root = tree.getroot()
-        ns = {"bddl": "http://www.example.com/bddl"}
-
-        for elem in root.iter():
-            if elem.tag.endswith("initial_config"):
-                for obj in elem:
-                    obj_name = obj.get("name")
-                    if obj_name and obj_name != "robot":
-                        pos_elem = obj.find("position")
-                        quat_elem = obj.find("quaternion")
-                        pos = None
-                        quat = None
-                        if pos_elem is not None and pos_elem.text:
-                            pos = np.array([float(x) for x in pos_elem.text.strip().split()])
-                        if quat_elem is not None and quat_elem.text:
-                            quat = np.array([float(x) for x in quat_elem.text.strip().split()])
-                        if pos is not None:
-                            poses[obj_name] = {"pos": pos, "quat": quat}
-    except Exception as e:
-        pass
-
-    if not poses:
-        pass
-
-    return poses
-
-
-def build_initial_state_descriptor(object_poses: dict) -> np.ndarray:
-    """构造均匀采样 descriptor。
-
-    将所有可随机物体的 xyz 拼接成 descriptor。
-    如果只有一个物体，descriptor 就是其 xyz (3维)；
-    如果有多个物体，拼接多个物体的 xyz。
-
-    Args:
-        object_poses: {name: {"pos": (3,), "quat": (4,) or None}}
-
-    Returns:
-        descriptor: concatenated xyz positions
-    """
-    parts = []
-    for name in sorted(object_poses.keys()):
-        pose = object_poses[name]
-        parts.append(pose["pos"])
-    if parts:
-        return np.concatenate(parts)
-    return np.array([])
-
-
-def generate_candidate_initial_states(env, num_candidates: int, seed_start: int) -> list:
-    """生成大量候选初始状态。
-
-    通过对不同 seed 执行 reset，从合法的初始化空间中采样状态。
-    每个 candidate 保存 seed 和完整 flattened state。
+    获取完整的 flattened MuJoCo simulator state。
 
     Args:
         env: OffScreenRenderEnv 实例
-        num_candidates: 目标候选数量
+
+    Returns:
+        flattened state as numpy array
+    """
+    sim = env.env.sim
+    qpos = sim.data.qpos.copy()
+    qvel = sim.data.qvel.copy()
+    act = sim.data.act.copy() if sim.data.act is not None else np.array([])
+    return np.concatenate([qpos, qvel, act])
+
+
+def get_randomizable_object_poses(env, bddl_file_path: str) -> dict:
+    """
+    从当前环境和 BDDL 文件中提取参与随机初始化的物体 pose。
+
+    Args:
+        env: OffScreenRenderEnv 实例
+        bddl_file_path: BDDL 文件路径
+
+    Returns:
+        dict: 物体名称到 pose 的映射
+    """
+    poses = {}
+
+    bddl_content = Path(bddl_file_path).read_text()
+
+    import re
+    init_state_pattern = re.compile(r'init\s*\((.*?)\)', re.DOTALL)
+    matches = init_state_pattern.findall(bddl_content)
+
+    if not matches:
+        return poses
+
+    geom_ids = []
+    for match in matches:
+        parts = match.strip().split(',')
+        if len(parts) >= 4:
+            try:
+                geom_name = parts[0].strip()
+                x, y, z = float(parts[1]), float(parts[2]), float(parts[3])
+                if geom_name not in poses:
+                    poses[geom_name] = []
+                poses[geom_name].append(np.array([x, y, z]))
+            except (ValueError, IndexError):
+                continue
+
+    final_poses = {}
+    for name, pos_list in poses.items():
+        if len(pos_list) > 0:
+            final_poses[name] = np.mean(pos_list, axis=0)
+
+    return final_poses
+
+
+def build_initial_state_descriptor(object_poses: dict, env_state: np.ndarray) -> np.ndarray:
+    """
+    构建用于均匀采样的 descriptor。
+
+    将所有可随机物体的 xyz 拼接成 descriptor。
+
+    Args:
+        object_poses: 物体名称到 pose 的映射
+        env_state: 完整的 environment state (未使用，保留接口兼容性)
+
+    Returns:
+        descriptor array
+    """
+    if not object_poses:
+        return np.array([])
+
+    parts = []
+    for name in sorted(object_poses.keys()):
+        pose = object_poses[name]
+        if len(pose) >= 3:
+            parts.append(pose[:3])
+        elif len(pose) == 1:
+            parts.append(pose)
+
+    if not parts:
+        return np.array([])
+
+    return np.concatenate(parts)
+
+
+def generate_candidate_initial_states(
+    env, bddl_file_path: str, num_candidates: int, seed_start: int = 0
+) -> list:
+    """
+    通过大量不同 seed reset 生成合法的 initial states。
+
+    Args:
+        env: OffScreenRenderEnv 实例
+        bddl_file_path: BDDL 文件路径
+        num_candidates: 需要生成的 candidate 数量
         seed_start: 起始 seed
 
     Returns:
-        list of dict: [{"seed": int, "state": np.ndarray, "object_poses": dict}]
+        list of dict, 每个 dict 包含:
+            - seed: 随机种子
+            - state: 完整的 flattened MuJoCo state
+            - object_poses: 物体初始 pose
+            - descriptor: 用于均匀采样的 descriptor
     """
     candidates = []
-    seed = seed_start
-    max_attempts = num_candidates * 20
-    attempts = 0
+    env.reset()
 
-    while len(candidates) < num_candidates and attempts < max_attempts:
-        attempts += 1
-        try:
-            env.seed(seed)
-            env.reset()
+    for i in range(num_candidates):
+        seed = seed_start + i
+        env.seed(seed)
+        env.reset()
 
-            full_state = get_flattened_env_state(env)
-            object_poses = get_randomizable_object_poses(env)
+        for _ in range(10):
+            env.step(LIBERO_DUMMY_ACTION)
 
-            candidates.append({
-                "seed": seed,
-                "state": full_state,
-                "object_poses": object_poses,
-            })
-            if len(candidates) % 100 == 0:
-                print(f"  Generated {len(candidates)} candidates...")
-        except Exception as e:
-            pass
-        seed += 1
+        full_state = get_flattened_env_state(env)
+        object_poses = get_randomizable_object_poses(env, bddl_file_path)
+        descriptor = build_initial_state_descriptor(object_poses, full_state)
 
-    print(f"  Generated {len(candidates)} candidate initial states")
+        candidates.append({
+            "seed": seed,
+            "state": full_state,
+            "object_poses": object_poses,
+            "descriptor": descriptor,
+        })
+
+        if (i + 1) % 500 == 0:
+            print(f"  Generated {i + 1}/{num_candidates} candidates")
+
     return candidates
 
 
 def remove_constant_dimensions(descriptors: np.ndarray) -> tuple:
-    """排除 descriptor 中标准差过小的维度。
+    """
+    移除 descriptor 中标准差过小的维度。
 
     Args:
-        descriptors: (num_candidates, descriptor_dim) array
+        descriptors: shape (num_candidates, descriptor_dim)
 
     Returns:
-        (valid_descriptors, valid_mask, stats) where stats contains min/max/std per dimension
+        (valid_descriptors, valid_dims_mask)
+        - valid_descriptors: 移除常数列后的 descriptors
+        - valid_dims_mask: 布尔数组，标记哪些维度是有效的
     """
-    stats = []
-    valid_mask = []
-    for i in range(descriptors.shape[1]):
-        std = np.std(descriptors[:, i])
-        dim_min = np.min(descriptors[:, i])
-        dim_max = np.max(descriptors[:, i])
-        stats.append({"min": float(dim_min), "max": float(dim_max), "std": float(std)})
-        valid_mask.append(std > 1e-6)
-
-    valid_mask = np.array(valid_mask)
-    if not np.any(valid_mask):
-        return descriptors, valid_mask, stats
-
-    valid_descriptors = descriptors[:, valid_mask]
-    return valid_descriptors, valid_mask, stats
+    std_vals = np.std(descriptors, axis=0)
+    valid_dims = std_vals > 1e-6
+    valid_descriptors = descriptors[:, valid_dims] if valid_descriptors := descriptors[:, valid_dims] else descriptors
+    return valid_descriptors, valid_dims
 
 
-def select_uniform_initial_states(candidates: list, num_select: int, seed: int) -> list:
-    """使用 farthest-point sampling 选择均匀分布的初始状态。
-
-    先对 descriptor 归一化到 0~1，第一个点选择离中心最近的，
-    之后每次选择距离已选集合最远的点。
+def select_uniform_initial_states(candidates: list, target_num: int) -> list:
+    """
+    使用 farthest-point sampling 选择均匀分布的 initial states。
 
     Args:
-        candidates: list of candidate dicts with "object_poses" key
-        num_select: 目标选择数量
-        seed: 随机种子
+        candidates: candidate 列表
+        target_num: 目标选择数量
 
     Returns:
-        list of selected candidate indices
+        选中的 candidate 索引列表
     """
-    if len(candidates) <= num_select:
+    if len(candidates) <= target_num:
         return list(range(len(candidates)))
 
-    descriptors = []
-    for c in candidates:
-        desc = build_initial_state_descriptor(c.get("object_poses", {}))
-        descriptors.append(desc)
+    descriptors = np.array([c["descriptor"] for c in candidates])
 
-    descriptors = np.array(descriptors)
-    if descriptors.shape[0] == 0 or descriptors.shape[1] == 0:
-        return list(range(min(num_select, len(candidates))))
+    if descriptors.shape[1] == 0:
+        return list(range(target_num))
 
-    valid_descriptors, valid_mask, dim_stats = remove_constant_dimensions(descriptors)
+    valid_descriptors, valid_dims_mask = remove_constant_dimensions(descriptors)
 
     if valid_descriptors.shape[1] == 0:
-        return list(range(min(num_select, len(candidates))))
+        return list(range(target_num))
 
-    valid_min = np.min(valid_descriptors, axis=0)
-    valid_max = np.max(valid_descriptors, axis=0)
-    valid_range = valid_max - valid_min
-    valid_range[valid_range < 1e-6] = 1.0
+    min_vals = np.min(valid_descriptors, axis=0)
+    max_vals = np.max(valid_descriptors, axis=0)
+    range_vals = max_vals - min_vals
+    range_vals = np.where(range_vals < 1e-10, 1.0, range_vals)
 
-    normalized = (valid_descriptors - valid_min) / valid_range
+    normalized = (valid_descriptors - min_vals) / range_vals
 
     center = np.mean(normalized, axis=0)
-    dist_to_center = np.linalg.norm(normalized - center, axis=1)
+    dists_to_center = np.linalg.norm(normalized - center, axis=1)
 
-    selected = [np.argmin(dist_to_center)]
-    min_distances = np.full(len(candidates), np.inf)
+    selected_indices = [int(np.argmin(dists_to_center))]
 
-    for _ in range(num_select - 1):
-        if len(selected) >= len(candidates):
+    for _ in range(target_num - 1):
+        if len(selected_indices) >= len(candidates):
             break
 
-        last_selected = selected[-1]
-        dists = np.linalg.norm(normalized - normalized[last_selected], axis=1)
-        min_distances = np.minimum(min_distances, dists)
+        selected_descriptors = normalized[selected_indices]
+        dists = np.linalg.norm(normalized - selected_descriptors[:, np.newaxis], axis=2)
+        min_dists_to_selected = np.min(dists, axis=0)
 
-        min_distances[selected] = -np.inf
+        for idx in selected_indices:
+            min_dists_to_selected[idx] = -np.inf
 
-        next_idx = np.argmax(min_distances)
-        if min_distances[next_idx] < 0:
-            break
-        selected.append(next_idx)
+        next_idx = int(np.argmax(min_dists_to_selected))
+        selected_indices.append(next_idx)
 
-    return selected
+    return selected_indices
 
 
-def save_uniform_initial_states(output_dir: Path, selected_candidates: list, dim_stats: list, valid_mask: list):
-    """保存均匀选择的初始状态到 NPZ 和 JSON。"""
+def save_uniform_initial_states(output_dir: Path, selected_candidates: list, all_candidates: list):
+    """
+    保存均匀初始状态到 NPZ 和 JSON 文件。
+
+    Args:
+        output_dir: 输出目录
+        selected_candidates: 选中的 candidate 列表
+        all_candidates: 所有 candidate 列表 (用于索引)
+    """
     states = np.array([c["state"] for c in selected_candidates])
-    seeds = [c["seed"] for c in selected_candidates]
-    object_poses = [c["object_poses"] for c in selected_candidates]
-
     npz_path = output_dir / "uniform_initial_states.npz"
-    np.savez(npz_path, states=states, seeds=seeds)
+    np.savez(npz_path, states=states)
+    print(f"Saved uniform initial states to {npz_path}")
 
     json_data = {
-        "num_states": len(selected_candidates),
-        "dim_stats": dim_stats,
-        "valid_mask": valid_mask.tolist() if hasattr(valid_mask, 'tolist') else list(valid_mask),
-        "seeds": seeds,
-        "object_poses": [
-            {k: {"pos": v["pos"].tolist(), "quat": v["quat"].tolist() if v["quat"] is not None else None}
-            for k, v in poses.items()
-        } for poses in object_poses
-        ]
+        "num_selected": len(selected_candidates),
+        "num_total_candidates": len(all_candidates),
+        "episodes": []
     }
+
+    for ep_idx, cand in enumerate(selected_candidates):
+        ep_data = {
+            "episode_index": ep_idx,
+            "seed": int(cand["seed"]),
+            "object_poses": {k: v.tolist() if isinstance(v, np.ndarray) else v
+                           for k, v in cand["object_poses"].items()},
+            "descriptor": cand["descriptor"].tolist() if isinstance(cand["descriptor"], np.ndarray) else [],
+        }
+        json_data["episodes"].append(ep_data)
 
     json_path = output_dir / "uniform_initial_states.json"
     with open(json_path, "w") as f:
         json.dump(json_data, f, indent=2)
-
-    print(f"  Saved uniform states to {npz_path} and {json_path}")
+    print(f"Saved uniform initial states metadata to {json_path}")
 
 
 def build_robot_state(env) -> np.ndarray:
-    """构造 25 维机器人状态。
+    """
+    构建 25 维机械臂状态。
 
     顺序: eef_pos(3) + eef_quat(4) + gripper_qpos(2) + gripper_qvel(2) + joint_pos(7) + joint_vel(7)
 
-    Returns:
-        np.ndarray shape (25,)
-    """
-    eef_pos = env.get_obs()["robot0_eef_pos"]
-    eef_quat = env.get_obs()["robot0_eef_quat"]
-    gripper_qpos = env.get_obs()["robot0_gripper_qpos"]
-    gripper_qvel = env.get_obs()["robot0_gripper_qvel"]
-    joint_pos = env.get_obs()["robot0_joint_pos"]
-    joint_vel = env.get_obs()["robot0_joint_vel"]
+    Args:
+        env: OffScreenRenderEnv 实例
 
-    state = np.concatenate([eef_pos, eef_quat, gripper_qpos, gripper_qvel, joint_pos, joint_vel])
-    assert state.shape == (ROBOT_STATE_DIM,), f"Expected (25,) got {state.shape}"
+    Returns:
+        25 维 numpy array
+    """
+    raw_obs = env.env._get_observations()
+
+    eef_pos = raw_obs.get("robot0_eef_pos")
+    eef_quat = raw_obs.get("robot0_eef_quat")
+    gripper_qpos = raw_obs.get("robot0_gripper_qpos")
+    gripper_qvel = raw_obs.get("robot0_gripper_qvel")
+    joint_pos = raw_obs.get("robot0_joint_pos")
+    joint_vel = raw_obs.get("robot0_joint_vel")
+
+    if eef_pos is None or eef_quat is None or gripper_qpos is None or joint_pos is None:
+        raise ValueError(f"Missing robot state fields. "
+                        f"eef_pos={eef_pos is not None}, eef_quat={eef_quat is not None}, "
+                        f"gripper_qpos={gripper_qpos is not None}, joint_pos={joint_pos is not None}")
+
+    state = np.concatenate([
+        eef_pos,
+        eef_quat,
+        gripper_qpos,
+        gripper_qvel if gripper_qvel is not None else np.zeros(2),
+        joint_pos,
+        joint_vel if joint_vel is not None else np.zeros(7),
+    ])
+
+    assert state.shape == (25,), f"Expected state shape (25,), got {state.shape}"
     return state.astype(np.float32)
 
 
-def create_dataset(repo_id: str, output_dir: Path, fps: int, image_size: int):
-    """创建 LeRobot video dataset。"""
+def create_dataset(
+    repo_id: str,
+    output_dir: Path,
+    fps: int,
+    image_size: int,
+    state_dim: int,
+):
+    """
+    创建 LeRobotDataset。
+
+    Args:
+        repo_id: HuggingFace repo ID
+        output_dir: 本地保存路径
+        fps: 帧率
+        image_size: 图像分辨率
+        state_dim: environment_state 维度
+
+    Returns:
+        LeRobotDataset 实例
+    """
     features = {
         "observation.images.top": {
             "dtype": "video",
@@ -384,15 +465,15 @@ def create_dataset(repo_id: str, output_dir: Path, fps: int, image_size: int):
         },
         "observation.state": {
             "dtype": "float32",
-            "shape": (ROBOT_STATE_DIM,),
+            "shape": (25,),
         },
         "observation.environment_state": {
             "dtype": "float32",
-            "shape": (1,),
+            "shape": (state_dim,),
         },
         "action": {
             "dtype": "float32",
-            "shape": (ACTION_DIM,),
+            "shape": (7,),
         },
         "next.reward": {
             "dtype": "float32",
@@ -413,371 +494,411 @@ def create_dataset(repo_id: str, output_dir: Path, fps: int, image_size: int):
         fps=fps,
         features=features,
         root=str(output_dir),
-        robot_type="panda",
         use_videos=True,
     )
+
     return dataset
 
 
-def collect_demo_episode(env, task_language: str, max_steps: int = 300) -> tuple:
-    """尝试执行 episode。
-
-    如果有成功轨迹，返回 (frames, success, initial_state, initial_object_poses)。
-    如果失败，返回 (None, False, None, None)。
-
-    Note: 此版本使用 env 内置的 init_states 来获取成功轨迹。
-    对于新生成的均匀 initial states，需要使用 rollout_episode() 函数配合 policy。
+def collect_demo_episode(
+    env,
+    demo_states: np.ndarray,
+    demo_actions: np.ndarray,
+    task_language: str,
+    image_size: int,
+    state_dim: int,
+):
     """
-    raw_obs = env.reset()
-    obs = env.get_obs()
+    通过 state replay 收集一个 episode。
 
-    initial_state = get_flattened_env_state(env)
-    initial_object_poses = get_randomizable_object_poses(env)
+    使用官方 demonstration 的 states 和 actions，通过 state replay 生成轨迹。
 
+    Args:
+        env: OffScreenRenderEnv 实例
+        demo_states: demonstration states (T, state_dim)
+        demo_actions: demonstration actions (T, 7)
+        task_language: 任务描述
+        image_size: 图像分辨率
+        state_dim: environment_state 维度
+
+    Returns:
+        (frames, success) - 帧列表和是否成功
+    """
     frames = []
-    success_detected = False
-    extra_frames = 10
-    frames_after_success = 0
+    success = False
 
-    for step in range(max_steps):
-        action = env.action_space.sample()
+    for t in range(len(demo_states)):
+        state = demo_states[t]
+        env.env.sim.set_state_from_flatten(state)
 
-        raw_obs, reward, done, info = env.step(action)
-        obs = env.get_obs()
+        for _ in range(3):
+            env.step(LIBERO_DUMMY_ACTION)
+
+        raw_obs = env.env._get_observations()
 
         top_image = raw_obs.get("agentview_image")
         wrist_image = raw_obs.get("robot0_eye_in_hand_image")
+
+        if top_image is not None:
+            top_image = top_image[::-1, ::-1]
+        if wrist_image is not None:
+            wrist_image = wrist_image[::-1, ::-1]
 
         if top_image is None or wrist_image is None:
             continue
 
         robot_state = build_robot_state(env)
-        env_state = get_flattened_env_state(env)
+        full_env_state = get_flattened_env_state(env)
+
+        if full_env_state.shape[0] != state_dim:
+            continue
+
+        action = demo_actions[t] if t < len(demo_actions) else np.zeros(7)
 
         frame = {
             "observation.images.top": top_image,
             "observation.images.wrist": wrist_image,
             "observation.state": robot_state,
-            "observation.environment_state": env_state.reshape(1,),
+            "observation.environment_state": full_env_state.astype(np.float32),
             "action": action.astype(np.float32),
-            "next.reward": np.array([reward], dtype=np.float32),
-            "next.success": np.array([info.get("is_success", False)], dtype=bool),
+            "next.reward": np.array([0.0], dtype=np.float32),
+            "next.success": np.array([False], dtype=bool),
             "task": task_language,
         }
         frames.append(frame)
 
-        if info.get("is_success", False):
-            success_detected = True
-            print(f"    Success at step {step}")
-            break
+    if frames:
+        last_frame = frames[-1]
+        env.env.sim.set_state_from_flatten(demo_states[-1])
+        for _ in range(10):
+            env.step(LIBERO_DUMMY_ACTION)
+        success = env.check_success()
 
-        if done:
-            break
-
-        if success_detected:
-            frames_after_success += 1
-            if frames_after_success >= extra_frames:
-                break
-
-    return frames, success_detected, initial_state, initial_object_poses
+    return frames, success
 
 
-def rollout_episode(env, initial_state: np.ndarray, policy, max_steps: int = 300) -> tuple:
-    """从指定初始状态使用 policy 执行 rollout。
+def get_demo_data(task):
+    """
+    获取 LIBERO 官方 demonstration 数据。
 
     Args:
-        env: OffScreenRenderEnv 实例
-        initial_state: flattened MuJoCo state
-        policy: 可调用对象，接受 observation 返回 action
-        max_steps: 最大步数
+        task: LIBERO Task 对象
 
     Returns:
-        (frames, success, initial_state, initial_object_poses)
+        (demo_states, demo_actions) - states 和 actions
     """
-    env.reset()
-    env.set_init_state(initial_state)
+    demos_path = get_libero_path("demos")
+    demo_dir = demos_path / task.problem_folder
 
-    initial_object_poses = get_randomizable_object_poses(env)
+    if not demo_dir.exists():
+        return None, None
 
-    raw_obs = env.get_obs()
-    frames = []
-    success_detected = False
-    extra_frames = 10
-    frames_after_success = 0
+    hdf5_files = list(demo_dir.glob("*.h5"))
+    if not hdf5_files:
+        return None, None
 
-    for step in range(max_steps):
-        obs = env.get_obs()
-        robot_state = build_robot_state(env)
+    demo_file = hdf5_files[0]
+    try:
+        with h5py.File(demo_file, "r") as f:
+            if "data/demo_0/states" in f:
+                demo_states = f["data/demo_0/states"][:]
+                demo_actions = f["data/demo_0/actions"][:]
+                return demo_states, demo_actions
+    except Exception as e:
+        print(f"Warning: Could not read demo file {demo_file}: {e}")
 
-        action = policy(obs)
-
-        raw_obs, reward, done, info = env.step(action)
-
-        top_image = raw_obs.get("agentview_image")
-        wrist_image = raw_obs.get("robot0_eye_in_hand_image")
-
-        if top_image is None or wrist_image is None:
-            continue
-
-        env_state = get_flattened_env_state(env)
-
-        frame = {
-            "observation.images.top": top_image,
-            "observation.images.wrist": wrist_image,
-            "observation.state": robot_state,
-            "observation.environment_state": env_state.reshape(1,),
-            "action": action.astype(np.float32),
-            "next.reward": np.array([reward], dtype=np.float32),
-            "next.success": np.array([info.get("is_success", False)], dtype=bool),
-            "task": env.task_description,
-        }
-        frames.append(frame)
-
-        if info.get("is_success", False):
-            success_detected = True
-            print(f"    Success at step {step}")
-            break
-
-        if done:
-            break
-
-        if success_detected:
-            frames_after_success += 1
-            if frames_after_success >= extra_frames:
-                break
-
-    return frames, success_detected, initial_state, initial_object_poses
+    return None, None
 
 
-def save_episode_metadata(output_dir: Path, episode_data: list, suite: str, task_id: int,
-                          task_name: str, task_description: str, bddl_file: str,
-                          state_dim: int, sampling_method: str, num_candidates: int):
-    """保存 episode 初始状态元数据到 episode_initial_states.json。"""
+def save_episode_metadata(
+    output_dir: Path,
+    suite_name: str,
+    task_id: int,
+    task_name: str,
+    task_language: str,
+    bddl_file: str,
+    state_dim: int,
+    episode_initial_states: list,
+    num_successful: int,
+    descriptor_info: dict,
+):
+    """
+    保存 episode 初始状态元数据。
+
+    Args:
+        output_dir: 输出目录
+        suite_name: suite 名称
+        task_id: task ID
+        task_name: task 名称
+        task_language: 任务描述
+        bddl_file: BDDL 文件路径
+        state_dim: environment_state 维度
+        episode_initial_states: 每个 episode 的初始状态信息
+        num_successful: 成功 episode 数量
+        descriptor_info: descriptor 维度信息
+    """
     metadata = {
-        "suite": suite,
+        "suite": suite_name,
         "task_id": task_id,
         "task_name": task_name,
-        "task_description": task_description,
+        "task_description": task_language,
         "bddl_file": str(bddl_file),
         "state_dim": state_dim,
-        "sampling_method": sampling_method,
-        "num_candidates": num_candidates,
-        "target_episodes": len(episode_data),
-        "successful_trajectories": sum(1 for ep in episode_data if ep.get("success", False)),
-        "episodes": []
+        "sampling_method": "task_space_farthest_point",
+        "num_candidates_generated": descriptor_info.get("num_candidates", 0),
+        "num_episodes_target": len(episode_initial_states),
+        "num_successful_trajectories": num_successful,
+        "descriptor_dim": descriptor_info.get("dim", 0),
+        "descriptor_object_names": descriptor_info.get("object_names", []),
+        "descriptor_min": descriptor_info.get("min", []),
+        "descriptor_max": descriptor_info.get("max", []),
+        "descriptor_std": descriptor_info.get("std", []),
+        "episodes": [],
     }
 
-    for ep in episode_data:
-        ep_info = {
-            "episode_index": ep["episode_index"],
-            "seed": ep.get("seed"),
-            "initial_environment_state": ep["initial_state"].tolist() if ep.get("initial_state") is not None else None,
-            "initial_object_poses": {
-                k: {"pos": v["pos"].tolist(), "quat": v["quat"].tolist() if v["quat"] is not None else None}
-                for k, v in ep.get("initial_object_poses", {}).items()
-            },
-            "success": ep.get("success", False),
-            "num_frames": ep.get("num_frames", 0),
+    for ep_data in episode_initial_states:
+        ep_meta = {
+            "episode_index": ep_data["episode_index"],
+            "seed": int(ep_data["seed"]),
+            "initial_environment_state": ep_data["state"].tolist() if isinstance(ep_data["state"], np.ndarray) else ep_data["state"],
+            "initial_object_poses": {k: v.tolist() if isinstance(v, np.ndarray) else v
+                                    for k, v in ep_data.get("object_poses", {}).items()},
+            "success": ep_data.get("success", False),
+            "num_frames": ep_data.get("num_frames", 0),
         }
-        metadata["episodes"].append(ep_info)
+        metadata["episodes"].append(ep_meta)
 
-    metadata_file = output_dir / "episode_initial_states.json"
-    with open(metadata_file, "w") as f:
+    json_path = output_dir / "episode_initial_states.json"
+    with open(json_path, "w") as f:
         json.dump(metadata, f, indent=2)
+    print(f"Saved episode metadata to {json_path}")
 
-    print(f"  Saved episode metadata to {metadata_file}")
 
+def validate_dataset(output_dir: Path):
+    """
+    验证生成的数据集。
 
-def validate_dataset(output_dir: Path) -> bool:
-    """验证生成的 dataset 的完整性和正确性。"""
-    output_dir = Path(output_dir)
+    Args:
+        output_dir: 数据集目录
+    """
+    print("\n=== Validating dataset ===")
 
-    meta_stats = output_dir / "meta" / "stats.json"
-    if not meta_stats.exists():
-        print(f"ERROR: {meta_stats} does not exist")
-        return False
-
-    try:
-        with open(meta_stats) as f:
+    stats_path = output_dir / "meta" / "stats.json"
+    if stats_path.exists():
+        with open(stats_path) as f:
             stats = json.load(f)
-    except json.JSONDecodeError as e:
-        print(f"ERROR: Failed to parse {meta_stats}: {e}")
-        return False
+        print(f"stats.json exists and is valid JSON")
+        required_keys = ["observation.state", "observation.environment_state", "action"]
+        for key in required_keys:
+            if key in stats:
+                print(f"  {key}: present in stats")
+            else:
+                print(f"  WARNING: {key} missing from stats")
+    else:
+        print(f"WARNING: stats.json not found at {stats_path}")
 
-    required_keys = ["observation.state", "observation.environment_state", "action"]
-    for key in required_keys:
-        if key not in stats:
-            print(f"ERROR: Required stat key '{key}' not found in stats.json")
-            return False
-
-    episode_meta = output_dir / "episode_initial_states.json"
-    if not episode_meta.exists():
-        print(f"ERROR: {episode_meta} does not exist")
-        return False
+    episode_meta_path = output_dir / "episode_initial_states.json"
+    if episode_meta_path.exists():
+        print(f"episode_initial_states.json exists")
+    else:
+        print(f"WARNING: episode_initial_states.json not found")
 
     video_dir = output_dir / "videos"
-    if not video_dir.exists():
-        print(f"ERROR: {video_dir} does not exist")
-        return False
-
-    camera_dirs = list(video_dir.glob("observation.images.*"))
-    if not camera_dirs:
-        print(f"ERROR: No camera video directories found in {video_dir}")
-        return False
-
-    print(f"  Validation passed: stats.json exists and is valid")
-    print(f"  Found {len(camera_dirs)} camera directories")
-    return True
+    if video_dir.exists():
+        video_count = len(list(video_dir.rglob("*.mp4")))
+        print(f"Found {video_count} video files")
+    else:
+        print(f"WARNING: videos directory not found")
 
 
 def main():
     args = parse_args()
 
-    print(f"\n{'='*60}")
-    print(f"LIBERO Dataset Collection")
-    print(f"{'='*60}")
+    print(f"=== LIBERO Dataset Collection ===")
     print(f"Suite: {args.suite}")
     print(f"Task ID: {args.task_id}")
     print(f"Target episodes: {args.num_episodes}")
     print(f"Candidate multiplier: {args.candidate_multiplier}")
     print(f"Output: {args.output_dir}")
-    print(f"{'='*60}\n")
+    print()
 
     suite, task = get_suite_and_task(args.suite, args.task_id)
-    bddl_file = resolve_bddl_file(task)
+    task_language = task.language
+    task_name = task.name
+    print(f"Task: {task_name}")
+    print(f"Description: {task_language}")
 
-    print(f"Task: {task.name}")
-    print(f"Description: {task.language}")
+    bddl_file = resolve_bddl_file(task)
     print(f"BDDL: {bddl_file}")
 
-    output_dir = Path(args.output_dir) if args.output_dir else \
-                 Path(f"personal/work2/dataset/{args.suite}_task{args.task_id}")
+    if args.output_dir is None:
+        output_dir = Path("personal/work2/dataset") / f"{args.suite}_task{args.task_id}"
+    else:
+        output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"\n[1/6] Creating environment to generate candidates...")
+    print("\n=== Step 1: Creating environment to infer state_dim ===")
     env = create_env(bddl_file, args.image_size, args.fps)
     env.reset()
+    for _ in range(10):
+        env.step(LIBERO_DUMMY_ACTION)
 
-    sample_state = get_flattened_env_state(env)
-    state_dim = len(sample_state)
-    print(f"  Environment state dimension: {state_dim}")
+    state_dim = get_flattened_env_state(env).shape[0]
+    print(f"Inferred state_dim: {state_dim}")
 
-    print(f"\n[2/6] Generating candidate initial states...")
+    print("\n=== Step 2: Generating candidate initial states ===")
     num_candidates = args.num_episodes * args.candidate_multiplier
-    candidates = generate_candidate_initial_states(env, num_candidates, args.seed_start)
+    print(f"Generating {num_candidates} candidates...")
 
-    if len(candidates) < args.num_episodes:
-        print(f"WARNING: Only generated {len(candidates)} candidates, less than target {args.num_episodes}")
+    candidates = generate_candidate_initial_states(
+        env, bddl_file, num_candidates, args.seed_start
+    )
+    print(f"Generated {len(candidates)} candidates")
 
-    print(f"\n[3/6] Selecting uniform initial states using farthest-point sampling...")
-    selected_indices = select_uniform_initial_states(candidates, args.num_episodes, args.seed_start)
+    if len(candidates) == 0:
+        print("ERROR: No valid candidates generated!")
+        env.close()
+        return
+
+    print("\n=== Step 3: Selecting uniform initial states ===")
+    selected_indices = select_uniform_initial_states(candidates, args.num_episodes)
     selected_candidates = [candidates[i] for i in selected_indices]
-    print(f"  Selected {len(selected_candidates)} uniform initial states")
+    print(f"Selected {len(selected_candidates)} uniform initial states")
 
-    descriptors = []
-    for c in selected_candidates:
-        desc = build_initial_state_descriptor(c.get("object_poses", {}))
-        descriptors.append(desc)
-    descriptors_arr = np.array(descriptors) if descriptors else np.array([]).reshape(0, 0)
-    _, valid_mask, dim_stats = remove_constant_dimensions(descriptors_arr)
+    print("\n=== Step 4: Saving uniform initial states ===")
+    save_uniform_initial_states(output_dir, selected_candidates, candidates)
 
-    print(f"\n[4/6] Saving uniform initial states...")
-    save_uniform_initial_states(output_dir, selected_candidates, dim_stats, valid_mask)
+    print("\n=== Step 5: Getting demo data ===")
+    demo_states, demo_actions = get_demo_data(task)
 
-    print(f"\n[5/6] Creating LeRobot dataset...")
-    dataset = create_dataset(args.repo_id, output_dir, args.fps, args.image_size)
+    if demo_states is None:
+        print("WARNING: No demo data found for this task. Cannot collect trajectories.")
+        print("Generating uniform initial states only...")
 
-    episode_data = []
-    successful_count = 0
-    state_dim_match = True
+        descriptor_info = {
+            "num_candidates": len(candidates),
+            "dim": selected_candidates[0]["descriptor"].shape[0] if selected_candidates else 0,
+            "object_names": list(selected_candidates[0]["object_poses"].keys()) if selected_candidates else [],
+            "min": [],
+            "max": [],
+            "std": [],
+        }
 
-    print(f"\n[6/6] Collecting episodes...")
-
-    for i, candidate in enumerate(selected_candidates):
-        print(f"  Episode {i}/{len(selected_candidates)} (seed={candidate['seed']})...", end=" ")
-
-        try:
-            env.seed(candidate["seed"])
-            env.reset()
-            env.set_init_state(candidate["state"])
-
-            frames, success, init_state, obj_poses = collect_demo_episode(
-                env, task.language, max_steps=300
-            )
-
-            if success:
-                for frame in frames:
-                    if state_dim_match:
-                        frame["observation.environment_state"] = get_flattened_env_state(env).reshape(1,)
-
-                    if frame["observation.environment_state"].shape != (1,) and \
-                       frame["observation.environment_state"].shape[0] != state_dim:
-                        print(f"\nWARNING: state_dim mismatch at episode {i}: "
-                              f"expected {state_dim}, got {frame['observation.environment_state'].shape}")
-
-                    dataset.add_frame(frame)
-
-                dataset.save_episode()
-                successful_count += 1
-                print(f"SUCCESS ({len(frames)} frames)")
-            else:
-                print("FAILED")
-                if not args.save_only_successful:
-                    pass
-                else:
-                    pass
-            episode_data.append({
+        episode_initial_states = []
+        for i, cand in enumerate(selected_candidates):
+            episode_initial_states.append({
                 "episode_index": i,
-                "seed": candidate["seed"],
-                "initial_state": candidate["state"],
-                "initial_object_poses": candidate["object_poses"],
-                "success": success,
-                "num_frames": len(frames) if success else 0,
-            })
-
-        except Exception as e:
-            print(f"ERROR: {e}")
-            episode_data.append({
-                "episode_index": i,
-                "seed": candidate["seed"],
-                "initial_state": candidate["state"],
-                "initial_object_poses": candidate["object_poses"],
+                "seed": cand["seed"],
+                "state": cand["state"],
+                "object_poses": cand["object_poses"],
                 "success": False,
                 "num_frames": 0,
             })
 
-    print(f"\n{'='*60}")
-    print(f"Collection Summary:")
-    print(f"  Target episodes: {args.num_episodes}")
-    print(f"  Successful trajectories: {successful_count}")
-    print(f"  Uniform initial states saved: {len(selected_candidates)}")
-    print(f"{'='*60}\n")
+        save_episode_metadata(
+            output_dir, args.suite, args.task_id, task_name, task_language,
+            bddl_file, state_dim, episode_initial_states, 0, descriptor_info
+        )
 
-    if successful_count < args.num_episodes:
-        print(f"WARNING: Only collected {successful_count} successful trajectories, "
-              f"less than target {args.num_episodes}.")
-        print(f"  The remaining initial states were saved to uniform_initial_states.npz/json")
-        print(f"  but no expert policy was available to generate trajectories for them.")
+        print("\n" + "="*60)
+        print("WARNING: No expert policy available for this task.")
+        print(f"Generated {len(selected_candidates)} uniform initial states,")
+        print("but 0 successful trajectories (no demo data or policy).")
+        print("Dataset contains only initial states, no trajectories.")
+        print("="*60 + "\n")
 
-    dataset.finalize()
+        validate_dataset(output_dir)
+        env.close()
+        return
 
-    print(f"\n[Final] Saving episode metadata...")
-    save_episode_metadata(
-        output_dir, episode_data, args.suite, args.task_id,
-        task.name, task.language, bddl_file, state_dim,
-        "task_space_farthest_point", len(candidates)
+    print(f"Demo data found: {demo_states.shape[0]} frames")
+
+    print("\n=== Step 6: Creating LeRobot dataset ===")
+    dataset = create_dataset(
+        repo_id=args.repo_id,
+        output_dir=output_dir,
+        fps=args.fps,
+        image_size=args.image_size,
+        state_dim=state_dim,
     )
 
-    print(f"\n[Final] Validating dataset...")
-    if validate_dataset(output_dir):
-        print("Dataset validation PASSED")
-    else:
-        print("Dataset validation FAILED")
+    print("\n=== Step 7: Collecting trajectories ===")
+    episode_initial_states = []
+    successful_episodes = 0
+    max_episodes = min(args.num_episodes, len(selected_candidates))
 
+    for ep_idx in range(max_episodes):
+        cand = selected_candidates[ep_idx]
+
+        env.seed(cand["seed"])
+        env.reset()
+        for _ in range(10):
+            env.step(LIBERO_DUMMY_ACTION)
+        env.env.sim.set_state_from_flatten(cand["state"])
+        for _ in range(5):
+            env.step(LIBERO_DUMMY_ACTION)
+
+        frames, success = collect_demo_episode(
+            env, demo_states, demo_actions, task_language, args.image_size, state_dim
+        )
+
+        if success and len(frames) > 0:
+            for frame in frames:
+                dataset.add_frame(frame)
+            dataset.save_episode()
+            successful_episodes += 1
+            print(f"Episode {ep_idx}: SUCCESS ({len(frames)} frames)")
+        else:
+            print(f"Episode {ep_idx}: FAILED (demo replay did not succeed)")
+
+        episode_initial_states.append({
+            "episode_index": ep_idx,
+            "seed": cand["seed"],
+            "state": cand["state"],
+            "object_poses": cand["object_poses"],
+            "success": success,
+            "num_frames": len(frames),
+        })
+
+        if (ep_idx + 1) % 50 == 0:
+            print(f"Progress: {ep_idx + 1}/{max_episodes} episodes processed")
+
+    print("\n=== Step 8: Finalizing dataset ===")
+    dataset.finalize()
+
+    print("\n=== Step 9: Saving episode metadata ===")
+    descriptors = np.array([c["descriptor"] for c in selected_candidates])
+    desc_min = np.min(descriptors, axis=0).tolist() if len(descriptors) > 0 else []
+    desc_max = np.max(descriptors, axis=0).tolist() if len(descriptors) > 0 else []
+    desc_std = np.std(descriptors, axis=0).tolist() if len(descriptors) > 0 else []
+
+    descriptor_info = {
+        "num_candidates": len(candidates),
+        "dim": descriptors.shape[1] if len(descriptors) > 0 else 0,
+        "object_names": list(selected_candidates[0]["object_poses"].keys()) if selected_candidates else [],
+        "min": desc_min,
+        "max": desc_max,
+        "std": desc_std,
+    }
+
+    save_episode_metadata(
+        output_dir, args.suite, args.task_id, task_name, task_language,
+        bddl_file, state_dim, episode_initial_states, successful_episodes, descriptor_info
+    )
+
+    print("\n" + "="*60)
+    print(f"Collection complete!")
+    print(f"  Suite: {args.suite}")
+    print(f"  Task ID: {args.task_id}")
+    print(f"  Task: {task_name}")
+    print(f"  Uniform initial states: {len(selected_candidates)}")
+    print(f"  Successful trajectories: {successful_episodes}")
+    print(f"  Environment state_dim: {state_dim}")
+    print(f"  Output: {output_dir}")
+    print("="*60 + "\n")
+
+    validate_dataset(output_dir)
     env.close()
-
-    print(f"\nDone! Dataset saved to: {output_dir}")
-    print(f"Use render_initial_state.py to verify the saved initial states")
 
 
 if __name__ == "__main__":

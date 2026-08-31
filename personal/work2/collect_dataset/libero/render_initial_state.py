@@ -1,30 +1,25 @@
 #!/usr/bin/env python
 """
-渲染初始状态验证脚本。
+验证 LIBERO 数据集初始状态恢复脚本。
 
 功能：
-    读取 episode_initial_states.json 或 uniform_initial_states.npz，
+    读取 dataset 的 episode_initial_states.json 或 uniform_initial_states.npz，
     根据其中 suite/task_id 自动创建相同 LIBERO task，
     读取指定 episode-index/state-index，执行 env.set_init_state(state)，
     保存 agentview 和 wrist PNG，用于证明保存的 initial_environment_state 可以恢复场景。
 
 运行方法：
     cd /data/zhonglinye/jun/lerobot
-
-    # 渲染 episode 0 的初始状态
     python personal/work2/collect_dataset/libero/render_initial_state.py \
         --input-dir personal/work2/dataset/libero_spatial_task0 \
-        --episode-index 0
+        --episode-index 0 \
+        --output-dir personal/work2/dataset/libero_spatial_task0/renders
 
-    # 渲染多个 episode
+    指定 state-index（从 uniform_initial_states.npz 中选择）：
     python personal/work2/collect_dataset/libero/render_initial_state.py \
         --input-dir personal/work2/dataset/libero_spatial_task0 \
-        --episode-index 0 --episode-index 5 --episode-index 10
-
-    # 使用 NPZ 文件中的 state-index
-    python personal/work2/collect_dataset/libero/render_initial_state.py \
-        --input-dir personal/work2/dataset/libero_spatial_task0 \
-        --state-index 0
+        --state-index 10 \
+        --output-dir personal/work2/dataset/libero_spatial_task0/renders
 """
 
 import argparse
@@ -41,56 +36,33 @@ import numpy as np
 from libero.libero import benchmark, get_libero_path
 from libero.libero.envs import OffScreenRenderEnv
 
+LIBERO_DUMMY_ACTION = [0, 0, 0, 0, 0, 0, -1]
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="渲染初始状态验证脚本",
+        description="验证 LIBERO 数据集初始状态恢复",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--input-dir", type=str, required=True,
-                        help="数据集目录（包含 episode_initial_states.json 或 uniform_initial_states.npz）")
-    parser.add_argument("--episode-index", type=int, action="append",
-                        help="要渲染的 episode 索引（可多次指定）")
-    parser.add_argument("--state-index", type=int, action="append",
-                        help="要渲染的 state 索引（从 NPZ 文件读取）")
+                        help="数据集目录，包含 episode_initial_states.json")
+    parser.add_argument("--episode-index", type=int, default=0,
+                        help="要验证的 episode 索引 (默认 0)")
+    parser.add_argument("--state-index", type=int, default=None,
+                        help="从 uniform_initial_states.npz 中选择的 state 索引")
     parser.add_argument("--output-dir", type=str, default=None,
-                        help="输出目录，默认 <input-dir>/rendered_states")
+                        help="渲染图像输出目录 (默认 <input-dir>/renders)")
     parser.add_argument("--image-size", type=int, default=360,
-                        help="图像分辨率（默认 360）")
+                        help="图像分辨率 (默认 360)")
     return parser.parse_args()
 
 
-def load_metadata(input_dir: Path):
-    """加载 episode_initial_states.json 或 uniform_initial_states.json。"""
-    json_path = input_dir / "episode_initial_states.json"
-    if json_path.exists():
-        with open(json_path) as f:
-            return json.load(f), "episode"
-
-    json_path = input_dir / "uniform_initial_states.json"
-    if json_path.exists():
-        with open(json_path) as f:
-            return json.load(f), "uniform"
-
-    raise FileNotFoundError(
-        f"Neither episode_initial_states.json nor uniform_initial_states.json found in {input_dir}"
-    )
-
-
-def load_npz(input_dir: Path):
-    """加载 uniform_initial_states.npz。"""
-    npz_path = input_dir / "uniform_initial_states.npz"
-    if not npz_path.exists():
-        raise FileNotFoundError(f"uniform_initial_states.npz not found in {input_dir}")
-    return np.load(npz_path)
-
-
 def get_suite_and_task(suite_name: str, task_id: int):
-    """获取指定 suite 和 task_id 对应的 task 对象。"""
-    bench = benchmark.get_benchmark_dict()
-    if suite_name not in bench:
-        raise ValueError(f"Unknown suite '{suite_name}'. Available: {', '.join(bench.keys())}")
-    suite = bench[suite_name]()
+    """获取 LIBERO suite 和 task 对象。"""
+    bench_dict = benchmark.get_benchmark_dict()
+    if suite_name not in bench_dict:
+        raise ValueError(f"Unknown suite '{suite_name}'. Available: {', '.join(sorted(bench_dict.keys()))}")
+    suite = bench_dict[suite_name]()
     if task_id < 0 or task_id >= len(suite.tasks):
         raise ValueError(f"task_id {task_id} out of range [0, {len(suite.tasks) - 1}]")
     task = suite.get_task(task_id)
@@ -98,178 +70,205 @@ def get_suite_and_task(suite_name: str, task_id: int):
 
 
 def resolve_bddl_file(task):
-    """获取 BDDL 文件的完整路径。"""
-    bddl_root = get_libero_path("bddl_files")
-    bddl_file = bddl_root / task.problem_folder / task.bddl_file
-    if not bddl_file.exists():
-        raise FileNotFoundError(f"BDDL file not found: {bddl_file}")
-    return bddl_file
+    """获取 BDDL 文件路径。"""
+    bddl_path = get_libero_path("bddl_files") / task.problem_folder / task.bddl_file
+    if not bddl_path.exists():
+        raise FileNotFoundError(f"BDDL file not found: {bddl_path}")
+    return bddl_path
 
 
-def create_env(bddl_file: Path, image_size: int):
+def create_env(bddl_file_path: str, image_size: int = 360, control_freq: int = 20):
     """创建 OffScreenRenderEnv 环境。"""
     env = OffScreenRenderEnv(
-        bddl_file_name=str(bddl_file),
+        bddl_file_name=str(bddl_file_path),
         camera_heights=image_size,
         camera_widths=image_size,
-        control_freq=20,
+        control_freq=control_freq,
     )
     return env
 
 
 def get_flattened_env_state(env) -> np.ndarray:
-    """获取完整的 MuJoCo simulator state。"""
+    """获取完整的 flattened MuJoCo simulator state。"""
     sim = env.env.sim
-    return sim.get_state().flatten()
+    qpos = sim.data.qpos.copy()
+    qvel = sim.data.qvel.copy()
+    act = sim.data.act.copy() if sim.data.act is not None else np.array([])
+    return np.concatenate([qpos, qvel, act])
 
 
-def render_initial_state(env, state: np.ndarray, output_path: Path, image_size: int):
-    """渲染指定初始状态并保存图像。"""
-    env.reset()
-    env.set_init_state(state)
+def load_initial_state(input_dir: Path, episode_index: int = 0, state_index: int = None):
+    """
+    加载初始状态。
+
+    Args:
+        input_dir: 数据集目录
+        episode_index: episode 索引（优先使用 episode_initial_states.json）
+        state_index: state 索引（使用 uniform_initial_states.npz）
+
+    Returns:
+        (state, metadata) - flattened state 和元数据
+    """
+    episode_meta_path = input_dir / "episode_initial_states.json"
+
+    if state_index is not None:
+        npz_path = input_dir / "uniform_initial_states.npz"
+        if npz_path.exists():
+            npz_data = np.load(npz_path)
+            if "states" in npz_data:
+                state = npz_data["states"][state_index]
+                metadata = {"source": "npz", "state_index": state_index}
+                return state, metadata
+        raise ValueError(f"state_index={state_index} specified but uniform_initial_states.npz not found")
+
+    if episode_meta_path.exists():
+        with open(episode_meta_path) as f:
+            meta = json.load(f)
+
+        if episode_index < len(meta["episodes"]):
+            ep_data = meta["episodes"][episode_index]
+            state = np.array(ep_data["initial_environment_state"])
+            metadata = {
+                "source": "episode_initial_states",
+                "episode_index": episode_index,
+                "seed": ep_data["seed"],
+                "task_id": meta.get("task_id"),
+                "suite": meta.get("suite"),
+            }
+            return state, metadata
+
+    npz_path = input_dir / "uniform_initial_states.npz"
+    if npz_path.exists():
+        npz_data = np.load(npz_path)
+        if "states" in npz_data and len(npz_data["states"]) > 0:
+            state = npz_data["states"][0]
+            metadata = {"source": "npz_default", "state_index": 0}
+            return state, metadata
+
+    raise FileNotFoundError(f"No initial state found in {input_dir}")
+
+
+def render_initial_state(
+    env,
+    state: np.ndarray,
+    image_size: int = 360,
+) -> tuple:
+    """
+    渲染初始状态场景。
+
+    Args:
+        env: OffScreenRenderEnv 实例
+        state: flattened state
+        image_size: 图像分辨率
+
+    Returns:
+        (top_image, wrist_image) - 两个相机的图像
+    """
+    env.env.sim.set_state_from_flatten(state)
 
     for _ in range(10):
-        env.step([0, 0, 0, 0, 0, 0, -1])
+        env.step(LIBERO_DUMMY_ACTION)
 
-    raw_obs = env.get_obs()
+    raw_obs = env.env._get_observations()
 
     top_image = raw_obs.get("agentview_image")
     wrist_image = raw_obs.get("robot0_eye_in_hand_image")
 
     if top_image is not None:
-        top_path = output_path.parent / f"{output_path.stem}_top.png"
-        import PIL.Image
-        img = PIL.Image.fromarray(top_image)
-        img.save(top_path)
-        print(f"  Saved top view: {top_path}")
+        top_image = top_image[::-1, ::-1]
+    if wrist_image is not None:
+        wrist_image = wrist_image[::-1, ::-1]
+
+    return top_image, wrist_image
+
+
+def save_images(
+    top_image,
+    wrist_image,
+    output_dir: Path,
+    prefix: str = "episode",
+):
+    """
+    保存图像到文件。
+
+    Args:
+        top_image: agentview 图像
+        wrist_image: wrist 图像
+        output_dir: 输出目录
+        prefix: 文件名前缀
+    """
+    from PIL import Image
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    if top_image is not None:
+        top_path = output_dir / f"{prefix}_agentview.png"
+        Image.fromarray(top_image).save(top_path)
+        print(f"Saved agentview image to {top_path}")
 
     if wrist_image is not None:
-        wrist_path = output_path.parent / f"{output_path.stem}_wrist.png"
-        import PIL.Image
-        img = PIL.Image.fromarray(wrist_image)
-        img.save(wrist_path)
-        print(f"  Saved wrist view: {wrist_path}")
-
-    restored_state = get_flattened_env_state(env)
-    state_diff = np.linalg.norm(state - restored_state)
-    print(f"  State restoration error: {state_diff:.6f}")
-
-    return top_image, wrist_image, state_diff
+        wrist_path = output_dir / f"{prefix}_wrist.png"
+        Image.fromarray(wrist_image).save(wrist_path)
+        print(f"Saved wrist image to {wrist_path}")
 
 
 def main():
     args = parse_args()
 
     input_dir = Path(args.input_dir)
-    output_dir = Path(args.output_dir) if args.output_dir else input_dir / "rendered_states"
-    output_dir.mkdir(parents=True, exist_ok=True)
+    if not input_dir.exists():
+        print(f"Error: Input directory not found: {input_dir}")
+        sys.exit(1)
 
-    print(f"\n{'='*60}")
-    print(f"Initial State Renderer")
-    print(f"{'='*60}")
+    if args.output_dir is None:
+        output_dir = input_dir / "renders"
+    else:
+        output_dir = Path(args.output_dir)
+
+    print("=== LIBERO Initial State Renderer ===")
     print(f"Input directory: {input_dir}")
-    print(f"Output directory: {output_dir}")
-    print(f"{'='*60}\n")
+    print(f"Episode index: {args.episode_index}")
+    print(f"State index: {args.state_index}")
+    print()
 
-    metadata, metadata_type = load_metadata(input_dir)
+    state, metadata = load_initial_state(input_dir, args.episode_index, args.state_index)
+    print(f"Loaded state from: {metadata['source']}")
+    print(f"State shape: {state.shape}")
 
-    suite_name = metadata["suite"]
-    task_id = metadata["task_id"]
-    task_name = metadata.get("task_name", "unknown")
-    task_description = metadata.get("task_description", "unknown")
+    suite_name = metadata.get("suite", "libero_spatial")
+    task_id = metadata.get("task_id", 0)
 
-    print(f"Suite: {suite_name}")
-    print(f"Task ID: {task_id}")
-    print(f"Task name: {task_name}")
-    print(f"Task description: {task_description}")
-    print(f"Metadata type: {metadata_type}")
+    if "episode_index" in metadata:
+        print(f"Suite: {suite_name}, Task ID: {task_id}, Episode: {metadata['episode_index']}")
+    else:
+        print(f"Suite: {suite_name}, Task ID: {task_id}, State index: {metadata.get('state_index', 'N/A')}")
 
-    _, task = get_suite_and_task(suite_name, task_id)
+    suite, task = get_suite_and_task(suite_name, task_id)
+    task_language = task.language
+    print(f"Task: {task.name}")
+    print(f"Description: {task_language}")
+
     bddl_file = resolve_bddl_file(task)
-    print(f"BDDL file: {bddl_file}")
+    print(f"BDDL: {bddl_file}")
 
-    print(f"\nCreating environment...")
+    print("\nCreating environment...")
     env = create_env(bddl_file, args.image_size)
+    env.reset()
 
-    npz_data = None
-    if metadata_type == "uniform" or args.state_index is not None:
-        npz_data = load_npz(input_dir)
+    print("Rendering initial state...")
+    top_image, wrist_image = render_initial_state(env, state, args.image_size)
 
-    episode_indices = args.episode_index or []
-    state_indices = args.state_index or []
+    prefix = f"episode{args.episode_index}"
+    if args.state_index is not None:
+        prefix = f"state{args.state_index}"
 
-    if not episode_indices and not state_indices:
-        print("\nNo episode-index or state-index specified, rendering first 3 states...")
-        if metadata_type == "episode":
-            episode_indices = [0, 1, 2]
-        else:
-            state_indices = [0, 1, 2]
-
-    print(f"\n{'='*60}")
-    print(f"Rendering initial states...")
-    print(f"{'='*60}\n")
-
-    for idx in episode_indices:
-        print(f"Rendering episode {idx}...")
-        if metadata_type == "episode":
-            episodes = metadata.get("episodes", [])
-            if idx >= len(episodes):
-                print(f"  ERROR: Episode {idx} not found (only {len(episodes)} episodes)")
-                continue
-            ep = episodes[idx]
-            state = np.array(ep["initial_environment_state"])
-            seed = ep.get("seed")
-        else:
-            if npz_data is None:
-                print(f"  ERROR: NPZ data not available")
-                continue
-            if idx >= len(npz_data["states"]):
-                print(f"  ERROR: State index {idx} not found (only {len(npz_data['states'])} states)")
-                continue
-            state = npz_data["states"][idx]
-            seeds = npz_data.get("seeds", [])
-            seed = seeds[idx] if idx < len(seeds) else None
-
-        print(f"  Seed: {seed}")
-        print(f"  State shape: {state.shape}")
-
-        output_path = output_dir / f"episode_{idx:03d}"
-        try:
-            top_img, wrist_img, state_diff = render_initial_state(env, state, output_path, args.image_size)
-            if state_diff > 1e-3:
-                print(f"  WARNING: State restoration error is large ({state_diff:.6f})")
-        except Exception as e:
-            print(f"  ERROR: {e}")
-
-    for idx in state_indices:
-        print(f"Rendering state index {idx}...")
-        if npz_data is None:
-            print(f"  ERROR: NPZ data not available")
-            continue
-        if idx >= len(npz_data["states"]):
-            print(f"  ERROR: State index {idx} not found (only {len(npz_data['states'])} states)")
-            continue
-
-        state = npz_data["states"][idx]
-        seeds = npz_data.get("seeds", [])
-        seed = seeds[idx] if idx < len(seeds) else None
-
-        print(f"  Seed: {seed}")
-        print(f"  State shape: {state.shape}")
-
-        output_path = output_dir / f"state_{idx:03d}"
-        try:
-            top_img, wrist_img, state_diff = render_initial_state(env, state, output_path, args.image_size)
-            if state_diff > 1e-3:
-                print(f"  WARNING: State restoration error is large ({state_diff:.6f})")
-        except Exception as e:
-            print(f"  ERROR: {e}")
+    print(f"\nSaving images to {output_dir}...")
+    save_images(top_image, wrist_image, output_dir, prefix)
 
     env.close()
 
-    print(f"\n{'='*60}")
-    print(f"Done! Rendered images saved to: {output_dir}")
-    print(f"{'='*60}")
+    print("\n=== Rendering complete ===")
+    print(f"Output directory: {output_dir}")
 
 
 if __name__ == "__main__":

@@ -95,6 +95,15 @@ def compute_fixed_universe_sic_from_indices(
     episode_to_idx = {ep: i for i, ep in enumerate(all_episode_indices)}
     n_episodes = len(all_episode_indices)
 
+    if K_global.shape != (n_episodes, n_episodes):
+        raise ValueError(
+            f"K_global shape {K_global.shape} does not match (N, N) with N={n_episodes}"
+        )
+    if K_wrist.shape != (n_episodes, n_episodes):
+        raise ValueError(
+            f"K_wrist shape {K_wrist.shape} does not match (N, N) with N={n_episodes}"
+        )
+
     selected_indices = set()
     sigma_global = np.zeros(n_episodes)
     sigma_wrist = np.zeros(n_episodes)
@@ -105,7 +114,7 @@ def compute_fixed_universe_sic_from_indices(
         if ep in episode_to_idx:
             idx = episode_to_idx[ep]
             if idx in selected_indices:
-                continue  # Skip duplicate episodes
+                continue  # Skip duplicate episodes: unique episode-level selection
             selected_indices.add(idx)
             sigma_global += tau_1 * K_global[:, idx]
             sigma_wrist += tau_1 * K_wrist[:, idx]

@@ -86,6 +86,21 @@ def load_subset_episode_indices(path: Path) -> List[int]:
     return int_episodes
 
 
+def load_subset_if_provided(subset_path: Optional[Path]) -> Optional[List[int]]:
+    """
+    Load a subset file only when explicitly provided.
+
+    - subset_path is None -> method not requested, returns None (no analysis).
+    - subset_path is not None but does not exist -> raise FileNotFoundError
+      (never silently omit a requested method).
+    """
+    if subset_path is None:
+        return None
+    if not subset_path.exists():
+        raise FileNotFoundError(f"Subset file not found: {subset_path}")
+    return load_subset_episode_indices(subset_path)
+
+
 def l2_normalize_rows(phi: np.ndarray) -> np.ndarray:
     """L2 normalize each row of embedding matrix."""
     norms = np.linalg.norm(phi, axis=1, keepdims=True)
@@ -106,7 +121,7 @@ def load_embeddings(embeddings_dir: Path) -> Tuple[Dict[int, Dict], Dict]:
             data = np.load(f, allow_pickle=True).item()
             ep_idx = data.get("episode_index")
             if ep_idx is None:
-                invalid_files.append(f.name)
+                invalid_files.append({"file": f.name, "reason": "missing episode_index"})
                 print(f"  WARNING: Missing episode_index in {f.name}")
                 continue
             valid_record_count += 1
@@ -118,7 +133,7 @@ def load_embeddings(embeddings_dir: Path) -> Tuple[Dict[int, Dict], Dict]:
                 "phi_wrist": data["phi_wrist"]
             }
         except Exception as e:
-            invalid_files.append(f.name)
+            invalid_files.append({"file": f.name, "reason": str(e)})
             print(f"  Skip invalid file: {f.name} ({e})")
 
     load_info = {
@@ -625,6 +640,8 @@ def grid_classifiability(
                 "balanced_accuracy_std": None,
                 "shuffled_accuracy_mean": None,
                 "shuffled_accuracy_std": None,
+                "shuffled_balanced_accuracy_mean": None,
+                "shuffled_balanced_accuracy_std": None,
                 "empty_cells": empty_cells,
                 "sparse_cells": sparse_cells,
                 "total_cells": grid_x * grid_y,
@@ -1354,7 +1371,7 @@ def evaluate_ours_vs_uniform(
         return (ours_val - uniform_val) / max(abs(uniform_val), eps)
 
     for key in ["physical_unselected_mean_nearest", "physical_unselected_p95", "physical_unselected_max_radius"]:
-        v1 = ws_delta.get(key)
+        v1 = ours_ws.get(key)
         v2 = uniform_ws.get(key)
         rd = _relative_delta(v1, v2)
         evidence_summary[f"workspace_{key}_relative_delta"] = rd
@@ -1441,18 +1458,20 @@ def evaluate_h1(analysis_results: Dict) -> Dict:
             emp_p_x = shuffled_r2_x.get("empirical_p_value")
             if emp_p_x is not None:
                 rep_evidence["probe_x_significant"] = emp_p_x < 0.05
+                rep_evidence["probe_x_evidence"] = "empirical_p_value"
             else:
-                ridge_r2_x = probe.get("ridge", {}).get("R2_x", 0)
-                shuffled_r2_x_mean = shuffled_r2_x.get("mean", 0)
-                rep_evidence["probe_x_significant"] = ridge_r2_x > shuffled_r2_x_mean
+                # No formal statistical test available. Do not fabricate significance
+                # from 'observed > null_mean'.
+                rep_evidence["probe_x_significant"] = False
+                rep_evidence["probe_x_evidence"] = "unavailable"
 
             emp_p_y = shuffled_r2_y.get("empirical_p_value")
             if emp_p_y is not None:
                 rep_evidence["probe_y_significant"] = emp_p_y < 0.05
+                rep_evidence["probe_y_evidence"] = "empirical_p_value"
             else:
-                ridge_r2_y = probe.get("ridge", {}).get("R2_y", 0)
-                shuffled_r2_y_mean = shuffled_r2_y.get("mean", 0)
-                rep_evidence["probe_y_significant"] = ridge_r2_y > shuffled_r2_y_mean
+                rep_evidence["probe_y_significant"] = False
+                rep_evidence["probe_y_evidence"] = "unavailable"
 
         overlap = analysis_results.get("neighbor_overlap", {}).get(rep, {})
         if overlap:
@@ -1460,10 +1479,15 @@ def evaluate_h1(analysis_results: Dict) -> Dict:
             emp_p = null_data.get("empirical_p_value")
             if emp_p is not None:
                 rep_evidence["neighbor_significant"] = emp_p < 0.05
+                rep_evidence["neighbor_evidence"] = "empirical_p_value"
             else:
-                real_overlap = overlap.get("neighbor_overlap@10", 0)
-                random_overlap = overlap.get("random_neighbor_overlap@10", 0)
-                rep_evidence["neighbor_significant"] = real_overlap > random_overlap
+                rep_evidence["neighbor_significant"] = False
+                rep_evidence["neighbor_evidence"] = "unavailable"
+            rep_evidence["neighbor_overlap@10"] = overlap.get("neighbor_overlap@10", 0)
+            rep_evidence["random_neighbor_overlap@10"] = overlap.get("random_neighbor_overlap@10", 0)
+            rep_evidence["neighbor_null_mean"] = null_data.get("mean", None)
+            rep_evidence["neighbor_null_std"] = null_data.get("std", None)
+            rep_evidence["neighbor_null_observed_percentile"] = null_data.get("observed_percentile", None)
 
         validation = analysis_results.get("validation", {})
         if validation.get("valid", False):
@@ -1528,18 +1552,18 @@ def evaluate_h2(analysis_results: Dict) -> Dict:
             emp_p_x = shuffled_r2_x.get("empirical_p_value")
             if emp_p_x is not None:
                 rep_evidence["probe_x_significant"] = emp_p_x < 0.05
+                rep_evidence["probe_x_evidence"] = "empirical_p_value"
             else:
-                ridge_r2_x = probe.get("ridge", {}).get("R2_x", 0)
-                shuffled_r2_x_mean = shuffled_r2_x.get("mean", 0)
-                rep_evidence["probe_x_significant"] = ridge_r2_x > shuffled_r2_x_mean
+                rep_evidence["probe_x_significant"] = False
+                rep_evidence["probe_x_evidence"] = "unavailable"
 
             emp_p_y = shuffled_r2_y.get("empirical_p_value")
             if emp_p_y is not None:
                 rep_evidence["probe_y_significant"] = emp_p_y < 0.05
+                rep_evidence["probe_y_evidence"] = "empirical_p_value"
             else:
-                ridge_r2_y = probe.get("ridge", {}).get("R2_y", 0)
-                shuffled_r2_y_mean = shuffled_r2_y.get("mean", 0)
-                rep_evidence["probe_y_significant"] = ridge_r2_y > shuffled_r2_y_mean
+                rep_evidence["probe_y_significant"] = False
+                rep_evidence["probe_y_evidence"] = "unavailable"
 
         overlap = overlap_results.get(rep, {})
         if overlap:
@@ -1547,10 +1571,15 @@ def evaluate_h2(analysis_results: Dict) -> Dict:
             emp_p = null_data.get("empirical_p_value")
             if emp_p is not None:
                 rep_evidence["neighbor_significant"] = emp_p < 0.05
+                rep_evidence["neighbor_evidence"] = "empirical_p_value"
             else:
-                real_overlap = overlap.get("neighbor_overlap@10", 0)
-                random_overlap = overlap.get("random_neighbor_overlap@10", 0)
-                rep_evidence["neighbor_significant"] = real_overlap > random_overlap
+                rep_evidence["neighbor_significant"] = False
+                rep_evidence["neighbor_evidence"] = "unavailable"
+            rep_evidence["neighbor_overlap@10"] = overlap.get("neighbor_overlap@10", 0)
+            rep_evidence["random_neighbor_overlap@10"] = overlap.get("random_neighbor_overlap@10", 0)
+            rep_evidence["neighbor_null_mean"] = null_data.get("mean", None)
+            rep_evidence["neighbor_null_std"] = null_data.get("std", None)
+            rep_evidence["neighbor_null_observed_percentile"] = null_data.get("observed_percentile", None)
 
         evidence[rep] = rep_evidence
 
@@ -1711,6 +1740,15 @@ def evaluate_hypotheses(analysis_results: Dict) -> Dict:
     }
 
 
+def _format_report_value(val):
+    """Format a report cell value. Returns 'N/A' for None/non-numeric, otherwise 4-dp."""
+    if val is None:
+        return "N/A"
+    if isinstance(val, (int, float)):
+        return f"{val:.4f}"
+    return str(val)
+
+
 def generate_report(
     analysis_results: Dict,
     output_dir: Path
@@ -1719,6 +1757,9 @@ def generate_report(
     report_path = output_dir / "analysis_report.md"
 
     hypothesis_eval = analysis_results.get("hypothesis_evaluation", {})
+
+    def fmt(val):
+        return _format_report_value(val)
 
     with open(report_path, 'w') as f:
         f.write("# Dataset Embedding Analysis Report\n\n")
@@ -1797,9 +1838,6 @@ def generate_report(
             boot_w = method_data.get('bootstrap_wrist', {})
             boot_c = method_data.get('bootstrap_combined', {})
             boot_fixed = method_data.get('bootstrap_fixed_sic', {})
-
-            def fmt(val):
-                return f"{val:.4f}" if isinstance(val, (int, float)) and val is not None else "N/A"
 
             mean_cover_g = cov_g.get('unselected_mean_nearest_distance') if cov_g else None
             mean_cover_w = cov_w.get('unselected_mean_nearest_distance') if cov_w else None
@@ -2234,22 +2272,16 @@ def main():
     print(f"  dbar_global: {dbar_global:.4f}, dbar_wrist: {dbar_wrist:.4f}")
 
     subsets_to_process = {}
-    if args.random_subset is not None:
-        if not args.random_subset.exists():
-            raise FileNotFoundError(f"Random subset file not found: {args.random_subset}")
-        random_episodes = load_subset_episode_indices(args.random_subset)
+    random_episodes = load_subset_if_provided(args.random_subset)
+    if random_episodes is not None:
         subsets_to_process["Random"] = random_episodes
 
-    if args.uniform_subset is not None:
-        if not args.uniform_subset.exists():
-            raise FileNotFoundError(f"Uniform subset file not found: {args.uniform_subset}")
-        uniform_episodes = load_subset_episode_indices(args.uniform_subset)
+    uniform_episodes = load_subset_if_provided(args.uniform_subset)
+    if uniform_episodes is not None:
         subsets_to_process["Uniform"] = uniform_episodes
 
-    if args.ours_subset is not None:
-        if not args.ours_subset.exists():
-            raise FileNotFoundError(f"Ours subset file not found: {args.ours_subset}")
-        ours_episodes = load_subset_episode_indices(args.ours_subset)
+    ours_episodes = load_subset_if_provided(args.ours_subset)
+    if ours_episodes is not None:
         subsets_to_process["Ours"] = ours_episodes
 
     global_p05 = float(np.percentile(global_dist[np.triu_indices(n_episodes, k=1)], 5))
@@ -2261,9 +2293,13 @@ def main():
 
         match_result = match_subset_to_indices(episodes, episode_indices)
         subset_indices = match_result["matched_indices"]
-        subset_comparison[method_name]["requested_subset_size"] = match_result["requested_subset_size"]
-        subset_comparison[method_name]["matched_subset_size"] = match_result["matched_subset_size"]
-        subset_comparison[method_name]["missing_episode_indices"] = match_result["missing_episode_indices"]
+
+        subset_comparison[method_name] = {
+            "requested_subset_size": match_result["requested_subset_size"],
+            "matched_subset_size": match_result["matched_subset_size"],
+            "missing_episode_indices": match_result["missing_episode_indices"],
+            "duplicate_episode_indices": [],
+        }
 
         print(f"    Computing workspace coverage...")
         workspace_cov = compute_workspace_coverage(obj_init_positions, subset_indices, method_name)
@@ -2296,7 +2332,7 @@ def main():
             alpha=args.alpha, lambda_wrist=args.lambda_wrist
         )
 
-        subset_comparison[method_name] = {
+        subset_comparison[method_name].update({
             "workspace_coverage": workspace_cov,
             "coverage_global": cov_global,
             "coverage_wrist": cov_wrist,
@@ -2305,27 +2341,25 @@ def main():
             "redundancy_wrist": red_wrist,
             "redundancy_combined": red_combined,
             "fixed_sic": fixed_sic,
-        }
+        })
 
     print("\n[13/15] Running bootstrap analysis...")
-    
-    # Pre-generate consistent random subsets across all representations
-    subset_size = len(list(subsets_to_process.values())[0]) if subsets_to_process else 0
-    pre_generated_subsets = None
-    if subset_size > 0:
-        pre_generated_subsets = generate_bootstrap_subsets(
-            n_total=n_episodes,
-            subset_size=subset_size,
-            n_bootstrap=args.n_bootstrap,
-            seed=args.seed,
-        )
-    
+
     for method_name in subsets_to_process:
         print(f"\n  Bootstrap for {method_name}...")
 
         episodes = subsets_to_process[method_name]
         match_result = match_subset_to_indices(episodes, episode_indices)
         subset_indices = match_result["matched_indices"]
+
+        # Pre-generate consistent random subsets shared by global/wrist/combined/fixed-SIC
+        # for this method so every representation is evaluated on the exact same samples.
+        pre_generated_subsets = generate_bootstrap_subsets(
+            n_total=n_episodes,
+            subset_size=len(subset_indices),
+            n_bootstrap=args.n_bootstrap,
+            seed=args.seed,
+        )
 
         print(f"    Global bootstrap...")
         boot_global = random_bootstrap_analysis(
