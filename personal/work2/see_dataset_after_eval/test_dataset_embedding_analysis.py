@@ -36,6 +36,11 @@ from analyze_dataset_embedding import (
     compute_combined_embeddings,
     match_subset_to_indices,
     compute_workspace_coverage,
+    evaluate_ours_vs_uniform,
+    evaluate_h1,
+    evaluate_h2,
+    evaluate_h3,
+    evaluate_hypotheses,
 )
 from analysis_utils import compute_fixed_universe_sic
 from sic_v2 import check_embeddings_valid
@@ -506,6 +511,247 @@ def test_17_ours_uniform_overlap():
     return True
 
 
+def test_18_ours_vs_uniform_comprehensive():
+    """Test 18: Ours vs Uniform comprehensive comparison returns all required fields"""
+    print("\n=== Test 18: Ours vs Uniform comprehensive comparison ===")
+
+    ours_episodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    uniform_episodes = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+
+    ours_data = {
+        "workspace_coverage": {
+            "physical_unselected_mean_nearest": 0.1,
+            "physical_unselected_p95": 0.2,
+            "physical_unselected_max_radius": 0.3,
+            "grid_7x4_ratio": 0.5,
+            "grid_14x8_ratio": 0.3,
+        },
+        "coverage_global": {
+            "unselected_mean_nearest_distance": 0.15,
+            "unselected_median_nearest_distance": 0.12,
+            "unselected_p90_nearest_distance": 0.18,
+            "unselected_p95_nearest_distance": 0.2,
+            "unselected_max_nearest_distance": 0.25,
+        },
+        "coverage_wrist": {
+            "unselected_mean_nearest_distance": 0.16,
+            "unselected_median_nearest_distance": 0.13,
+            "unselected_p90_nearest_distance": 0.19,
+            "unselected_p95_nearest_distance": 0.21,
+            "unselected_max_nearest_distance": 0.26,
+        },
+        "coverage_combined": {
+            "unselected_mean_nearest_distance": 0.14,
+            "unselected_median_nearest_distance": 0.11,
+            "unselected_p90_nearest_distance": 0.17,
+            "unselected_p95_nearest_distance": 0.19,
+            "unselected_max_nearest_distance": 0.24,
+        },
+        "redundancy_global": {
+            "mean_nearest": 0.05,
+            "median_nearest": 0.04,
+            "p10_nearest": 0.02,
+            "p50_nearest": 0.04,
+            "p90_nearest": 0.08,
+            "redundancy_fraction": 0.1,
+        },
+        "redundancy_wrist": {
+            "mean_nearest": 0.06,
+            "median_nearest": 0.05,
+            "p10_nearest": 0.03,
+            "p50_nearest": 0.05,
+            "p90_nearest": 0.09,
+            "redundancy_fraction": 0.12,
+        },
+        "redundancy_combined": {
+            "mean_nearest": 0.04,
+            "median_nearest": 0.03,
+            "p10_nearest": 0.01,
+            "p50_nearest": 0.03,
+            "p90_nearest": 0.07,
+            "redundancy_fraction": 0.08,
+        },
+        "fixed_sic": {
+            "normalized_sic": 0.45,
+        },
+    }
+
+    uniform_data = {
+        "workspace_coverage": {
+            "physical_unselected_mean_nearest": 0.11,
+            "physical_unselected_p95": 0.21,
+            "physical_unselected_max_radius": 0.31,
+            "grid_7x4_ratio": 0.52,
+            "grid_14x8_ratio": 0.32,
+        },
+        "coverage_global": {
+            "unselected_mean_nearest_distance": 0.16,
+            "unselected_median_nearest_distance": 0.13,
+            "unselected_p90_nearest_distance": 0.19,
+            "unselected_p95_nearest_distance": 0.21,
+            "unselected_max_nearest_distance": 0.26,
+        },
+        "coverage_wrist": {
+            "unselected_mean_nearest_distance": 0.17,
+            "unselected_median_nearest_distance": 0.14,
+            "unselected_p90_nearest_distance": 0.2,
+            "unselected_p95_nearest_distance": 0.22,
+            "unselected_max_nearest_distance": 0.27,
+        },
+        "coverage_combined": {
+            "unselected_mean_nearest_distance": 0.15,
+            "unselected_median_nearest_distance": 0.12,
+            "unselected_p90_nearest_distance": 0.18,
+            "unselected_p95_nearest_distance": 0.2,
+            "unselected_max_nearest_distance": 0.25,
+        },
+        "redundancy_global": {
+            "mean_nearest": 0.06,
+            "median_nearest": 0.05,
+            "p10_nearest": 0.03,
+            "p50_nearest": 0.05,
+            "p90_nearest": 0.09,
+            "redundancy_fraction": 0.12,
+        },
+        "redundancy_wrist": {
+            "mean_nearest": 0.07,
+            "median_nearest": 0.06,
+            "p10_nearest": 0.04,
+            "p50_nearest": 0.06,
+            "p90_nearest": 0.1,
+            "redundancy_fraction": 0.14,
+        },
+        "redundancy_combined": {
+            "mean_nearest": 0.05,
+            "median_nearest": 0.04,
+            "p10_nearest": 0.02,
+            "p50_nearest": 0.04,
+            "p90_nearest": 0.08,
+            "redundancy_fraction": 0.1,
+        },
+        "fixed_sic": {
+            "normalized_sic": 0.46,
+        },
+    }
+
+    result = evaluate_ours_vs_uniform(
+        ours_data, uniform_data,
+        ours_episodes, uniform_episodes,
+        spearman_global=0.5,
+    )
+
+    assert "episode_overlap_count" in result, "Missing episode_overlap_count"
+    assert "episode_overlap_ratio" in result, "Missing episode_overlap_ratio"
+    assert "workspace_coverage_delta" in result, "Missing workspace_coverage_delta"
+    assert "global_coverage_delta" in result, "Missing global_coverage_delta"
+    assert "wrist_coverage_delta" in result, "Missing wrist_coverage_delta"
+    assert "combined_coverage_delta" in result, "Missing combined_coverage_delta"
+    assert "global_redundancy_delta" in result, "Missing global_redundancy_delta"
+    assert "wrist_redundancy_delta" in result, "Missing wrist_redundancy_delta"
+    assert "combined_redundancy_delta" in result, "Missing combined_redundancy_delta"
+    assert "fixed_sic_delta" in result, "Missing fixed_sic_delta"
+    assert "conclusion" in result, "Missing conclusion"
+
+    assert result["episode_overlap_count"] == 6, f"Expected 6 overlap, got {result['episode_overlap_count']}"
+    assert abs(result["episode_overlap_ratio"] - 0.6) < 1e-10, f"Expected 0.6 ratio, got {result['episode_overlap_ratio']}"
+    assert result["fixed_sic_delta"] == -0.01, f"Expected -0.01 SIC delta, got {result['fixed_sic_delta']}"
+
+    print(f"  PASS: All required fields present")
+    print(f"  PASS: episode_overlap_count={result['episode_overlap_count']}")
+    print(f"  PASS: episode_overlap_ratio={result['episode_overlap_ratio']:.4f}")
+    print(f"  PASS: fixed_sic_delta={result['fixed_sic_delta']:.4f}")
+    print(f"  PASS: conclusion={result['conclusion']}")
+    return True
+
+
+def test_19_h1_evaluation():
+    """Test 19: H1 evaluation uses multiple evidence sources"""
+    print("\n=== Test 19: H1 evaluation ===")
+
+    mock_results = {
+        "validation": {"valid": True},
+        "global_stats": {"effective_rank": 50.0, "dimension": 100},
+        "wrist_stats": {"effective_rank": 40.0, "dimension": 100},
+        "combined_stats": {"effective_rank": 80.0, "dimension": 200},
+        "probe": {
+            "global": {
+                "ridge": {"R2_x": 0.8, "R2_y": 0.75},
+                "shuffled_ridge": {"R2_x": {"mean": 0.1, "std": 0.05}, "R2_y": {"mean": 0.1, "std": 0.05}},
+            },
+            "wrist": {
+                "ridge": {"R2_x": 0.6, "R2_y": 0.55},
+                "shuffled_ridge": {"R2_x": {"mean": 0.1, "std": 0.05}, "R2_y": {"mean": 0.1, "std": 0.05}},
+            },
+            "combined": {
+                "ridge": {"R2_x": 0.85, "R2_y": 0.8},
+                "shuffled_ridge": {"R2_x": {"mean": 0.1, "std": 0.05}, "R2_y": {"mean": 0.1, "std": 0.05}},
+            },
+        },
+        "neighbor_overlap": {
+            "global": {"neighbor_overlap@10": 0.3, "random_neighbor_overlap@10": 0.1},
+            "wrist": {"neighbor_overlap@10": 0.25, "random_neighbor_overlap@10": 0.1},
+            "combined": {"neighbor_overlap@10": 0.35, "random_neighbor_overlap@10": 0.1},
+        },
+    }
+
+    h1_result = evaluate_h1(mock_results)
+
+    assert "status" in h1_result, "Missing status"
+    assert "evidence" in h1_result, "Missing evidence"
+    assert "effective_rank_ratio" in h1_result, "Missing effective_rank_ratio"
+
+    print(f"  PASS: H1 status={h1_result['status']}")
+    print(f"  PASS: effective_rank_ratio={h1_result['effective_rank_ratio']:.4f}")
+    return True
+
+
+def test_20_h2_evaluation():
+    """Test 20: H2 evaluation uses permutation p-value"""
+    print("\n=== Test 20: H2 evaluation ===")
+
+    mock_results = {
+        "spearman": {
+            "global": {"rho": 0.6, "p_value": 1e-10, "n_pairs": 50000},
+            "wrist": {"rho": 0.5, "p_value": 1e-8, "n_pairs": 50000},
+            "combined": {"rho": 0.65, "p_value": 1e-12, "n_pairs": 50000},
+        },
+        "permutation_tests": {
+            "global": {"permutation_p_value": 0.001, "observed_rho": 0.6},
+            "wrist": {"permutation_p_value": 0.002, "observed_rho": 0.5},
+            "combined": {"permutation_p_value": 0.001, "observed_rho": 0.65},
+        },
+        "probe": {
+            "global": {
+                "ridge": {"R2_x": 0.7, "R2_y": 0.65},
+                "shuffled_ridge": {"R2_x": {"mean": 0.05, "std": 0.02}},
+            },
+            "wrist": {
+                "ridge": {"R2_x": 0.5, "R2_y": 0.45},
+                "shuffled_ridge": {"R2_x": {"mean": 0.05, "std": 0.02}},
+            },
+            "combined": {
+                "ridge": {"R2_x": 0.75, "R2_y": 0.7},
+                "shuffled_ridge": {"R2_x": {"mean": 0.05, "std": 0.02}},
+            },
+        },
+        "neighbor_overlap": {
+            "global": {"neighbor_overlap@10": 0.25, "random_neighbor_overlap@10": 0.08},
+            "wrist": {"neighbor_overlap@10": 0.2, "random_neighbor_overlap@10": 0.08},
+            "combined": {"neighbor_overlap@10": 0.3, "random_neighbor_overlap@10": 0.08},
+        },
+    }
+
+    h2_result = evaluate_h2(mock_results)
+
+    assert "status" in h2_result, "Missing status"
+    assert "evidence" in h2_result, "Missing evidence"
+    assert "n_sig_spearman" in h2_result, "Missing n_sig_spearman"
+
+    print(f"  PASS: H2 status={h2_result['status']}")
+    print(f"  PASS: n_sig_spearman={h2_result['n_sig_spearman']}")
+    return True
+
+
 def main():
     print("\n" + "="*60)
     print("Dataset Embedding Analysis Unit Tests")
@@ -529,6 +775,9 @@ def main():
         test_15_h3_random_level_not_weak,
         test_16_h3_strong_support,
         test_17_ours_uniform_overlap,
+        test_18_ours_vs_uniform_comprehensive,
+        test_19_h1_evaluation,
+        test_20_h2_evaluation,
     ]
     
     passed = 0

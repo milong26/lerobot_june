@@ -1,1 +1,1 @@
-personal/work2/duibi/random_42_corner3/random_112_seed42/checkpoints/006000/pretrained_model
+personal/work2/duibi/random_42_corner3/random_112_seed42/checkpoints/010000/pretrained_model
