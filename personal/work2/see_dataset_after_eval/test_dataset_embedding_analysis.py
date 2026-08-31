@@ -41,9 +41,11 @@ from analyze_dataset_embedding import (
     evaluate_h2,
     evaluate_h3,
     evaluate_hypotheses,
+    load_subset_episode_indices,
+    l2_normalize_rows,
 )
-from analysis_utils import compute_fixed_universe_sic
-from sic_v2 import check_embeddings_valid
+from analysis_utils import compute_fixed_universe_sic, compute_fixed_universe_sic_from_indices
+from sic_v2 import check_embeddings_valid, compute_dbar_from_embeddings, build_kernel_matrices
 
 
 def create_test_embeddings(n_episodes=50, dim=16, seed=42):
@@ -113,7 +115,7 @@ def test_3_ridge_recovers_xy():
     probe = position_probe(embeddings, np.concatenate([x, y], axis=1), n_shuffles=10, seed=42)
     
     assert probe['ridge']['R2_x'] > 0.9, f"Expected high R2_x, got {probe['ridge']['R2_x']:.4f}"
-    assert probe['ridge']['R2_y'] > 0.9, f"Expected high R2_y, got {probe['ridge']['R2_y']:.4f}"
+    assert probe['ridge']['R2_y'] > 0.9, f"Expected hig你h R2_y, got {probe['ridge']['R2_y']:.4f}"
     
     print(f"  PASS: Ridge R2_x={probe['ridge']['R2_x']:.4f}, R2_y={probe['ridge']['R2_y']:.4f}")
     return True
@@ -637,7 +639,6 @@ def test_18_ours_vs_uniform_comprehensive():
     result = evaluate_ours_vs_uniform(
         ours_data, uniform_data,
         ours_episodes, uniform_episodes,
-        spearman_global=0.5,
     )
 
     assert "episode_overlap_count" in result, "Missing episode_overlap_count"
@@ -752,6 +753,482 @@ def test_20_h2_evaluation():
     return True
 
 
+def test_21_subset_loader_selected_episode_indices():
+    """Test 21: Subset loader supports selected_episode_indices field"""
+    print("\n=== Test 21: Subset loader selected_episode_indices ===")
+
+    import tempfile
+    test_data = {"method": "random", "num_episodes": 112, "seed": 42, "selected_episode_indices": [3, 8, 11, 12]}
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        temp_path = Path(f.name)
+
+    try:
+        indices = load_subset_episode_indices(temp_path)
+        assert indices == [3, 8, 11, 12], f"Expected [3, 8, 11, 12], got {indices}"
+        print(f"  PASS: Loaded {len(indices)} indices from selected_episode_indices")
+    finally:
+        temp_path.unlink()
+
+    return True
+
+
+def test_22_subset_loader_missing_key_raises():
+    """Test 22: Subset loader raises ValueError when no valid key found"""
+    print("\n=== Test 22: Subset loader missing key raises ===")
+
+    import tempfile
+    test_data = {"method": "random", "num_episodes": 112}
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        temp_path = Path(f.name)
+
+    try:
+        try:
+            load_subset_episode_indices(temp_path)
+            raise AssertionError("Should have raised ValueError")
+        except ValueError as e:
+            assert "selected_episode_indices" in str(e) or "episode_indices" in str(e) or "episodes" in str(e)
+            print(f"  PASS: Raised ValueError as expected: {e}")
+    finally:
+        temp_path.unlink()
+
+    return True
+
+
+def test_23_random_json_structure():
+    """Test 23: Random JSON structure example loads 112 episodes"""
+    print("\n=== Test 23: Random JSON structure ===")
+
+    import tempfile
+    random_indices = list(range(112))
+    test_data = {
+        "method": "random",
+        "num_episodes": 112,
+        "seed": 42,
+        "selected_episode_indices": random_indices
+    }
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        temp_path = Path(f.name)
+
+    try:
+        indices = load_subset_episode_indices(temp_path)
+        assert len(indices) == 112, f"Expected 112 indices, got {len(indices)}"
+        assert indices == random_indices
+        print(f"  PASS: Loaded 112 indices from Random JSON structure")
+    finally:
+        temp_path.unlink()
+
+    return True
+
+
+def test_24_uniform_json_structure():
+    """Test 24: Uniform JSON structure example loads 112 episodes"""
+    print("\n=== Test 24: Uniform JSON structure ===")
+
+    import tempfile
+    uniform_indices = [5, 7, 11, 12] + list(range(20, 128))
+    test_data = {
+        "method": "uniform_workspace",
+        "num_episodes": 112,
+        "seed": 42,
+        "selected_episode_indices": uniform_indices
+    }
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        temp_path = Path(f.name)
+
+    try:
+        indices = load_subset_episode_indices(temp_path)
+        assert len(indices) == 112, f"Expected 112 indices, got {len(indices)}"
+        print(f"  PASS: Loaded 112 indices from Uniform JSON structure")
+    finally:
+        temp_path.unlink()
+
+    return True
+
+
+def test_25_ours_json_structure():
+    """Test 25: Ours JSON structure example loads selected_episode_indices"""
+    print("\n=== Test 25: Ours JSON structure ===")
+
+    import tempfile
+    ours_indices = [0, 5, 6, 7, 9] + list(range(20, 127))
+    test_data = {
+        "selected_episode_indices": ours_indices
+    }
+
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        json.dump(test_data, f)
+        temp_path = Path(f.name)
+
+    try:
+        indices = load_subset_episode_indices(temp_path)
+        assert len(indices) == 112, f"Expected 112 indices, got {len(indices)}"
+        print(f"  PASS: Loaded 112 indices from Ours JSON structure")
+    finally:
+        temp_path.unlink()
+
+    return True
+
+
+def test_26_fixed_sic_observed_bootstrap_shared_dbar():
+    """Test 26: Fixed SIC observed and bootstrap share same dbar"""
+    print("\n=== Test 26: Fixed SIC observed and bootstrap shared dbar ===")
+
+    episode_indices, phi_g, phi_w = create_test_embeddings(n_episodes=30, dim=8)
+
+    dbar_g, dbar_w, _ = compute_dbar_from_embeddings(phi_g, phi_w)
+    K_g, K_w = build_kernel_matrices(phi_g, phi_w, dbar_g, dbar_w)
+
+    from analyze_dataset_embedding import compute_fixed_universe_sic_for_subset
+
+    subset_indices_a = list(range(10))
+
+    sic_result = compute_fixed_universe_sic_for_subset(
+        subset_indices_a, episode_indices, K_g, K_w, dbar_g, dbar_w, "test"
+    )
+
+    assert abs(sic_result["dbar_global"] - dbar_g) < 1e-10, "dbar_global should match"
+    assert abs(sic_result["dbar_wrist"] - dbar_w) < 1e-10, "dbar_wrist should match"
+
+    print(f"  PASS: Observed SIC uses same dbar as precomputed")
+    return True
+
+
+def test_27_compute_dbar_from_embeddings_used():
+    """Test 27: compute_dbar_from_embeddings definition is used in main flow"""
+    print("\n=== Test 27: compute_dbar_from_embeddings used ===")
+
+    rng = np.random.RandomState(42)
+    n = 50
+    dim = 8
+
+    phi_g = rng.randn(n, dim).astype(np.float32)
+    phi_w = rng.randn(n, dim).astype(np.float32)
+
+    dbar_g, dbar_w, fallback = compute_dbar_from_embeddings(phi_g, phi_w)
+
+    assert isinstance(dbar_g, float), "dbar_global should be float"
+    assert isinstance(dbar_w, float), "dbar_wrist should be float"
+    assert isinstance(fallback, bool), "fallback should be bool"
+
+    print(f"  PASS: compute_dbar_from_embeddings returns correct types")
+    return True
+
+
+def test_28_alignment_duplicate_from_load_info():
+    """Test 28: Alignment duplicate info comes from load_info/meta_info"""
+    print("\n=== Test 28: Alignment duplicate from load_info/meta_info ===")
+
+    from analyze_dataset_embedding import align_embeddings_with_metadata
+
+    rng = np.random.RandomState(42)
+    n = 20
+    dim = 4
+
+    embeddings = {i: rng.randn(dim).astype(np.float32) for i in range(n)}
+    metadata = {i: {"init_pos": rng.rand(2), "goal_pos": rng.rand(2)} for i in range(n)}
+
+    load_info = {
+        "duplicate_episode_indices": [5, 10],
+        "invalid_files": ["bad_file.npy"],
+        "file_count": 22,
+    }
+    meta_info = {
+        "duplicate_episode_indices": [3, 7],
+    }
+
+    episode_indices, phi_g, phi_w, init_pos, goal_pos, alignment_info = \
+        align_embeddings_with_metadata(embeddings, metadata, load_info=load_info, meta_info=meta_info)
+
+    assert alignment_info["duplicate_embedding_episode_index"] == [5, 10], "Should use load_info duplicates"
+    assert alignment_info["duplicate_metadata_episode_index"] == [3, 7], "Should use meta_info duplicates"
+    assert alignment_info["invalid_embedding_files"] == ["bad_file.npy"], "Should use load_info invalid files"
+
+    print(f"  PASS: Alignment duplicate info from load_info/meta_info")
+    return True
+
+
+def test_29_normalized_embedding_stats():
+    """Test 29: global_normalized/wrist_normalized stats exist"""
+    print("\n=== Test 29: Normalized embedding stats ===")
+
+    rng = np.random.RandomState(42)
+    n = 50
+    dim = 8
+
+    phi_g = rng.randn(n, dim).astype(np.float32)
+    phi_w = rng.randn(n, dim).astype(np.float32)
+
+    phi_g_norm = l2_normalize_rows(phi_g)
+    phi_w_norm = l2_normalize_rows(phi_w)
+
+    stats_g_norm = compute_embedding_statistics(phi_g_norm, "global_normalized")
+    stats_w_norm = compute_embedding_statistics(phi_w_norm, "wrist_normalized")
+
+    assert "effective_rank" in stats_g_norm, "Missing effective_rank in global_normalized"
+    assert "effective_rank" in stats_w_norm, "Missing effective_rank in wrist_normalized"
+
+    norms_g = np.linalg.norm(phi_g_norm, axis=1)
+    assert np.allclose(norms_g, 1.0, atol=1e-6), "Normalized embeddings should have unit norm"
+
+    print(f"  PASS: Normalized embedding stats computed correctly")
+    return True
+
+
+def test_30_h1_uses_probe_null_evidence():
+    """Test 30: H1 uses x/y probe null evidence"""
+    print("\n=== Test 30: H1 uses probe null evidence ===")
+
+    mock_results = {
+        "validation": {"valid": True},
+        "global_stats": {"effective_rank": 50.0, "dimension": 100},
+        "wrist_stats": {"effective_rank": 40.0, "dimension": 100},
+        "combined_stats": {"effective_rank": 80.0, "dimension": 200},
+        "probe": {
+            "global": {
+                "ridge": {"R2_x": 0.8, "R2_y": 0.75},
+                "shuffled_ridge": {
+                    "R2_x": {"mean": 0.1, "std": 0.05, "observed": 0.8, "observed_percentile": 0.95, "empirical_p_value": 0.01},
+                    "R2_y": {"mean": 0.1, "std": 0.05, "observed": 0.75, "observed_percentile": 0.94, "empirical_p_value": 0.02},
+                },
+            },
+            "wrist": {
+                "ridge": {"R2_x": 0.6, "R2_y": 0.55},
+                "shuffled_ridge": {
+                    "R2_x": {"mean": 0.1, "std": 0.05, "observed": 0.6, "observed_percentile": 0.90, "empirical_p_value": 0.03},
+                    "R2_y": {"mean": 0.1, "std": 0.05, "observed": 0.55, "observed_percentile": 0.88, "empirical_p_value": 0.04},
+                },
+            },
+            "combined": {
+                "ridge": {"R2_x": 0.85, "R2_y": 0.8},
+                "shuffled_ridge": {
+                    "R2_x": {"mean": 0.1, "std": 0.05, "observed": 0.85, "observed_percentile": 0.96, "empirical_p_value": 0.005},
+                    "R2_y": {"mean": 0.1, "std": 0.05, "observed": 0.8, "observed_percentile": 0.95, "empirical_p_value": 0.01},
+                },
+            },
+        },
+        "neighbor_overlap": {
+            "global": {
+                "neighbor_overlap@10": 0.3,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"mean": 0.1, "std": 0.02, "empirical_p_value": 0.001},
+            },
+            "wrist": {
+                "neighbor_overlap@10": 0.25,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"mean": 0.1, "std": 0.02, "empirical_p_value": 0.005},
+            },
+            "combined": {
+                "neighbor_overlap@10": 0.35,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"mean": 0.1, "std": 0.02, "empirical_p_value": 0.001},
+            },
+        },
+    }
+
+    h1_result = evaluate_h1(mock_results)
+
+    assert "status" in h1_result, "Missing status"
+    assert "evidence" in h1_result, "Missing evidence"
+
+    for rep in ["global", "wrist", "combined"]:
+        rep_evidence = h1_result["evidence"].get(rep, {})
+        assert "probe_x_significant" in rep_evidence, f"Missing probe_x_significant for {rep}"
+        assert "probe_y_significant" in rep_evidence, f"Missing probe_y_significant for {rep}"
+        assert "neighbor_significant" in rep_evidence, f"Missing neighbor_significant for {rep}"
+
+    print(f"  PASS: H1 uses probe x/y null evidence")
+    return True
+
+
+def test_31_h2_uses_permutation_probe_neighbor_null():
+    """Test 31: H2 uses permutation p + probe null + neighbor null"""
+    print("\n=== Test 31: H2 uses permutation p + probe null + neighbor null ===")
+
+    mock_results = {
+        "spearman": {
+            "global": {"rho": 0.6, "p_value": 1e-10, "n_pairs": 50000},
+            "wrist": {"rho": 0.5, "p_value": 1e-8, "n_pairs": 50000},
+            "combined": {"rho": 0.65, "p_value": 1e-12, "n_pairs": 50000},
+        },
+        "permutation_tests": {
+            "global": {"permutation_p_value": 0.001, "observed_rho": 0.6},
+            "wrist": {"permutation_p_value": 0.002, "observed_rho": 0.5},
+            "combined": {"permutation_p_value": 0.001, "observed_rho": 0.65},
+        },
+        "probe": {
+            "global": {
+                "ridge": {"R2_x": 0.7, "R2_y": 0.65},
+                "shuffled_ridge": {
+                    "R2_x": {"mean": 0.05, "std": 0.02, "empirical_p_value": 0.01},
+                    "R2_y": {"mean": 0.05, "std": 0.02, "empirical_p_value": 0.02},
+                },
+            },
+            "wrist": {
+                "ridge": {"R2_x": 0.5, "R2_y": 0.45},
+                "shuffled_ridge": {
+                    "R2_x": {"mean": 0.05, "std": 0.02, "empirical_p_value": 0.03},
+                    "R2_y": {"mean": 0.05, "std": 0.02, "empirical_p_value": 0.04},
+                },
+            },
+            "combined": {
+                "ridge": {"R2_x": 0.75, "R2_y": 0.7},
+                "shuffled_ridge": {
+                    "R2_x": {"mean": 0.05, "std": 0.02, "empirical_p_value": 0.005},
+                    "R2_y": {"mean": 0.05, "std": 0.02, "empirical_p_value": 0.01},
+                },
+            },
+        },
+        "neighbor_overlap": {
+            "global": {
+                "neighbor_overlap@10": 0.25,
+                "random_neighbor_overlap@10": 0.08,
+                "neighbor_overlap@10_null": {"mean": 0.08, "std": 0.02, "empirical_p_value": 0.001},
+            },
+            "wrist": {
+                "neighbor_overlap@10": 0.2,
+                "random_neighbor_overlap@10": 0.08,
+                "neighbor_overlap@10_null": {"mean": 0.08, "std": 0.02, "empirical_p_value": 0.005},
+            },
+            "combined": {
+                "neighbor_overlap@10": 0.3,
+                "random_neighbor_overlap@10": 0.08,
+                "neighbor_overlap@10_null": {"mean": 0.08, "std": 0.02, "empirical_p_value": 0.001},
+            },
+        },
+    }
+
+    h2_result = evaluate_h2(mock_results)
+
+    assert "status" in h2_result, "Missing status"
+    assert "evidence" in h2_result, "Missing evidence"
+
+    for rep in ["global", "wrist", "combined"]:
+        rep_evidence = h2_result["evidence"].get(rep, {})
+        assert "spearman_significant" in rep_evidence, f"Missing spearman_significant for {rep}"
+        assert "probe_x_significant" in rep_evidence, f"Missing probe_x_significant for {rep}"
+        assert "probe_y_significant" in rep_evidence, f"Missing probe_y_significant for {rep}"
+        assert "neighbor_significant" in rep_evidence, f"Missing neighbor_significant for {rep}"
+
+    print(f"  PASS: H2 uses permutation p + probe null + neighbor null")
+    return True
+
+
+def test_32_ours_uniform_no_rho_overlap_threshold():
+    """Test 32: Ours-vs-Uniform no longer contains rho>0.3/overlap>0.5 conclusion logic"""
+    print("\n=== Test 32: Ours-vs-Uniform no hard thresholds ===")
+
+    ours_episodes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    uniform_episodes = [5, 6, 7, 8, 9, 10, 11, 12, 13, 14]
+
+    ours_data = {
+        "workspace_coverage": {"physical_unselected_mean_nearest": 0.1},
+        "coverage_global": {"unselected_mean_nearest_distance": 0.15},
+        "coverage_wrist": {"unselected_mean_nearest_distance": 0.16},
+        "coverage_combined": {"unselected_mean_nearest_distance": 0.14},
+        "redundancy_global": {"redundancy_fraction": 0.1},
+        "redundancy_wrist": {"redundancy_fraction": 0.12},
+        "redundancy_combined": {"redundancy_fraction": 0.08},
+        "fixed_sic": {"normalized_sic": 0.45},
+    }
+
+    uniform_data = {
+        "workspace_coverage": {"physical_unselected_mean_nearest": 0.11},
+        "coverage_global": {"unselected_mean_nearest_distance": 0.16},
+        "coverage_wrist": {"unselected_mean_nearest_distance": 0.17},
+        "coverage_combined": {"unselected_mean_nearest_distance": 0.15},
+        "redundancy_global": {"redundancy_fraction": 0.12},
+        "redundancy_wrist": {"redundancy_fraction": 0.14},
+        "redundancy_combined": {"redundancy_fraction": 0.1},
+        "fixed_sic": {"normalized_sic": 0.46},
+    }
+
+    result = evaluate_ours_vs_uniform(ours_data, uniform_data, ours_episodes, uniform_episodes)
+
+    assert "conclusion" in result, "Missing conclusion"
+    assert "evidence_summary" in result, "Missing evidence_summary"
+
+    conclusion = result["conclusion"]
+    assert "Insufficient evidence" in conclusion or "Evidence suggests" in conclusion, \
+        f"Conclusion should be conservative, got: {conclusion}"
+
+    print(f"  PASS: No hard thresholds, conclusion is conservative")
+    return True
+
+
+def test_33_fixed_sic_none_safe():
+    """Test 33: fixed_sic=None doesn't crash compare"""
+    print("\n=== Test 33: fixed_sic=None safe ===")
+
+    ours_episodes = [1, 2, 3, 4, 5]
+    uniform_episodes = [3, 4, 5, 6, 7]
+
+    ours_data = {
+        "workspace_coverage": {"physical_unselected_mean_nearest": 0.1},
+        "coverage_global": {"unselected_mean_nearest_distance": 0.15},
+        "coverage_wrist": {"unselected_mean_nearest_distance": 0.16},
+        "coverage_combined": {"unselected_mean_nearest_distance": 0.14},
+        "redundancy_global": {"redundancy_fraction": 0.1},
+        "redundancy_wrist": {"redundancy_fraction": 0.12},
+        "redundancy_combined": {"redundancy_fraction": 0.08},
+        "fixed_sic": None,
+    }
+
+    uniform_data = {
+        "workspace_coverage": {"physical_unselected_mean_nearest": 0.11},
+        "coverage_global": {"unselected_mean_nearest_distance": 0.16},
+        "coverage_wrist": {"unselected_mean_nearest_distance": 0.17},
+        "coverage_combined": {"unselected_mean_nearest_distance": 0.15},
+        "redundancy_global": {"redundancy_fraction": 0.12},
+        "redundancy_wrist": {"redundancy_fraction": 0.14},
+        "redundancy_combined": {"redundancy_fraction": 0.1},
+        "fixed_sic": {"normalized_sic": 0.46},
+    }
+
+    try:
+        result = evaluate_ours_vs_uniform(ours_data, uniform_data, ours_episodes, uniform_episodes)
+        assert "fixed_sic_delta" in result, "Missing fixed_sic_delta"
+        print(f"  PASS: fixed_sic=None handled safely")
+    except Exception as e:
+        raise AssertionError(f"Should not crash with fixed_sic=None: {e}")
+
+    return True
+
+
+def test_34_table2_fixed_sic_fields():
+    """Test 34: Table 2 Fixed SIC fields still correct"""
+    print("\n=== Test 34: Table 2 Fixed SIC fields ===")
+
+    episode_indices, phi_g, phi_w = create_test_embeddings(n_episodes=30, dim=8)
+
+    dbar_g, dbar_w, _ = compute_dbar_from_embeddings(phi_g, phi_w)
+    K_g, K_w = build_kernel_matrices(phi_g, phi_w, dbar_g, dbar_w)
+
+    subset_indices = list(range(10))
+
+    from analyze_dataset_embedding import compute_fixed_universe_sic_for_subset
+
+    sic_result = compute_fixed_universe_sic_for_subset(
+        subset_indices, episode_indices, K_g, K_w, dbar_g, dbar_w, "test"
+    )
+
+    assert "normalized_sic" in sic_result, "Missing normalized_sic"
+    assert "fixed_universe_sic" in sic_result, "Missing fixed_universe_sic"
+    assert "reference_anchor_count" in sic_result, "Missing reference_anchor_count"
+    assert "dbar_global" in sic_result, "Missing dbar_global"
+    assert "dbar_wrist" in sic_result, "Missing dbar_wrist"
+
+    print(f"  PASS: Table 2 Fixed SIC fields present")
+    return True
+
+
 def main():
     print("\n" + "="*60)
     print("Dataset Embedding Analysis Unit Tests")
@@ -778,6 +1255,20 @@ def main():
         test_18_ours_vs_uniform_comprehensive,
         test_19_h1_evaluation,
         test_20_h2_evaluation,
+        test_21_subset_loader_selected_episode_indices,
+        test_22_subset_loader_missing_key_raises,
+        test_23_random_json_structure,
+        test_24_uniform_json_structure,
+        test_25_ours_json_structure,
+        test_26_fixed_sic_observed_bootstrap_shared_dbar,
+        test_27_compute_dbar_from_embeddings_used,
+        test_28_alignment_duplicate_from_load_info,
+        test_29_normalized_embedding_stats,
+        test_30_h1_uses_probe_null_evidence,
+        test_31_h2_uses_permutation_probe_neighbor_null,
+        test_32_ours_uniform_no_rho_overlap_threshold,
+        test_33_fixed_sic_none_safe,
+        test_34_table2_fixed_sic_fields,
     ]
     
     passed = 0

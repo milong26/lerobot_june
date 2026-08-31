@@ -41,16 +41,44 @@ sys.stdout.reconfigure(line_buffering=True)
 sys.path.insert(0, str(Path(__file__).parent))
 
 from sic_v2 import FixedAnchorSIC, check_embeddings_valid, compute_dbar_from_embeddings, build_kernel_matrices
-from analysis_utils import compute_fixed_universe_sic
+from analysis_utils import compute_fixed_universe_sic, compute_fixed_universe_sic_from_indices
 
 
-def build_single_kernel_matrix(phi: np.ndarray, dbar: float) -> np.ndarray:
-    """Build kernel matrix for a single representation."""
-    n = len(phi)
-    diff = phi[:, np.newaxis, :] - phi[np.newaxis, :, :]
-    dist = np.linalg.norm(diff, axis=2)
-    K = np.exp(-dist / dbar)
-    return K
+def load_subset_episode_indices(path: Path) -> List[int]:
+    """
+    Load subset episode indices from JSON file.
+    Priority: selected_episode_indices > episode_indices > episodes
+    Raises ValueError if no valid key found.
+    """
+    with open(path) as f:
+        data = json.load(f)
+
+    if isinstance(data, list):
+        episodes = data
+    elif isinstance(data, dict):
+        episodes = None
+        for key in ["selected_episode_indices", "episode_indices", "episodes"]:
+            if key in data:
+                episodes = data[key]
+                break
+        if episodes is None:
+            raise ValueError(
+                f"Subset JSON {path} does not contain a supported episode list key. "
+                f"Expected one of: selected_episode_indices, episode_indices, episodes"
+            )
+    else:
+        raise ValueError(f"Subset JSON {path} has unsupported format: {type(data)}")
+
+    if not isinstance(episodes, list):
+        raise ValueError(f"Episode list in {path} is not a list")
+
+    return [int(x) for x in episodes]
+
+
+def l2_normalize_rows(phi: np.ndarray) -> np.ndarray:
+    """L2 normalize each row of embedding matrix."""
+    norms = np.linalg.norm(phi, axis=1, keepdims=True)
+    return phi / np.maximum(norms, 1e-10)
 
 
 def load_embeddings(embeddings_dir: Path) -> Tuple[Dict[int, Dict], Dict]:
@@ -112,7 +140,9 @@ def load_episode_metadata(dataset_root: Path) -> Tuple[Dict[int, Dict], Dict]:
 
 def align_embeddings_with_metadata(
     embeddings: Dict[int, Dict],
-    metadata: Dict[int, Dict]
+    metadata: Dict[int, Dict],
+    load_info: Optional[Dict] = None,
+    meta_info: Optional[Dict] = None
 ) -> Tuple[List[int], np.ndarray, np.ndarray, np.ndarray, np.ndarray, Dict]:
     """
     Align embeddings with metadata.
@@ -127,30 +157,16 @@ def align_embeddings_with_metadata(
     missing_embeddings = sorted(metadata_episodes - embedding_episodes)
     missing_metadata = sorted(embedding_episodes - metadata_episodes)
 
-    dup_embedding = []
-    seen = set()
-    for ep in sorted(embedding_episodes):
-        if ep in seen:
-            dup_embedding.append(ep)
-        seen.add(ep)
-
-    dup_metadata = []
-    seen = set()
-    for ep in sorted(metadata_episodes):
-        if ep in seen:
-            dup_metadata.append(ep)
-        seen.add(ep)
-
     alignment_info = {
         "metadata_episode_count": len(metadata_episodes),
-        "embedding_file_count": len(embeddings),
+        "embedding_file_count": load_info.get("file_count", 0) if load_info else len(embeddings),
         "embedding_unique_episode_count": len(embedding_episodes),
         "intersection_count": len(intersection),
         "missing_embedding": missing_embeddings,
         "missing_metadata": missing_metadata,
-        "duplicate_embedding_episode_index": dup_embedding,
-        "duplicate_metadata_episode_index": dup_metadata,
-        "invalid_embedding_files": [],
+        "duplicate_embedding_episode_index": load_info.get("duplicate_episode_indices", []) if load_info else [],
+        "duplicate_metadata_episode_index": meta_info.get("duplicate_episode_indices", []) if meta_info else [],
+        "invalid_embedding_files": load_info.get("invalid_files", []) if load_info else [],
     }
 
     if not intersection:
@@ -399,13 +415,33 @@ def position_probe(
             if (shuffle_i + 1) % 20 == 0:
                 print(f"    Shuffle {shuffle_i + 1}/{n_shuffles} for {dim_name}")
 
+    shuffled_r2_x_list = list(results["shuffled_ridge"]["R2_x"])
+    shuffled_r2_y_list = list(results["shuffled_ridge"]["R2_y"])
+    shuffled_mae_x_list = list(results["shuffled_ridge"]["MAE_x"])
+    shuffled_mae_y_list = list(results["shuffled_ridge"]["MAE_y"])
+
     for key in ["shuffled_ridge", "shuffled_knn"]:
         for metric in ["R2_x", "R2_y", "MAE_x", "MAE_y"]:
             arr = results[key][metric]
             results[key][metric] = {
                 "mean": float(np.mean(arr)),
-                "std": float(np.std(arr))
+                "std": float(np.std(arr)),
+                "n_shuffles": n_shuffles,
             }
+
+    for metric, null_list in [("R2_x", shuffled_r2_x_list), ("R2_y", shuffled_r2_y_list)]:
+        null_arr = np.asarray(null_list)
+        observed = results["ridge"][metric]
+        results["shuffled_ridge"][metric]["observed"] = observed
+        results["shuffled_ridge"][metric]["observed_percentile"] = float(np.mean(null_arr <= observed))
+        results["shuffled_ridge"][metric]["empirical_p_value"] = float((np.sum(null_arr >= observed) + 1) / (len(null_arr) + 1))
+
+    for metric, null_list in [("MAE_x", shuffled_mae_x_list), ("MAE_y", shuffled_mae_y_list)]:
+        null_arr = np.asarray(null_list)
+        observed = results["ridge"][metric]
+        results["shuffled_ridge"][metric]["observed"] = observed
+        results["shuffled_ridge"][metric]["observed_percentile"] = float(np.mean(null_arr >= observed))
+        results["shuffled_ridge"][metric]["empirical_p_value"] = float((np.sum(null_arr <= observed) + 1) / (len(null_arr) + 1))
 
     return results
 
@@ -843,7 +879,7 @@ def random_bootstrap_analysis(
     K_wrist: np.ndarray = None,
     dbar_global: float = None,
     dbar_wrist: float = None,
-    n_episodes_total: int = None,
+    all_episode_indices: List[int] = None,
     precomputed_dist_matrix: np.ndarray = None,
 ) -> Dict:
     """
@@ -879,6 +915,9 @@ def random_bootstrap_analysis(
     else:
         compute_sic = False
 
+    if all_episode_indices is None:
+        all_episode_indices = list(range(n_total))
+
     print(f"  Running {n_bootstrap} bootstrap iterations...")
     for boot_i in range(n_bootstrap):
         sample_indices = rng.choice(n_total, subset_size, replace=False)
@@ -900,11 +939,8 @@ def random_bootstrap_analysis(
         bootstrap_metrics["redundancy_fraction"].append(redundancy_frac)
 
         if compute_sic:
-            sample_episodes = list(range(n_episodes_total))
-            selected_episodes = [sample_episodes[i] for i in sample_indices]
-            all_episode_indices = list(range(n_episodes_total))
+            selected_episodes = [all_episode_indices[i] for i in sample_indices]
 
-            from analysis_utils import compute_fixed_universe_sic_from_indices
             sic_result = compute_fixed_universe_sic_from_indices(
                 selected_episodes=selected_episodes,
                 all_episode_indices=all_episode_indices,
@@ -962,23 +998,18 @@ def random_bootstrap_analysis(
     if compute_sic:
         bootstrap_sic = np.array(bootstrap_metrics["normalized_fixed_sic"])
 
-        if K_global is not None:
-            all_episode_indices = list(range(n_episodes_total))
-            selected_episodes = list(subset_indices)
-            from analysis_utils import compute_fixed_universe_sic_from_indices
-            sic_obs = compute_fixed_universe_sic_from_indices(
-                selected_episodes=selected_episodes,
-                all_episode_indices=all_episode_indices,
-                K_global=K_global,
-                K_wrist=K_wrist,
-                dbar_global=dbar_global,
-                dbar_wrist=dbar_wrist,
-                alpha=1.0,
-                lambda_wrist=1.0,
-            )
-            observed_sic = sic_obs["normalized_sic"]
-        else:
-            observed_sic = 0.0
+        selected_episodes = [all_episode_indices[i] for i in subset_indices]
+        sic_obs = compute_fixed_universe_sic_from_indices(
+            selected_episodes=selected_episodes,
+            all_episode_indices=all_episode_indices,
+            K_global=K_global,
+            K_wrist=K_wrist,
+            dbar_global=dbar_global,
+            dbar_wrist=dbar_wrist,
+            alpha=1.0,
+            lambda_wrist=1.0,
+        )
+        observed_sic = sic_obs["normalized_sic"]
 
         better_fraction_sic = float(np.sum(bootstrap_sic < observed_sic) / len(bootstrap_sic))
 
@@ -1052,27 +1083,32 @@ def compute_workspace_coverage(
 def compute_fixed_universe_sic_for_subset(
     subset_indices: List[int],
     all_episode_indices: List[int],
-    phi_globals: np.ndarray,
-    phi_wrists: np.ndarray,
+    K_global: np.ndarray,
+    K_wrist: np.ndarray,
+    dbar_global: float,
+    dbar_wrist: float,
     name: str,
     alpha: float = 1.0,
-    lambda_wrist: float = 1.0
+    lambda_wrist: float = 1.0,
 ) -> Dict:
     """
-    Compute fixed-universe SIC for a subset.
+    Compute fixed-universe SIC for a subset using precomputed K matrices and dbar values.
+    Ensures consistency across all methods and bootstrap iterations.
     """
     if not subset_indices:
         return None
 
     subset_episodes = [all_episode_indices[i] for i in subset_indices]
 
-    sic_result = compute_fixed_universe_sic(
+    sic_result = compute_fixed_universe_sic_from_indices(
         selected_episodes=subset_episodes,
         all_episode_indices=all_episode_indices,
-        phi_globals=phi_globals,
-        phi_wrists=phi_wrists,
+        K_global=K_global,
+        K_wrist=K_wrist,
+        dbar_global=dbar_global,
+        dbar_wrist=dbar_wrist,
         alpha=alpha,
-        lambda_wrist=lambda_wrist
+        lambda_wrist=lambda_wrist,
     )
 
     return {
@@ -1080,8 +1116,8 @@ def compute_fixed_universe_sic_for_subset(
         "fixed_universe_sic": sic_result["fixed_universe_sic"],
         "normalized_sic": sic_result["normalized_sic"],
         "reference_anchor_count": sic_result["reference_anchor_count"],
-        "dbar_global": sic_result["dbar_global"],
-        "dbar_wrist": sic_result["dbar_wrist"],
+        "dbar_global": dbar_global,
+        "dbar_wrist": dbar_wrist,
     }
 
 
@@ -1090,11 +1126,11 @@ def evaluate_ours_vs_uniform(
     uniform_data: Dict,
     ours_episodes: List[int],
     uniform_episodes: List[int],
-    spearman_global: float,
 ) -> Dict:
     """
     Comprehensive Ours vs Uniform comparison.
     Evaluates whether Ours mainly reproduces Uniform initial-position coverage.
+    Outputs raw delta metrics and evidence summary without hard-coded thresholds.
     """
     ours_eps = set(ours_episodes)
     uniform_eps = set(uniform_episodes)
@@ -1107,163 +1143,131 @@ def evaluate_ours_vs_uniform(
         "episode_overlap_ratio": overlap_ratio,
     }
 
+    ours_ws = ours_data.get("workspace_coverage") or {}
+    uniform_ws = uniform_data.get("workspace_coverage") or {}
     ws_delta = {}
-    if ours_data.get("workspace_coverage") and uniform_data.get("workspace_coverage"):
-        for key in ["physical_unselected_mean_nearest", "physical_unselected_p95", "physical_unselected_max_radius"]:
-            v1 = ours_data["workspace_coverage"].get(key)
-            v2 = uniform_data["workspace_coverage"].get(key)
-            if v1 is not None and v2 is not None:
-                ws_delta[key] = v1 - v2
-        for grid_key in ["grid_7x4_ratio", "grid_14x8_ratio"]:
-            v1 = ours_data["workspace_coverage"].get(grid_key)
-            v2 = uniform_data["workspace_coverage"].get(grid_key)
-            if v1 is not None and v2 is not None:
-                ws_delta[grid_key] = v1 - v2
+    for key in ["physical_unselected_mean_nearest", "physical_unselected_p95", "physical_unselected_max_radius"]:
+        v1 = ours_ws.get(key)
+        v2 = uniform_ws.get(key)
+        if v1 is not None and v2 is not None:
+            ws_delta[key] = v1 - v2
+    for grid_key in ["grid_7x4_ratio", "grid_14x8_ratio"]:
+        v1 = ours_ws.get(grid_key)
+        v2 = uniform_ws.get(grid_key)
+        if v1 is not None and v2 is not None:
+            ws_delta[grid_key] = v1 - v2
     result["workspace_coverage_delta"] = ws_delta
 
+    ours_g = ours_data.get("coverage_global") or {}
+    uniform_g = uniform_data.get("coverage_global") or {}
     global_delta = {}
-    if ours_data.get("coverage_global") and uniform_data.get("coverage_global"):
-        for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
-                     "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
-                     "unselected_max_nearest_distance"]:
-            v1 = ours_data["coverage_global"].get(key)
-            v2 = uniform_data["coverage_global"].get(key)
-            if v1 is not None and v2 is not None:
-                global_delta[key] = v1 - v2
+    for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
+                 "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
+                 "unselected_max_nearest_distance"]:
+        v1 = ours_g.get(key)
+        v2 = uniform_g.get(key)
+        if v1 is not None and v2 is not None:
+            global_delta[key] = v1 - v2
     result["global_coverage_delta"] = global_delta
 
+    ours_w = ours_data.get("coverage_wrist") or {}
+    uniform_w = uniform_data.get("coverage_wrist") or {}
     wrist_delta = {}
-    if ours_data.get("coverage_wrist") and uniform_data.get("coverage_wrist"):
-        for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
-                     "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
-                     "unselected_max_nearest_distance"]:
-            v1 = ours_data["coverage_wrist"].get(key)
-            v2 = uniform_data["coverage_wrist"].get(key)
-            if v1 is not None and v2 is not None:
-                wrist_delta[key] = v1 - v2
+    for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
+                 "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
+                 "unselected_max_nearest_distance"]:
+        v1 = ours_w.get(key)
+        v2 = uniform_w.get(key)
+        if v1 is not None and v2 is not None:
+            wrist_delta[key] = v1 - v2
     result["wrist_coverage_delta"] = wrist_delta
 
+    ours_c = ours_data.get("coverage_combined") or {}
+    uniform_c = uniform_data.get("coverage_combined") or {}
     combined_delta = {}
-    if ours_data.get("coverage_combined") and uniform_data.get("coverage_combined"):
-        for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
-                     "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
-                     "unselected_max_nearest_distance"]:
-            v1 = ours_data["coverage_combined"].get(key)
-            v2 = uniform_data["coverage_combined"].get(key)
-            if v1 is not None and v2 is not None:
-                combined_delta[key] = v1 - v2
+    for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
+                 "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
+                 "unselected_max_nearest_distance"]:
+        v1 = ours_c.get(key)
+        v2 = uniform_c.get(key)
+        if v1 is not None and v2 is not None:
+            combined_delta[key] = v1 - v2
     result["combined_coverage_delta"] = combined_delta
 
+    ours_gr = ours_data.get("redundancy_global") or {}
+    uniform_gr = uniform_data.get("redundancy_global") or {}
     global_red_delta = {}
-    if ours_data.get("redundancy_global") and uniform_data.get("redundancy_global"):
-        for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
-            v1 = ours_data["redundancy_global"].get(key)
-            v2 = uniform_data["redundancy_global"].get(key)
-            if v1 is not None and v2 is not None:
-                global_red_delta[key] = v1 - v2
+    for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
+        v1 = ours_gr.get(key)
+        v2 = uniform_gr.get(key)
+        if v1 is not None and v2 is not None:
+            global_red_delta[key] = v1 - v2
     result["global_redundancy_delta"] = global_red_delta
 
+    ours_wr = ours_data.get("redundancy_wrist") or {}
+    uniform_wr = uniform_data.get("redundancy_wrist") or {}
     wrist_red_delta = {}
-    if ours_data.get("redundancy_wrist") and uniform_data.get("redundancy_wrist"):
-        for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
-            v1 = ours_data["redundancy_wrist"].get(key)
-            v2 = uniform_data["redundancy_wrist"].get(key)
-            if v1 is not None and v2 is not None:
-                wrist_red_delta[key] = v1 - v2
+    for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
+        v1 = ours_wr.get(key)
+        v2 = uniform_wr.get(key)
+        if v1 is not None and v2 is not None:
+            wrist_red_delta[key] = v1 - v2
     result["wrist_redundancy_delta"] = wrist_red_delta
 
+    ours_cr = ours_data.get("redundancy_combined") or {}
+    uniform_cr = uniform_data.get("redundancy_combined") or {}
     combined_red_delta = {}
-    if ours_data.get("redundancy_combined") and uniform_data.get("redundancy_combined"):
-        for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
-            v1 = ours_data["redundancy_combined"].get(key)
-            v2 = uniform_data["redundancy_combined"].get(key)
-            if v1 is not None and v2 is not None:
-                combined_red_delta[key] = v1 - v2
+    for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
+        v1 = ours_cr.get(key)
+        v2 = uniform_cr.get(key)
+        if v1 is not None and v2 is not None:
+            combined_red_delta[key] = v1 - v2
     result["combined_redundancy_delta"] = combined_red_delta
 
-    sic_delta = None
-    ours_sic = ours_data.get("fixed_sic", {}).get("normalized_sic")
-    uniform_sic = uniform_data.get("fixed_sic", {}).get("normalized_sic")
-    if ours_sic is not None and uniform_sic is not None:
-        sic_delta = ours_sic - uniform_sic
+    ours_fixed_sic = ours_data.get("fixed_sic") or {}
+    uniform_fixed_sic = uniform_data.get("fixed_sic") or {}
+    ours_sic = ours_fixed_sic.get("normalized_sic")
+    uniform_sic = uniform_fixed_sic.get("normalized_sic")
+    sic_delta = (ours_sic - uniform_sic) if (ours_sic is not None and uniform_sic is not None) else None
     result["fixed_sic_delta"] = sic_delta
 
-    evidence_score = 0
-    total_checks = 0
+    evidence_summary = {}
 
-    if ws_delta:
-        ws_mean = ws_delta.get("physical_unselected_mean_nearest")
-        if ws_mean is not None:
-            total_checks += 1
-            if abs(ws_mean) < 0.05:
-                evidence_score += 1
+    def _check_similar_direction(delta_dict, key, eps=1e-10):
+        v = delta_dict.get(key)
+        if v is None:
+            return None
+        return abs(v) < (abs(v) + eps) * 0.1
 
-    if global_delta:
-        g_mean = global_delta.get("unselected_mean_nearest_distance")
-        if g_mean is not None:
-            total_checks += 1
-            if abs(g_mean) < 0.05:
-                evidence_score += 1
+    ws_mean = ws_delta.get("physical_unselected_mean_nearest")
+    evidence_summary["workspace_similar_direction"] = (abs(ws_mean) < 0.01 * (abs(ws_delta.get("physical_unselected_mean_nearest", 0)) + 1e-10)) if ws_mean is not None else None
 
-    if wrist_delta:
-        w_mean = wrist_delta.get("unselected_mean_nearest_distance")
-        if w_mean is not None:
-            total_checks += 1
-            if abs(w_mean) < 0.05:
-                evidence_score += 1
+    g_mean = global_delta.get("unselected_mean_nearest_distance")
+    evidence_summary["global_similar_direction"] = (abs(g_mean) < 0.01 * (abs(global_delta.get("unselected_mean_nearest_distance", 0)) + 1e-10)) if g_mean is not None else None
 
-    if combined_delta:
-        c_mean = combined_delta.get("unselected_mean_nearest_distance")
-        if c_mean is not None:
-            total_checks += 1
-            if abs(c_mean) < 0.05:
-                evidence_score += 1
+    w_mean = wrist_delta.get("unselected_mean_nearest_distance")
+    evidence_summary["wrist_similar_direction"] = (abs(w_mean) < 0.01 * (abs(wrist_delta.get("unselected_mean_nearest_distance", 0)) + 1e-10)) if w_mean is not None else None
 
-    if global_red_delta:
-        g_red = global_red_delta.get("redundancy_fraction")
-        if g_red is not None:
-            total_checks += 1
-            if abs(g_red) < 0.05:
-                evidence_score += 1
+    c_mean = combined_delta.get("unselected_mean_nearest_distance")
+    evidence_summary["combined_similar_direction"] = (abs(c_mean) < 0.01 * (abs(combined_delta.get("unselected_mean_nearest_distance", 0)) + 1e-10)) if c_mean is not None else None
 
-    if wrist_red_delta:
-        w_red = wrist_red_delta.get("redundancy_fraction")
-        if w_red is not None:
-            total_checks += 1
-            if abs(w_red) < 0.05:
-                evidence_score += 1
+    g_red = global_red_delta.get("redundancy_fraction")
+    w_red = wrist_red_delta.get("redundancy_fraction")
+    c_red = combined_red_delta.get("redundancy_fraction")
+    redundancy_similar = []
+    if g_red is not None:
+        redundancy_similar.append(abs(g_red) < 0.01)
+    if w_red is not None:
+        redundancy_similar.append(abs(w_red) < 0.01)
+    if c_red is not None:
+        redundancy_similar.append(abs(c_red) < 0.01)
+    evidence_summary["redundancy_similar_direction"] = all(redundancy_similar) if redundancy_similar else None
 
-    if combined_red_delta:
-        c_red = combined_red_delta.get("redundancy_fraction")
-        if c_red is not None:
-            total_checks += 1
-            if abs(c_red) < 0.05:
-                evidence_score += 1
+    evidence_summary["sic_additional_gain"] = sic_delta
 
-    if sic_delta is not None:
-        total_checks += 1
-        if abs(sic_delta) < 0.02:
-            evidence_score += 1
+    result["evidence_summary"] = evidence_summary
 
-    if total_checks > 0:
-        similarity_ratio = evidence_score / total_checks
-    else:
-        similarity_ratio = 0.0
-
-    high_overlap = overlap_ratio > 0.5
-    high_spearman = abs(spearman_global) > 0.3
-
-    if similarity_ratio >= 0.7 and high_overlap and high_spearman:
-        conclusion = "Evidence suggests Ours may mainly reproduce initial-position coverage."
-    elif similarity_ratio >= 0.5 and high_overlap:
-        conclusion = "Some evidence suggests Ours may reproduce initial-position coverage, but results are mixed."
-    else:
-        conclusion = "Insufficient evidence that Ours mainly reproduces Uniform initial-position coverage."
-
-    result["conclusion"] = conclusion
-    result["similarity_ratio"] = similarity_ratio
-    result["evidence_score"] = evidence_score
-    result["total_checks"] = total_checks
+    result["conclusion"] = "Insufficient evidence that Ours mainly reproduces Uniform initial-position coverage."
 
     return result
 
@@ -1272,26 +1276,49 @@ def evaluate_h1(analysis_results: Dict) -> Dict:
     """
     Evaluate H1: Embedding 是否具有可区分性？
     Based on: validity/collapse, position probe vs shuffled, neighbor overlap vs random.
-    Uses null distribution evidence rather than fixed thresholds.
+    Uses null distribution evidence (empirical p-values) rather than fixed thresholds.
     """
     evidence = {}
 
     for rep in ["global", "wrist", "combined"]:
-        rep_evidence = {"probe": False, "neighbor": False, "validity": False}
+        rep_evidence = {
+            "probe_x_significant": False,
+            "probe_y_significant": False,
+            "neighbor_significant": False,
+            "validity": False,
+        }
 
         probe = analysis_results.get("probe", {}).get(rep, {})
         if probe:
-            ridge_r2_x = probe.get("ridge", {}).get("R2_x", 0)
-            shuffled_r2_x_mean = probe.get("shuffled_ridge", {}).get("R2_x", {}).get("mean", 0)
-            if ridge_r2_x > shuffled_r2_x_mean:
-                rep_evidence["probe"] = True
+            shuffled_r2_x = probe.get("shuffled_ridge", {}).get("R2_x", {})
+            shuffled_r2_y = probe.get("shuffled_ridge", {}).get("R2_y", {})
+
+            emp_p_x = shuffled_r2_x.get("empirical_p_value")
+            if emp_p_x is not None:
+                rep_evidence["probe_x_significant"] = emp_p_x < 0.05
+            else:
+                ridge_r2_x = probe.get("ridge", {}).get("R2_x", 0)
+                shuffled_r2_x_mean = shuffled_r2_x.get("mean", 0)
+                rep_evidence["probe_x_significant"] = ridge_r2_x > shuffled_r2_x_mean
+
+            emp_p_y = shuffled_r2_y.get("empirical_p_value")
+            if emp_p_y is not None:
+                rep_evidence["probe_y_significant"] = emp_p_y < 0.05
+            else:
+                ridge_r2_y = probe.get("ridge", {}).get("R2_y", 0)
+                shuffled_r2_y_mean = shuffled_r2_y.get("mean", 0)
+                rep_evidence["probe_y_significant"] = ridge_r2_y > shuffled_r2_y_mean
 
         overlap = analysis_results.get("neighbor_overlap", {}).get(rep, {})
         if overlap:
-            real_overlap = overlap.get("neighbor_overlap@10", 0)
-            random_overlap = overlap.get("random_neighbor_overlap@10", 0)
-            if real_overlap > random_overlap:
-                rep_evidence["neighbor"] = True
+            null_data = overlap.get("neighbor_overlap@10_null", {})
+            emp_p = null_data.get("empirical_p_value")
+            if emp_p is not None:
+                rep_evidence["neighbor_significant"] = emp_p < 0.05
+            else:
+                real_overlap = overlap.get("neighbor_overlap@10", 0)
+                random_overlap = overlap.get("random_neighbor_overlap@10", 0)
+                rep_evidence["neighbor_significant"] = real_overlap > random_overlap
 
         validation = analysis_results.get("validation", {})
         if validation.get("valid", False):
@@ -1299,19 +1326,18 @@ def evaluate_h1(analysis_results: Dict) -> Dict:
 
         evidence[rep] = rep_evidence
 
-    n_strong = 0
-    for rep in ["global", "combined"]:
-        rep_ev = evidence.get(rep, {})
-        if sum(rep_ev.values()) >= 2:
-            n_strong += 1
+    n_probe_sig = sum(1 for rep in ["global", "combined"]
+                      if evidence.get(rep, {}).get("probe_x_significant") and evidence.get(rep, {}).get("probe_y_significant"))
+    n_neighbor_sig = sum(1 for rep in ["global", "combined"]
+                         if evidence.get(rep, {}).get("neighbor_significant"))
 
     eff_rank_global = analysis_results.get("global_stats", {}).get("effective_rank", 0)
     dim_global = analysis_results.get("global_stats", {}).get("dimension", 1)
     eff_rank_ratio = eff_rank_global / dim_global if dim_global > 0 else 0
 
-    if n_strong >= 2:
+    if n_probe_sig >= 2 and n_neighbor_sig >= 1:
         status = "SUPPORTED"
-    elif n_strong >= 1:
+    elif n_probe_sig >= 1 or n_neighbor_sig >= 1:
         status = "WEAK"
     else:
         status = "NOT SUPPORTED"
@@ -1329,7 +1355,7 @@ def evaluate_h2(analysis_results: Dict) -> Dict:
     """
     Evaluate H2: Embedding distance 是否具有 task-state geometry？
     Based on: Spearman + permutation test, position probe vs shuffled, neighbor overlap vs random.
-    Uses permutation p-value rather than fixed rho threshold.
+    Uses permutation p-value and empirical null evidence rather than fixed rho threshold.
     """
     spearman_results = analysis_results.get("spearman", {})
     perm_tests = analysis_results.get("permutation_tests", {})
@@ -1338,34 +1364,61 @@ def evaluate_h2(analysis_results: Dict) -> Dict:
 
     evidence = {}
     for rep in ["global", "wrist", "combined"]:
-        rep_evidence = {"spearman_sig": False, "probe_sig": False, "neighbor_sig": False}
+        rep_evidence = {
+            "spearman_significant": False,
+            "probe_x_significant": False,
+            "probe_y_significant": False,
+            "neighbor_significant": False,
+        }
 
         perm = perm_tests.get(rep, {})
         if perm.get("permutation_p_value", 1.0) < 0.05:
-            rep_evidence["spearman_sig"] = True
+            rep_evidence["spearman_significant"] = True
 
         probe = probe_results.get(rep, {})
         if probe:
-            ridge_r2_x = probe.get("ridge", {}).get("R2_x", 0)
-            shuffled_r2_x_mean = probe.get("shuffled_ridge", {}).get("R2_x", {}).get("mean", 0)
-            if ridge_r2_x > shuffled_r2_x_mean:
-                rep_evidence["probe_sig"] = True
+            shuffled_r2_x = probe.get("shuffled_ridge", {}).get("R2_x", {})
+            shuffled_r2_y = probe.get("shuffled_ridge", {}).get("R2_y", {})
+
+            emp_p_x = shuffled_r2_x.get("empirical_p_value")
+            if emp_p_x is not None:
+                rep_evidence["probe_x_significant"] = emp_p_x < 0.05
+            else:
+                ridge_r2_x = probe.get("ridge", {}).get("R2_x", 0)
+                shuffled_r2_x_mean = shuffled_r2_x.get("mean", 0)
+                rep_evidence["probe_x_significant"] = ridge_r2_x > shuffled_r2_x_mean
+
+            emp_p_y = shuffled_r2_y.get("empirical_p_value")
+            if emp_p_y is not None:
+                rep_evidence["probe_y_significant"] = emp_p_y < 0.05
+            else:
+                ridge_r2_y = probe.get("ridge", {}).get("R2_y", 0)
+                shuffled_r2_y_mean = shuffled_r2_y.get("mean", 0)
+                rep_evidence["probe_y_significant"] = ridge_r2_y > shuffled_r2_y_mean
 
         overlap = overlap_results.get(rep, {})
         if overlap:
-            real_overlap = overlap.get("neighbor_overlap@10", 0)
-            random_overlap = overlap.get("random_neighbor_overlap@10", 0)
-            if real_overlap > random_overlap:
-                rep_evidence["neighbor_sig"] = True
+            null_data = overlap.get("neighbor_overlap@10_null", {})
+            emp_p = null_data.get("empirical_p_value")
+            if emp_p is not None:
+                rep_evidence["neighbor_significant"] = emp_p < 0.05
+            else:
+                real_overlap = overlap.get("neighbor_overlap@10", 0)
+                random_overlap = overlap.get("random_neighbor_overlap@10", 0)
+                rep_evidence["neighbor_significant"] = real_overlap > random_overlap
 
         evidence[rep] = rep_evidence
 
-    n_sig_spearman = sum(1 for rep in ["global", "wrist", "combined"] if evidence.get(rep, {}).get("spearman_sig", False))
-    n_strong = sum(1 for rep in ["global", "combined"] if sum(evidence.get(rep, {}).values()) >= 2)
+    n_sig_spearman = sum(1 for rep in ["global", "wrist", "combined"]
+                         if evidence.get(rep, {}).get("spearman_significant", False))
+    n_probe_sig = sum(1 for rep in ["global", "combined"]
+                      if evidence.get(rep, {}).get("probe_x_significant") and evidence.get(rep, {}).get("probe_y_significant"))
+    n_neighbor_sig = sum(1 for rep in ["global", "combined"]
+                         if evidence.get(rep, {}).get("neighbor_significant"))
 
-    if n_sig_spearman >= 2 and n_strong >= 1:
+    if n_sig_spearman >= 2 and n_probe_sig >= 1 and n_neighbor_sig >= 1:
         status = "SUPPORTED"
-    elif n_sig_spearman >= 1 or n_strong >= 1:
+    elif n_sig_spearman >= 2 or (n_probe_sig >= 1 and n_neighbor_sig >= 1):
         status = "WEAK"
     else:
         status = "NOT SUPPORTED"
@@ -1383,6 +1436,7 @@ def evaluate_h3(analysis_results: Dict) -> Dict:
     """
     Evaluate H3: Ours subset 是否显著优于 random coverage？
     Based on: bootstrap better_than_random_fraction for multiple metrics.
+    Groups metrics by evidence family to avoid treating highly correlated metrics as independent.
     """
     subset_comparison = analysis_results.get("subset_comparison", {})
     ours_data = subset_comparison.get("Ours", {})
@@ -1395,30 +1449,58 @@ def evaluate_h3(analysis_results: Dict) -> Dict:
             "description": "Ours subset 是否显著优于 random coverage？"
         }
 
-    core_metrics = []
+    evidence_families = {
+        "coverage_quality": [],
+        "max_radius_tail": [],
+        "redundancy": [],
+        "fixed_sic": [],
+    }
+
     for rep in ["global", "wrist", "combined"]:
         bootstrap = ours_data.get(f"bootstrap_{rep}", {})
         if bootstrap:
-            for metric in ["mean_nearest", "p95_nearest", "max_radius", "redundancy_fraction"]:
+            for metric in ["mean_nearest", "p95_nearest"]:
                 metric_data = bootstrap.get(metric, {})
                 btr = metric_data.get("better_than_random_fraction", None)
                 if btr is not None:
-                    core_metrics.append({
+                    evidence_families["coverage_quality"].append({
                         "representation": rep,
                         "metric": metric,
                         "better_than_random_fraction": btr,
                     })
 
+            max_data = bootstrap.get("max_radius", {})
+            max_btr = max_data.get("better_than_random_fraction", None)
+            if max_btr is not None:
+                evidence_families["max_radius_tail"].append({
+                    "representation": rep,
+                    "metric": "max_radius",
+                    "better_than_random_fraction": max_btr,
+                })
+
+            red_data = bootstrap.get("redundancy_fraction", {})
+            red_btr = red_data.get("better_than_random_fraction", None)
+            if red_btr is not None:
+                evidence_families["redundancy"].append({
+                    "representation": rep,
+                    "metric": "redundancy_fraction",
+                    "better_than_random_fraction": red_btr,
+                })
+
             sic_data = bootstrap.get("normalized_fixed_sic", {})
             sic_btr = sic_data.get("better_than_random_fraction", None)
             if sic_btr is not None:
-                core_metrics.append({
+                evidence_families["fixed_sic"].append({
                     "representation": rep,
                     "metric": "normalized_fixed_sic",
                     "better_than_random_fraction": sic_btr,
                 })
 
-    if not core_metrics:
+    all_core_metrics = []
+    for family_metrics in evidence_families.values():
+        all_core_metrics.extend(family_metrics)
+
+    if not all_core_metrics:
         return {
             "hypothesis": "H3",
             "status": "NOT EVALUATED",
@@ -1426,27 +1508,42 @@ def evaluate_h3(analysis_results: Dict) -> Dict:
             "description": "Ours subset 是否显著优于 random coverage？"
         }
 
-    n_strong = sum(1 for m in core_metrics if m["better_than_random_fraction"] >= 0.95)
-    n_weak = sum(1 for m in core_metrics if 0.8 <= m["better_than_random_fraction"] < 0.95)
-    n_random = sum(1 for m in core_metrics if 0.4 <= m["better_than_random_fraction"] <= 0.6)
-    n_poor = sum(1 for m in core_metrics if m["better_than_random_fraction"] < 0.1)
+    n_random = sum(1 for m in all_core_metrics if 0.4 <= m["better_than_random_fraction"] <= 0.6)
+    n_poor = sum(1 for m in all_core_metrics if m["better_than_random_fraction"] < 0.1)
 
-    if n_random > len(core_metrics) * 0.5 or n_strong < 2:
+    n_strong_families = 0
+    for family_name, family_metrics in evidence_families.items():
+        if not family_metrics:
+            continue
+        family_strong = sum(1 for m in family_metrics if m["better_than_random_fraction"] >= 0.95)
+        if family_strong >= len(family_metrics) * 0.5:
+            n_strong_families += 1
+
+    n_weak_families = 0
+    for family_name, family_metrics in evidence_families.items():
+        if not family_metrics:
+            continue
+        family_weak = sum(1 for m in family_metrics if 0.8 <= m["better_than_random_fraction"] < 0.95)
+        if family_weak >= len(family_metrics) * 0.5:
+            n_weak_families += 1
+
+    if n_random > len(all_core_metrics) * 0.5:
         status = "NOT SUPPORTED"
-    elif n_strong >= 3 and n_poor == 0:
+    elif n_strong_families >= 3 and n_poor == 0:
         status = "SUPPORTED"
-    elif n_weak >= 2 and n_strong < 3:
+    elif n_strong_families >= 2 or n_weak_families >= 2:
         status = "WEAK"
     else:
-        status = "WEAK"
+        status = "NOT SUPPORTED"
 
     return {
         "hypothesis": "H3",
         "status": status,
         "evidence": {
-            "core_metrics": core_metrics,
-            "n_strong": n_strong,
-            "n_weak": n_weak,
+            "core_metrics": all_core_metrics,
+            "evidence_families": {k: len(v) for k, v in evidence_families.items()},
+            "n_strong_families": n_strong_families,
+            "n_weak_families": n_weak_families,
             "n_random": n_random,
             "n_poor": n_poor,
         },
@@ -1701,6 +1798,8 @@ def save_analysis_summary(
             "global": analysis_results.get("global_stats", {}),
             "wrist": analysis_results.get("wrist_stats", {}),
             "combined": analysis_results.get("combined_stats", {}),
+            "global_normalized": analysis_results.get("global_normalized_stats", {}),
+            "wrist_normalized": analysis_results.get("wrist_normalized_stats", {}),
         },
         "spearman": analysis_results.get("spearman", {}),
         "permutation_tests": analysis_results.get("permutation_tests", {}),
@@ -1736,7 +1835,7 @@ def save_embedding_metrics(
             "effective_rank"
         ])
 
-        for rep in ["global", "wrist", "combined"]:
+        for rep in ["global", "wrist", "combined", "global_normalized", "wrist_normalized"]:
             stats = analysis_results.get(f"{rep}_stats", {})
             writer.writerow([
                 rep,
@@ -1841,15 +1940,16 @@ def main():
 
     print("\n[3/15] Aligning embeddings with metadata...")
     episode_indices, phi_globals, phi_wrists, obj_init_positions, goal_positions, alignment_info = \
-        align_embeddings_with_metadata(embeddings, metadata)
-    alignment_info["invalid_embedding_files"] = load_info.get("invalid_files", [])
+        align_embeddings_with_metadata(embeddings, metadata, load_info=load_info, meta_info=meta_info)
     print(f"  Aligned {len(episode_indices)} episodes")
 
     n_episodes = len(episode_indices)
     print(f"  Global embedding shape: {phi_globals.shape}")
     print(f"  Wrist embedding shape: {phi_wrists.shape}")
 
-    print("\n[4/15] Computing combined embeddings...")
+    print("\n[4/15] Computing normalized and combined embeddings...")
+    phi_global_normalized = l2_normalize_rows(phi_globals)
+    phi_wrist_normalized = l2_normalize_rows(phi_wrists)
     phi_combined = compute_combined_embeddings(phi_globals, phi_wrists, lambda_wrist=args.lambda_wrist)
     print(f"  Combined embedding shape: {phi_combined.shape}")
 
@@ -1857,6 +1957,8 @@ def main():
     global_stats = compute_embedding_statistics(phi_globals, "global")
     wrist_stats = compute_embedding_statistics(phi_wrists, "wrist")
     combined_stats = compute_embedding_statistics(phi_combined, "combined")
+    global_normalized_stats = compute_embedding_statistics(phi_global_normalized, "global_normalized")
+    wrist_normalized_stats = compute_embedding_statistics(phi_wrist_normalized, "wrist_normalized")
     print(f"  Global effective rank: {global_stats['effective_rank']:.2f}")
     print(f"  Wrist effective rank: {wrist_stats['effective_rank']:.2f}")
     print(f"  Combined effective rank: {combined_stats['effective_rank']:.2f}")
@@ -1875,9 +1977,14 @@ def main():
     global_dist = pairwise_distances(phi_globals)
     wrist_dist = pairwise_distances(phi_wrists)
     combined_dist = pairwise_distances(phi_combined)
+    global_normalized_dist = pairwise_distances(phi_global_normalized)
+    wrist_normalized_dist = pairwise_distances(phi_wrist_normalized)
 
     spearman_results = {}
-    for name, emb_dist in [("global", global_dist), ("wrist", wrist_dist), ("combined", combined_dist)]:
+    for name, emb_dist in [
+        ("global", global_dist), ("wrist", wrist_dist), ("combined", combined_dist),
+        ("global_normalized", global_normalized_dist), ("wrist_normalized", wrist_normalized_dist),
+    ]:
         rho, p_value, n_pairs = compute_spearman_correlation(phys_dist_2d, emb_dist, seed=args.seed)
         spearman_results[name] = {"rho": rho, "p_value": p_value, "n_pairs": n_pairs}
         print(f"  {name} Spearman rho: {rho:.4f}, p: {p_value:.2e}, n_pairs: {n_pairs}")
@@ -1914,35 +2021,33 @@ def main():
     print("\n[12/15] Computing subset coverage and redundancy...")
     subset_comparison = {}
 
-    episode_to_idx = {ep: i for i, ep in enumerate(episode_indices)}
+    dbar_global, dbar_wrist, dbar_fallback_used = compute_dbar_from_embeddings(phi_globals, phi_wrists)
+    K_global, K_wrist = build_kernel_matrices(phi_globals, phi_wrists, dbar_global, dbar_wrist)
 
-    dbar_global = float(np.mean(pairwise_distances(phi_globals)))
-    dbar_wrist = float(np.mean(pairwise_distances(phi_wrists)))
-
-    K_global = build_single_kernel_matrix(phi_globals, dbar_global)
-    K_wrist = build_single_kernel_matrix(phi_wrists, dbar_wrist)
+    print(f"  dbar_global: {dbar_global:.4f}, dbar_wrist: {dbar_wrist:.4f}")
 
     subsets_to_process = {}
     if args.random_subset and args.random_subset.exists():
-        with open(args.random_subset) as f:
-            random_episodes = json.load(f)
-        if isinstance(random_episodes, dict):
-            random_episodes = random_episodes.get("episodes", random_episodes.get("episode_indices", []))
+        random_episodes = load_subset_episode_indices(args.random_subset)
+        if len(set(random_episodes)) != len(random_episodes):
+            print(f"  WARNING: Random subset has duplicate episode indices")
         subsets_to_process["Random"] = random_episodes
 
     if args.uniform_subset and args.uniform_subset.exists():
-        with open(args.uniform_subset) as f:
-            uniform_episodes = json.load(f)
-        if isinstance(uniform_episodes, dict):
-            uniform_episodes = uniform_episodes.get("episodes", uniform_episodes.get("episode_indices", []))
+        uniform_episodes = load_subset_episode_indices(args.uniform_subset)
+        if len(set(uniform_episodes)) != len(uniform_episodes):
+            print(f"  WARNING: Uniform subset has duplicate episode indices")
         subsets_to_process["Uniform"] = uniform_episodes
 
     if args.ours_subset and args.ours_subset.exists():
-        with open(args.ours_subset) as f:
-            ours_episodes = json.load(f)
-        if isinstance(ours_episodes, dict):
-            ours_episodes = ours_episodes.get("episodes", ours_episodes.get("episode_indices", []))
+        ours_episodes = load_subset_episode_indices(args.ours_subset)
+        if len(set(ours_episodes)) != len(ours_episodes):
+            print(f"  WARNING: Ours subset has duplicate episode indices")
         subsets_to_process["Ours"] = ours_episodes
+
+    global_p05 = float(np.percentile(global_dist[np.triu_indices(n_episodes, k=1)], 5))
+    wrist_p05 = float(np.percentile(wrist_dist[np.triu_indices(n_episodes, k=1)], 5))
+    combined_p05 = float(np.percentile(combined_dist[np.triu_indices(n_episodes, k=1)], 5))
 
     for method_name, episodes in subsets_to_process.items():
         print(f"\n  Processing {method_name} subset ({len(episodes)} episodes)...")
@@ -1961,10 +2066,6 @@ def main():
         print(f"    Computing combined coverage...")
         cov_combined = compute_subset_coverage(phi_combined, subset_indices, obj_init_positions, f"{method_name}_combined")
 
-        global_p05 = float(np.percentile(global_dist[np.triu_indices(n_episodes, k=1)], 5))
-        wrist_p05 = float(np.percentile(wrist_dist[np.triu_indices(n_episodes, k=1)], 5))
-        combined_p05 = float(np.percentile(combined_dist[np.triu_indices(n_episodes, k=1)], 5))
-
         subset_phi_global = phi_globals[subset_indices]
         subset_phi_wrist = phi_wrists[subset_indices]
         subset_phi_combined = phi_combined[subset_indices]
@@ -1980,7 +2081,7 @@ def main():
 
         print(f"    Computing fixed-universe SIC...")
         fixed_sic = compute_fixed_universe_sic_for_subset(
-            subset_indices, episode_indices, phi_globals, phi_wrists, method_name,
+            subset_indices, episode_indices, K_global, K_wrist, dbar_global, dbar_wrist, method_name,
             alpha=args.alpha, lambda_wrist=args.lambda_wrist
         )
 
@@ -2008,7 +2109,7 @@ def main():
             full_p05_threshold=global_p05,
             K_global=K_global, K_wrist=K_wrist,
             dbar_global=dbar_global, dbar_wrist=dbar_wrist,
-            n_episodes_total=n_episodes,
+            all_episode_indices=episode_indices,
             precomputed_dist_matrix=global_dist,
         )
 
@@ -2018,7 +2119,7 @@ def main():
             full_p05_threshold=wrist_p05,
             K_global=K_global, K_wrist=K_wrist,
             dbar_global=dbar_global, dbar_wrist=dbar_wrist,
-            n_episodes_total=n_episodes,
+            all_episode_indices=episode_indices,
             precomputed_dist_matrix=wrist_dist,
         )
 
@@ -2028,7 +2129,7 @@ def main():
             full_p05_threshold=combined_p05,
             K_global=K_global, K_wrist=K_wrist,
             dbar_global=dbar_global, dbar_wrist=dbar_wrist,
-            n_episodes_total=n_episodes,
+            all_episode_indices=episode_indices,
             precomputed_dist_matrix=combined_dist,
         )
 
@@ -2041,14 +2142,12 @@ def main():
     if "Ours" in subset_comparison and "Uniform" in subset_comparison:
         ours_episodes = subsets_to_process.get("Ours", [])
         uniform_episodes = subsets_to_process.get("Uniform", [])
-        spearman_global = spearman_results.get("global", {}).get("rho", 0.0)
 
         ours_uniform_comparison = evaluate_ours_vs_uniform(
             subset_comparison["Ours"],
             subset_comparison["Uniform"],
             ours_episodes,
             uniform_episodes,
-            spearman_global,
         )
         print(f"  Episode overlap: {ours_uniform_comparison.get('episode_overlap_count', 0)}")
         print(f"  Conclusion: {ours_uniform_comparison.get('conclusion', 'N/A')}")
@@ -2082,6 +2181,8 @@ def main():
         "global_stats": global_stats,
         "wrist_stats": wrist_stats,
         "combined_stats": combined_stats,
+        "global_normalized_stats": global_normalized_stats,
+        "wrist_normalized_stats": wrist_normalized_stats,
         "spearman": spearman_results,
         "permutation_tests": perm_tests,
         "probe": probe_results,
