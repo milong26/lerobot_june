@@ -317,6 +317,8 @@ class FixedAnchorSIC:
         for ep in b0_episodes:
             if ep in self.episode_to_idx:
                 idx = self.episode_to_idx[ep]
+                if idx in self.selected_indices:
+                    continue  # Skip duplicate episodes
                 self.selected_indices.add(idx)
                 self.sigma_global += self.tau_1 * self.K_global[:, idx]
                 self.sigma_wrist += self.tau_1 * self.K_wrist[:, idx]

@@ -104,6 +104,8 @@ def compute_fixed_universe_sic_from_indices(
     for ep in selected_episodes:
         if ep in episode_to_idx:
             idx = episode_to_idx[ep]
+            if idx in selected_indices:
+                continue  # Skip duplicate episodes
             selected_indices.add(idx)
             sigma_global += tau_1 * K_global[:, idx]
             sigma_wrist += tau_1 * K_wrist[:, idx]

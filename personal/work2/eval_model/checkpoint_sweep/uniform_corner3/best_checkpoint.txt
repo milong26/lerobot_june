@@ -1,0 +1,1 @@
+personal/work2/duibi/uniform_42_corner3/uniform_112_seed42/checkpoints/012000/pretrained_model

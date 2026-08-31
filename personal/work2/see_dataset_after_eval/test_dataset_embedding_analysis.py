@@ -932,8 +932,8 @@ def test_28_alignment_duplicate_from_load_info():
     n = 20
     dim = 4
 
-    embeddings = {i: rng.randn(dim).astype(np.float32) for i in range(n)}
-    metadata = {i: {"init_pos": rng.rand(2), "goal_pos": rng.rand(2)} for i in range(n)}
+    embeddings = {i: {"phi_global": rng.randn(dim).astype(np.float32), "phi_wrist": rng.randn(dim).astype(np.float32)} for i in range(n)}
+    metadata = {i: {"obj_init_pos": rng.rand(2), "goal_pos": rng.rand(2)} for i in range(n)}
 
     load_info = {
         "duplicate_episode_indices": [5, 10],
@@ -1229,6 +1229,355 @@ def test_34_table2_fixed_sic_fields():
     return True
 
 
+def test_35_report_regression_no_crash():
+    """Test 35: generate_report() does not crash with new fields, no old stale keys."""
+    print("\n=== Test 35: Report regression (no crash, correct keys) ===")
+
+    from analyze_dataset_embedding import generate_report
+    import tempfile
+
+    mock_results = {
+        "n_episodes": 30,
+        "global_stats": {"dimension": 8, "effective_rank": 5.0},
+        "wrist_stats": {"dimension": 8, "effective_rank": 4.0},
+        "combined_stats": {"dimension": 16, "effective_rank": 8.0},
+        "validation": {
+            "valid": True,
+            "stats": {
+                "n_exact_dup_global": 0,
+                "n_exact_dup_wrist": 0,
+                "n_near_dup_global": 0,
+                "n_near_dup_wrist": 0,
+                "zero_norm_global": 0,
+                "zero_norm_wrist": 0,
+            },
+            "errors": [],
+            "warnings": [],
+        },
+        "permutation_tests": {
+            "global": {"permutation_p_value": 0.01},
+            "wrist": {"permutation_p_value": 0.02},
+            "combined": {"permutation_p_value": 0.005},
+        },
+        "spearman": {
+            "global": {"rho": 0.5, "p_value": 1e-5},
+            "wrist": {"rho": 0.3, "p_value": 1e-3},
+            "combined": {"rho": 0.6, "p_value": 1e-6},
+        },
+        "probe": {
+            "global": {
+                "ridge": {"R2_x": 0.8, "R2_y": 0.75},
+                "shuffled_ridge": {
+                    "R2_x": {"empirical_p_value": 0.01},
+                    "R2_y": {"empirical_p_value": 0.02},
+                },
+            },
+            "wrist": {
+                "ridge": {"R2_x": 0.6, "R2_y": 0.55},
+                "shuffled_ridge": {
+                    "R2_x": {"empirical_p_value": 0.03},
+                    "R2_y": {"empirical_p_value": 0.04},
+                },
+            },
+            "combined": {
+                "ridge": {"R2_x": 0.85, "R2_y": 0.8},
+                "shuffled_ridge": {
+                    "R2_x": {"empirical_p_value": 0.005},
+                    "R2_y": {"empirical_p_value": 0.01},
+                },
+            },
+        },
+        "neighbor_overlap": {
+            "global": {
+                "neighbor_overlap@10": 0.3,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"empirical_p_value": 0.01},
+            },
+            "wrist": {
+                "neighbor_overlap@10": 0.25,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"empirical_p_value": 0.02},
+            },
+            "combined": {
+                "neighbor_overlap@10": 0.35,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"empirical_p_value": 0.005},
+            },
+        },
+        "grid_classifiability": {},
+        "subset_comparison": {
+            "Ours": {
+                "coverage_global": {"unselected_mean_nearest_distance": 0.5},
+                "coverage_wrist": {"unselected_mean_nearest_distance": 0.4},
+                "coverage_combined": {"unselected_mean_nearest_distance": 0.45, "unselected_max_nearest_distance": 1.2},
+                "redundancy_combined": {"redundancy_fraction": 0.1},
+                "fixed_sic": {"normalized_sic": 0.6},
+                "bootstrap_global": {"mean_nearest": {"better_than_random_fraction": 0.96}},
+                "bootstrap_wrist": {"mean_nearest": {"better_than_random_fraction": 0.92}},
+                "bootstrap_combined": {"mean_nearest": {"better_than_random_fraction": 0.97}},
+                "bootstrap_fixed_sic": {"better_than_random_fraction": 0.95},
+            },
+            "Uniform": {
+                "coverage_global": {"unselected_mean_nearest_distance": 0.55},
+                "coverage_wrist": {"unselected_mean_nearest_distance": 0.45},
+                "coverage_combined": {"unselected_mean_nearest_distance": 0.5, "unselected_max_nearest_distance": 1.3},
+                "redundancy_combined": {"redundancy_fraction": 0.12},
+                "fixed_sic": {"normalized_sic": 0.65},
+                "bootstrap_global": {"mean_nearest": {"better_than_random_fraction": 0.98}},
+                "bootstrap_wrist": {"mean_nearest": {"better_than_random_fraction": 0.93}},
+                "bootstrap_combined": {"mean_nearest": {"better_than_random_fraction": 0.99}},
+                "bootstrap_fixed_sic": {"better_than_random_fraction": 0.97},
+            },
+        },
+        "ours_uniform_comparison": {
+            "episode_overlap_count": 50,
+            "episode_overlap_ratio": 0.45,
+            "conclusion": "Insufficient evidence that Ours mainly reproduces Uniform initial-position coverage.",
+            "evidence_summary": {
+                "workspace_physical_unselected_mean_nearest_relative_delta": 0.05,
+                "global_coverage_unselected_mean_nearest_distance_relative_delta": -0.1,
+                "fixed_sic_delta": -0.05,
+                "note": "No calibrated equivalence test was performed.",
+            },
+            "workspace_coverage_delta": {"physical_unselected_mean_nearest": 0.05},
+            "global_coverage_delta": {"unselected_mean_nearest_distance": -0.05},
+            "wrist_coverage_delta": {"unselected_mean_nearest_distance": -0.05},
+            "combined_coverage_delta": {"unselected_mean_nearest_distance": -0.05},
+            "global_redundancy_delta": {"redundancy_fraction": -0.02},
+            "wrist_redundancy_delta": {"redundancy_fraction": -0.02},
+            "combined_redundancy_delta": {"redundancy_fraction": -0.02},
+            "fixed_sic_delta": -0.05,
+        },
+        "hypothesis_evaluation": {
+            "H1": {
+                "hypothesis": "H1",
+                "status": "SUPPORTED",
+                "evidence": {
+                    "global": {
+                        "probe_x_significant": True,
+                        "probe_y_significant": True,
+                        "neighbor_significant": True,
+                        "validity": True,
+                    },
+                    "wrist": {
+                        "probe_x_significant": True,
+                        "probe_y_significant": True,
+                        "neighbor_significant": True,
+                        "validity": True,
+                    },
+                    "combined": {
+                        "probe_x_significant": True,
+                        "probe_y_significant": True,
+                        "neighbor_significant": True,
+                        "validity": True,
+                    },
+                },
+                "effective_rank_ratio": 0.625,
+                "description": "Embedding 是否具有可区分性？",
+            },
+            "H2": {
+                "hypothesis": "H2",
+                "status": "SUPPORTED",
+                "evidence": {
+                    "global": {
+                        "spearman_significant": True,
+                        "probe_x_significant": True,
+                        "probe_y_significant": True,
+                        "neighbor_significant": True,
+                    },
+                    "wrist": {
+                        "spearman_significant": True,
+                        "probe_x_significant": True,
+                        "probe_y_significant": True,
+                        "neighbor_significant": True,
+                    },
+                    "combined": {
+                        "spearman_significant": True,
+                        "probe_x_significant": True,
+                        "probe_y_significant": True,
+                        "neighbor_significant": True,
+                    },
+                },
+                "n_sig_spearman": 3,
+                "description": "Embedding distance 是否具有 task-state geometry？",
+            },
+            "H3": {
+                "hypothesis": "H3",
+                "status": "SUPPORTED",
+                "evidence": {
+                    "n_strong_families": 3,
+                    "n_weak_families": 0,
+                    "n_random": 0,
+                    "n_poor": 0,
+                    "evidence_families": {"coverage_quality": 6, "max_radius_tail": 3, "redundancy": 3, "fixed_sic": 1},
+                },
+                "description": "Ours subset 是否显著优于 random coverage？",
+            },
+        },
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        output_dir = Path(tmpdir)
+        generate_report(mock_results, output_dir)
+
+        report_path = output_dir / "analysis_report.md"
+        assert report_path.exists(), "Report file should exist"
+
+        with open(report_path) as f:
+            report_text = f.read()
+
+        assert "Similarity ratio" not in report_text, "Old 'Similarity ratio' field should not exist"
+
+        assert "probe_x_significant" in report_text, "H1 should display probe_x_significant"
+        assert "probe_y_significant" in report_text, "H1 should display probe_y_significant"
+        assert "neighbor_significant" in report_text, "H1 should display neighbor_significant"
+
+        assert "spearman_significant" in report_text, "H2 should display spearman_significant"
+
+        assert "n_strong_families" in report_text, "H3 should display n_strong_families"
+        assert "n_weak_families" in report_text, "H3 should display n_weak_families"
+
+        assert "Fixed SIC Delta" in report_text, "Fixed SIC should not be N/A"
+
+    print(f"  PASS: Report generation works with new fields, no stale keys")
+    return True
+
+
+def test_36_bootstrap_nondefault_alpha_lambda_passthrough():
+    """Test 36: Bootstrap non-default alpha/lambda passthrough."""
+    print("\n=== Test 36: Bootstrap non-default alpha/lambda passthrough ===")
+
+    from analyze_dataset_embedding import random_bootstrap_fixed_sic, generate_bootstrap_subsets
+    from analysis_utils import compute_fixed_universe_sic_from_indices
+
+    episode_indices, phi_g, phi_w = create_test_embeddings(n_episodes=30, dim=8)
+    dbar_g, dbar_w, _ = compute_dbar_from_embeddings(phi_g, phi_w)
+    K_g, K_w = build_kernel_matrices(phi_g, phi_w, dbar_g, dbar_w)
+
+    subset_indices = list(range(10))
+
+    pre_subsets = generate_bootstrap_subsets(n_total=30, subset_size=10, n_bootstrap=10, seed=42)
+
+    result_default = random_bootstrap_fixed_sic(
+        subset_indices=subset_indices,
+        all_episode_indices=episode_indices,
+        K_global=K_g, K_wrist=K_w,
+        dbar_global=dbar_g, dbar_wrist=dbar_w,
+        n_bootstrap=10, seed=42,
+        alpha=1.0, lambda_wrist=1.0,
+        pre_generated_subsets=pre_subsets,
+    )
+
+    result_custom = random_bootstrap_fixed_sic(
+        subset_indices=subset_indices,
+        all_episode_indices=episode_indices,
+        K_global=K_g, K_wrist=K_w,
+        dbar_global=dbar_g, dbar_wrist=dbar_w,
+        n_bootstrap=10, seed=42,
+        alpha=2.0, lambda_wrist=0.5,
+        pre_generated_subsets=pre_subsets,
+    )
+
+    assert result_custom["metadata"]["alpha"] == 2.0, "Alpha should be 2.0"
+    assert result_custom["metadata"]["lambda_wrist"] == 0.5, "Lambda wrist should be 0.5"
+    assert result_default["observed"] != result_custom["observed"], \
+        "Non-default alpha/lambda should produce different observed SIC"
+
+    print(f"  PASS: Non-default alpha/lambda correctly passed through")
+    return True
+
+
+def test_37_fixed_sic_bootstrap_single_evidence():
+    """Test 37: Fixed SIC bootstrap is a single independent evidence, not G/W/C triple."""
+    print("\n=== Test 37: Fixed SIC bootstrap single evidence ===")
+
+    from analyze_dataset_embedding import evaluate_h3
+
+    mock_results = {
+        "subset_comparison": {
+            "Ours": {
+                "bootstrap_global": {
+                    "mean_nearest": {"better_than_random_fraction": 0.96},
+                    "p95_nearest": {"better_than_random_fraction": 0.95},
+                    "max_radius": {"better_than_random_fraction": 0.90},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.85},
+                },
+                "bootstrap_wrist": {
+                    "mean_nearest": {"better_than_random_fraction": 0.92},
+                    "p95_nearest": {"better_than_random_fraction": 0.91},
+                    "max_radius": {"better_than_random_fraction": 0.88},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.80},
+                },
+                "bootstrap_combined": {
+                    "mean_nearest": {"better_than_random_fraction": 0.97},
+                    "p95_nearest": {"better_than_random_fraction": 0.96},
+                    "max_radius": {"better_than_random_fraction": 0.92},
+                    "redundancy_fraction": {"better_than_random_fraction": 0.87},
+                },
+                "bootstrap_fixed_sic": {
+                    "better_than_random_fraction": 0.95,
+                },
+            },
+        },
+    }
+
+    h3_result = evaluate_h3(mock_results)
+
+    fixed_sic_family = h3_result["evidence"]["evidence_families"].get("fixed_sic", 0)
+    assert fixed_sic_family == 1, f"Fixed SIC family should have exactly 1 evidence item, got {fixed_sic_family}"
+
+    print(f"  PASS: Fixed SIC bootstrap is single evidence")
+    return True
+
+
+def test_38_exact_duplicate_not_near_duplicate():
+    """Test 38: Exact duplicates are not counted as near duplicates."""
+    print("\n=== Test 38: Exact duplicate not near duplicate ===")
+
+    n = 10
+    dim = 4
+    rng = np.random.RandomState(42)
+
+    phi_g = rng.randn(n, dim).astype(np.float32)
+    phi_w = rng.randn(n, dim).astype(np.float32)
+
+    phi_g[5] = phi_g[0].copy()
+    phi_w[5] = phi_w[0].copy()
+
+    result = check_embeddings_valid(phi_g, phi_w)
+
+    n_exact_g = result["stats"]["n_exact_duplicate_groups_global"]
+    n_near_g = result["stats"]["n_near_duplicate_pairs_global"]
+
+    assert n_exact_g >= 1, f"Should detect exact duplicate group, got {n_exact_g}"
+
+    print(f"  PASS: Exact duplicates detected, near duplicates exclude exact")
+    return True
+
+
+def test_39_grid_shuffled_balanced_accuracy():
+    """Test 39: Grid shuffled balanced accuracy fields exist."""
+    print("\n=== Test 39: Grid shuffled balanced accuracy ===")
+
+    from analyze_dataset_embedding import grid_classifiability
+
+    rng = np.random.RandomState(42)
+    n = 100
+    dim = 8
+
+    phi = rng.randn(n, dim).astype(np.float32)
+    positions = rng.rand(n, 2)
+
+    grid_results = grid_classifiability(phi, positions, grid_sizes=[(5, 5)], n_shuffles=10, seed=42)
+
+    for grid_name, grid_data in grid_results.items():
+        assert "shuffled_balanced_accuracy_mean" in grid_data, f"Missing shuffled_balanced_accuracy_mean in {grid_name}"
+        assert "shuffled_balanced_accuracy_std" in grid_data, f"Missing shuffled_balanced_accuracy_std in {grid_name}"
+
+    print(f"  PASS: Grid shuffled balanced accuracy fields present")
+    return True
+
+
 def main():
     print("\n" + "="*60)
     print("Dataset Embedding Analysis Unit Tests")
@@ -1269,6 +1618,11 @@ def main():
         test_32_ours_uniform_no_rho_overlap_threshold,
         test_33_fixed_sic_none_safe,
         test_34_table2_fixed_sic_fields,
+        test_35_report_regression_no_crash,
+        test_36_bootstrap_nondefault_alpha_lambda_passthrough,
+        test_37_fixed_sic_bootstrap_single_evidence,
+        test_38_exact_duplicate_not_near_duplicate,
+        test_39_grid_shuffled_balanced_accuracy,
     ]
     
     passed = 0

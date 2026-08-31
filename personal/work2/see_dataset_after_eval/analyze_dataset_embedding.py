@@ -18,9 +18,7 @@ Usage:
 """
 
 import sys
-import os
 import json
-import time
 import argparse
 import numpy as np
 from pathlib import Path
@@ -40,7 +38,7 @@ sys.stdout.reconfigure(line_buffering=True)
 
 sys.path.insert(0, str(Path(__file__).parent))
 
-from sic_v2 import FixedAnchorSIC, check_embeddings_valid, compute_dbar_from_embeddings, build_kernel_matrices
+from sic_v2 import check_embeddings_valid, compute_dbar_from_embeddings, build_kernel_matrices
 from analysis_utils import compute_fixed_universe_sic, compute_fixed_universe_sic_from_indices
 
 
@@ -48,7 +46,7 @@ def load_subset_episode_indices(path: Path) -> List[int]:
     """
     Load subset episode indices from JSON file.
     Priority: selected_episode_indices > episode_indices > episodes
-    Raises ValueError if no valid key found.
+    Raises ValueError if no valid key found or if duplicates exist.
     """
     with open(path) as f:
         data = json.load(f)
@@ -72,7 +70,20 @@ def load_subset_episode_indices(path: Path) -> List[int]:
     if not isinstance(episodes, list):
         raise ValueError(f"Episode list in {path} is not a list")
 
-    return [int(x) for x in episodes]
+    int_episodes = [int(x) for x in episodes]
+
+    seen = set()
+    duplicates = []
+    for ep in int_episodes:
+        if ep in seen:
+            duplicates.append(ep)
+        seen.add(ep)
+    if duplicates:
+        raise ValueError(
+            f"Subset JSON {path} contains {len(duplicates)} duplicate episode indices: {duplicates[:10]}{'...' if len(duplicates) > 10 else ''}"
+        )
+
+    return int_episodes
 
 
 def l2_normalize_rows(phi: np.ndarray) -> np.ndarray:
@@ -86,29 +97,37 @@ def load_embeddings(embeddings_dir: Path) -> Tuple[Dict[int, Dict], Dict]:
     embeddings = {}
     duplicate_episode_indices = []
     invalid_files = []
-    file_count = 0
+    npy_file_count = 0
+    valid_record_count = 0
 
     for f in sorted(embeddings_dir.glob("*.npy")):
+        npy_file_count += 1
         try:
             data = np.load(f, allow_pickle=True).item()
             ep_idx = data.get("episode_index")
-            if ep_idx is not None:
-                file_count += 1
-                if ep_idx in embeddings:
-                    duplicate_episode_indices.append(ep_idx)
-                    print(f"  WARNING: Duplicate episode_index {ep_idx} in {f.name}")
-                embeddings[ep_idx] = {
-                    "phi_global": data["phi_global"],
-                    "phi_wrist": data["phi_wrist"]
-                }
+            if ep_idx is None:
+                invalid_files.append(f.name)
+                print(f"  WARNING: Missing episode_index in {f.name}")
+                continue
+            valid_record_count += 1
+            if ep_idx in embeddings:
+                duplicate_episode_indices.append(ep_idx)
+                print(f"  WARNING: Duplicate episode_index {ep_idx} in {f.name}")
+            embeddings[ep_idx] = {
+                "phi_global": data["phi_global"],
+                "phi_wrist": data["phi_wrist"]
+            }
         except Exception as e:
             invalid_files.append(f.name)
             print(f"  Skip invalid file: {f.name} ({e})")
 
     load_info = {
-        "file_count": file_count,
+        "npy_file_count": npy_file_count,
+        "valid_record_count": valid_record_count,
+        "embedding_unique_episode_count": len(embeddings),
         "duplicate_episode_indices": duplicate_episode_indices,
         "invalid_files": invalid_files,
+        "file_count": valid_record_count,
     }
     return embeddings, load_info
 
@@ -124,6 +143,7 @@ def load_episode_metadata(dataset_root: Path) -> Tuple[Dict[int, Dict], Dict]:
 
     episodes = {}
     duplicate_indices = []
+    raw_record_count = len(data["episodes"])
     for ep in data["episodes"]:
         ep_idx = ep["episode_index"]
         if ep_idx in episodes:
@@ -134,7 +154,7 @@ def load_episode_metadata(dataset_root: Path) -> Tuple[Dict[int, Dict], Dict]:
             "goal_pos": np.array(ep.get("goal_pos", ep.get("goal_pose", [0, 0, 0]))),
         }
 
-    meta_info = {"duplicate_episode_indices": duplicate_indices}
+    meta_info = {"duplicate_episode_indices": duplicate_indices, "record_count": raw_record_count}
     return episodes, meta_info
 
 
@@ -158,9 +178,12 @@ def align_embeddings_with_metadata(
     missing_metadata = sorted(embedding_episodes - metadata_episodes)
 
     alignment_info = {
-        "metadata_episode_count": len(metadata_episodes),
-        "embedding_file_count": load_info.get("file_count", 0) if load_info else len(embeddings),
+        "metadata_episode_count": meta_info.get("record_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
+        "metadata_unique_episode_count": len(metadata_episodes),
+        "embedding_npy_file_count": load_info.get("npy_file_count", 0) if load_info else 0,
+        "embedding_valid_record_count": load_info.get("valid_record_count", 0) if load_info else len(embeddings),
         "embedding_unique_episode_count": len(embedding_episodes),
+        "embedding_file_count": load_info.get("file_count", 0) if load_info else len(embeddings),
         "intersection_count": len(intersection),
         "missing_embedding": missing_embeddings,
         "missing_metadata": missing_metadata,
@@ -574,6 +597,8 @@ def grid_classifiability(
                 "balanced_accuracy_std": None,
                 "shuffled_accuracy_mean": None,
                 "shuffled_accuracy_std": None,
+                "shuffled_balanced_accuracy_mean": None,
+                "shuffled_balanced_accuracy_std": None,
                 "empty_cells": empty_cells,
                 "sparse_cells": sparse_cells,
                 "total_cells": grid_x * grid_y,
@@ -612,6 +637,7 @@ def grid_classifiability(
             continue
 
         shuffled_accs = []
+        shuffled_balanced_accs = []
         n_requested = n_shuffles
         n_valid = 0
         n_invalid = 0
@@ -628,7 +654,9 @@ def grid_classifiability(
             try:
                 shuffled_cv = StratifiedKFold(n_splits=min(5, shuffled_min_class), shuffle=True, random_state=seed)
                 acc = np.mean(cross_val_score(knn, phi, grid_ids_shuffled, cv=shuffled_cv, scoring='accuracy'))
+                balanced_acc = np.mean(cross_val_score(knn, phi, grid_ids_shuffled, cv=shuffled_cv, scoring='balanced_accuracy'))
                 shuffled_accs.append(acc)
+                shuffled_balanced_accs.append(balanced_acc)
                 n_valid += 1
             except Exception:
                 n_invalid += 1
@@ -636,9 +664,13 @@ def grid_classifiability(
         if len(shuffled_accs) > 0:
             shuffled_mean = float(np.mean(shuffled_accs))
             shuffled_std = float(np.std(shuffled_accs))
+            shuffled_balanced_mean = float(np.mean(shuffled_balanced_accs))
+            shuffled_balanced_std = float(np.std(shuffled_balanced_accs))
         else:
             shuffled_mean = None
             shuffled_std = None
+            shuffled_balanced_mean = None
+            shuffled_balanced_std = None
 
         results[f"{grid_x}x{grid_y}"] = {
             "accuracy": float(np.mean(accuracies)),
@@ -647,6 +679,8 @@ def grid_classifiability(
             "balanced_accuracy_std": float(np.std(balanced_accuracies)),
             "shuffled_accuracy_mean": shuffled_mean,
             "shuffled_accuracy_std": shuffled_std,
+            "shuffled_balanced_accuracy_mean": shuffled_balanced_mean,
+            "shuffled_balanced_accuracy_std": shuffled_balanced_std,
             "empty_cells": empty_cells,
             "sparse_cells": sparse_cells,
             "total_cells": grid_x * grid_y,
@@ -756,8 +790,12 @@ def generate_visualizations(
 def match_subset_to_indices(
     subset_episodes: List[int],
     all_episode_indices: List[int]
-) -> List[int]:
-    """Match subset episodes to indices in the aligned dataset"""
+) -> Dict:
+    """
+    Match subset episodes to indices in the aligned dataset.
+    Returns dict with matched_indices, missing_episode_indices, requested_subset_size, matched_subset_size.
+    Raises ValueError if any episodes are missing from aligned universe.
+    """
     idx_map = {ep: i for i, ep in enumerate(all_episode_indices)}
     matched = []
     missing = []
@@ -769,11 +807,16 @@ def match_subset_to_indices(
             missing.append(ep)
 
     if missing:
-        print(f"  WARNING: {len(missing)} subset episodes not in aligned dataset")
-        if len(missing) <= 10:
-            print(f"    Missing: {missing}")
+        raise ValueError(
+            f"{len(missing)} subset episodes not in aligned dataset: {missing[:10]}{'...' if len(missing) > 10 else ''}"
+        )
 
-    return matched
+    return {
+        "matched_indices": matched,
+        "missing_episode_indices": missing,
+        "requested_subset_size": len(subset_episodes),
+        "matched_subset_size": len(matched),
+    }
 
 
 def compute_subset_coverage(
@@ -869,6 +912,107 @@ def compute_subset_redundancy(
     return redundancy
 
 
+def generate_bootstrap_subsets(
+    n_total: int,
+    subset_size: int,
+    n_bootstrap: int,
+    seed: int
+) -> np.ndarray:
+    """
+    Pre-generate bootstrap random subset indices.
+    Returns shape (n_bootstrap, subset_size) array of indices.
+    All representations (global/wrist/combined/fixed-SIC) must use the same
+    pre-generated subsets to ensure consistency.
+    """
+    rng = np.random.RandomState(seed)
+    subsets = np.zeros((n_bootstrap, subset_size), dtype=int)
+    for i in range(n_bootstrap):
+        subsets[i] = rng.choice(n_total, subset_size, replace=False)
+    return subsets
+
+
+def random_bootstrap_fixed_sic(
+    subset_indices: List[int],
+    all_episode_indices: List[int],
+    K_global: np.ndarray,
+    K_wrist: np.ndarray,
+    dbar_global: float,
+    dbar_wrist: float,
+    n_bootstrap: int,
+    seed: int,
+    alpha: float = 1.0,
+    lambda_wrist: float = 1.0,
+    pre_generated_subsets: np.ndarray = None,
+) -> Dict:
+    """
+    Compute bootstrap distribution for fixed SIC only.
+    This is computed once as an independent evidence item, not per-representation.
+    """
+    rng = np.random.RandomState(seed)
+    n_total = len(all_episode_indices)
+    subset_size = len(subset_indices)
+
+    if subset_size == 0 or subset_size >= n_total:
+        return None
+
+    if pre_generated_subsets is not None:
+        bootstrap_indices = pre_generated_subsets
+    else:
+        bootstrap_indices = generate_bootstrap_subsets(n_total, subset_size, n_bootstrap, seed)
+
+    bootstrap_sic_vals = []
+    for i in range(n_bootstrap):
+        sample_indices = bootstrap_indices[i]
+        selected_episodes = [all_episode_indices[j] for j in sample_indices]
+
+        sic_result = compute_fixed_universe_sic_from_indices(
+            selected_episodes=selected_episodes,
+            all_episode_indices=all_episode_indices,
+            K_global=K_global,
+            K_wrist=K_wrist,
+            dbar_global=dbar_global,
+            dbar_wrist=dbar_wrist,
+            alpha=alpha,
+            lambda_wrist=lambda_wrist,
+        )
+        bootstrap_sic_vals.append(sic_result["normalized_sic"])
+
+        if (i + 1) % 200 == 0:
+            print(f"    Fixed SIC Bootstrap {i + 1}/{n_bootstrap}")
+
+    bootstrap_sic = np.array(bootstrap_sic_vals)
+
+    selected_episodes = [all_episode_indices[i] for i in subset_indices]
+    sic_obs = compute_fixed_universe_sic_from_indices(
+        selected_episodes=selected_episodes,
+        all_episode_indices=all_episode_indices,
+        K_global=K_global,
+        K_wrist=K_wrist,
+        dbar_global=dbar_global,
+        dbar_wrist=dbar_wrist,
+        alpha=alpha,
+        lambda_wrist=lambda_wrist,
+    )
+    observed_sic = sic_obs["normalized_sic"]
+
+    better_fraction = float(np.sum(bootstrap_sic < observed_sic) / len(bootstrap_sic))
+
+    return {
+        "observed": observed_sic,
+        "bootstrap_mean": float(np.mean(bootstrap_sic)),
+        "bootstrap_std": float(np.std(bootstrap_sic)),
+        "better_than_random_fraction": better_fraction,
+        "percentile": float(np.sum(bootstrap_sic <= observed_sic) / len(bootstrap_sic)),
+        "metadata": {
+            "n_bootstrap": n_bootstrap,
+            "seed": seed,
+            "subset_size": subset_size,
+            "alpha": alpha,
+            "lambda_wrist": lambda_wrist,
+        },
+    }
+
+
 def random_bootstrap_analysis(
     all_phi: np.ndarray,
     subset_indices: List[int],
@@ -881,10 +1025,15 @@ def random_bootstrap_analysis(
     dbar_wrist: float = None,
     all_episode_indices: List[int] = None,
     precomputed_dist_matrix: np.ndarray = None,
+    pre_generated_subsets: np.ndarray = None,
+    alpha: float = 1.0,
+    lambda_wrist: float = 1.0,
 ) -> Dict:
     """
-    Random bootstrap baseline analysis with coverage, redundancy, and fixed SIC.
-    Vectorized for performance.
+    Random bootstrap baseline analysis with coverage and redundancy.
+    Fixed SIC is computed separately via random_bootstrap_fixed_sic().
+    Uses pre-generated subsets if provided to ensure all representations
+    use the exact same random samples.
     """
     rng = np.random.RandomState(seed)
     n_total = len(all_phi)
@@ -909,18 +1058,17 @@ def random_bootstrap_analysis(
         "redundancy_fraction": [],
     }
 
-    if K_global is not None and K_wrist is not None and dbar_global is not None and dbar_wrist is not None:
-        compute_sic = True
-        bootstrap_metrics["normalized_fixed_sic"] = []
-    else:
-        compute_sic = False
-
     if all_episode_indices is None:
         all_episode_indices = list(range(n_total))
 
+    if pre_generated_subsets is not None:
+        bootstrap_indices = pre_generated_subsets
+    else:
+        bootstrap_indices = generate_bootstrap_subsets(n_total, subset_size, n_bootstrap, seed)
+
     print(f"  Running {n_bootstrap} bootstrap iterations...")
     for boot_i in range(n_bootstrap):
-        sample_indices = rng.choice(n_total, subset_size, replace=False)
+        sample_indices = bootstrap_indices[boot_i]
 
         nearest_dists = dist_matrix[:, sample_indices].min(axis=1)
 
@@ -937,21 +1085,6 @@ def random_bootstrap_analysis(
         nn_dists = sub_matrix.min(axis=1)
         redundancy_frac = float(np.mean(nn_dists < full_p05_threshold))
         bootstrap_metrics["redundancy_fraction"].append(redundancy_frac)
-
-        if compute_sic:
-            selected_episodes = [all_episode_indices[i] for i in sample_indices]
-
-            sic_result = compute_fixed_universe_sic_from_indices(
-                selected_episodes=selected_episodes,
-                all_episode_indices=all_episode_indices,
-                K_global=K_global,
-                K_wrist=K_wrist,
-                dbar_global=dbar_global,
-                dbar_wrist=dbar_wrist,
-                alpha=1.0,
-                lambda_wrist=1.0,
-            )
-            bootstrap_metrics["normalized_fixed_sic"].append(sic_result["normalized_sic"])
 
         if (boot_i + 1) % 200 == 0:
             print(f"    Bootstrap {boot_i + 1}/{n_bootstrap}")
@@ -978,12 +1111,11 @@ def random_bootstrap_analysis(
         elif metric == "redundancy_fraction":
             observed = observed_redundancy
 
-        if metric in ["mean_nearest", "p95_nearest", "max_radius", "redundancy_fraction"]:
-            lower_better = metric in ["mean_nearest", "p95_nearest", "max_radius", "redundancy_fraction"]
-            if lower_better:
-                better_fraction = float(np.sum(bootstrap_vals > observed) / len(bootstrap_vals))
-            else:
-                better_fraction = float(np.sum(bootstrap_vals < observed) / len(bootstrap_vals))
+        lower_better = True
+        if lower_better:
+            better_fraction = float(np.sum(bootstrap_vals > observed) / len(bootstrap_vals))
+        else:
+            better_fraction = float(np.sum(bootstrap_vals < observed) / len(bootstrap_vals))
 
         percentile = float(np.sum(bootstrap_vals <= observed) / len(bootstrap_vals))
 
@@ -995,31 +1127,13 @@ def random_bootstrap_analysis(
             "percentile": percentile,
         }
 
-    if compute_sic:
-        bootstrap_sic = np.array(bootstrap_metrics["normalized_fixed_sic"])
-
-        selected_episodes = [all_episode_indices[i] for i in subset_indices]
-        sic_obs = compute_fixed_universe_sic_from_indices(
-            selected_episodes=selected_episodes,
-            all_episode_indices=all_episode_indices,
-            K_global=K_global,
-            K_wrist=K_wrist,
-            dbar_global=dbar_global,
-            dbar_wrist=dbar_wrist,
-            alpha=1.0,
-            lambda_wrist=1.0,
-        )
-        observed_sic = sic_obs["normalized_sic"]
-
-        better_fraction_sic = float(np.sum(bootstrap_sic < observed_sic) / len(bootstrap_sic))
-
-        results["normalized_fixed_sic"] = {
-            "observed": observed_sic,
-            "bootstrap_mean": float(np.mean(bootstrap_sic)),
-            "bootstrap_std": float(np.std(bootstrap_sic)),
-            "better_than_random_fraction": better_fraction_sic,
-            "percentile": float(np.sum(bootstrap_sic <= observed_sic) / len(bootstrap_sic)),
-        }
+    results["metadata"] = {
+        "n_bootstrap": n_bootstrap,
+        "seed": seed,
+        "subset_size": subset_size,
+        "alpha": alpha,
+        "lambda_wrist": lambda_wrist,
+    }
 
     return results
 
@@ -1232,38 +1346,69 @@ def evaluate_ours_vs_uniform(
     result["fixed_sic_delta"] = sic_delta
 
     evidence_summary = {}
+    eps = 1e-10
 
-    def _check_similar_direction(delta_dict, key, eps=1e-10):
-        v = delta_dict.get(key)
-        if v is None:
+    def _relative_delta(ours_val, uniform_val):
+        if ours_val is None or uniform_val is None:
             return None
-        return abs(v) < (abs(v) + eps) * 0.1
+        return (ours_val - uniform_val) / max(abs(uniform_val), eps)
 
-    ws_mean = ws_delta.get("physical_unselected_mean_nearest")
-    evidence_summary["workspace_similar_direction"] = (abs(ws_mean) < 0.01 * (abs(ws_delta.get("physical_unselected_mean_nearest", 0)) + 1e-10)) if ws_mean is not None else None
+    for key in ["physical_unselected_mean_nearest", "physical_unselected_p95", "physical_unselected_max_radius"]:
+        v1 = ws_delta.get(key)
+        v2 = uniform_ws.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"workspace_{key}_relative_delta"] = rd
 
-    g_mean = global_delta.get("unselected_mean_nearest_distance")
-    evidence_summary["global_similar_direction"] = (abs(g_mean) < 0.01 * (abs(global_delta.get("unselected_mean_nearest_distance", 0)) + 1e-10)) if g_mean is not None else None
+    for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
+                 "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
+                 "unselected_max_nearest_distance"]:
+        v1 = ours_g.get(key)
+        v2 = uniform_g.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"global_coverage_{key}_relative_delta"] = rd
 
-    w_mean = wrist_delta.get("unselected_mean_nearest_distance")
-    evidence_summary["wrist_similar_direction"] = (abs(w_mean) < 0.01 * (abs(wrist_delta.get("unselected_mean_nearest_distance", 0)) + 1e-10)) if w_mean is not None else None
+    for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
+                 "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
+                 "unselected_max_nearest_distance"]:
+        v1 = ours_w.get(key)
+        v2 = uniform_w.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"wrist_coverage_{key}_relative_delta"] = rd
 
-    c_mean = combined_delta.get("unselected_mean_nearest_distance")
-    evidence_summary["combined_similar_direction"] = (abs(c_mean) < 0.01 * (abs(combined_delta.get("unselected_mean_nearest_distance", 0)) + 1e-10)) if c_mean is not None else None
+    for key in ["unselected_mean_nearest_distance", "unselected_median_nearest_distance",
+                 "unselected_p90_nearest_distance", "unselected_p95_nearest_distance",
+                 "unselected_max_nearest_distance"]:
+        v1 = ours_c.get(key)
+        v2 = uniform_c.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"combined_coverage_{key}_relative_delta"] = rd
 
-    g_red = global_red_delta.get("redundancy_fraction")
-    w_red = wrist_red_delta.get("redundancy_fraction")
-    c_red = combined_red_delta.get("redundancy_fraction")
-    redundancy_similar = []
-    if g_red is not None:
-        redundancy_similar.append(abs(g_red) < 0.01)
-    if w_red is not None:
-        redundancy_similar.append(abs(w_red) < 0.01)
-    if c_red is not None:
-        redundancy_similar.append(abs(c_red) < 0.01)
-    evidence_summary["redundancy_similar_direction"] = all(redundancy_similar) if redundancy_similar else None
+    for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
+        v1 = ours_gr.get(key)
+        v2 = uniform_gr.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"global_redundancy_{key}_relative_delta"] = rd
 
-    evidence_summary["sic_additional_gain"] = sic_delta
+    for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
+        v1 = ours_wr.get(key)
+        v2 = uniform_wr.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"wrist_redundancy_{key}_relative_delta"] = rd
+
+    for key in ["mean_nearest", "median_nearest", "p10_nearest", "p50_nearest", "p90_nearest", "redundancy_fraction"]:
+        v1 = ours_cr.get(key)
+        v2 = uniform_cr.get(key)
+        rd = _relative_delta(v1, v2)
+        evidence_summary[f"combined_redundancy_{key}_relative_delta"] = rd
+
+    evidence_summary["fixed_sic_delta"] = sic_delta
+    if ours_sic is not None and uniform_sic is not None:
+        evidence_summary["fixed_sic_relative_delta"] = (ours_sic - uniform_sic) / max(abs(uniform_sic), eps)
+
+    evidence_summary["note"] = (
+        "No calibrated equivalence test was performed; inspect the multi-metric deltas above. "
+        "Relative deltas are computed as (ours - uniform) / max(|uniform|, eps)."
+    )
 
     result["evidence_summary"] = evidence_summary
 
@@ -1326,9 +1471,9 @@ def evaluate_h1(analysis_results: Dict) -> Dict:
 
         evidence[rep] = rep_evidence
 
-    n_probe_sig = sum(1 for rep in ["global", "combined"]
+    n_probe_sig = sum(1 for rep in ["global", "wrist", "combined"]
                       if evidence.get(rep, {}).get("probe_x_significant") and evidence.get(rep, {}).get("probe_y_significant"))
-    n_neighbor_sig = sum(1 for rep in ["global", "combined"]
+    n_neighbor_sig = sum(1 for rep in ["global", "wrist", "combined"]
                          if evidence.get(rep, {}).get("neighbor_significant"))
 
     eff_rank_global = analysis_results.get("global_stats", {}).get("effective_rank", 0)
@@ -1411,9 +1556,9 @@ def evaluate_h2(analysis_results: Dict) -> Dict:
 
     n_sig_spearman = sum(1 for rep in ["global", "wrist", "combined"]
                          if evidence.get(rep, {}).get("spearman_significant", False))
-    n_probe_sig = sum(1 for rep in ["global", "combined"]
+    n_probe_sig = sum(1 for rep in ["global", "wrist", "combined"]
                       if evidence.get(rep, {}).get("probe_x_significant") and evidence.get(rep, {}).get("probe_y_significant"))
-    n_neighbor_sig = sum(1 for rep in ["global", "combined"]
+    n_neighbor_sig = sum(1 for rep in ["global", "wrist", "combined"]
                          if evidence.get(rep, {}).get("neighbor_significant"))
 
     if n_sig_spearman >= 2 and n_probe_sig >= 1 and n_neighbor_sig >= 1:
@@ -1487,14 +1632,15 @@ def evaluate_h3(analysis_results: Dict) -> Dict:
                     "better_than_random_fraction": red_btr,
                 })
 
-            sic_data = bootstrap.get("normalized_fixed_sic", {})
-            sic_btr = sic_data.get("better_than_random_fraction", None)
-            if sic_btr is not None:
-                evidence_families["fixed_sic"].append({
-                    "representation": rep,
-                    "metric": "normalized_fixed_sic",
-                    "better_than_random_fraction": sic_btr,
-                })
+    fixed_sic_bootstrap = ours_data.get("bootstrap_fixed_sic", {})
+    if fixed_sic_bootstrap:
+        sic_btr = fixed_sic_bootstrap.get("better_than_random_fraction", None)
+        if sic_btr is not None:
+            evidence_families["fixed_sic"].append({
+                "representation": "combined",
+                "metric": "normalized_fixed_sic",
+                "better_than_random_fraction": sic_btr,
+            })
 
     all_core_metrics = []
     for family_metrics in evidence_families.values():
@@ -1636,21 +1782,20 @@ def generate_report(
                    f"{nn_overlap_str} | {eff_rank_str} |\n")
 
         f.write("\n## Table 2: Subset Coverage Comparison\n\n")
-        f.write("| Method | Global Cover | Wrist Cover | Combined Cover | Max Radius | Redundancy | Fixed SIC | Global BTR | Wrist BTR | Combined BTR |\n")
-        f.write("|--------|-------------|-------------|----------------|------------|------------|-----------|------------|-----------|--------------|\n")
+        f.write("| Method | Global Cover | Wrist Cover | Combined Cover | Combined Max Radius | Combined Redundancy | Fixed SIC | Fixed SIC BTR | Global BTR | Wrist BTR | Combined BTR |\n")
+        f.write("|--------|-------------|-------------|----------------|---------------------|---------------------|-----------|---------------|------------|-----------|--------------|\n")
 
         subset_comparison = analysis_results.get("subset_comparison", {})
         for method_name, method_data in subset_comparison.items():
             cov_g = method_data.get('coverage_global', {})
             cov_w = method_data.get('coverage_wrist', {})
             cov_c = method_data.get('coverage_combined', {})
-            red_g = method_data.get('redundancy_global', {})
-            red_w = method_data.get('redundancy_wrist', {})
             red_c = method_data.get('redundancy_combined', {})
             sic = method_data.get('fixed_sic', {})
             boot_g = method_data.get('bootstrap_global', {})
             boot_w = method_data.get('bootstrap_wrist', {})
             boot_c = method_data.get('bootstrap_combined', {})
+            boot_fixed = method_data.get('bootstrap_fixed_sic', {})
 
             def fmt(val):
                 return f"{val:.4f}" if isinstance(val, (int, float)) and val is not None else "N/A"
@@ -1658,9 +1803,10 @@ def generate_report(
             mean_cover_g = cov_g.get('unselected_mean_nearest_distance') if cov_g else None
             mean_cover_w = cov_w.get('unselected_mean_nearest_distance') if cov_w else None
             mean_cover_c = cov_c.get('unselected_mean_nearest_distance') if cov_c else None
-            max_radius_g = cov_g.get('unselected_max_nearest_distance') if cov_g else None
-            redundancy_g = red_g.get('redundancy_fraction') if red_g else None
+            max_radius_c = cov_c.get('unselected_max_nearest_distance') if cov_c else None
+            redundancy_c = red_c.get('redundancy_fraction') if red_c else None
             fixed_sic = sic.get('normalized_sic') if sic else None
+            fixed_sic_btr = boot_fixed.get('better_than_random_fraction') if boot_fixed else None
             btr_g = boot_g.get('mean_nearest', {}).get('better_than_random_fraction') if boot_g else None
             btr_w = boot_w.get('mean_nearest', {}).get('better_than_random_fraction') if boot_w else None
             btr_c = boot_c.get('mean_nearest', {}).get('better_than_random_fraction') if boot_c else None
@@ -1668,9 +1814,10 @@ def generate_report(
             f.write(f"| {method_name} | {fmt(mean_cover_g)} | "
                    f"{fmt(mean_cover_w)} | "
                    f"{fmt(mean_cover_c)} | "
-                   f"{fmt(max_radius_g)} | "
-                   f"{fmt(redundancy_g)} | "
+                   f"{fmt(max_radius_c)} | "
+                   f"{fmt(redundancy_c)} | "
                    f"{fmt(fixed_sic)} | "
+                   f"{fmt(fixed_sic_btr)} | "
                    f"{fmt(btr_g)} | "
                    f"{fmt(btr_w)} | "
                    f"{fmt(btr_c)} |\n")
@@ -1679,9 +1826,16 @@ def generate_report(
         ours_uniform = analysis_results.get("ours_uniform_comparison", {})
         if ours_uniform:
             f.write(f"- Episode overlap count: {ours_uniform.get('episode_overlap_count', 'N/A')}\n")
-            f.write(f"- Episode overlap ratio: {ours_uniform.get('episode_overlap_ratio', 'N/A'):.4f}\n")
-            f.write(f"- Conclusion: {ours_uniform.get('conclusion', 'N/A')}\n")
-            f.write(f"- Similarity ratio: {ours_uniform.get('similarity_ratio', 'N/A'):.4f}\n\n")
+            overlap_ratio_val = ours_uniform.get('episode_overlap_ratio')
+            f.write(f"- Episode overlap ratio: {fmt(overlap_ratio_val)}\n")
+            f.write(f"- Conclusion: {ours_uniform.get('conclusion', 'N/A')}\n\n")
+
+            ev = ours_uniform.get("evidence_summary", {})
+            if ev:
+                f.write("### Evidence Summary\n\n")
+                for k, v in ev.items():
+                    f.write(f"- {k}: {fmt(v) if isinstance(v, (int, float)) else v}\n")
+                f.write("\n")
 
             ws_delta = ours_uniform.get("workspace_coverage_delta", {})
             if ws_delta:
@@ -1758,20 +1912,24 @@ def generate_report(
                 ev = h_data.get("evidence", {})
                 for rep in ["global", "wrist", "combined"]:
                     rep_ev = ev.get(rep, {})
-                    f.write(f"- {rep}: probe={rep_ev.get('probe', False)}, neighbor={rep_ev.get('neighbor', False)}, validity={rep_ev.get('validity', False)}\n")
-                f.write(f"- Effective rank ratio: {h_data.get('effective_rank_ratio', 'N/A'):.4f}\n")
+                    f.write(f"- {rep}: probe_x_significant={rep_ev.get('probe_x_significant', False)}, probe_y_significant={rep_ev.get('probe_y_significant', False)}, neighbor_significant={rep_ev.get('neighbor_significant', False)}, validity={rep_ev.get('validity', False)}\n")
+                eff_rank_ratio_val = h_data.get('effective_rank_ratio')
+                f.write(f"- Effective rank ratio: {fmt(eff_rank_ratio_val)}\n")
             elif h_name == "H2":
                 ev = h_data.get("evidence", {})
                 for rep in ["global", "wrist", "combined"]:
                     rep_ev = ev.get(rep, {})
-                    f.write(f"- {rep}: spearman_sig={rep_ev.get('spearman_sig', False)}, probe_sig={rep_ev.get('probe_sig', False)}, neighbor_sig={rep_ev.get('neighbor_sig', False)}\n")
+                    f.write(f"- {rep}: spearman_significant={rep_ev.get('spearman_significant', False)}, probe_x_significant={rep_ev.get('probe_x_significant', False)}, probe_y_significant={rep_ev.get('probe_y_significant', False)}, neighbor_significant={rep_ev.get('neighbor_significant', False)}\n")
                 f.write(f"- Significant Spearman tests: {h_data.get('n_sig_spearman', 'N/A')}\n")
             elif h_name == "H3":
                 ev = h_data.get("evidence", {})
-                f.write(f"- Strong metrics: {ev.get('n_strong', 0)}\n")
-                f.write(f"- Weak metrics: {ev.get('n_weak', 0)}\n")
+                f.write(f"- Strong evidence families: {ev.get('n_strong_families', 0)}\n")
+                f.write(f"- Weak evidence families: {ev.get('n_weak_families', 0)}\n")
                 f.write(f"- Random-range metrics: {ev.get('n_random', 0)}\n")
                 f.write(f"- Poor metrics: {ev.get('n_poor', 0)}\n")
+                families_detail = ev.get("evidence_families", {})
+                if families_detail:
+                    f.write(f"- Evidence families detail: {families_detail}\n")
             f.write("\n")
 
         f.write("## Phase Representation Warning\n\n")
@@ -1780,6 +1938,29 @@ def generate_report(
         f.write("因此当前分析主要验证 initial / pre-grasp task-state representation。\n")
         f.write("它不能证明 transport / place / release phase representation 是充分的。\n")
         f.write("不要因为 embedding initial-state geometry 很强就得出完整 manipulation representation 已经有效的结论。\n")
+
+
+def _numpy_to_python(obj):
+    """Convert numpy types to Python native types for JSON serialization."""
+    if isinstance(obj, (np.integer,)):
+        return int(obj)
+    elif isinstance(obj, (np.floating,)):
+        return float(obj)
+    elif isinstance(obj, np.ndarray):
+        return obj.tolist()
+    elif isinstance(obj, np.bool_):
+        return bool(obj)
+    return obj
+
+
+def _convert_to_python(obj):
+    """Recursively convert numpy types in nested structures to Python native types."""
+    if isinstance(obj, dict):
+        return {k: _convert_to_python(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [_convert_to_python(item) for item in obj]
+    else:
+        return _numpy_to_python(obj)
 
 
 def save_analysis_summary(
@@ -1792,6 +1973,8 @@ def save_analysis_summary(
     alignment = analysis_results.get("alignment", {})
 
     summary = {
+        "analysis_config": analysis_results.get("analysis_config", {}),
+        "fixed_universe": analysis_results.get("fixed_universe", {}),
         "alignment": alignment,
         "validation": analysis_results.get("validation", {}),
         "representations": {
@@ -1811,8 +1994,10 @@ def save_analysis_summary(
         "hypothesis_evaluation": analysis_results.get("hypothesis_evaluation", {}),
     }
 
+    summary = _convert_to_python(summary)
+
     with open(summary_path, 'w') as f:
-        json.dump(summary, f, indent=2, default=str)
+        json.dump(summary, f, indent=2)
 
     print(f"Analysis summary saved to: {summary_path}")
 
@@ -1862,7 +2047,7 @@ def save_coverage_comparison(
     analysis_results: Dict,
     output_dir: Path
 ):
-    """Save coverage_comparison.csv"""
+    """Save coverage_comparison.csv with comprehensive metrics."""
     import csv
 
     csv_path = output_dir / "coverage_comparison.csv"
@@ -1872,10 +2057,11 @@ def save_coverage_comparison(
     with open(csv_path, 'w', newline='') as f:
         writer = csv.writer(f)
         writer.writerow([
-            "method", "global_mean_nearest", "wrist_mean_nearest", "combined_mean_nearest",
-            "global_max_radius", "wrist_max_radius", "combined_max_radius",
-            "global_redundancy", "wrist_redundancy", "combined_redundancy",
-            "fixed_sic"
+            "method",
+            "global_mean_nearest", "global_median_nearest", "global_p90_nearest", "global_p95_nearest", "global_max_radius", "global_redundancy",
+            "wrist_mean_nearest", "wrist_median_nearest", "wrist_p90_nearest", "wrist_p95_nearest", "wrist_max_radius", "wrist_redundancy",
+            "combined_mean_nearest", "combined_median_nearest", "combined_p90_nearest", "combined_p95_nearest", "combined_max_radius", "combined_redundancy",
+            "fixed_sic", "fixed_sic_btr",
         ])
 
         for method_name, method_data in subset_comparison.items():
@@ -1886,19 +2072,37 @@ def save_coverage_comparison(
             red_w = method_data.get('redundancy_wrist', {})
             red_c = method_data.get('redundancy_combined', {})
             sic = method_data.get('fixed_sic', {})
+            boot_fixed = method_data.get('bootstrap_fixed_sic', {})
+
+            def _get(d, *keys):
+                for k in keys:
+                    v = d.get(k)
+                    if v is not None:
+                        return v
+                return ''
 
             writer.writerow([
                 method_name,
-                cov_g.get('unselected_mean_nearest_distance', ''),
-                cov_w.get('unselected_mean_nearest_distance', ''),
-                cov_c.get('unselected_mean_nearest_distance', ''),
-                cov_g.get('unselected_max_nearest_distance', ''),
-                cov_w.get('unselected_max_nearest_distance', ''),
-                cov_c.get('unselected_max_nearest_distance', ''),
-                red_g.get('redundancy_fraction', ''),
-                red_w.get('redundancy_fraction', ''),
-                red_c.get('redundancy_fraction', ''),
-                sic.get('normalized_sic', ''),
+                _get(cov_g, 'unselected_mean_nearest_distance'),
+                _get(cov_g, 'unselected_median_nearest_distance'),
+                _get(cov_g, 'unselected_p90_nearest_distance'),
+                _get(cov_g, 'unselected_p95_nearest_distance'),
+                _get(cov_g, 'unselected_max_nearest_distance'),
+                _get(red_g, 'redundancy_fraction'),
+                _get(cov_w, 'unselected_mean_nearest_distance'),
+                _get(cov_w, 'unselected_median_nearest_distance'),
+                _get(cov_w, 'unselected_p90_nearest_distance'),
+                _get(cov_w, 'unselected_p95_nearest_distance'),
+                _get(cov_w, 'unselected_max_nearest_distance'),
+                _get(red_w, 'redundancy_fraction'),
+                _get(cov_c, 'unselected_mean_nearest_distance'),
+                _get(cov_c, 'unselected_median_nearest_distance'),
+                _get(cov_c, 'unselected_p90_nearest_distance'),
+                _get(cov_c, 'unselected_p95_nearest_distance'),
+                _get(cov_c, 'unselected_max_nearest_distance'),
+                _get(red_c, 'redundancy_fraction'),
+                _get(sic, 'normalized_sic'),
+                _get(boot_fixed, 'better_than_random_fraction'),
             ])
 
     print(f"Coverage comparison saved to: {csv_path}")
@@ -2027,22 +2231,22 @@ def main():
     print(f"  dbar_global: {dbar_global:.4f}, dbar_wrist: {dbar_wrist:.4f}")
 
     subsets_to_process = {}
-    if args.random_subset and args.random_subset.exists():
+    if args.random_subset is not None:
+        if not args.random_subset.exists():
+            raise FileNotFoundError(f"Random subset file not found: {args.random_subset}")
         random_episodes = load_subset_episode_indices(args.random_subset)
-        if len(set(random_episodes)) != len(random_episodes):
-            print(f"  WARNING: Random subset has duplicate episode indices")
         subsets_to_process["Random"] = random_episodes
 
-    if args.uniform_subset and args.uniform_subset.exists():
+    if args.uniform_subset is not None:
+        if not args.uniform_subset.exists():
+            raise FileNotFoundError(f"Uniform subset file not found: {args.uniform_subset}")
         uniform_episodes = load_subset_episode_indices(args.uniform_subset)
-        if len(set(uniform_episodes)) != len(uniform_episodes):
-            print(f"  WARNING: Uniform subset has duplicate episode indices")
         subsets_to_process["Uniform"] = uniform_episodes
 
-    if args.ours_subset and args.ours_subset.exists():
+    if args.ours_subset is not None:
+        if not args.ours_subset.exists():
+            raise FileNotFoundError(f"Ours subset file not found: {args.ours_subset}")
         ours_episodes = load_subset_episode_indices(args.ours_subset)
-        if len(set(ours_episodes)) != len(ours_episodes):
-            print(f"  WARNING: Ours subset has duplicate episode indices")
         subsets_to_process["Ours"] = ours_episodes
 
     global_p05 = float(np.percentile(global_dist[np.triu_indices(n_episodes, k=1)], 5))
@@ -2052,7 +2256,11 @@ def main():
     for method_name, episodes in subsets_to_process.items():
         print(f"\n  Processing {method_name} subset ({len(episodes)} episodes)...")
 
-        subset_indices = match_subset_to_indices(episodes, episode_indices)
+        match_result = match_subset_to_indices(episodes, episode_indices)
+        subset_indices = match_result["matched_indices"]
+        subset_comparison[method_name]["requested_subset_size"] = match_result["requested_subset_size"]
+        subset_comparison[method_name]["matched_subset_size"] = match_result["matched_subset_size"]
+        subset_comparison[method_name]["missing_episode_indices"] = match_result["missing_episode_indices"]
 
         print(f"    Computing workspace coverage...")
         workspace_cov = compute_workspace_coverage(obj_init_positions, subset_indices, method_name)
@@ -2097,11 +2305,24 @@ def main():
         }
 
     print("\n[13/15] Running bootstrap analysis...")
+    
+    # Pre-generate consistent random subsets across all representations
+    subset_size = len(list(subsets_to_process.values())[0]) if subsets_to_process else 0
+    pre_generated_subsets = None
+    if subset_size > 0:
+        pre_generated_subsets = generate_bootstrap_subsets(
+            n_total=n_episodes,
+            subset_size=subset_size,
+            n_bootstrap=args.n_bootstrap,
+            seed=args.seed,
+        )
+    
     for method_name in subsets_to_process:
         print(f"\n  Bootstrap for {method_name}...")
 
         episodes = subsets_to_process[method_name]
-        subset_indices = match_subset_to_indices(episodes, episode_indices)
+        match_result = match_subset_to_indices(episodes, episode_indices)
+        subset_indices = match_result["matched_indices"]
 
         print(f"    Global bootstrap...")
         boot_global = random_bootstrap_analysis(
@@ -2111,6 +2332,9 @@ def main():
             dbar_global=dbar_global, dbar_wrist=dbar_wrist,
             all_episode_indices=episode_indices,
             precomputed_dist_matrix=global_dist,
+            alpha=args.alpha,
+            lambda_wrist=args.lambda_wrist,
+            pre_generated_subsets=pre_generated_subsets,
         )
 
         print(f"    Wrist bootstrap...")
@@ -2121,6 +2345,9 @@ def main():
             dbar_global=dbar_global, dbar_wrist=dbar_wrist,
             all_episode_indices=episode_indices,
             precomputed_dist_matrix=wrist_dist,
+            alpha=args.alpha,
+            lambda_wrist=args.lambda_wrist,
+            pre_generated_subsets=pre_generated_subsets,
         )
 
         print(f"    Combined bootstrap...")
@@ -2131,11 +2358,27 @@ def main():
             dbar_global=dbar_global, dbar_wrist=dbar_wrist,
             all_episode_indices=episode_indices,
             precomputed_dist_matrix=combined_dist,
+            alpha=args.alpha,
+            lambda_wrist=args.lambda_wrist,
+            pre_generated_subsets=pre_generated_subsets,
+        )
+        
+        print(f"    Fixed SIC bootstrap (once, independent)...")
+        boot_fixed_sic = random_bootstrap_fixed_sic(
+            subset_indices=subset_indices,
+            all_episode_indices=episode_indices,
+            K_global=K_global, K_wrist=K_wrist,
+            dbar_global=dbar_global, dbar_wrist=dbar_wrist,
+            n_bootstrap=args.n_bootstrap, seed=args.seed,
+            alpha=args.alpha,
+            lambda_wrist=args.lambda_wrist,
+            pre_generated_subsets=pre_generated_subsets,
         )
 
         subset_comparison[method_name]["bootstrap_global"] = boot_global
         subset_comparison[method_name]["bootstrap_wrist"] = boot_wrist
         subset_comparison[method_name]["bootstrap_combined"] = boot_combined
+        subset_comparison[method_name]["bootstrap_fixed_sic"] = boot_fixed_sic
 
     print("\n[14/15] Evaluating Ours vs Uniform...")
     ours_uniform_comparison = {}
@@ -2191,6 +2434,18 @@ def main():
         "subset_comparison": subset_comparison,
         "ours_uniform_comparison": ours_uniform_comparison,
         "hypothesis_evaluation": hypothesis_evaluation,
+        "analysis_config": {
+            "seed": args.seed,
+            "n_bootstrap": args.n_bootstrap,
+            "alpha": args.alpha,
+            "lambda_wrist": args.lambda_wrist,
+        },
+        "fixed_universe": {
+            "reference_episode_count": n_episodes,
+            "dbar_global": dbar_global,
+            "dbar_wrist": dbar_wrist,
+            "dbar_fallback_used": dbar_fallback_used,
+        },
     }
 
     print("\n  Generating report...")

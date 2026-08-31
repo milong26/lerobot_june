@@ -772,14 +772,110 @@ class VLAFlowMatching(nn.Module):
             execution_horizon=kwargs.get("execution_horizon"),
         )
 
+    def sample_actions_with_trace(
+        self,
+        images,
+        img_masks,
+        lang_tokens,
+        lang_masks,
+        state,
+        noise=None,
+        trace_callback=None,
+        **kwargs: Unpack[ActionSelectKwargs],
+    ) -> Tensor:
+        # 这个函数只用来测试，不会用在正式代码中
+        """Do a full inference forward with diagnostic tracing of each denoising step.
+
+        This method is identical to sample_actions() in its mathematical output, but
+        provides hooks for capturing attention weights, hidden states, and velocity
+        predictions at each flow-matching denoising step.
+
+        Args:
+            images: List of image tensors, same as sample_actions().
+            img_masks: Image validity masks, same as sample_actions().
+            lang_tokens: Language token IDs, same as sample_actions().
+            lang_masks: Language attention masks, same as sample_actions().
+            state: Robot state tensor, same as sample_actions().
+            noise: Optional explicit initial noise tensor. If None, sampled via sample_noise().
+            trace_callback: Optional callable invoked at key points:
+                - After prefix prefill: {"event": "prefill_end", "prefix_length": int}
+                - After each denoise step: {"event": "denoise_step", "timestep", "x_t",
+                  "suffix_hidden", "v_t", "prefix_length", "suffix_length"}
+            **kwargs: Additional inference parameters (inference_delay, etc.).
+
+        Returns:
+            Tensor of shape (batch, chunk_size, max_action_dim) with final action chunk.
+            Semantically identical to sample_actions() output.
+        """
+        bsize = state.shape[0]
+        device = state.device
+
+        if noise is None:
+            actions_shape = (bsize, self.config.chunk_size, self.config.max_action_dim)
+            noise = self.sample_noise(actions_shape, device)
+
+        prefix_embs, prefix_pad_masks, prefix_att_masks = self.embed_prefix(
+            images, img_masks, lang_tokens, lang_masks, state=state
+        )
+        prefix_att_2d_masks = make_att_2d_masks(prefix_pad_masks, prefix_att_masks)
+        prefix_position_ids = torch.cumsum(prefix_pad_masks, dim=1) - 1
+        # Compute image and language key value cache
+        _, past_key_values = self.vlm_with_expert.forward(
+            attention_mask=prefix_att_2d_masks,
+            position_ids=prefix_position_ids,
+            past_key_values=None,
+            inputs_embeds=[prefix_embs, None],
+            use_cache=self.config.use_cache,
+        )
+
+        prefix_len = prefix_pad_masks.shape[1]
+        if trace_callback is not None:
+            trace_callback({
+                "event": "prefill_end",
+                "prefix_length": prefix_len,
+            })
+
+        num_steps = self.config.num_steps
+
+        return euler_integrate(
+            lambda input_x_t, current_timestep: self.denoise_step(
+                x_t=input_x_t,
+                prefix_pad_masks=prefix_pad_masks,
+                past_key_values=past_key_values,
+                timestep=current_timestep,
+                trace_callback=trace_callback,
+            ),
+            noise,
+            num_steps,
+            rtc_processor=self.rtc_processor,
+            rtc_enabled=self._rtc_enabled(),
+            inference_delay=kwargs.get("inference_delay"),
+            prev_chunk_left_over=kwargs.get("prev_chunk_left_over"),
+            execution_horizon=kwargs.get("execution_horizon"),
+        )
+
     def denoise_step(
         self,
         prefix_pad_masks,
         past_key_values,
         x_t,
         timestep,
+        trace_callback=None,
     ):
-        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        """Apply one denoising step of the noise `x_t` at a given timestep.
+
+        Args:
+            prefix_pad_masks: (B, prefix_len) boolean mask for prefix tokens.
+            past_key_values: DynamicCache with prefix KV cache.
+            x_t: (B, chunk_size, max_action_dim) noisy actions at current timestep.
+            timestep: (B,) float tensor of current flow-matching timestep.
+            trace_callback: Optional callable for diagnostic tracing. When provided,
+                receives a dict with denoising tensors and metadata after computing
+                suffix_hidden and v_t. Does not affect the mathematical output.
+
+        Returns:
+            v_t: (B, chunk_size, max_action_dim) predicted velocity field.
+        """
         suffix_embs, suffix_pad_masks, suffix_att_masks = self.embed_suffix(x_t, timestep)
 
         suffix_len = suffix_pad_masks.shape[1]
@@ -807,4 +903,16 @@ class VLAFlowMatching(nn.Module):
         suffix_out = suffix_out[:, -self.config.chunk_size :]
         suffix_out = suffix_out.to(dtype=torch.float32)
         v_t = self.action_out_proj(suffix_out)
+
+        if trace_callback is not None:
+            trace_callback({
+                "event": "denoise_step",
+                "timestep": timestep,
+                "x_t": x_t,
+                "suffix_hidden": suffix_out,
+                "v_t": v_t,
+                "prefix_length": prefix_len,
+                "suffix_length": suffix_len,
+            })
+
         return v_t

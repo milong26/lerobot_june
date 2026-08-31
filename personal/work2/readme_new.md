@@ -38,23 +38,21 @@ python personal/work2/visualize_initial_positions.py \
 
 新增代码personal/work2/dataset_lookin/inspect_dataset.py
 可以检查数据集，输出
-============================================================
 Dataset Overview
-============================================================
 Repo ID: lerobot/metaworld_pick_place
 Num episodes: 500
 Num frames: 31095
 FPS: 80
 Features: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'observation.environment_state', 'action', 'next.reward', 'next.success', 'timestamp', 'frame_index', 'episode_index', 'index', 'task_index']
 
-============================================================
+
 Episode Metadata (first 3 episodes)
-============================================================
+
 Type of dataset.meta.episodes: <class 'datasets.arrow_dataset.Dataset'>
 
-============================================================
+
 First Frame Structure
-============================================================
+
 Frame keys: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'observation.environment_state', 'action', 'next.reward', 'next.success', 'timestamp', 'frame_index', 'episode_index', 'index', 'task_index', 'task']
   observation.images.top: shape=torch.Size([3, 480, 480]), dtype=torch.float32
   observation.images.wrist: shape=torch.Size([3, 480, 480]), dtype=torch.float32
@@ -70,16 +68,16 @@ Frame keys: ['observation.images.top', 'observation.images.wrist', 'observation.
   task_index: shape=torch.Size([]), dtype=torch.int64
   task: len=31, type=<class 'str'>
 
-============================================================
+
 Episode 0 Frame (episode_index check)
-============================================================
+
   episode_index: 0
   frame_index: 0
   index: 0
 
-============================================================
+
 Episode Meta Details
-============================================================
+
 
 ## see_embedding
 因为之前extract embedding的时候不知道哪个方式更好，所以需要写代码验证
@@ -107,9 +105,9 @@ python extract_embeddings.py --force
 evaluate_episode_embeddings.py
 这个代码运行以后应该可以得到比较好的以episode为单位的embedding，用于后续的微调
 执行以后得到的结果显示
-============================================================
+
 TOP 20 TEMPORAL STRATEGIES
-============================================================
+
 Rank  Method                       Start%  End%    Len%    Weight       PosCorr  d_bar   Cluster  Overall 
 --------------------------------------------------------------------------------------------------------------
 1     temporal_multi_window        15      30      15      uniform      0.1118   0.0000  0.0000   0.0671  
@@ -133,23 +131,23 @@ Rank  Method                       Start%  End%    Len%    Weight       PosCorr 
 19    temporal_window              30      90      60      uniform      0.0760   0.1049  30.2329  6.1132  
 20    temporal_multi_window        30      90      60      uniform      0.0732   0.1018  0.0000   0.0643  
 
-============================================================
+
 GENERATING VISUALIZATIONS
-============================================================
+
 Saved embedding comparison to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/embedding_comparison.png
 Saved temporal importance to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/temporal_importance.png
 
-============================================================
+
 SAVING RESULTS
-============================================================
+
 Saved evaluation results to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/evaluation.csv
 Saved temporal search results to /data/zhonglinye/jun/lerobot/personal/work2/ours/extract_embedding_by_episode/temporal_search_results.csv
 
 Saving final episode embeddings...
 
-============================================================
+
 ADAPTIVE TEMPORAL EMBEDDING SEARCH
-============================================================
+
 
 Dataset:
 MetaWorld PickPlace-v3
@@ -301,3 +299,10 @@ CUDA_VISIBLE_DEVICES=2 MUJOCO_GL=egl PYOPENGL_PLATFORM=egl lerobot-eval \
     --policy.use_amp=false \
     --policy.device=cuda \
     --rename_map='{"observation.pixels/top": "observation.images.camera1", "observation.pixels/wrist": "observation.images.camera2"}'
+
+
+
+# libero
+pip install -e ".[libero]"
+
+采集数据：需要检查libero的任务，挑一个任务
