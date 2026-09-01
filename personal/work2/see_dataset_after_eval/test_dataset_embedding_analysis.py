@@ -950,13 +950,13 @@ def test_28_alignment_duplicate_from_load_info():
     load_info = {
         "duplicate_episode_indices": [5, 10],
         "invalid_files": [{"file": "bad_file.npy", "reason": "missing phi_global"}],
-        "file_count": 22,
-        "npy_file_count": 22,
-        "valid_record_count": 20,
+        "embedding_npy_file_count": 22,
+        "embedding_valid_record_count": 20,
     }
     meta_info = {
         "duplicate_episode_indices": [3, 7],
-        "record_count": 20,
+        "metadata_record_count": 20,
+        "metadata_unique_episode_count": 20,
     }
 
     episode_indices, phi_g, phi_w, init_pos, goal_pos, alignment_info = \
@@ -966,10 +966,9 @@ def test_28_alignment_duplicate_from_load_info():
     assert alignment_info["duplicate_metadata_episode_index"] == [3, 7], "Should use meta_info duplicates"
     assert alignment_info["invalid_embedding_files"] == [{"file": "bad_file.npy", "reason": "missing phi_global"}], \
         "Should use load_info invalid files with file+reason structure"
-    assert alignment_info["embedding_npy_file_count"] == 22, "Should use load_info npy_file_count"
-    assert alignment_info["embedding_valid_record_count"] == 20, "Should use load_info valid_record_count"
+    assert alignment_info["embedding_npy_file_count"] == 22, "Should use load_info embedding_npy_file_count"
+    assert alignment_info["embedding_valid_record_count"] == 20, "Should use load_info embedding_valid_record_count"
     assert alignment_info["metadata_record_count"] == 20, "metadata_record_count should be raw record count"
-    assert alignment_info["metadata_episode_count"] == 20, "metadata_episode_count should be raw record count"
     assert alignment_info["metadata_unique_episode_count"] == 20, "metadata_unique_episode_count should be unique count"
 
     print(f"  PASS: Alignment duplicate info from load_info/meta_info")
@@ -1614,15 +1613,15 @@ def test_40_alignment_raw_vs_unique_counts():
     metadata = {i: {"obj_init_pos": rng.rand(2), "goal_pos": rng.rand(2)} for i in range(n)}
 
     load_info = {
-        "npy_file_count": 15,
-        "valid_record_count": 12,
-        "file_count": 12,
+        "embedding_npy_file_count": 15,
+        "embedding_valid_record_count": 12,
         "duplicate_episode_indices": [],
         "invalid_files": [],
     }
     meta_info = {
         "duplicate_episode_indices": [],
-        "record_count": 13,
+        "metadata_record_count": 13,
+        "metadata_unique_episode_count": 13,
     }
 
     _, _, _, _, _, alignment_info = align_embeddings_with_metadata(
@@ -1630,7 +1629,6 @@ def test_40_alignment_raw_vs_unique_counts():
     )
 
     assert alignment_info["metadata_record_count"] == 13, "metadata_record_count should be raw record count"
-    assert alignment_info["metadata_episode_count"] == 13, "metadata_episode_count should be raw record count"
     assert alignment_info["metadata_unique_episode_count"] == 10, "metadata_unique_episode_count should be unique count"
     assert alignment_info["embedding_npy_file_count"] == 15, "embedding_npy_file_count should be scanned .npy count"
     assert alignment_info["embedding_valid_record_count"] == 12, "embedding_valid_record_count should be valid records"
@@ -1657,8 +1655,8 @@ def test_41_missing_episode_index_marked_invalid():
 
         embeddings, load_info = load_embeddings(emb_dir)
 
-        assert load_info["npy_file_count"] == 2, "Should scan both .npy files"
-        assert load_info["valid_record_count"] == 1, "Only the good file should be a valid record"
+        assert load_info["embedding_npy_file_count"] == 2, "Should scan both .npy files"
+        assert load_info["embedding_valid_record_count"] == 1, "Only the good file should be a valid record"
         assert len(load_info["invalid_files"]) == 1, "Bad file should be in invalid_files"
         assert load_info["invalid_files"][0]["file"] == "bad.npy", "Should record bad file name"
         assert load_info["invalid_files"][0]["reason"] == "missing episode_index", "Should record reason"
@@ -1825,7 +1823,7 @@ def test_47_json_summary_no_default_str():
 
     analysis_results = {
         "n_episodes": 10,
-        "alignment": {"metadata_episode_count": 10, "metadata_unique_episode_count": 10},
+        "alignment": {"metadata_record_count": 10, "metadata_unique_episode_count": 10},
         "validation": {"valid": True, "stats": {}, "errors": [], "warnings": []},
         "global_stats": {"dimension": 4, "effective_rank": 2.0},
         "wrist_stats": {"dimension": 4, "effective_rank": 2.0},
@@ -2010,6 +2008,7 @@ def test_48_report_regression_minimal():
         assert "probe_x_significant" in report_text, "H1 should display probe_x_significant"
         assert "probe_y_significant" in report_text, "H1 should display probe_y_significant"
         assert "neighbor_significant" in report_text, "H1 should display neighbor_significant"
+        assert "validity" in report_text, "H1 should display validity"
         assert "spearman_significant" in report_text, "H2 should display spearman_significant"
         assert "n_strong_families" in report_text, "H3 should display n_strong_families"
         assert "n_weak_families" in report_text, "H3 should display n_weak_families"
@@ -2200,7 +2199,7 @@ def test_49_report_regression_latest_fields():
         assert report_path.exists(), "analysis_report.md should be written"
         report_text = report_path.read_text()
 
-        old_fields = ["probe", "neighbor", "spearman_sig", "probe_sig", "neighbor_sig",
+        old_fields = ["spearman_sig", "probe_sig", "neighbor_sig",
                       "n_strong", "n_weak"]
         for old_field in old_fields:
             assert old_field not in report_text, (
