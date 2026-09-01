@@ -490,11 +490,51 @@ def get_image_grid_from_model(vlm_with_expert, prepared_image, n_tokens):
 # Environment and input creation
 # ============================================================
 
+def get_task_language_instruction(task_name):
+    """Read metaworld_config.json and return the natural language instruction for the given task.
+
+    Args:
+        task_name: Task name string (e.g. "pick-place-v3").
+
+    Returns:
+        Natural language instruction string.
+
+    Raises:
+        FileNotFoundError: If metaworld_config.json does not exist.
+        ValueError: If JSON is malformed.
+        KeyError: If task_name is not found in the config.
+    """
+    config_path = PROJECT_ROOT / "src/lerobot/envs/metaworld_config.json"
+    if not config_path.exists():
+        raise FileNotFoundError(
+            f"metaworld_config.json not found at {config_path}"
+        )
+    try:
+        with open(config_path, "r") as f:
+            config = json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(
+            f"Failed to parse metaworld_config.json: {e}"
+        )
+
+    task_descriptions = config.get("TASK_DESCRIPTIONS", {})
+    if task_name not in task_descriptions:
+        raise KeyError(
+            f"Task '{task_name}' not found in metaworld_config.json. "
+            f"Available tasks: {list(task_descriptions.keys())}"
+        )
+
+    return task_descriptions[task_name]
+
+
 def create_metaworld_input(task, seed, camera_name, device):
     """Create MetaWorld environment and get observation.
 
     Images are converted: uint8 [0,255] -> float32 / 255.0 -> [0,1]
     This matches the real eval pipeline where prepare_images() does img * 2 - 1.
+
+    Reads natural language instruction from metaworld_config.json and stores it
+    in model_data["language_instruction"].
     """
     env = MetaworldEnv(
         task=task,
@@ -525,6 +565,8 @@ def create_metaworld_input(task, seed, camera_name, device):
 
     state_tensor = torch.from_numpy(state.copy()).unsqueeze(0).float()
 
+    language_instruction = get_task_language_instruction(task)
+
     print(f"  camera1 (top) shape={top_img_tensor.shape} dtype={top_img_tensor.dtype} "
           f"min={top_img_tensor.min().item():.4f} max={top_img_tensor.max().item():.4f}")
     if wrist_img_tensor is not None:
@@ -536,6 +578,7 @@ def create_metaworld_input(task, seed, camera_name, device):
         "observation.images.camera2": wrist_img_tensor.to(device) if wrist_img_tensor is not None else None,
         "observation.state": state_tensor.to(device),
         "task": env.task_description,
+        "language_instruction": language_instruction,
         "top_image_np": top_image_np,
         "wrist_image_np": wrist_image_np,
         "state": state,
@@ -561,15 +604,19 @@ def prepare_batch_for_model(model_data, policy, device):
     batch["observation.state"] = model_data["observation.state"]
 
     processor = policy.model.vlm_with_expert.processor
-    task = model_data["task"]
 
-    # NewLineTaskProcessorStep equivalent: ensure task ends with '\n'
-    if not task.endswith("\n"):
-        task = task + "\n"
+    # Use natural language instruction from metaworld_config.json instead of task name
+    language_instruction = model_data.get("language_instruction")
+    if language_instruction is None:
+        language_instruction = model_data["task"]
+
+    # NewLineTaskProcessorStep equivalent: ensure instruction ends with '\n'
+    if not language_instruction.endswith("\n"):
+        language_instruction = language_instruction + "\n"
 
     # TokenizerProcessorStep equivalent: use config values, NOT processor.tokenizer.model_max_length
     text_inputs = processor.tokenizer(
-        task,
+        language_instruction,
         return_tensors="pt",
         padding=policy.config.pad_language_to,
         padding_side="right",
@@ -1917,14 +1964,20 @@ def extract_inference_trace_from_model(
 
 
 def run_sanity_check(policy, batch, shared_noise, device):
-    """Verify sample_actions and sample_actions_with_trace produce identical output."""
+    """Verify sample_actions and sample_actions_with_trace produce identical output.
+
+    Reuses the already-prepared batch fields instead of calling
+    policy.model.prepare_images/prepare_language/prepare_state (which do not exist
+    on VLAFlowMatching).
+    """
 
     policy.model.eval()
 
-    # Use the same preprocessing path as inference_trace
-    images, img_masks = policy.model.prepare_images(batch)
-    lang_tokens, lang_masks = policy.model.prepare_language(batch)
-    state = policy.model.prepare_state(batch)
+    # Reuse the same extraction path as extract_inference_trace_from_model()
+    images, img_masks = policy.prepare_images(batch)
+    state = policy.prepare_state(batch)
+    lang_tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
+    lang_masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
 
     # SmolVLM attention requires bool masks
     if isinstance(img_masks, list):
@@ -2131,7 +2184,8 @@ def _plot_pairwise_action_divergence(model_names, all_model_traces, plots_dir, g
             v_t_a_s = v_t_a[:min_steps]
             v_t_b_s = v_t_b[:min_steps]
 
-            v_t_l2 = torch.norm(v_t_a_s - v_t_b_s, dim=(1, 2)).cpu().numpy()
+            v_t_diff = (v_t_a_s - v_t_b_s).reshape(min_steps, -1)
+            v_t_l2 = torch.norm(v_t_diff, dim=1).cpu().numpy()
 
             v_t_a_flat = v_t_a_s.reshape(min_steps, -1)
             v_t_b_flat = v_t_b_s.reshape(min_steps, -1)
@@ -2238,6 +2292,9 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
     print(f"  policy.config.image_features: {policy.config.image_features}")
     print(f"  Task: {TASK}")
 
+    language_instruction = get_task_language_instruction(TASK)
+    print(f"  Language instruction: {language_instruction}")
+
     model_dir = output_dir / model_name / f"seed_{seed}"
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -2251,6 +2308,9 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
         "layer_indices": layer_indices,
         "average_heads": average_heads,
         "max_steps": max_steps,
+        "task_name": TASK,
+        "language_instruction": language_instruction,
+        "language_instruction_source": "metaworld_config.json",
         "phase_detection_thresholds": {
             "gripper_object_dist_pre_grasp": GRIPPER_OBJECT_DIST_PRE_GRASP,
             "object_height_post_grasp": OBJECT_HEIGHT_POST_GRASP,
@@ -2537,6 +2597,8 @@ def main():
                         help="Comma-separated denoising steps for heatmap generation, e.g. first,mid,last or 0,5,9.")
     parser.add_argument("--sanity-check", action="store_true",
                         help="Run sanity check comparing sample_actions vs sample_actions_with_trace.")
+    parser.add_argument("--load-from-cache", action="store_true",
+                        help="Load trace.pt and metadata.json from cache instead of re-running inference (inference_trace mode only).")
 
     args = parser.parse_args()
 
@@ -2575,99 +2637,173 @@ def main():
     if args.mode == "inference_trace":
         noise_seed = args.noise_seed if args.noise_seed is not None else args.seed
 
-        camera_groups = {}
-        for mc in models_to_process:
-            cam = mc["camera_name"]
-            if cam not in camera_groups:
-                camera_groups[cam] = []
-            camera_groups[cam].append(mc["name"])
+        if args.load_from_cache:
+            print(f"{'='*80}")
+            print("Loading from cache (skip inference)")
+            print(f"{'='*80}")
 
-        for cam_group, model_names_in_group in camera_groups.items():
-            print(f"\n{'#'*80}")
-            print(f"# Processing camera group: {cam_group}")
-            print(f"# Models: {model_names_in_group}")
-            print(f"{'#'*80}")
+            inference_json = output_dir / "inference_attention_trace.json"
+            if inference_json.exists():
+                with open(inference_json, "r") as f:
+                    all_rows = json.load(f)
+                print(f"  Loaded {len(all_rows)} attention rows from {inference_json}")
+            else:
+                inference_csv = output_dir / "inference_attention_trace.csv"
+                if inference_csv.exists():
+                    import csv
+                    all_rows = []
+                    with open(inference_csv, "r") as f:
+                        reader = csv.DictReader(f)
+                        for row in reader:
+                            for key in ["denoise_index", "timestep", "layer", "query_length",
+                                        "key_length", "query_count", "camera1_mass", "camera2_mass",
+                                        "visual_total", "language_mass", "state_mass", "suffix_mass",
+                                        "other_mass", "x_t_norm", "v_t_norm", "suffix_hidden_norm"]:
+                                if key in row and row[key] != "":
+                                    try:
+                                        row[key] = float(row[key])
+                                    except ValueError:
+                                        pass
+                            all_rows.append(row)
+                    print(f"  Loaded {len(all_rows)} attention rows from {inference_csv}")
+                else:
+                    print("  WARNING: no cached attention rows found, using empty list")
+                    all_rows = []
 
-            first_model_cfg = None
+            camera_groups = {}
             for mc in models_to_process:
-                if mc["name"] in model_names_in_group:
-                    first_model_cfg = mc
-                    break
+                cam = mc["camera_name"]
+                if cam not in camera_groups:
+                    camera_groups[cam] = []
+                camera_groups[cam].append(mc["name"])
 
-            shared_noise = None
-            shared_model_data = None
-            reference_input_signature = None
-            shared_env = None
-            first_policy = None
+            all_model_traces = {}
+            for mc in models_to_process:
+                model_name = mc["name"]
+                model_dir = output_dir / model_name / f"seed_{args.seed}"
+                trace_pt_path = model_dir / "trace.pt"
+                metadata_path = model_dir / "metadata.json"
 
-            if first_model_cfg is not None:
-                p = Path(first_model_cfg["path"])
-                if not p.is_absolute():
-                    p = PROJECT_ROOT / p
-                if p.exists():
-                    first_policy = SmolVLAPolicy.from_pretrained(str(p))
-                    first_policy = first_policy.to(device)
-                    first_policy.eval()
+                if not trace_pt_path.exists():
+                    print(f"  WARNING: trace.pt not found for {model_name} at {trace_pt_path}")
+                    continue
 
-                    shared_model_data = create_metaworld_input(TASK, args.seed, cam_group, device)
-                    shared_env = shared_model_data["env"]
-                    shared_batch = prepare_batch_for_model(shared_model_data, first_policy, device)
+                trace_pt = torch.load(trace_pt_path, map_location="cpu")
+                print(f"  Loaded trace.pt for {model_name} ({trace_pt_path})")
 
-                    shared_noise = create_shared_initial_noise(
-                        first_policy.config.chunk_size,
-                        first_policy.config.max_action_dim,
-                        noise_seed,
-                        device,
-                    )
+                if metadata_path.exists():
+                    with open(metadata_path, "r") as f:
+                        metadata = json.load(f)
+                else:
+                    metadata = {"model_name": model_name, "method": mc["method"]}
 
-                    reference_input_signature = build_input_signature(
-                        shared_model_data, shared_batch, first_policy, shared_noise
-                    )
+                trace_result = {
+                    "attention_rows": [],
+                    "step_traces": [],
+                    "final_action": trace_pt.get("final_action"),
+                    "metadata": metadata,
+                    "initial_noise": trace_pt.get("initial_noise"),
+                    "x_t_tensor": trace_pt.get("x_t", torch.empty(0)),
+                    "v_t_tensor": trace_pt.get("v_t", torch.empty(0)),
+                    "suffix_hidden_tensor": trace_pt.get("suffix_hidden", torch.empty(0)),
+                    "timesteps_tensor": trace_pt.get("timesteps", torch.empty(0)),
+                }
+                all_model_traces[model_name] = trace_result
 
-                    print(f"\n  Camera group '{cam_group}' reference input signature:")
-                    for key in ["camera1_raw_sha256", "camera2_raw_sha256", "state_sha256",
-                                "language_tokens_sha256", "noise_sha256"]:
-                        val = reference_input_signature.get(key, "N/A")
-                        if isinstance(val, str) and len(val) > 16:
-                            val = val[:16] + "..."
-                        print(f"    {key}: {val}")
+            print(f"\n  Loaded traces for {len(all_model_traces)} models from cache")
 
-                    del first_policy
-                    first_policy = None
-                    torch.cuda.empty_cache()
+        else:
+            camera_groups = {}
+            for mc in models_to_process:
+                cam = mc["camera_name"]
+                if cam not in camera_groups:
+                    camera_groups[cam] = []
+                camera_groups[cam].append(mc["name"])
 
-            try:
-                for model_cfg in models_to_process:
-                    if model_cfg["name"] not in model_names_in_group:
-                        continue
+            for cam_group, model_names_in_group in camera_groups.items():
+                print(f"# Processing camera group: {cam_group}")
+                print(f"# Models: {model_names_in_group}")
 
-                    result = process_single_model(
-                        model_cfg, device, args.seed, args.mode, args.query_mode,
-                        output_dir, layer_indices, average_heads, args.max_steps,
-                        noise_seed=noise_seed,
-                        heatmap_steps_str=args.trace_heatmap_steps,
-                        shared_noise=shared_noise,
-                        shared_model_data=shared_model_data,
-                        reference_input_signature=reference_input_signature,
-                        reference_model_name=first_model_cfg["name"] if first_model_cfg else None,
-                        do_sanity_check=args.sanity_check,
-                    )
+                first_model_cfg = None
+                for mc in models_to_process:
+                    if mc["name"] in model_names_in_group:
+                        first_model_cfg = mc
+                        break
 
-                    if result is not None:
-                        rows, trace_result = result
-                        if rows:
-                            all_rows.extend(rows)
-                        if trace_result is not None:
-                            all_model_traces[model_cfg["name"]] = trace_result
+                shared_noise = None
+                shared_model_data = None
+                reference_input_signature = None
+                shared_env = None
+                first_policy = None
 
-                    torch.cuda.empty_cache()
-            finally:
-                if shared_env is not None:
-                    try:
-                        shared_env.close()
-                    except Exception:
-                        pass
-                    shared_env = None
+                if first_model_cfg is not None:
+                    p = Path(first_model_cfg["path"])
+                    if not p.is_absolute():
+                        p = PROJECT_ROOT / p
+                    if p.exists():
+                        first_policy = SmolVLAPolicy.from_pretrained(str(p))
+                        first_policy = first_policy.to(device)
+                        first_policy.eval()
+
+                        shared_model_data = create_metaworld_input(TASK, args.seed, cam_group, device)
+                        shared_env = shared_model_data["env"]
+                        shared_batch = prepare_batch_for_model(shared_model_data, first_policy, device)
+
+                        shared_noise = create_shared_initial_noise(
+                            first_policy.config.chunk_size,
+                            first_policy.config.max_action_dim,
+                            noise_seed,
+                            device,
+                        )
+
+                        reference_input_signature = build_input_signature(
+                            shared_model_data, shared_batch, first_policy, shared_noise
+                        )
+
+                        print(f"\n  Camera group '{cam_group}' reference input signature:")
+                        for key in ["camera1_raw_sha256", "camera2_raw_sha256", "state_sha256",
+                                    "language_tokens_sha256", "noise_sha256"]:
+                            val = reference_input_signature.get(key, "N/A")
+                            if isinstance(val, str) and len(val) > 16:
+                                val = val[:16] + "..."
+                            print(f"    {key}: {val}")
+
+                        del first_policy
+                        first_policy = None
+                        torch.cuda.empty_cache()
+
+                try:
+                    for model_cfg in models_to_process:
+                        if model_cfg["name"] not in model_names_in_group:
+                            continue
+
+                        result = process_single_model(
+                            model_cfg, device, args.seed, args.mode, args.query_mode,
+                            output_dir, layer_indices, average_heads, args.max_steps,
+                            noise_seed=noise_seed,
+                            heatmap_steps_str=args.trace_heatmap_steps,
+                            shared_noise=shared_noise,
+                            shared_model_data=shared_model_data,
+                            reference_input_signature=reference_input_signature,
+                            reference_model_name=first_model_cfg["name"] if first_model_cfg else None,
+                            do_sanity_check=args.sanity_check,
+                        )
+
+                        if result is not None:
+                            rows, trace_result = result
+                            if rows:
+                                all_rows.extend(rows)
+                            if trace_result is not None:
+                                all_model_traces[model_cfg["name"]] = trace_result
+
+                        torch.cuda.empty_cache()
+                finally:
+                    if shared_env is not None:
+                        try:
+                            shared_env.close()
+                        except Exception:
+                            pass
+                        shared_env = None
 
         if all_model_traces:
             generate_inference_trace_summary_plots(

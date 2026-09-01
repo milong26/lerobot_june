@@ -219,4 +219,5 @@ personal/work2/dataset_view/*
 *.logtests/data/aloha_sim_insertion_human/data_dict.pth
 personal/work2/dataset_lookin/first_frame/*
 
-
+**/heatmaps/*
+*.pt
