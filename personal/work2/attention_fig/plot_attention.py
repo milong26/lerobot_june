@@ -1917,35 +1917,69 @@ def extract_inference_trace_from_model(
 
 
 def run_sanity_check(policy, batch, shared_noise, device):
-    """Verify that sample_actions_with_trace produces identical output to sample_actions.
+    """Verify sample_actions and sample_actions_with_trace produce identical output."""
 
-    Args:
-        policy: SmolVLAPolicy in eval mode.
-        batch: Prepared input batch.
-        shared_noise: Same initial noise for both calls.
-        device: Target device.
+    policy.model.eval()
 
-    Returns:
-        Dict with max_abs_diff and mean_abs_diff.
-    """
-    images, img_masks = policy.prepare_images(batch)
-    state = policy.prepare_state(batch)
-    lang_tokens = batch[f"{OBS_LANGUAGE_TOKENS}"]
-    lang_masks = batch[f"{OBS_LANGUAGE_ATTENTION_MASK}"]
+    # Use the same preprocessing path as inference_trace
+    images, img_masks = policy.model.prepare_images(batch)
+    lang_tokens, lang_masks = policy.model.prepare_language(batch)
+    state = policy.model.prepare_state(batch)
+
+    # SmolVLM attention requires bool masks
+    if isinstance(img_masks, list):
+        img_masks = [
+            m.bool() if m is not None else None
+            for m in img_masks
+        ]
+    elif img_masks is not None:
+        img_masks = img_masks.bool()
+
+    if lang_masks is not None:
+        lang_masks = lang_masks.bool()
 
     with torch.no_grad():
+
         action_baseline = policy.model.sample_actions(
-            images, img_masks, lang_tokens, lang_masks, state, noise=shared_noise
+            images,
+            img_masks,
+            lang_tokens,
+            lang_masks,
+            state,
+            noise=shared_noise,
         )
+
         action_trace = policy.model.sample_actions_with_trace(
-            images, img_masks, lang_tokens, lang_masks, state, noise=shared_noise, trace_callback=None
+            images,
+            img_masks,
+            lang_tokens,
+            lang_masks,
+            state,
+            noise=shared_noise,
+            trace_callback=None,
         )
 
     diff = (action_baseline - action_trace).abs()
-    return {
+
+    result = {
         "max_abs_diff": float(diff.max().item()),
         "mean_abs_diff": float(diff.mean().item()),
+        "baseline_shape": list(action_baseline.shape),
+        "trace_shape": list(action_trace.shape),
+        "passed": bool(torch.allclose(
+            action_baseline,
+            action_trace,
+            rtol=1e-5,
+            atol=1e-5,
+        )),
     }
+
+    print("Sanity check result:")
+    print(f"  max_abs_diff: {result['max_abs_diff']}")
+    print(f"  mean_abs_diff: {result['mean_abs_diff']}")
+    print(f"  passed: {result['passed']}")
+
+    return result
 
 
 def generate_inference_trace_summary_plots(

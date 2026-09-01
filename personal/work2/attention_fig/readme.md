@@ -13,16 +13,20 @@ python personal/work2/attention_fig/plot_attention.py \
   --average-heads \
   2>&1 | tee personal/work2/attention_fig/attention_probe_all.log
 
-
-# 结论是什么
-不同数据集微调模型的成功率高低，能否用注意力图来解释？
-
-
-
-# 结果怎么看
-看图？
-
-
-
-# 复用
-我的ours应该有问题，所以下次看代码的时候肯定还要再看
+修改了代码以后执行新的
+cd /data/zhonglinye/jun/lerobot
+conda activate lb_server
+export CUDA_VISIBLE_DEVICES=0
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+nohup python personal/work2/attention_fig/plot_attention.py \
+  --mode inference_trace \
+  --device cuda \
+  --seed 10042 \
+  --noise-seed 10042 \
+  --query-mode mean_suffix \
+  --layers 3,7,11 \
+  --trace-heatmap-steps first,mid,last \
+  --sanity-check \
+  --output-dir personal/work2/attention_fig/result_inference_trace \
+  > personal/work2/attention_fig/inference_trace.log 2>&1 &
