@@ -46,6 +46,7 @@ TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
 TRAIN_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/duibi/train_and_eval_scripts/train_and_eval.sh"
 OUR_V2_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our_v2"
+OUR_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our"
 
 mkdir -p "\$LOG_DIR"
 
@@ -65,21 +66,56 @@ echo "========================================"
 echo ""
 
 DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_\${DATASET_NAME}"
-EMBEDDINGS_DIR="\$OUTPUT_BASE_DIR/embeddings"
 RESULTS_DIR="\$OUTPUT_BASE_DIR/results"
 SUBSET_DIR="\$OUTPUT_BASE_DIR/subsets"
 
-mkdir -p "\$EMBEDDINGS_DIR" "\$RESULTS_DIR" "\$SUBSET_DIR"
+mkdir -p "\$RESULTS_DIR" "\$SUBSET_DIR"
 
-# Step 1: Extract embeddings (reuse v1 embedding extraction)
-echo "=== Step 1: Extracting VLM embeddings ==="
-python "/data/zhonglinye/jun/lerobot/personal/work2/our/embeddings/extract_embeddings.py" \\
-    --dataset-dir "\$DATASET_DIR" \\
-    --output-dir "\$EMBEDDINGS_DIR" \\
-    --n-components 32 \\
-    --device cuda
+# Step 1: Find existing visual embedding (reuse, do not re-extract)
+echo "=== Step 1: Looking for existing visual embeddings ==="
+
+V2_EMBEDDINGS_DIR="\$OUTPUT_BASE_DIR/embeddings"
+V1_EMBEDDINGS_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_112_seed42_\${DATASET_NAME}/embeddings"
+
+EMBEDDINGS_DIR=""
+
+# Priority 1: Check v2 experiment directory
+if [ -d "\$V2_EMBEDDINGS_DIR" ] && [ "\$(ls -A \$V2_EMBEDDINGS_DIR/*.npy 2>/dev/null)" ]; then
+    EMBEDDINGS_DIR="\$V2_EMBEDDINGS_DIR"
+    echo "Embedding source: v2 directory"
+    echo "Embedding path: \$EMBEDDINGS_DIR"
+# Priority 2: Check v1 ours directory
+elif [ -d "\$V1_EMBEDDINGS_DIR" ] && [ "\$(ls -A \$V1_EMBEDDINGS_DIR/*.npy 2>/dev/null)" ]; then
+    EMBEDDINGS_DIR="\$V1_EMBEDDINGS_DIR"
+    echo "Embedding source: v1 directory (reuse)"
+    echo "Embedding path: \$EMBEDDINGS_DIR"
+else
+    echo "ERROR: No existing visual embedding found for v2 or v1 directory."
+    echo "  v2 directory: \$V2_EMBEDDINGS_DIR"
+    echo "  v1 directory: \$V1_EMBEDDINGS_DIR"
+    echo "Please run embedding extraction first:"
+    echo "  python \$OUR_DIR/embeddings/extract_embeddings.py \\"
+    echo "      --dataset-dir \$DATASET_DIR \\"
+    echo "      --output-dir \$V2_EMBEDDINGS_DIR \\"
+    echo "      --n-components 32 \\"
+    echo "      --device cuda"
+    exit 1
+fi
+
+# Copy embeddings to v2 directory for future reuse (if using v1)
+if [ "\$EMBEDDINGS_DIR" = "\$V1_EMBEDDINGS_DIR" ]; then
+    echo "Copying v1 embeddings to v2 directory for future reuse..."
+    mkdir -p "\$V2_EMBEDDINGS_DIR"
+    cp "\$V1_EMBEDDINGS_DIR"/*.npy "\$V2_EMBEDDINGS_DIR/"
+    EMBEDDINGS_DIR="\$V2_EMBEDDINGS_DIR"
+    echo "Embedding source: v1 directory (copied to v2)"
+    echo "Embedding path: \$EMBEDDINGS_DIR"
+fi
+
+echo "Final embedding directory: \$EMBEDDINGS_DIR"
 
 # Step 2: Run v2 sequential greedy selection with action embedding
+echo ""
 echo "=== Step 2: Running Dynamic Anchor v2 episode selection ==="
 python "\$OUR_V2_DIR/experiments/select_episodes_v2.py" \\
     --dataset-root "\$DATASET_DIR" \\
