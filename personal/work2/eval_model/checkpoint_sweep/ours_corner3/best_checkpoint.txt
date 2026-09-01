@@ -1,0 +1,1 @@
+personal/work2/duibi/ours_112_seed42_corner3/dynamicanchor_112_seed42/checkpoints/008000/pretrained_model
