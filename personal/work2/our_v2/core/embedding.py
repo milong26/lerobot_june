@@ -15,6 +15,16 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+from our_v2.config import VISUAL_WEIGHT, ACTION_WEIGHT, VISUAL_NORMALIZE, ACTION_NORMALIZE
+
+
+def _l2_normalize(vec: np.ndarray) -> np.ndarray:
+    """L2 normalize a 1-D vector."""
+    norm = np.linalg.norm(vec)
+    if norm < 1e-8:
+        return vec
+    return vec / norm
+
 
 def load_episode_embeddings(embedding_dir: Path) -> Dict[int, Dict]:
     """
@@ -70,15 +80,16 @@ def build_state_action_embedding(
     use_action: bool = False,
 ) -> Dict[int, np.ndarray]:
     """
-    Build state-action joint embedding.
+    Build state-action joint embedding with proper normalization and weighting.
 
-    If action_embeddings is provided and use_action is True, concatenate
-    visual (global+wrist) with action embedding.
-
-    If action embedding is not available, fall back to visual-only with a warning.
+    Processing pipeline:
+    1. Visual: normalize global, normalize wrist, concat, normalize again.
+    2. Action: normalize if available.
+    3. Fusion: concat(visual * VISUAL_WEIGHT, action * ACTION_WEIGHT).
+    4. Fallback: if action not available, use visual-only.
 
     Args:
-        embeddings: visual embedding dict.
+        embeddings: visual embedding dict with phi_global and phi_wrist.
         action_embeddings: optional action embedding dict.
         use_action: whether to include action embedding.
 
@@ -87,39 +98,61 @@ def build_state_action_embedding(
     """
     state_action = {}
 
-    if use_action and action_embeddings:
-        available_action_eps = set(action_embeddings.keys())
-        visual_eps = set(embeddings.keys())
-        common_eps = visual_eps & available_action_eps
+    # Step 1: Build normalized visual embeddings
+    visual_embs = {}
+    for ep_idx, data in embeddings.items():
+        phi_global = data["phi_global"]
+        phi_wrist = data["phi_wrist"]
 
-        if len(common_eps) < len(visual_eps):
-            missing = visual_eps - available_action_eps
-            warnings.warn(
-                f"Action embedding missing for {len(missing)} episodes. "
-                f"Falling back to visual-only for those episodes."
-            )
+        if VISUAL_NORMALIZE:
+            phi_global = _l2_normalize(phi_global)
+            phi_wrist = _l2_normalize(phi_wrist)
 
-        for ep_idx in embeddings:
-            phi_global = embeddings[ep_idx]["phi_global"]
-            phi_wrist = embeddings[ep_idx]["phi_wrist"]
-            visual_combined = np.concatenate([phi_global, phi_wrist], axis=0)
+        visual_combined = np.concatenate([phi_global, phi_wrist], axis=0)
 
-            if ep_idx in action_embeddings:
-                state_action[ep_idx] = np.concatenate(
-                    [visual_combined, action_embeddings[ep_idx]], axis=0
-                )
-            else:
-                state_action[ep_idx] = visual_combined
+        if VISUAL_NORMALIZE:
+            visual_combined = _l2_normalize(visual_combined)
+
+        visual_embs[ep_idx] = visual_combined
+
+    visual_dim = len(visual_embs[next(iter(visual_embs))])
+    print(f"  Visual embedding dimension: {visual_dim}")
+
+    # Step 2: Check action embedding availability
+    has_action = use_action and action_embeddings and len(action_embeddings) > 0
+
+    if use_action and not has_action:
+        warnings.warn(
+            "use_action=True but no action_embeddings provided or empty. "
+            "Falling back to visual-only embedding."
+        )
+
+    # Step 3: Build state-action embeddings
+    for ep_idx in embeddings:
+        visual_part = visual_embs[ep_idx] * VISUAL_WEIGHT
+
+        if has_action and ep_idx in action_embeddings:
+            action_emb = action_embeddings[ep_idx]
+            if ACTION_NORMALIZE:
+                action_emb = _l2_normalize(action_emb)
+            action_part = action_emb * ACTION_WEIGHT
+
+            combined = np.concatenate([visual_part, action_part], axis=0)
+            state_action[ep_idx] = combined
+        else:
+            state_action[ep_idx] = visual_part
+
+    # Step 4: Log dimensions
+    sample_emb = state_action[next(iter(state_action))]
+    final_dim = len(sample_emb)
+
+    if has_action:
+        action_dim = len(action_embeddings[next(iter(action_embeddings))])
+        print(f"  Action embedding dimension: {action_dim}")
     else:
-        if use_action and not action_embeddings:
-            warnings.warn(
-                "use_action=True but no action_embeddings provided. "
-                "Falling back to visual-only embedding."
-            )
-        for ep_idx, data in embeddings.items():
-            state_action[ep_idx] = np.concatenate(
-                [data["phi_global"], data["phi_wrist"]], axis=0
-            )
+        print(f"  Action embedding dimension: N/A (visual-only)")
+
+    print(f"  Final state-action embedding dimension: {final_dim}")
 
     return state_action
 
@@ -138,9 +171,5 @@ def normalize_embedding(
     """
     normalized = {}
     for ep_idx, emb in embeddings.items():
-        norm = np.linalg.norm(emb)
-        if norm < 1e-8:
-            normalized[ep_idx] = emb
-        else:
-            normalized[ep_idx] = emb / norm
+        normalized[ep_idx] = _l2_normalize(emb)
     return normalized

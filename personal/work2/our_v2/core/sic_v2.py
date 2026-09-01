@@ -9,6 +9,38 @@ import numpy as np
 from typing import Dict, List, Tuple
 
 
+def validate_embedding_dimension(embeddings: Dict[int, np.ndarray]) -> int:
+    """
+    Validate that all episode embeddings have consistent dimensions.
+
+    Args:
+        embeddings: dict of episode embeddings.
+
+    Returns:
+        Embedding dimension.
+
+    Raises:
+        ValueError: if dimensions are inconsistent.
+    """
+    if not embeddings:
+        raise ValueError("No embeddings provided for validation.")
+
+    indices = list(embeddings.keys())
+    ref_dim = embeddings[indices[0]].shape[0]
+
+    for idx in indices[1:]:
+        dim = embeddings[idx].shape[0]
+        if dim != ref_dim:
+            raise ValueError(
+                f"Inconsistent embedding dimensions: "
+                f"episode {indices[0]} has dim={ref_dim}, "
+                f"episode {idx} has dim={dim}. "
+                f"All embeddings must have the same dimension."
+            )
+
+    return ref_dim
+
+
 def compute_pairwise_distance(
     emb_a: np.ndarray,
     emb_b: np.ndarray,
@@ -59,6 +91,7 @@ def compute_bandwidth(embeddings: Dict[int, np.ndarray], k: int = 5) -> float:
         return 1.0
 
     embs = np.array([embeddings[i] for i in indices])
+    emb_dim = embs.shape[1]
     k_actual = min(k, n - 1)
 
     knn_dists = []
@@ -70,6 +103,9 @@ def compute_bandwidth(embeddings: Dict[int, np.ndarray], k: int = 5) -> float:
     bandwidth = float(np.mean(knn_dists))
     if bandwidth < 1e-8:
         bandwidth = 1.0
+
+    print(f"  compute_bandwidth: n_episodes={n}, embedding_dim={emb_dim}, bandwidth={bandwidth:.4f}")
+
     return bandwidth
 
 

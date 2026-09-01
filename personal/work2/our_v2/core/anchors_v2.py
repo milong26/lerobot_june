@@ -19,6 +19,7 @@ from our_v2.core.sic_v2 import (
     compute_bandwidth,
     compute_sic_total,
     compute_candidate_score,
+    validate_embedding_dimension,
 )
 
 
@@ -57,7 +58,7 @@ def select_next_episode(
     Args:
         selected_indices: currently selected episode indices.
         candidate_indices: remaining candidate episode indices.
-        embeddings: episode embedding dict.
+        embeddings: episode embedding dict (state-action embeddings).
         bandwidth: kernel bandwidth.
         k: kNN parameter for redundancy.
 
@@ -96,7 +97,7 @@ def sequential_greedy_selection(
     Sequential greedy selection: pick one episode at a time, recompute gains.
 
     Args:
-        embeddings: episode embedding dict.
+        embeddings: episode embedding dict (state-action embeddings).
         initial_selected: initial seed episode indices.
         target_size: target number of selected episodes.
         k: kNN parameter for redundancy.
@@ -105,6 +106,9 @@ def sequential_greedy_selection(
     Returns:
         Dict with selected_episode_indices and selection log.
     """
+    # Validate embedding dimensions before selection
+    emb_dim = validate_embedding_dimension(embeddings)
+
     all_indices = sorted(embeddings.keys())
     selected = list(initial_selected)
     remaining = [i for i in all_indices if i not in selected]
@@ -116,6 +120,7 @@ def sequential_greedy_selection(
         print(f"Sequential Greedy Selection (v2)")
         print(f"{'='*60}")
         print(f"Total episodes: {len(all_indices)}")
+        print(f"Embedding dimension: {emb_dim}")
         print(f"Initial seed: {len(selected)}")
         print(f"Target size: {target_size}")
         print(f"Bandwidth: {bandwidth:.4f}")

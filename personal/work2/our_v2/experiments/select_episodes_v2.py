@@ -18,6 +18,7 @@ Usage:
 
 import sys
 import json
+import warnings
 import argparse
 import time
 from pathlib import Path
@@ -83,16 +84,30 @@ def main():
         print("Error: No visual embeddings found.")
         return
 
+    n_visual = len(visual_embeddings)
+    print(f"  Visual embedding episodes: {n_visual}")
+
     # Step 2: Load action embeddings (optional)
     action_embeddings = None
-    if args.use_action_embedding and action_trace_dir and action_trace_dir.exists():
-        print(f"\n[Step 2] Loading action embeddings from {action_trace_dir}...")
-        action_embeddings = build_action_embeddings(
-            action_trace_dir,
-            episode_indices=list(visual_embeddings.keys()),
-        )
-    elif args.use_action_embedding:
-        print(f"\n[Step 2] Warning: --use-action-embedding set but trace dir not found. Falling back to visual-only.")
+    if args.use_action_embedding:
+        if action_trace_dir and action_trace_dir.exists():
+            print(f"\n[Step 2] Loading action embeddings from {action_trace_dir}...")
+            action_embeddings = build_action_embeddings(
+                action_trace_dir,
+                episode_indices=list(visual_embeddings.keys()),
+            )
+            n_action = len(action_embeddings)
+            print(f"  Action embedding episodes: {n_action}")
+            if n_action == 0:
+                warnings.warn(
+                    "No action embeddings loaded. Falling back to visual-only."
+                )
+        else:
+            trace_info = action_trace_dir if action_trace_dir else "not specified"
+            warnings.warn(
+                f"--use-action-embedding set but action trace dir not found: {trace_info}. "
+                "Falling back to visual-only."
+            )
 
     # Step 3: Build state-action embedding
     print(f"\n[Step 3] Building state-action embeddings...")
@@ -107,6 +122,8 @@ def main():
     sa_embeddings = normalize_embedding(sa_embeddings)
 
     all_indices = sorted(sa_embeddings.keys())
+    sample_emb = sa_embeddings[all_indices[0]]
+    print(f"  Final embedding dimension: {len(sample_emb)}")
     print(f"  Total episodes with embeddings: {len(all_indices)}")
 
     # Step 5: Initialize seed set

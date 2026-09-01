@@ -79,14 +79,16 @@ python "/data/zhonglinye/jun/lerobot/personal/work2/our/embeddings/extract_embed
     --n-components 32 \\
     --device cuda
 
-# Step 2: Run v2 sequential greedy selection
+# Step 2: Run v2 sequential greedy selection with action embedding
 echo "=== Step 2: Running Dynamic Anchor v2 episode selection ==="
 python "\$OUR_V2_DIR/experiments/select_episodes_v2.py" \\
     --dataset-root "\$DATASET_DIR" \\
     --embedding-dir "\$EMBEDDINGS_DIR" \\
     --output-dir "\$RESULTS_DIR" \\
     --num-selected "\$NUM_EPISODES" \\
-    --seed "\$SEED"
+    --seed "\$SEED" \\
+    --action-trace-dir "/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/result_inference_trace" \\
+    --use-action-embedding
 
 # Copy subset file to expected location
 SUBSET_FILE="\$SUBSET_DIR/dynamicanchor_v2_\${NUM_EPISODES}_seed\${SEED}.json"

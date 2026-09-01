@@ -247,15 +247,27 @@ def get_object_pose_from_sim(env, object_name):
     """
     从 MuJoCo simulator 中获取指定物体的 position。
     通过 body name 匹配，返回 xpos (3,)。
+    支持精确匹配和前缀匹配（例如 akita_black_bowl_1 可能对应 body name akita_black_bowl_1 或 akita_black_bowl）。
     """
     model = _get_mujoco_model(env)
     data = _get_mujoco_data(env)
 
     num_bodies = model.nbody
+    
+    # 第一次尝试精确匹配
     for i in range(num_bodies):
         name = model.body(i).name
         if name == object_name:
             return data.xpos[i].copy()
+    
+    # 如果精确匹配失败，尝试前缀匹配（去掉 _数字 后缀）
+    # 例如 akita_black_bowl_1 -> akita_black_bowl
+    base_name = "_".join(object_name.split("_")[:-1]) if "_" in object_name else object_name
+    for i in range(num_bodies):
+        name = model.body(i).name
+        if name == base_name or name.startswith(object_name):
+            return data.xpos[i].copy()
+    
     return None
 
 
@@ -265,6 +277,12 @@ def collect_object_pose_variance(env, object_names, num_samples=50, seed_start=0
     返回 dict: {object_name: [pose_array, ...]}
     """
     pose_records = {name: [] for name in object_names}
+    
+    # 调试：打印所有可用的 body names
+    model = _get_mujoco_model(env)
+    all_body_names = [model.body(i).name for i in range(model.nbody)]
+    print(f"  调试：MuJoCo model 中共有 {len(all_body_names)} 个 bodies")
+    print(f"  调试：前 50 个 body names: {all_body_names[:50]}")
 
     for i in range(num_samples):
         seed = seed_start + i
@@ -275,6 +293,9 @@ def collect_object_pose_variance(env, object_names, num_samples=50, seed_start=0
                 pose = get_object_pose_from_sim(env, name)
                 if pose is not None:
                     pose_records[name].append(pose)
+                else:
+                    if i == 0:
+                        print(f"  WARNING: 无法找到物体 '{name}' 的 body")
         except Exception as e:
             warnings.warn(f"Failed seed={seed}: {e}")
 
@@ -386,13 +407,14 @@ def remove_constant_dimensions(descriptors, threshold=1e-6):
     return stds > threshold
 
 
-def select_uniform_initial_states(candidates, num_target, varying_mask=None):
+def select_uniform_initial_states(candidates, num_target, varying_mask=None, checkpoint_file=None, checkpoint_interval=50):
     """
     使用 farthest-point sampling 从 candidate 中选择均匀覆盖初始化空间的子集。
     1. 对 descriptor 每一维按 min/max 归一化到 [0, 1]。
     2. 第一个点选择离归一化空间中心 (0.5, 0.5, ...) 最近的 candidate。
     3. 之后每次选择距离已选集合最近距离最大的 candidate（max-min diversity）。
     使用 tqdm 显示进度条。
+    支持 checkpoint 保存：每 checkpoint_interval 步保存中间状态到 checkpoint_file。
     """
     if not candidates:
         return []
@@ -423,13 +445,31 @@ def select_uniform_initial_states(candidates, num_target, varying_mask=None):
     for i in range(n):
         min_distances[i] = np.linalg.norm(descriptors_norm[i] - descriptors_norm[first_idx])
 
-    pbar = tqdm(range(1, num_select), desc="Selecting uniform states")
-    for _ in pbar:
+    # 加载 checkpoint（如果存在）
+    start_step = 1
+    if checkpoint_file is not None and Path(checkpoint_file).exists():
+        print(f"  加载 checkpoint: {checkpoint_file}")
+        ckpt = np.load(str(checkpoint_file))
+        selected_indices = ckpt["selected_indices"].tolist()
+        min_distances = ckpt["min_distances"].copy()
+        start_step = len(selected_indices)
+        print(f"  从第 {start_step} 步继续")
+
+    pbar = tqdm(range(start_step, num_select), desc="Selecting uniform states")
+    for step in pbar:
         next_idx = int(np.argmax(min_distances))
         selected_indices.append(next_idx)
         new_distances = np.linalg.norm(descriptors_norm - descriptors_norm[next_idx], axis=1)
         min_distances = np.minimum(min_distances, new_distances)
         pbar.set_postfix({"selected": len(selected_indices), "max_dist": f"{min_distances.max():.4f}"})
+        
+        # 保存 checkpoint
+        if checkpoint_file is not None and (step % checkpoint_interval == 0 or step == num_select - 1):
+            np.savez(
+                str(checkpoint_file),
+                selected_indices=np.array(selected_indices),
+                min_distances=min_distances,
+            )
 
     pbar.close()
     return selected_indices
@@ -685,20 +725,24 @@ def load_libero_demonstrations(suite_name, task_id):
     import h5py
 
     datasets_dir = Path(get_libero_path("datasets"))
-    demo_files = list(datasets_dir.glob(f"**/{suite_name}/**demo*.hdf5"))
-    if not demo_files:
-        demo_files = list(datasets_dir.glob(f"**/*{suite_name}*demo*.hdf5"))
-    if not demo_files:
-        demo_files = list(datasets_dir.glob(f"**/*demo*.hdf5"))
+    # 修复 glob 模式：** 必须是完整路径组件，不能和通配符混用
+    demo_files = []
+    for hdf5_file in datasets_dir.rglob("*.hdf5"):
+        if "demo" in hdf5_file.name:
+            demo_files.append(hdf5_file)
 
     if not demo_files:
         print(f"WARNING: No demonstration HDF5 files found in {datasets_dir}")
         return []
 
+    print(f"  Found {len(demo_files)} HDF5 files in {datasets_dir}")
+
     all_demos = []
     for demo_file in demo_files:
         try:
             with h5py.File(demo_file, "r") as f:
+                if "data" not in f:
+                    continue
                 demo_keys = [k for k in f["data"].keys() if k.startswith("demo_")]
                 for dk in demo_keys:
                     demo_grp = f["data"][dk]
@@ -897,9 +941,21 @@ def main():
     }
 
     print(f"\n  使用 farthest-point sampling 选择 {args.num_episodes} 个均匀初始状态...")
-    selected_indices = select_uniform_initial_states(candidates, args.num_episodes, varying_mask)
+    # 设置 checkpoint 文件路径
+    output_dir_path = Path(args.output_dir)
+    output_dir_path.mkdir(parents=True, exist_ok=True)
+    fps_checkpoint = output_dir_path / "fps_checkpoint.npz"
+    
+    selected_indices = select_uniform_initial_states(
+        candidates, args.num_episodes, varying_mask,
+        checkpoint_file=str(fps_checkpoint), checkpoint_interval=50,
+    )
     selected_candidates = [candidates[i] for i in selected_indices]
     print(f"  选中 {len(selected_candidates)} 个 uniform initial states")
+    
+    # 清理 checkpoint 文件（完成后不需要保留）
+    if fps_checkpoint.exists():
+        fps_checkpoint.unlink()
 
     # 6. 保存 uniform initial states
     print("\n[6/9] 保存 uniform initial states...")

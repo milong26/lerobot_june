@@ -20,7 +20,15 @@ KNN_K = 5
 VISUAL_EMBEDDING_DIM = 32  # per view (global + wrist)
 
 # Action embedding switch
-USE_ACTION_EMBEDDING = False
+USE_ACTION_EMBEDDING = True
 
 # Action embedding extraction method
 ACTION_EMBEDDING_METHOD = "combined"
+
+# Embedding weights for fusion
+ACTION_WEIGHT = 1.0
+VISUAL_WEIGHT = 1.0
+
+# Normalization flags
+ACTION_NORMALIZE = True
+VISUAL_NORMALIZE = True

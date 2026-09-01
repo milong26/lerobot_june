@@ -16,6 +16,13 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _to_numpy(tensor) -> np.ndarray:
+    """Convert torch tensor to numpy with detach().cpu().numpy()."""
+    if isinstance(tensor, torch.Tensor):
+        return tensor.detach().cpu().numpy()
+    return np.array(tensor)
+
+
 def load_action_trace(trace_path: Path) -> Optional[Dict]:
     """
     Load a single episode's action trace from trace.pt.
@@ -34,7 +41,7 @@ def load_action_trace(trace_path: Path) -> Optional[Dict]:
         trace = torch.load(trace_path, weights_only=False)
         return trace
     except Exception as e:
-        print(f"  Failed to load trace {trace_path}: {e}")
+        print(f"  [ERROR] Failed to load trace {trace_path}: {e}")
         return None
 
 
@@ -67,23 +74,23 @@ def extract_action_embedding(
 
     if method in ("xt_stats", "combined") and x_t is not None and x_t.numel() > 0:
         x_t_flat = x_t.reshape(x_t.shape[0], -1)
-        x_mean = x_t_flat.mean(dim=0).numpy()
-        x_std = x_t_flat.std(dim=0).numpy()
+        x_mean = _to_numpy(x_t_flat.mean(dim=0))
+        x_std = _to_numpy(x_t_flat.std(dim=0))
         parts.append(np.concatenate([x_mean, x_std]))
 
     if method in ("vt_stats", "combined") and v_t is not None and v_t.numel() > 0:
         v_t_flat = v_t.reshape(v_t.shape[0], -1)
-        v_mean = v_t_flat.mean(dim=0).numpy()
-        v_std = v_t_flat.std(dim=0).numpy()
+        v_mean = _to_numpy(v_t_flat.mean(dim=0))
+        v_std = _to_numpy(v_t_flat.std(dim=0))
         parts.append(np.concatenate([v_mean, v_std]))
 
     if method in ("hidden_mean", "combined") and suffix_hidden is not None and suffix_hidden.numel() > 0:
         h_flat = suffix_hidden.reshape(suffix_hidden.shape[0], -1)
-        h_mean = h_flat.mean(dim=0).numpy()
+        h_mean = _to_numpy(h_flat.mean(dim=0))
         parts.append(h_mean)
 
     if method == "final_action" and final_action is not None and final_action.numel() > 0:
-        parts.append(final_action.reshape(-1).numpy())
+        parts.append(_to_numpy(final_action.reshape(-1)))
 
     if not parts:
         raise ValueError("No valid action data found in trace for extraction.")
@@ -112,6 +119,8 @@ def build_action_embeddings(
         Dict[episode_index, action_embedding_array]
     """
     action_embeddings = {}
+    missing_count = 0
+    error_count = 0
 
     if episode_indices is None:
         episode_indices = []
@@ -128,17 +137,22 @@ def build_action_embeddings(
         if not trace_path.exists():
             trace_path = trace_dir / f"episode_{ep_idx}" / "trace.pt"
         if not trace_path.exists():
+            missing_count += 1
             continue
 
         trace = load_action_trace(trace_path)
         if trace is None:
+            error_count += 1
+            print(f"  [ERROR] Episode {ep_idx}: trace loading failed")
             continue
 
         try:
             emb = extract_action_embedding(trace, method=method)
             action_embeddings[ep_idx] = emb
         except ValueError as e:
-            print(f"  Skip episode {ep_idx}: {e}")
+            error_count += 1
+            print(f"  [ERROR] Episode {ep_idx}: {e}")
 
-    print(f"Built action embeddings for {len(action_embeddings)} episodes")
+    print(f"Built action embeddings for {len(action_embeddings)} episodes "
+          f"(missing: {missing_count}, errors: {error_count})")
     return action_embeddings
