@@ -50,6 +50,13 @@ OUR_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our"
 
 mkdir -p "\$LOG_DIR"
 
+# Initialize log file at the very beginning
+LOG_FILE="\$LOG_DIR/\$EXP_NAME.log"
+> "\$LOG_FILE"
+
+# Redirect all stdout and stderr to log file from this point forward
+exec > >(tee -a "\$LOG_FILE") 2>&1
+
 echo \$\$ > "\$PID_FILE"
 echo "Start time: \$(date '+%Y-%m-%d %H:%M:%S')" > "\$TIME_FILE"
 echo "PID: \$\$" >> "\$TIME_FILE"
@@ -172,8 +179,7 @@ lerobot-train \\
     --job_name=smolvla_\$EXP_NAME \\
     --output_dir="\$OUTPUT_BASE_DIR/\$EXP_NAME" \\
     --remove_features='["observation.environment_state"]' \\
-    --wandb.enable=true \\
-    2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
+    --wandb.enable=true
 
 echo "" >> "\$TIME_FILE"
 echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"

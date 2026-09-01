@@ -221,3 +221,5 @@ personal/work2/dataset_lookin/first_frame/*
 
 **/heatmaps/*
 *.pt
+
+personal/work2/dataset/libero/*

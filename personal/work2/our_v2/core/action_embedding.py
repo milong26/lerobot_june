@@ -74,21 +74,12 @@ def load_episode_actions(
         from_idx = dataset.meta.episodes["dataset_from_index"][ep_idx]
         to_idx = dataset.meta.episodes["dataset_to_index"][ep_idx]
 
-        action_frames = []
-        valid = True
-        for idx in range(from_idx, to_idx):
-            try:
-                frame = dataset[idx]
-                action_frames.append(frame[action_key])
-            except Exception as e:
-                print(f"  [WARN] Failed to load action for episode {ep_idx}, frame {idx}: {e}")
-                valid = False
-                break
-
-        if valid and action_frames:
-            action_array = np.array(action_frames)
+        try:
+            episode_slice = dataset.hf_dataset[from_idx:to_idx]
+            action_array = np.array(episode_slice[action_key])
             episode_actions[ep_idx] = action_array
-        else:
+        except Exception as e:
+            print(f"  [WARN] Failed to load actions for episode {ep_idx}: {e}")
             missing_count += 1
 
     print(f"Loaded action sequences for {len(episode_actions)} episodes (missing: {missing_count})")
