@@ -968,6 +968,7 @@ def test_28_alignment_duplicate_from_load_info():
         "Should use load_info invalid files with file+reason structure"
     assert alignment_info["embedding_npy_file_count"] == 22, "Should use load_info npy_file_count"
     assert alignment_info["embedding_valid_record_count"] == 20, "Should use load_info valid_record_count"
+    assert alignment_info["metadata_record_count"] == 20, "metadata_record_count should be raw record count"
     assert alignment_info["metadata_episode_count"] == 20, "metadata_episode_count should be raw record count"
     assert alignment_info["metadata_unique_episode_count"] == 20, "metadata_unique_episode_count should be unique count"
 
@@ -1628,6 +1629,7 @@ def test_40_alignment_raw_vs_unique_counts():
         embeddings, metadata, load_info=load_info, meta_info=meta_info
     )
 
+    assert alignment_info["metadata_record_count"] == 13, "metadata_record_count should be raw record count"
     assert alignment_info["metadata_episode_count"] == 13, "metadata_episode_count should be raw record count"
     assert alignment_info["metadata_unique_episode_count"] == 10, "metadata_unique_episode_count should be unique count"
     assert alignment_info["embedding_npy_file_count"] == 15, "embedding_npy_file_count should be scanned .npy count"
@@ -1861,6 +1863,162 @@ def test_47_json_summary_no_default_str():
     return True
 
 
+def test_48_report_regression_minimal():
+    """Test 48: Minimal analysis_result drives generate_report without stale fields.
+
+    Verifies:
+      - No 'Similarity ratio' key is read/produced.
+      - H1 fields are read from the new names.
+      - H2 fields are read from the new names.
+      - H3 fields are read from the new names.
+      - Fixed SIC does not render as N/A when present.
+    """
+    print("\n=== Test 48: Minimal report regression ===")
+
+    import tempfile
+    from analyze_dataset_embedding import generate_report
+
+    # Minimal but structurally complete analysis_result.
+    analysis_results = {
+        "n_episodes": 10,
+        "alignment": {"metadata_record_count": 10, "metadata_unique_episode_count": 10},
+        "validation": {"valid": True, "stats": {}, "errors": [], "warnings": []},
+        "global_stats": {"dimension": 4, "effective_rank": 2.0},
+        "wrist_stats": {"dimension": 4, "effective_rank": 2.0},
+        "combined_stats": {"dimension": 8, "effective_rank": 4.0},
+        "global_normalized_stats": {"effective_rank": 2.0},
+        "wrist_normalized_stats": {"effective_rank": 2.0},
+        "spearman": {"global": {"rho": 0.5, "p_value": 0.01}},
+        "permutation_tests": {"global": {"permutation_p_value": 0.01}},
+        "probe": {
+            "global": {
+                "ridge": {"R2_x": 0.5, "R2_y": 0.5},
+                "shuffled_ridge": {
+                    "R2_x": {"empirical_p_value": 0.01},
+                    "R2_y": {"empirical_p_value": 0.02},
+                },
+            }
+        },
+        "neighbor_overlap": {
+            "global": {
+                "neighbor_overlap@10": 0.2,
+                "random_neighbor_overlap@10": 0.1,
+                "neighbor_overlap@10_null": {"empirical_p_value": 0.01},
+            }
+        },
+        "grid_classifiability": {},
+        "subset_comparison": {
+            "Ours": {
+                "coverage_global": {"unselected_mean_nearest_distance": 0.5},
+                "coverage_wrist": {"unselected_mean_nearest_distance": 0.4},
+                "coverage_combined": {
+                    "unselected_mean_nearest_distance": 0.45,
+                    "unselected_max_nearest_distance": 1.2,
+                },
+                "redundancy_combined": {"redundancy_fraction": 0.1},
+                "fixed_sic": {"normalized_sic": 0.6},
+                "bootstrap_global": {"mean_nearest": {"better_than_random_fraction": 0.95}},
+                "bootstrap_wrist": {"mean_nearest": {"better_than_random_fraction": 0.92}},
+                "bootstrap_combined": {"mean_nearest": {"better_than_random_fraction": 0.97}},
+                "bootstrap_fixed_sic": {"better_than_random_fraction": 0.95},
+            },
+            "Uniform": {
+                "coverage_global": {"unselected_mean_nearest_distance": 0.55},
+                "coverage_wrist": {"unselected_mean_nearest_distance": 0.45},
+                "coverage_combined": {
+                    "unselected_mean_nearest_distance": 0.5,
+                    "unselected_max_nearest_distance": 1.3,
+                },
+                "redundancy_combined": {"redundancy_fraction": 0.12},
+                "fixed_sic": {"normalized_sic": 0.65},
+                "bootstrap_global": {"mean_nearest": {"better_than_random_fraction": 0.98}},
+                "bootstrap_wrist": {"mean_nearest": {"better_than_random_fraction": 0.93}},
+                "bootstrap_combined": {"mean_nearest": {"better_than_random_fraction": 0.99}},
+                "bootstrap_fixed_sic": {"better_than_random_fraction": 0.97},
+            },
+        },
+        "ours_uniform_comparison": {
+            "episode_overlap_count": 3,
+            "episode_overlap_ratio": 0.3,
+            "conclusion": "Insufficient evidence that Ours mainly reproduces Uniform initial-position coverage.",
+            "evidence_summary": {
+                "workspace_physical_unselected_mean_nearest_relative_delta": 0.05,
+                "global_coverage_unselected_mean_nearest_distance_relative_delta": -0.1,
+                "fixed_sic_delta": -0.05,
+            },
+            "workspace_coverage_delta": {"physical_unselected_mean_nearest": 0.05},
+            "global_coverage_delta": {"unselected_mean_nearest_distance": -0.05},
+            "wrist_coverage_delta": {"unselected_mean_nearest_distance": -0.05},
+            "combined_coverage_delta": {"unselected_mean_nearest_distance": -0.05},
+            "global_redundancy_delta": {"redundancy_fraction": -0.02},
+            "wrist_redundancy_delta": {"redundancy_fraction": -0.02},
+            "combined_redundancy_delta": {"redundancy_fraction": -0.02},
+            "fixed_sic_delta": -0.05,
+        },
+        "hypothesis_evaluation": {
+            "H1": {
+                "status": "WEAK",
+                "evidence": {
+                    "global": {"probe_x_significant": True, "probe_y_significant": True,
+                               "neighbor_significant": True, "validity": True},
+                },
+                "n_strong_families": 0,
+                "n_weak_families": 1,
+                "n_random": 0,
+                "n_poor": 0,
+            },
+            "H2": {
+                "status": "WEAK",
+                "evidence": {
+                    "global": {"spearman_significant": True, "probe_x_significant": True,
+                               "probe_y_significant": True, "neighbor_significant": True},
+                },
+                "n_strong_families": 0,
+                "n_weak_families": 1,
+                "n_random": 0,
+                "n_poor": 0,
+            },
+            "H3": {
+                "status": "WEAK",
+                "evidence": {
+                    "core_metrics": [],
+                    "evidence_families": {"coverage_quality": 2, "max_radius_tail": 1,
+                                          "redundancy": 1, "fixed_sic": 1},
+                    "evidence_families_detail": {"coverage_quality": [], "max_radius_tail": [],
+                                                 "redundancy": [], "fixed_sic": []},
+                    "n_strong_families": 1,
+                    "n_weak_families": 2,
+                    "n_random": 0,
+                    "n_poor": 0,
+                },
+            },
+        },
+        "analysis_config": {"seed": 42, "n_bootstrap": 100, "alpha": 1.0, "lambda_wrist": 1.0},
+        "fixed_universe": {"reference_episode_count": 10, "dbar_global": 1.0,
+                           "dbar_wrist": 1.0, "dbar_fallback_used": False},
+    }
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        out_dir = Path(tmpdir)
+        generate_report(analysis_results, out_dir)
+
+        report_path = out_dir / "analysis_report.md"
+        assert report_path.exists(), "analysis_report.md should be written"
+        report_text = report_path.read_text()
+
+        assert "Similarity ratio" not in report_text, "Report must not emit a Similarity ratio"
+        assert "probe_x_significant" in report_text, "H1 should display probe_x_significant"
+        assert "probe_y_significant" in report_text, "H1 should display probe_y_significant"
+        assert "neighbor_significant" in report_text, "H1 should display neighbor_significant"
+        assert "spearman_significant" in report_text, "H2 should display spearman_significant"
+        assert "n_strong_families" in report_text, "H3 should display n_strong_families"
+        assert "n_weak_families" in report_text, "H3 should display n_weak_families"
+        assert "Fixed SIC Delta" in report_text, "Fixed SIC should not be N/A"
+
+    print(f"  PASS: Minimal report regression, no stale fields, Fixed SIC rendered")
+    return True
+
+
 def main():
     print("\n" + "="*60)
     print("Dataset Embedding Analysis Unit Tests")
@@ -1914,6 +2072,7 @@ def main():
         test_45_h1_wrist_included_in_final_judgment,
         test_46_h2_wrist_included_in_final_judgment,
         test_47_json_summary_no_default_str,
+        test_48_report_regression_minimal,
     ]
     
     passed = 0

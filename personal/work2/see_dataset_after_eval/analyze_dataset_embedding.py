@@ -193,6 +193,7 @@ def align_embeddings_with_metadata(
     missing_metadata = sorted(embedding_episodes - metadata_episodes)
 
     alignment_info = {
+        "metadata_record_count": meta_info.get("record_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
         "metadata_episode_count": meta_info.get("record_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
         "metadata_unique_episode_count": len(metadata_episodes),
         "embedding_npy_file_count": load_info.get("npy_file_count", 0) if load_info else 0,
@@ -810,18 +811,33 @@ def match_subset_to_indices(
 ) -> Dict:
     """
     Match subset episodes to indices in the aligned dataset.
-    Returns dict with matched_indices, missing_episode_indices, requested_subset_size, matched_subset_size.
-    Raises ValueError if any episodes are missing from aligned universe.
+
+    Returns dict with matched_indices, missing_episode_indices, duplicate_episode_indices,
+    requested_subset_size, matched_subset_size.
+    Raises ValueError if any episodes are missing from aligned universe or if the subset
+    contains duplicate episode indices (duplicates are never silently de-duplicated).
     """
     idx_map = {ep: i for i, ep in enumerate(all_episode_indices)}
     matched = []
     missing = []
+    duplicate = []
+    seen = set()
 
     for ep in subset_episodes:
+        if ep in seen:
+            duplicate.append(ep)
+            continue
+        seen.add(ep)
         if ep in idx_map:
             matched.append(idx_map[ep])
         else:
             missing.append(ep)
+
+    if duplicate:
+        raise ValueError(
+            f"{len(duplicate)} duplicate subset episode indices: {duplicate[:10]}{'...' if len(duplicate) > 10 else ''}. "
+            f"Duplicate episodes are not allowed - refusing to de-duplicate silently."
+        )
 
     if missing:
         raise ValueError(
@@ -831,6 +847,7 @@ def match_subset_to_indices(
     return {
         "matched_indices": matched,
         "missing_episode_indices": missing,
+        "duplicate_episode_indices": duplicate,
         "requested_subset_size": len(subset_episodes),
         "matched_subset_size": len(matched),
     }
@@ -1015,7 +1032,9 @@ def random_bootstrap_fixed_sic(
     better_fraction = float(np.sum(bootstrap_sic < observed_sic) / len(bootstrap_sic))
 
     return {
+        "observed_fixed_sic": observed_sic,
         "observed": observed_sic,
+        "bootstrap_distribution": bootstrap_sic.tolist(),
         "bootstrap_mean": float(np.mean(bootstrap_sic)),
         "bootstrap_std": float(np.std(bootstrap_sic)),
         "better_than_random_fraction": better_fraction,
@@ -1962,10 +1981,10 @@ def generate_report(
                 f.write(f"- Significant Spearman tests: {h_data.get('n_sig_spearman', 'N/A')}\n")
             elif h_name == "H3":
                 ev = h_data.get("evidence", {})
-                f.write(f"- Strong evidence families: {ev.get('n_strong_families', 0)}\n")
-                f.write(f"- Weak evidence families: {ev.get('n_weak_families', 0)}\n")
-                f.write(f"- Random-range metrics: {ev.get('n_random', 0)}\n")
-                f.write(f"- Poor metrics: {ev.get('n_poor', 0)}\n")
+                f.write(f"- Strong evidence families (n_strong_families): {ev.get('n_strong_families', 0)}\n")
+                f.write(f"- Weak evidence families (n_weak_families): {ev.get('n_weak_families', 0)}\n")
+                f.write(f"- Random-range metrics (n_random): {ev.get('n_random', 0)}\n")
+                f.write(f"- Poor metrics (n_poor): {ev.get('n_poor', 0)}\n")
                 families_detail = ev.get("evidence_families_detail", {})
                 if families_detail:
                     f.write(f"- Evidence families detail:\n")
@@ -2298,7 +2317,7 @@ def main():
             "requested_subset_size": match_result["requested_subset_size"],
             "matched_subset_size": match_result["matched_subset_size"],
             "missing_episode_indices": match_result["missing_episode_indices"],
-            "duplicate_episode_indices": [],
+            "duplicate_episode_indices": match_result["duplicate_episode_indices"],
         }
 
         print(f"    Computing workspace coverage...")
