@@ -1,12 +1,11 @@
 """
 Action Trajectory Embedding Extraction Module
 
-Reads trace.pt files produced by the attention analysis pipeline and extracts
-fixed-length action representations from x_t, v_t, and hidden representations.
+Extracts fixed-length action embeddings from LeRobot demonstration dataset
+action trajectories. Does NOT depend on trained policy internals (hidden, x_t, v_t).
 """
 
 import sys
-import torch
 import numpy as np
 from pathlib import Path
 from typing import Dict, Optional, List
@@ -16,143 +15,180 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-def _to_numpy(tensor) -> np.ndarray:
-    """Convert torch tensor to numpy with detach().cpu().numpy()."""
-    if isinstance(tensor, torch.Tensor):
-        return tensor.detach().cpu().numpy()
-    return np.array(tensor)
-
-
-def load_action_trace(trace_path: Path) -> Optional[Dict]:
+def _detect_action_key(dataset) -> str:
     """
-    Load a single episode's action trace from trace.pt.
+    Auto-detect the action feature key from dataset metadata.
 
     Args:
-        trace_path: path to trace.pt file.
+        dataset: LeRobotDataset instance.
 
     Returns:
-        Dict with keys: x_t, v_t, suffix_hidden, timesteps, final_action, etc.
-        or None if loading fails.
+        Action feature key string.
     """
-    if not trace_path.exists():
-        return None
+    features = dataset.meta.features
+    for key in features.keys():
+        if "action" in key.lower():
+            return key
 
-    try:
-        trace = torch.load(trace_path, weights_only=False)
-        return trace
-    except Exception as e:
-        print(f"  [ERROR] Failed to load trace {trace_path}: {e}")
-        return None
+    raise ValueError(
+        f"No action feature found in dataset. Available features: {list(features.keys())}"
+    )
 
 
-def extract_action_embedding(
-    trace: Dict,
-    method: str = "combined",
-) -> np.ndarray:
+def load_episode_actions(
+    dataset_root: str,
+    episode_indices: Optional[List[int]] = None,
+) -> Dict[int, np.ndarray]:
     """
-    Extract a fixed-length action representation from a trace dict.
-
-    Supported methods:
-        "xt_stats": mean and std of x_t over denoising steps.
-        "vt_stats": mean and std of v_t trajectory.
-        "hidden_mean": mean-pooled suffix hidden representation.
-        "combined": concatenate xt_stats + vt_stats + hidden_mean (default).
+    Load action sequences from LeRobot dataset for specified episodes.
 
     Args:
-        trace: dict from load_action_trace.
-        method: extraction method.
+        dataset_root: root directory of the LeRobot dataset.
+        episode_indices: optional list of episode indices. If None, load all.
+
+    Returns:
+        Dict[episode_index, action_sequence]
+        where action_sequence shape is [T, action_dim]
+    """
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+    print(f"  Loading dataset from: {dataset_root}")
+    dataset = LeRobotDataset(repo_id="1/2", root=dataset_root)
+
+    action_key = _detect_action_key(dataset)
+    print(f"  Detected action key: '{action_key}'")
+
+    num_episodes = dataset.num_episodes
+    if episode_indices is None:
+        episode_indices = list(range(num_episodes))
+
+    episode_actions = {}
+    missing_count = 0
+
+    for ep_idx in episode_indices:
+        if ep_idx >= num_episodes:
+            missing_count += 1
+            print(f"  [WARN] Episode {ep_idx} out of range (max: {num_episodes - 1})")
+            continue
+
+        from_idx = dataset.meta.episodes["dataset_from_index"][ep_idx]
+        to_idx = dataset.meta.episodes["dataset_to_index"][ep_idx]
+
+        action_frames = []
+        valid = True
+        for idx in range(from_idx, to_idx):
+            try:
+                frame = dataset[idx]
+                action_frames.append(frame[action_key])
+            except Exception as e:
+                print(f"  [WARN] Failed to load action for episode {ep_idx}, frame {idx}: {e}")
+                valid = False
+                break
+
+        if valid and action_frames:
+            action_array = np.array(action_frames)
+            episode_actions[ep_idx] = action_array
+        else:
+            missing_count += 1
+
+    print(f"Loaded action sequences for {len(episode_actions)} episodes (missing: {missing_count})")
+    return episode_actions
+
+
+def extract_action_embedding(action_sequence: np.ndarray) -> np.ndarray:
+    """
+    Convert a single episode's action trajectory to a fixed-length embedding.
+
+    Uses only demonstration data statistics, no model internals.
+
+    Features extracted:
+    - action mean (per dimension)
+    - action std (per dimension)
+    - action velocity mean (per dimension)
+    - action velocity std (per dimension)
+    - trajectory length (scalar)
+    - action range (max - min, per dimension)
+    - initial action (per dimension)
+    - final action (per dimension)
+
+    Args:
+        action_sequence: numpy array of shape [T, action_dim]
 
     Returns:
         1-D numpy array representing the action embedding.
     """
+    if action_sequence.ndim != 2:
+        raise ValueError(f"Expected 2D action sequence [T, D], got shape {action_sequence.shape}")
+
+    T, D = action_sequence.shape
     parts = []
 
-    x_t = trace.get("x_t")
-    v_t = trace.get("v_t")
-    suffix_hidden = trace.get("suffix_hidden")
-    final_action = trace.get("final_action")
+    # 1. Action mean per dimension
+    action_mean = np.mean(action_sequence, axis=0)
+    parts.append(action_mean)
 
-    if method in ("xt_stats", "combined") and x_t is not None and x_t.numel() > 0:
-        x_t_flat = x_t.reshape(x_t.shape[0], -1)
-        x_mean = _to_numpy(x_t_flat.mean(dim=0))
-        x_std = _to_numpy(x_t_flat.std(dim=0))
-        parts.append(np.concatenate([x_mean, x_std]))
+    # 2. Action std per dimension
+    action_std = np.std(action_sequence, axis=0)
+    parts.append(action_std)
 
-    if method in ("vt_stats", "combined") and v_t is not None and v_t.numel() > 0:
-        v_t_flat = v_t.reshape(v_t.shape[0], -1)
-        v_mean = _to_numpy(v_t_flat.mean(dim=0))
-        v_std = _to_numpy(v_t_flat.std(dim=0))
-        parts.append(np.concatenate([v_mean, v_std]))
+    # 3. Action velocity (first-order difference)
+    if T > 1:
+        velocity = np.diff(action_sequence, axis=0)
+        vel_mean = np.mean(velocity, axis=0)
+        vel_std = np.std(velocity, axis=0)
+        parts.append(vel_mean)
+        parts.append(vel_std)
+    else:
+        parts.append(np.zeros(D))
+        parts.append(np.zeros(D))
 
-    if method in ("hidden_mean", "combined") and suffix_hidden is not None and suffix_hidden.numel() > 0:
-        h_flat = suffix_hidden.reshape(suffix_hidden.shape[0], -1)
-        h_mean = _to_numpy(h_flat.mean(dim=0))
-        parts.append(h_mean)
+    # 4. Trajectory length (normalized)
+    parts.append(np.array([float(T)]))
 
-    if method == "final_action" and final_action is not None and final_action.numel() > 0:
-        parts.append(_to_numpy(final_action.reshape(-1)))
+    # 5. Action range (max - min) per dimension
+    action_range = np.max(action_sequence, axis=0) - np.min(action_sequence, axis=0)
+    parts.append(action_range)
 
-    if not parts:
-        raise ValueError("No valid action data found in trace for extraction.")
+    # 6. Initial and final action
+    parts.append(action_sequence[0])
+    parts.append(action_sequence[-1])
 
     return np.concatenate(parts)
 
 
 def build_action_embeddings(
-    trace_dir: Path,
+    dataset_root: str,
     episode_indices: Optional[List[int]] = None,
-    method: str = "combined",
 ) -> Dict[int, np.ndarray]:
     """
-    Batch-generate action embeddings for episodes.
-
-    Looks for trace.pt files under trace_dir/<episode_index>/ or directly
-    under trace_dir if structured differently.
+    Batch-generate action embeddings from LeRobot demonstration dataset.
 
     Args:
-        trace_dir: directory containing episode trace files.
-        episode_indices: optional list of episode indices to process.
-                         If None, auto-detect from directory structure.
-        method: extraction method passed to extract_action_embedding.
+        dataset_root: root directory of the LeRobot dataset.
+        episode_indices: optional list of episode indices. If None, load all.
 
     Returns:
         Dict[episode_index, action_embedding_array]
     """
+    episode_actions = load_episode_actions(dataset_root, episode_indices)
+
     action_embeddings = {}
     missing_count = 0
-    error_count = 0
+    action_dim = None
 
-    if episode_indices is None:
-        episode_indices = []
-        for d in sorted(trace_dir.iterdir()):
-            if d.is_dir():
-                try:
-                    ep_idx = int(d.name)
-                    episode_indices.append(ep_idx)
-                except ValueError:
-                    pass
-
-    for ep_idx in episode_indices:
-        trace_path = trace_dir / str(ep_idx) / "trace.pt"
-        if not trace_path.exists():
-            trace_path = trace_dir / f"episode_{ep_idx}" / "trace.pt"
-        if not trace_path.exists():
-            missing_count += 1
-            continue
-
-        trace = load_action_trace(trace_path)
-        if trace is None:
-            error_count += 1
-            print(f"  [ERROR] Episode {ep_idx}: trace loading failed")
-            continue
-
+    for ep_idx, action_seq in episode_actions.items():
         try:
-            emb = extract_action_embedding(trace, method=method)
+            emb = extract_action_embedding(action_seq)
             action_embeddings[ep_idx] = emb
-        except ValueError as e:
-            error_count += 1
-            print(f"  [ERROR] Episode {ep_idx}: {e}")
+            if action_dim is None:
+                action_dim = emb.shape[0]
+        except Exception as e:
+            missing_count += 1
+            print(f"  [ERROR] Failed to extract embedding for episode {ep_idx}: {e}")
 
-    print(f"Built action embeddings for {len(action_embeddings)} episodes "
-          f"(missing: {missing_count}, errors: {error_count})")
+    print(f"Loaded action embeddings for {len(action_embeddings)} episodes")
+    print(f"Missing action episodes: {missing_count}")
+    if action_dim is not None:
+        print(f"Action embedding dimension: {action_dim}")
+
     return action_embeddings

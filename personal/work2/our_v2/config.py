@@ -22,9 +22,6 @@ VISUAL_EMBEDDING_DIM = 32  # per view (global + wrist)
 # Action embedding switch
 USE_ACTION_EMBEDDING = True
 
-# Action embedding extraction method
-ACTION_EMBEDDING_METHOD = "combined"
-
 # Embedding weights for fusion
 ACTION_WEIGHT = 1.0
 VISUAL_WEIGHT = 1.0

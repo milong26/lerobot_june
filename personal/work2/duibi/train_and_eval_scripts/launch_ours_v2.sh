@@ -87,7 +87,6 @@ python "\$OUR_V2_DIR/experiments/select_episodes_v2.py" \\
     --output-dir "\$RESULTS_DIR" \\
     --num-selected "\$NUM_EPISODES" \\
     --seed "\$SEED" \\
-    --action-trace-dir "/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/result_inference_trace" \\
     --use-action-embedding
 
 # Copy subset file to expected location

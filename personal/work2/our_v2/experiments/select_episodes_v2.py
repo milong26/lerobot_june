@@ -12,7 +12,6 @@ Usage:
         --output-dir /path/to/output \
         --num-selected 112 \
         --seed 42 \
-        [--action-trace-dir /path/to/traces] \
         [--use-action-embedding]
 """
 
@@ -47,7 +46,6 @@ def main():
     parser = argparse.ArgumentParser(description="Dynamic Anchor v2 Episode Selection")
     parser.add_argument("--dataset-root", type=str, required=True, help="Dataset root directory")
     parser.add_argument("--embedding-dir", type=str, required=True, help="Visual embedding cache directory")
-    parser.add_argument("--action-trace-dir", type=str, default=None, help="Action trace directory (optional)")
     parser.add_argument("--output-dir", type=str, required=True, help="Output directory")
     parser.add_argument("--num-selected", type=int, default=TARGET_SIZE, help="Target number of episodes")
     parser.add_argument("--seed", type=int, default=SEED, help="Random seed")
@@ -59,7 +57,7 @@ def main():
 
     embedding_dir = Path(args.embedding_dir)
     output_dir = Path(args.output_dir)
-    action_trace_dir = Path(args.action_trace_dir) if args.action_trace_dir else None
+    dataset_root = args.dataset_root
 
     if not embedding_dir.exists():
         print(f"Error: Embedding directory does not exist: {embedding_dir}")
@@ -70,6 +68,7 @@ def main():
     print(f"\n{'='*60}")
     print(f"Dynamic Anchor v2 - Episode Selection")
     print(f"{'='*60}")
+    print(f"Dataset root: {dataset_root}")
     print(f"Embedding dir: {embedding_dir}")
     print(f"Output dir: {output_dir}")
     print(f"Target episodes: {args.num_selected}")
@@ -90,10 +89,10 @@ def main():
     # Step 2: Load action embeddings (optional)
     action_embeddings = None
     if args.use_action_embedding:
-        if action_trace_dir and action_trace_dir.exists():
-            print(f"\n[Step 2] Loading action embeddings from {action_trace_dir}...")
+        print(f"\n[Step 2] Loading action embeddings from dataset...")
+        try:
             action_embeddings = build_action_embeddings(
-                action_trace_dir,
+                dataset_root=dataset_root,
                 episode_indices=list(visual_embeddings.keys()),
             )
             n_action = len(action_embeddings)
@@ -102,11 +101,9 @@ def main():
                 warnings.warn(
                     "No action embeddings loaded. Falling back to visual-only."
                 )
-        else:
-            trace_info = action_trace_dir if action_trace_dir else "not specified"
+        except Exception as e:
             warnings.warn(
-                f"--use-action-embedding set but action trace dir not found: {trace_info}. "
-                "Falling back to visual-only."
+                f"Failed to load action embeddings: {e}. Falling back to visual-only."
             )
 
     # Step 3: Build state-action embedding
