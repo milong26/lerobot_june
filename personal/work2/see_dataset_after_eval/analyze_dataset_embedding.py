@@ -137,12 +137,11 @@ def load_embeddings(embeddings_dir: Path) -> Tuple[Dict[int, Dict], Dict]:
             print(f"  Skip invalid file: {f.name} ({e})")
 
     load_info = {
-        "npy_file_count": npy_file_count,
-        "valid_record_count": valid_record_count,
+        "embedding_npy_file_count": npy_file_count,
+        "embedding_valid_record_count": valid_record_count,
         "embedding_unique_episode_count": len(embeddings),
         "duplicate_episode_indices": duplicate_episode_indices,
         "invalid_files": invalid_files,
-        "file_count": valid_record_count,
     }
     return embeddings, load_info
 
@@ -169,7 +168,11 @@ def load_episode_metadata(dataset_root: Path) -> Tuple[Dict[int, Dict], Dict]:
             "goal_pos": np.array(ep.get("goal_pos", ep.get("goal_pose", [0, 0, 0]))),
         }
 
-    meta_info = {"duplicate_episode_indices": duplicate_indices, "record_count": raw_record_count}
+    meta_info = {
+        "metadata_record_count": raw_record_count,
+        "metadata_unique_episode_count": len(episodes),
+        "duplicate_episode_indices": duplicate_indices,
+    }
     return episodes, meta_info
 
 
@@ -193,13 +196,11 @@ def align_embeddings_with_metadata(
     missing_metadata = sorted(embedding_episodes - metadata_episodes)
 
     alignment_info = {
-        "metadata_record_count": meta_info.get("record_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
-        "metadata_episode_count": meta_info.get("record_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
-        "metadata_unique_episode_count": len(metadata_episodes),
-        "embedding_npy_file_count": load_info.get("npy_file_count", 0) if load_info else 0,
-        "embedding_valid_record_count": load_info.get("valid_record_count", 0) if load_info else len(embeddings),
+        "metadata_record_count": meta_info.get("metadata_record_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
+        "metadata_unique_episode_count": meta_info.get("metadata_unique_episode_count", len(metadata_episodes)) if meta_info else len(metadata_episodes),
+        "embedding_npy_file_count": load_info.get("embedding_npy_file_count", 0) if load_info else 0,
+        "embedding_valid_record_count": load_info.get("embedding_valid_record_count", 0) if load_info else len(embeddings),
         "embedding_unique_episode_count": len(embedding_episodes),
-        "embedding_file_count": load_info.get("file_count", 0) if load_info else len(embeddings),
         "intersection_count": len(intersection),
         "missing_embedding": missing_embeddings,
         "missing_metadata": missing_metadata,

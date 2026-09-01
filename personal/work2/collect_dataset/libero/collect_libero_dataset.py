@@ -25,10 +25,11 @@ LIBERO 数据集生成工具：为单个 LIBERO task 生成约 300 个 episode �
 LeRobot frame 字段：
     - observation.images.top: agentview_image (RGB, 3 x image_size x image_size)
     - observation.images.wrist: robot0_eye_in_hand_image (RGB, 3 x image_size x image_size)
-    - observation.state: 25 维机器人状态
+    - observation.state: 8 维机器人状态（与 LeRobot 文档一致）
+        robot0_eef_pos(3) + robot0_eef_axis_angle(3) + robot0_gripper_qpos(2)
+    - observation.environment_state: 25 维完整机器人状态
         robot0_eef_pos(3) + robot0_eef_quat(4) + robot0_gripper_qpos(2) +
         robot0_gripper_qvel(2) + robot0_joint_pos(7) + robot0_joint_vel(7)
-    - observation.environment_state: 完整 flattened MuJoCo state (state_dim 维)
     - action: 7 维 LIBERO action
     - next.reward: float
     - next.success: bool
@@ -337,7 +338,26 @@ def save_uniform_initial_states(output_dir, selected_candidates, all_candidates,
 
 def build_robot_state(obs):
     """
-    从 LIBERO observation 构造 25 维机器人状态向量。
+    从 LIBERO observation 构造 8 维机器人状态向量（与 LeRobot 文档一致）。
+    固定顺序：robot0_eef_pos(3) + robot0_eef_axis_angle(3) + robot0_gripper_qpos(2)
+    """
+    eef_pos = np.asarray(obs.get("robot0_eef_pos", np.zeros(3)), dtype=np.float32)
+    eef_quat = np.asarray(obs.get("robot0_eef_quat", np.zeros(4)), dtype=np.float32)
+    gripper_qpos = np.asarray(obs.get("robot0_gripper_qpos", np.zeros(2)), dtype=np.float32)
+
+    # 将四元数转换为 axis-angle (3 维)
+    from scipy.spatial.transform import Rotation as R
+    rot = R.from_quat([eef_quat[1], eef_quat[2], eef_quat[3], eef_quat[0]])  # scipy uses xyzw
+    axis_angle = rot.as_rotvec().astype(np.float32)
+
+    state = np.concatenate([eef_pos, axis_angle, gripper_qpos])
+    assert state.shape == (8,), f"Expected state shape (8,), got {state.shape}"
+    return state
+
+
+def build_full_robot_state(obs):
+    """
+    从 LIBERO observation 构造 25 维完整机器人状态向量。
     固定顺序：robot0_eef_pos(3) + robot0_eef_quat(4) + robot0_gripper_qpos(2) +
               robot0_gripper_qvel(2) + robot0_joint_pos(7) + robot0_joint_vel(7)
     """
@@ -376,11 +396,11 @@ def create_dataset(repo_id, output_dir, fps=20, image_size=360):
         },
         "observation.state": {
             "dtype": "float32",
-            "shape": (25,),
+            "shape": (8,),
         },
         "observation.environment_state": {
             "dtype": "float32",
-            "shape": (-1,),
+            "shape": (25,),
         },
         "action": {
             "dtype": "float32",
@@ -412,11 +432,12 @@ def create_dataset(repo_id, output_dir, fps=20, image_size=360):
     return dataset
 
 
-def collect_demo_episode(env, demo_data, image_size=360, task_description=""):
+def collect_demo_episode(env, demo_data, image_size=360, task_description="", extra_frames_after_success=10):
     """
     使用 state replay 从 LIBERO 官方 demonstration 生成一个 episode。
     读取 HDF5 中的 data/demo_x/states 和 actions，逐帧执行 env.set_init_state(states[t])
     得到与该 state 对应的 observation。observation.environment_state = states[t]。
+    任务完成后额外等待 extra_frames_after_success 帧，让模型看到任务完成后的稳定状态。
     """
     states = demo_data["states"]
     actions = demo_data["actions"]
@@ -440,12 +461,13 @@ def collect_demo_episode(env, demo_data, image_size=360, task_description=""):
         wrist_img = _resize_image(wrist_img, image_size)
 
         robot_state = build_robot_state(obs)
+        full_robot_state = build_full_robot_state(obs)
 
         frame = {
             "observation.images.top": agentview_img,
             "observation.images.wrist": wrist_img,
             "observation.state": robot_state,
-            "observation.environment_state": states[t].copy().astype(np.float32),
+            "observation.environment_state": full_robot_state,
             "action": actions[t].copy().astype(np.float32),
             "next.reward": np.array([1.0 if t == len(states) - 1 else 0.0], dtype=np.float32),
             "next.success": np.array([t == len(states) - 1], dtype=bool),
@@ -455,6 +477,40 @@ def collect_demo_episode(env, demo_data, image_size=360, task_description=""):
 
         if t == len(states) - 1:
             success = True
+
+    # 任务完成后额外等待帧：保持最后一帧的状态，继续采集 observation
+    if success and extra_frames_after_success > 0:
+        # 保持在最后一个 state
+        env.set_init_state(states[-1])
+        for _ in range(extra_frames_after_success):
+            obs = env.env._get_observations()
+
+            agentview_img = obs.get("agentview_image")
+            wrist_img = obs.get("robot0_eye_in_hand_image")
+
+            if agentview_img is None or wrist_img is None:
+                continue
+
+            agentview_img = np.flip(agentview_img, (0, 1))
+            wrist_img = np.flip(wrist_img, (0, 1))
+            agentview_img = _resize_image(agentview_img, image_size)
+            wrist_img = _resize_image(wrist_img, image_size)
+
+            robot_state = build_robot_state(obs)
+            full_robot_state = build_full_robot_state(obs)
+
+            # 额外帧：action 为零向量，reward=1, success=True
+            frame = {
+                "observation.images.top": agentview_img,
+                "observation.images.wrist": wrist_img,
+                "observation.state": robot_state,
+                "observation.environment_state": full_robot_state,
+                "action": np.zeros(7, dtype=np.float32),
+                "next.reward": np.array([1.0], dtype=np.float32),
+                "next.success": np.array([True], dtype=bool),
+                "task": task_description,
+            }
+            frames.append(frame)
 
     return frames, success, len(frames)
 
@@ -521,6 +577,15 @@ def validate_dataset(output_dir, expected_episodes, state_dim):
                 results["valid"] = False
                 results["issues"].append(
                     f"environment_state stat dim {mean_arr.shape[0]} != expected {state_dim}"
+                )
+
+        obs_state_stats = stats.get("observation.state", {})
+        if "mean" in obs_state_stats:
+            mean_arr = np.array(obs_state_stats["mean"])
+            if mean_arr.shape[0] != 8:
+                results["valid"] = False
+                results["issues"].append(
+                    f"observation.state stat dim {mean_arr.shape[0]} != expected 8"
                 )
 
     ep_json = output_path / "episode_initial_states.json"
@@ -624,10 +689,11 @@ def main():
 
     # 6. 保存 uniform initial states
     print("\n[6/8] 保存 uniform initial states...")
-    state_dim = len(selected_candidates[0]["flattened_state"])
+    mujoco_state_dim = len(selected_candidates[0]["flattened_state"])
+    env_state_dim = 25  # observation.environment_state 固定 25 维
     save_uniform_initial_states(
         output_dir, selected_candidates, candidates,
-        args.suite, args.task_id, task, state_dim,
+        args.suite, args.task_id, task, mujoco_state_dim,
         descriptor_dim, object_names, varying_mask, descriptor_stats,
     )
 
@@ -712,7 +778,7 @@ def main():
     dataset.finalize()
 
     print("\n验证数据集...")
-    validation = validate_dataset(args.output_dir, success_count, state_dim)
+    validation = validate_dataset(args.output_dir, success_count, env_state_dim)
     if validation["valid"]:
         print("  验证通过！")
     else:
@@ -728,7 +794,9 @@ def main():
     print(f"Descriptor 维度: {descriptor_dim}")
     print(f"Uniform initial states 数量: {len(selected_candidates)}")
     print(f"真实成功 trajectory 数量: {success_count}")
-    print(f"Environment state dim: {state_dim}")
+    print(f"observation.state dim: 8 (eef_pos + axis_angle + gripper_qpos)")
+    print(f"observation.environment_state dim: {env_state_dim} (完整机器人状态)")
+    print(f"MuJoCo state dim (保存在 NPZ): {mujoco_state_dim}")
     print(f"数据集路径: {args.output_dir}")
 
     if success_count < args.num_episodes:

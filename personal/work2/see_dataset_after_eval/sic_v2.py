@@ -188,14 +188,21 @@ def check_embeddings_valid(
         result["valid"] = False
         result["errors"].append(f"{zero_w} phi_wrists have zero norm")
 
-    def count_exact_duplicates(phi):
-        # 使用 np.unique 进行精确重复检测
-        # 返回的是 exact duplicate groups 数量（即出现次数>1的unique vector group数量）
+    def count_exact_duplicate_groups(phi):
+        """
+        统计 exact duplicate group 数量。
+        使用 np.unique 找出完全相同的 vector group，
+        返回 count > 1 的 group 数量。
+        """
         unique_arr, counts = np.unique(phi, axis=0, return_counts=True)
         return int(np.sum(counts > 1))
 
     def count_near_duplicate_pairs(phi, threshold):
-        # 统计 near duplicate pair 数量，排除 exact duplicate
+        """
+        统计 near duplicate pair 数量（上三角，避免重复计算）。
+        Near duplicate 定义：cosine similarity > threshold 且不是 exact duplicate。
+        如果两个 embedding 完全相同（exact duplicate），则不计入 near duplicate。
+        """
         # 使用 np.unique 获取 exact duplicate group id
         unique_arr, inverse_indices = np.unique(phi, axis=0, return_inverse=True)
         
@@ -208,40 +215,52 @@ def check_embeddings_valid(
         
         n = len(phi)
         near_dup_pairs = 0
+        # 只统计上三角 pair，避免重复计算
         for i in range(n):
             for j in range(i + 1, n):
-                # 排除 exact duplicate（同一 group）
+                # 排除 exact duplicate（同一 group，完全相同的 embedding）
                 if inverse_indices[i] == inverse_indices[j]:
                     continue
+                # 只统计 cosine similarity > threshold 的 pair
                 if cos_sim[i, j] > threshold:
                     near_dup_pairs += 1
         return near_dup_pairs
 
-    result["stats"]["n_exact_dup_global"] = count_exact_duplicates(phi_globals)
-    result["stats"]["n_exact_dup_wrist"] = count_exact_duplicates(phi_wrists)
-    result["stats"]["n_exact_duplicate_groups_global"] = result["stats"]["n_exact_dup_global"]
-    result["stats"]["n_exact_duplicate_groups_wrist"] = result["stats"]["n_exact_dup_wrist"]
+    # Exact duplicate group 统计
+    n_exact_duplicate_groups_global = count_exact_duplicate_groups(phi_globals)
+    n_exact_duplicate_groups_wrist = count_exact_duplicate_groups(phi_wrists)
 
-    if result["stats"]["n_exact_dup_global"] > 0:
-        result["warnings"].append(f"{result['stats']['n_exact_dup_global']} exact duplicate groups in phi_globals")
-    if result["stats"]["n_exact_dup_wrist"] > 0:
-        result["warnings"].append(f"{result['stats']['n_exact_dup_wrist']} exact duplicate groups in phi_wrists")
-
+    # Near duplicate pair 统计（已排除 exact duplicate pairs）
+    n_near_duplicate_pairs_global = 0
+    n_near_duplicate_pairs_wrist = 0
     if norms_global.min() > 1e-10 and norms_wrist.min() > 1e-10:
-        near_dup_pairs_g = count_near_duplicate_pairs(phi_globals, near_dup_cosine_threshold)
-        near_dup_pairs_w = count_near_duplicate_pairs(phi_wrists, near_dup_cosine_threshold)
+        n_near_duplicate_pairs_global = count_near_duplicate_pairs(phi_globals, near_dup_cosine_threshold)
+        n_near_duplicate_pairs_wrist = count_near_duplicate_pairs(phi_wrists, near_dup_cosine_threshold)
 
-        result["stats"]["n_near_dup_global"] = near_dup_pairs_g
-        result["stats"]["n_near_dup_wrist"] = near_dup_pairs_w
-        result["stats"]["n_near_duplicate_pairs_global"] = near_dup_pairs_g
-        result["stats"]["n_near_duplicate_pairs_wrist"] = near_dup_pairs_w
+    # 填充 stats（新字段）
+    result["stats"]["n_exact_duplicate_groups_global"] = n_exact_duplicate_groups_global
+    result["stats"]["n_exact_duplicate_groups_wrist"] = n_exact_duplicate_groups_wrist
+    result["stats"]["n_near_duplicate_pairs_global"] = n_near_duplicate_pairs_global
+    result["stats"]["n_near_duplicate_pairs_wrist"] = n_near_duplicate_pairs_wrist
 
-        if near_dup_pairs_g > 0 or near_dup_pairs_w > 0:
-            result["warnings"].append(
-                f"Near-duplicate embedding pairs detected (excluding exact duplicates): "
-                f"global={near_dup_pairs_g}, "
-                f"wrist={near_dup_pairs_w}"
-            )
+    # 保留兼容旧字段，内部值来自新的统计逻辑
+    result["stats"]["n_exact_dup_global"] = n_exact_duplicate_groups_global
+    result["stats"]["n_exact_dup_wrist"] = n_exact_duplicate_groups_wrist
+    result["stats"]["n_near_dup_global"] = n_near_duplicate_pairs_global
+    result["stats"]["n_near_dup_wrist"] = n_near_duplicate_pairs_wrist
+
+    # 生成 warnings
+    if n_exact_duplicate_groups_global > 0:
+        result["warnings"].append(f"{n_exact_duplicate_groups_global} exact duplicate groups in phi_globals")
+    if n_exact_duplicate_groups_wrist > 0:
+        result["warnings"].append(f"{n_exact_duplicate_groups_wrist} exact duplicate groups in phi_wrists")
+
+    if n_near_duplicate_pairs_global > 0 or n_near_duplicate_pairs_wrist > 0:
+        result["warnings"].append(
+            f"Near-duplicate embedding pairs detected (excluding exact duplicates): "
+            f"global={n_near_duplicate_pairs_global}, "
+            f"wrist={n_near_duplicate_pairs_wrist}"
+        )
 
     return result
 

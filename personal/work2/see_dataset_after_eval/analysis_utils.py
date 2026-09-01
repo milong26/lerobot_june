@@ -97,11 +97,11 @@ def compute_fixed_universe_sic_from_indices(
 
     if K_global.shape != (n_episodes, n_episodes):
         raise ValueError(
-            f"K_global shape {K_global.shape} does not match (N, N) with N={n_episodes}"
+            f"Invalid K_global shape: got {K_global.shape}, expected ({n_episodes}, {n_episodes})"
         )
     if K_wrist.shape != (n_episodes, n_episodes):
         raise ValueError(
-            f"K_wrist shape {K_wrist.shape} does not match (N, N) with N={n_episodes}"
+            f"Invalid K_wrist shape: got {K_wrist.shape}, expected ({n_episodes}, {n_episodes})"
         )
 
     selected_indices = set()
