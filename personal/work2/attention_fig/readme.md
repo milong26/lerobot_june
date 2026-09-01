@@ -49,3 +49,6 @@ nohup python personal/work2/attention_fig/plot_attention.py \
   --load-from-cache \
   --output-dir personal/work2/attention_fig/result_inference_trace \
   > personal/work2/attention_fig/inference_trace_continue.log 2>&1 &
+
+
+ok这边暂时不看了。
