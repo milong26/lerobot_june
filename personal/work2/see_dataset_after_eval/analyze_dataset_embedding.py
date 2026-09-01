@@ -24,7 +24,7 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 from scipy.stats import spearmanr
-from scipy.spatial.distance import pairwise_distances
+from sklearn.metrics import pairwise_distances
 from sklearn.linear_model import Ridge
 from sklearn.neighbors import KNeighborsRegressor, KNeighborsClassifier
 from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
@@ -2193,7 +2193,7 @@ def main():
 
     print("\n[1/15] Loading embeddings...")
     embeddings, load_info = load_embeddings(args.embeddings_dir)
-    print(f"  Loaded {len(embeddings)} episodes from {load_info['file_count']} files")
+    print(f"  Loaded {len(embeddings)} episodes from {load_info['embedding_npy_file_count']} files")
     if load_info['duplicate_episode_indices']:
         print(f"  WARNING: {len(load_info['duplicate_episode_indices'])} duplicate episode indices")
     if load_info['invalid_files']:
