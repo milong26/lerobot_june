@@ -1,6 +1,7 @@
 #!/bin/bash
 # Launch dynamic anchor v3 no-action experiment in tmux
-# Usage: bash launch_ours_v3_no_action.sh <num_episodes> <gpu_id> [seed] [dataset_name]
+# Usage: bash launch_ours_v3_no_action.sh <num_episodes> <gpu_id> [seed] [dataset_name] [mode]
+#   mode: "full" (default) or "selection-only"
 
 set -e
 
@@ -8,6 +9,7 @@ NUM_EPISODES=${1:-112}
 GPU_ID=${2:-0}
 SEED=${3:-42}
 DATASET_NAME=${4:-corner3}
+MODE=${5:-full}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_v3_no_action_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
@@ -40,6 +42,7 @@ GPU_ID=\$1
 NUM_EPISODES=\$2
 SEED=\$3
 DATASET_NAME=\$4
+MODE=\$5
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_v3_no_action_\${NUM_EPISODES}_seed\${SEED}_\${DATASET_NAME}"
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
@@ -67,6 +70,7 @@ echo "GPU: \$GPU_ID"
 echo "Num Episodes: \$NUM_EPISODES"
 echo "Seed: \$SEED"
 echo "Dataset: \$DATASET_NAME"
+echo "Mode: \$MODE"
 echo "PID: \$\$"
 echo "Started: \$(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
@@ -138,10 +142,28 @@ python "\$OUR_V3_DIR/experiments/select_episodes_v3_no_action.py" \\
     --num-selected "\$NUM_EPISODES" \\
     --seed "\$SEED"
 
-# Copy subset file to expected location
+# The selection script already generates the subset file at the correct location.
+# Do NOT copy it (source and destination may be the same file).
 SUBSET_FILE="\$SUBSET_DIR/dynamicgrid_v3_no_action_\${NUM_EPISODES}_seed\${SEED}.json"
-cp "\$OUTPUT_BASE_DIR/subsets"/dynamicgrid_v3_no_action_*.json "\$SUBSET_FILE"
+if [ ! -f "\$SUBSET_FILE" ]; then
+    echo "ERROR: Subset file not found at \$SUBSET_FILE"
+    echo "Selection may have failed. Check logs above."
+    exit 1
+fi
 echo "=== V3 No-Action selection complete ==="
+echo "Subset file: \$SUBSET_FILE"
+
+# If mode is selection-only, exit after selection and validation
+if [ "\$MODE" = "selection-only" ]; then
+    echo ""
+    echo "========================================"
+    echo "Selection-only mode: stopping after selection"
+    echo "========================================"
+    echo "" >> "\$TIME_FILE"
+    echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"
+    echo "Status: selection-only completed" >> "\$TIME_FILE"
+    exit 0
+fi
 
 # Load episode indices
 EPISODES=\$(python -c "import json; data=json.load(open('\$SUBSET_FILE')); print('[' + ','.join(str(x) for x in data['selected_episode_indices']) + ']')")
@@ -214,12 +236,13 @@ RUNNER_EOF
 chmod +x "$RUNNER_SCRIPT"
 
 # Launch in tmux
-tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $NUM_EPISODES $SEED $DATASET_NAME"
+tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $NUM_EPISODES $SEED $DATASET_NAME $MODE"
 
 echo "Launched experiment: $EXP_NAME"
 echo "tmux session: $TMUX_SESSION"
 echo "Output dir: $OUTPUT_BASE_DIR"
 echo "Dataset: $DATASET_NAME"
+echo "Mode: $MODE"
 echo ""
 echo "Monitor with: tmux attach -t $TMUX_SESSION"
 echo "Check logs: tail -f $LOG_DIR/$EXP_NAME.log"

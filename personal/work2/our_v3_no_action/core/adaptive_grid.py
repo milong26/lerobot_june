@@ -5,6 +5,7 @@ Implements the adaptive spatial grid that starts as a coarse uniform grid
 and recursively splits high-value cells into finer sub-cells.
 """
 
+import hashlib
 import numpy as np
 from typing import List, Dict, Optional, Tuple
 from dataclasses import dataclass, field
@@ -144,11 +145,15 @@ def pick_next_target_in_cell(
     selected_positions: List[Tuple[float, float, float]],
     split_x: int = 2,
     split_y: int = 2,
+    rng: Optional[np.random.RandomState] = None,
 ) -> Tuple[float, float, float]:
     """
     Generate a new target init_pos inside the cell.
     If the cell has children, use child centers.
     Otherwise use maximin to pick a position far from already-sampled positions.
+
+    Uses the provided rng for reproducibility. If rng is None, uses a
+    deterministic hash-based seed derived from cell_id.
     """
     if cell.children:
         # Use child cell centers, pick the one farthest from existing samples
@@ -177,8 +182,12 @@ def pick_next_target_in_cell(
         return best_pos if best_pos else cell_center(cell)
 
     # No children: use maximin within cell bounds
+    if rng is None:
+        # Fallback: use deterministic hash of cell_id for reproducibility
+        hash_val = int(hashlib.md5(cell.cell_id.encode()).hexdigest(), 16) % (2**31)
+        rng = np.random.RandomState(hash_val)
+
     n_candidates = 20
-    rng = np.random.RandomState(hash(cell.cell_id) % (2**31))
 
     candidates = []
     for _ in range(n_candidates):

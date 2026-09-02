@@ -66,6 +66,43 @@ def find_nearest_unselected_episode(
     return best_idx, best_actual_pos, float(best_dist)
 
 
+def acquire_episode(
+    target_pos: Tuple[float, float, float],
+    all_indices: List[int],
+    all_positions: np.ndarray,
+    state: "AcquisitionState",
+    mapping_tolerance: float = 0.1,
+) -> Tuple[int, Tuple[float, float, float], float, bool]:
+    """
+    Acquire an episode for the given target position.
+
+    Calls find_nearest_unselected_episode internally and ensures no duplicate episodes.
+    Uses mapping_tolerance to determine if the mapping is a good fit.
+
+    Args:
+        target_pos: the target (x, y, z) position
+        all_indices: all episode indices
+        all_positions: all episode positions array
+        state: current acquisition state (for used_indices)
+        mapping_tolerance: maximum distance for a "good" mapping (meters)
+
+    Returns:
+        (episode_index, actual_pos, mapping_distance, fallback)
+        - fallback=False if mapping_distance <= mapping_tolerance (good fit)
+        - fallback=True if mapping_distance > mapping_tolerance (still selected but imperfect)
+    """
+    ep_idx, actual_pos, mapping_dist = find_nearest_unselected_episode(
+        target_pos,
+        all_indices,
+        all_positions,
+        state.acquired_indices,
+    )
+
+    fallback = mapping_dist > mapping_tolerance
+
+    return ep_idx, actual_pos, mapping_dist, fallback
+
+
 class AcquisitionState:
     """Tracks the state of the acquisition process."""
 

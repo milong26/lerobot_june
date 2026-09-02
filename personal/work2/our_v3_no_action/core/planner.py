@@ -23,12 +23,14 @@ from our_v3_no_action.core.adaptive_grid import (
 )
 from our_v3_no_action.core.pool_adapter import (
     AcquisitionState, load_episode_positions, find_nearest_unselected_episode,
+    acquire_episode,
 )
 from our_v3_no_action.core.visual_embedding import (
     load_acquired_visual_embedding, build_combined_embedding,
 )
 from our_v3_no_action.core.scoring import (
     compute_spatial_need, compute_visual_disagreement, normalize_scores,
+    compute_cell_priority as _compute_cell_priority,
 )
 from our_v3_no_action.config import (
     TOTAL_BUDGET, INITIAL_GRID_X, INITIAL_GRID_Y, INITIAL_BUDGET,
@@ -63,6 +65,9 @@ class V3Planner:
         self.spatial_weight = spatial_weight
         self.visual_weight = visual_weight
         self.seed = seed
+
+        # Deterministic RNG for all random operations
+        self.rng = np.random.RandomState(seed)
 
         # Load episode positions (only metadata, no episode data)
         self.ep_indices, self.ep_positions = load_episode_positions(dataset_root)
@@ -113,6 +118,45 @@ class V3Planner:
                     cell.sample_positions.append(pos)
                     break
 
+    def compute_all_cell_priorities(self):
+        """
+        Compute priorities for all active leaf cells in a unified manner:
+        1. Calculate raw scores for each leaf cell
+        2. Min-max normalize spatial and visual scores across all cells
+        3. Compute final priority = spatial_weight * norm_spatial + visual_weight * norm_visual
+        4. Store the final priority and normalized components on each cell
+        """
+        self._update_cell_membership()
+
+        leaf_cells = get_leaf_cells(self.cells)
+        if not leaf_cells:
+            return
+
+        raw_spatial_scores = []
+        raw_visual_scores = []
+
+        for cell in leaf_cells:
+            raw_s, raw_v, _ = _compute_cell_priority(
+                cell, self.cells, self.state.acquired_positions,
+                self.state.visual_embeddings,
+                spatial_weight=self.spatial_weight,
+                visual_weight=self.visual_weight,
+            )
+            raw_spatial_scores.append(raw_s)
+            raw_visual_scores.append(raw_v)
+
+        norm_spatial = normalize_scores(raw_spatial_scores)
+        norm_visual = normalize_scores(raw_visual_scores)
+
+        for i, cell in enumerate(leaf_cells):
+            cell.priority = (
+                self.spatial_weight * norm_spatial[i] +
+                self.visual_weight * norm_visual[i]
+            )
+            # Store normalized components for logging
+            cell._norm_spatial = norm_spatial[i]
+            cell._norm_visual = norm_visual[i]
+
     def initialize_uniform_collection(self):
         """
         Stage 1: Coarse uniform coverage.
@@ -130,11 +174,12 @@ class V3Planner:
         for cell in coarse_cells:
             target_pos = cell_center(cell)
 
-            ep_idx, actual_pos, mapping_dist = find_nearest_unselected_episode(
+            ep_idx, actual_pos, mapping_dist, fallback = acquire_episode(
                 target_pos,
                 self.ep_indices,
                 self.ep_positions,
-                self.state.acquired_indices,
+                self.state,
+                mapping_tolerance=MIN_MAPPING_TOLERANCE,
             )
 
             log_entry = {
@@ -145,10 +190,13 @@ class V3Planner:
                 "target_init_pos": list(target_pos),
                 "actual_init_pos": list(actual_pos),
                 "mapping_distance": mapping_dist,
+                "mapping_fallback": fallback,
                 "spatial_score": 0.0,
                 "visual_score": 0.0,
                 "final_priority": 0.0,
                 "split": False,
+                "split_parent_id": None,
+                "created_child_ids": [],
                 "n_acquired": self.state.n_acquired() + 1,
             }
 
@@ -164,44 +212,10 @@ class V3Planner:
             self._update_cell_membership()
 
             print(f"  Step {self.state.step}: cell={cell.cell_id}, "
-                  f"ep={ep_idx}, dist={mapping_dist:.4f}")
+                  f"ep={ep_idx}, dist={mapping_dist:.4f}, fallback={fallback}")
 
         print(f"\nStage 1 complete: {self.state.n_acquired()} episodes acquired")
         print(f"  Initial episodes: {sorted(self.initial_stage_indices)}")
-
-    def update_cell_statistics(self):
-        """Recompute priority for all active leaf cells."""
-        self._update_cell_membership()
-
-        leaf_cells = get_leaf_cells(self.cells)
-        if not leaf_cells:
-            return
-
-        spatial_scores = []
-        visual_scores = []
-
-        for cell in leaf_cells:
-            s, v, _ = self._compute_raw_priority(cell)
-            spatial_scores.append(s)
-            visual_scores.append(v)
-
-        norm_spatial = normalize_scores(spatial_scores)
-        norm_visual = normalize_scores(visual_scores)
-
-        for i, cell in enumerate(leaf_cells):
-            cell.priority = (
-                self.spatial_weight * norm_spatial[i] +
-                self.visual_weight * norm_visual[i]
-            )
-
-    def _compute_raw_priority(self, cell: AdaptiveCell) -> Tuple[float, float, float]:
-        """Compute raw (unnormalized) priority components for a cell."""
-        spatial_need = compute_spatial_need(cell, self.state.acquired_positions)
-        visual_dis = compute_visual_disagreement(
-            cell, self.cells, self.state.visual_embeddings
-        )
-        final = self.spatial_weight * spatial_need + self.visual_weight * visual_dis
-        return spatial_need, visual_dis, final
 
     def select_highest_priority_cell(self) -> Optional[AdaptiveCell]:
         """Select the active leaf cell with highest priority."""
@@ -212,56 +226,79 @@ class V3Planner:
         best_cell = max(leaf_cells, key=lambda c: c.priority)
         return best_cell
 
-    def maybe_split_cell(self, cell: AdaptiveCell) -> bool:
+    def maybe_split_cell(self, cell: AdaptiveCell) -> Tuple[bool, Optional[str], List[str]]:
         """
         Split a cell if it is high-value and depth < MAX_DEPTH.
-        Returns True if split occurred.
+        Split decision is based on pre-acquisition information (n_samples >= 2).
+        After split, reassign historical samples to child leaf cells.
+
+        Returns:
+            (did_split, parent_id, child_ids)
         """
         if cell.depth >= self.max_depth:
-            return False
+            return False, None, []
 
-        # Check if this cell has been selected multiple times (high value indicator)
         if cell.n_samples >= 2:
+            parent_id = cell.cell_id
             children = split_cell(cell, SPLIT_X, SPLIT_Y)
+            child_ids = [c.cell_id for c in children]
             for child in children:
                 self.cells[child.cell_id] = child
-            return True
 
-        return False
+            # Reassign historical samples to child leaf cells
+            self._update_cell_membership()
+
+            return True, parent_id, child_ids
+
+        return False, None, []
 
     def collect_one_step(self) -> Dict:
         """
         Execute one adaptive acquisition step:
-        1. Update cell statistics
+        1. Update cell statistics (compute priorities)
         2. Select highest priority cell
         3. Generate new target init_pos
         4. Map to nearest unused episode
         5. Acquire episode
         6. Load visual embedding
-        7. Update priorities
-        8. Maybe split cell
+        7. Maybe split cell
         """
-        self.update_cell_statistics()
+        self.compute_all_cell_priorities()
 
         best_cell = self.select_highest_priority_cell()
         if best_cell is None:
             raise RuntimeError("No available cells for collection")
 
-        selected_positions = self._all_selected_positions()
-        target_pos = pick_next_target_in_cell(best_cell, selected_positions, SPLIT_X, SPLIT_Y)
+        # Use cell-local sample positions for maximin (not global)
+        cell_sample_positions = list(best_cell.sample_positions)
+        if not cell_sample_positions:
+            cell_sample_positions = [cell_center(best_cell)]
 
-        ep_idx, actual_pos, mapping_dist = find_nearest_unselected_episode(
+        target_pos = pick_next_target_in_cell(
+            best_cell, cell_sample_positions, SPLIT_X, SPLIT_Y, rng=self.rng
+        )
+
+        ep_idx, actual_pos, mapping_dist, fallback = acquire_episode(
             target_pos,
             self.ep_indices,
             self.ep_positions,
-            self.state.acquired_indices,
+            self.state,
+            mapping_tolerance=MIN_MAPPING_TOLERANCE,
         )
 
-        # Compute scores for logging
-        spatial_need, visual_dis, final_pri = self._compute_raw_priority(best_cell)
+        # Compute scores for logging: use the actual priority that was used for selection
+        raw_spatial, raw_visual, _ = _compute_cell_priority(
+            best_cell, self.cells, self.state.acquired_positions,
+            self.state.visual_embeddings,
+            spatial_weight=self.spatial_weight,
+            visual_weight=self.visual_weight,
+        )
 
-        # Acquire
-        did_split = self.maybe_split_cell(best_cell)
+        # Maybe split cell (before acquire, based on pre-existing info)
+        did_split, split_parent_id, created_child_ids = self.maybe_split_cell(best_cell)
+
+        # The final_priority is the cell.priority that was actually used for argmax selection
+        final_priority = best_cell.priority
 
         log_entry = {
             "step": self.state.step + 1,
@@ -271,10 +308,17 @@ class V3Planner:
             "target_init_pos": list(target_pos),
             "actual_init_pos": list(actual_pos),
             "mapping_distance": mapping_dist,
-            "spatial_score": float(spatial_need),
-            "visual_score": float(visual_dis),
-            "final_priority": float(final_pri),
+            "mapping_fallback": fallback,
+            "raw_spatial_score": float(raw_spatial),
+            "raw_visual_score": float(raw_visual),
+            "normalized_spatial_score": float(getattr(best_cell, '_norm_spatial', 0.0)),
+            "normalized_visual_score": float(getattr(best_cell, '_norm_visual', 0.0)),
+            "spatial_score": float(getattr(best_cell, '_norm_spatial', 0.0)),
+            "visual_score": float(getattr(best_cell, '_norm_visual', 0.0)),
+            "final_priority": float(final_priority),
             "split": did_split,
+            "split_parent_id": split_parent_id,
+            "created_child_ids": created_child_ids,
             "n_acquired": self.state.n_acquired() + 1,
         }
 
@@ -290,9 +334,9 @@ class V3Planner:
         self._update_cell_membership()
 
         print(f"  Step {self.state.step}: cell={best_cell.cell_id}(d={best_cell.depth}), "
-              f"ep={ep_idx}, dist={mapping_dist:.4f}, "
-              f"spatial={spatial_need:.4f}, visual={visual_dis:.4f}, "
-              f"priority={final_pri:.4f}, split={did_split}")
+              f"ep={ep_idx}, dist={mapping_dist:.4f}, fallback={fallback}, "
+              f"raw_spatial={raw_spatial:.4f}, raw_visual={raw_visual:.4f}, "
+              f"priority={final_priority:.4f}, split={did_split}")
 
         return log_entry
 
@@ -331,6 +375,16 @@ class V3Planner:
 
     def _build_result(self) -> Dict:
         """Build the final result dictionary."""
+        # Collect mapping_fallbacks from log
+        mapping_fallbacks = [h.get("mapping_fallback", False) for h in self.state.history]
+
+        # Compute mapping statistics
+        mapping_distances = [h["mapping_distance"] for h in self.state.history]
+        fallback_count = sum(1 for f in mapping_fallbacks if f)
+        fallback_ratio = fallback_count / len(mapping_fallbacks) if mapping_fallbacks else 0.0
+        mean_mapping_dist = float(np.mean(mapping_distances)) if mapping_distances else 0.0
+        max_mapping_dist = float(np.max(mapping_distances)) if mapping_distances else 0.0
+
         return {
             "selected_episode_indices": sorted(self.state.acquired_indices),
             "target_init_positions": [
@@ -339,7 +393,8 @@ class V3Planner:
             "actual_init_positions": [
                 list(h["actual_init_pos"]) for h in self.state.history
             ],
-            "mapping_distances": [h["mapping_distance"] for h in self.state.history],
+            "mapping_distances": mapping_distances,
+            "mapping_fallbacks": mapping_fallbacks,
             "initial_stage_indices": sorted(self.initial_stage_indices),
             "adaptive_stage_indices": sorted(self.adaptive_stage_indices),
             "selection_method": "dynamicgrid_v3_no_action",
@@ -354,6 +409,12 @@ class V3Planner:
                 "seed": self.seed,
             },
             "acquisition_log": self.state.history,
+            "mapping_stats": {
+                "fallback_count": fallback_count,
+                "fallback_ratio": fallback_ratio,
+                "mean_mapping_distance": mean_mapping_dist,
+                "max_mapping_distance": max_mapping_dist,
+            },
         }
 
     def validate_causal_access(self) -> bool:
