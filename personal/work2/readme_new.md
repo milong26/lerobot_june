@@ -306,3 +306,16 @@ CUDA_VISIBLE_DEVICES=2 MUJOCO_GL=egl PYOPENGL_PLATFORM=egl lerobot-eval \
 pip install -e ".[libero]"
 
 采集数据：需要检查libero的任务，挑一个任务
+
+
+
+# 采集metaworld的新数据
+python personal/work2/collect_dataset/metaworld/collect_metaworld_dataset.py \
+        --task coffee-push-v3 \
+        --num-episodes 300 \
+        --output-dir personal/work2/dataset_view/coffee_push_corner3/ \
+        --repo-id your-username/metaworld_coffee_push \
+        --fps 80 \
+        --image-size 480 \
+        --randomize-obj \
+        --seed-start 0

@@ -720,11 +720,16 @@ def eval_policy(
 
         # Update progress bar
         current_episodes = min((batch_ix + 1) * env.num_envs, n_episodes)
-        current_success = sum(all_successes[-env.num_envs:]) if len(all_successes) >= env.num_envs else sum(all_successes)
+
+        total_success = sum(all_successes)
+        success_rate = total_success / len(all_successes) * 100
+
         progress_bar.set_description(
             f"Evaluating ({current_episodes}/{n_episodes} episodes, "
-            f"success: {current_success}/{env.num_envs})"
+            f"success: {total_success}/{len(all_successes)}, "
+            f"rate: {success_rate:.1f}%)"
         )
+
         progress_bar.update(1)
 
         # FIXME: episode_data is either None or it doesn't exist

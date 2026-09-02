@@ -22,6 +22,8 @@
 - 通过不同seed创建MT1环境，每个seed对应一组固定的obj_init_pos和goal
 - 默认启用随机化，每个episode使用不同的seed
 
+换一个任务，比如coffee-pull-v3
+
 使用示例（命令行）:
     # 采集10个episode的pick-place-v3数据（随机化物体和目标位置）
     python personal/work2/collect_dataset/collect_metaworld_dataset.py \
@@ -69,7 +71,7 @@ os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).parent / "outputs")
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
 # 加载metaworld配置
-CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
+CONFIG_PATH = Path(__file__).parent.parent.parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
 with open(CONFIG_PATH) as f:
     METAWORLD_CONFIG = json.load(f)
 
