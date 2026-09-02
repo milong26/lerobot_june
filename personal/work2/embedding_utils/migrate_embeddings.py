@@ -31,6 +31,7 @@ from embedding_utils.config import DEFAULT_PCA_DIM, build_extraction_method_name
 from embedding_utils.cache import (
     get_shared_embedding_dir,
     validate_shared_cache,
+    validate_previous_shared_cache,
     find_legacy_embedding_candidates,
     validate_legacy_cache,
     copy_legacy_cache_to_shared,
@@ -96,43 +97,56 @@ def main():
         print(f"Searching for legacy embedding candidates...")
         candidates = find_legacy_embedding_candidates(dataset_name)
         
-        if not candidates:
-            print(f"NO_VALID_LEGACY_CACHE_FOUND")
-            print(f"No legacy embedding directories found for dataset: {dataset_name}")
-            sys.exit(1)
-        
         migrated = False
-        for candidate_info in candidates:
-            candidate = candidate_info["path"]
-            source_type = candidate_info["source_type"]
-            print(f"  Checking: {candidate} (source_type={source_type})")
-            
-            if source_type not in AUTO_MIGRATION_ALLOWED_TYPES:
-                print(f"  -> SKIP (not in auto-migration allowed types)")
-                continue
-            
-            legacy_validation = validate_legacy_cache(candidate, dataset_root, pca_dim, source_type=source_type)
-            if legacy_validation["valid"]:
-                print(f"  -> VALID, migrating...")
-                copy_legacy_cache_to_shared(candidate, target_dir, dataset_root, dataset_name, pca_dim, source_type=source_type)
-                print(f"MIGRATED_FROM: {candidate}")
-                print(f"SHARED_EMBEDDING_DIR: {target_dir}")
-                migrated = True
-                break
-            else:
-                print(f"  -> INCOMPLETE ({len(legacy_validation['issues'])} issues)")
+        
+        # First try known legacy types
+        if candidates:
+            for candidate_info in candidates:
+                candidate = candidate_info["path"]
+                source_type = candidate_info["source_type"]
+                print(f"  Checking: {candidate} (source_type={source_type})")
+                
+                if source_type not in AUTO_MIGRATION_ALLOWED_TYPES:
+                    print(f"  -> SKIP (not in auto-migration allowed types)")
+                    continue
+                
+                legacy_validation = validate_legacy_cache(candidate, dataset_root, pca_dim, source_type=source_type)
+                if legacy_validation["valid"]:
+                    print(f"  -> VALID, migrating...")
+                    copy_legacy_cache_to_shared(candidate, target_dir, dataset_root, dataset_name, pca_dim, source_type=source_type)
+                    print(f"MIGRATED_FROM: {candidate}")
+                    print(f"SHARED_EMBEDDING_DIR: {target_dir}")
+                    migrated = True
+                    break
+                else:
+                    print(f"  -> INCOMPLETE ({len(legacy_validation['issues'])} issues)")
         
         if not migrated:
             # Also try old shared cache variants
             print(f"\nChecking for previous shared cache candidates...")
             old_candidates = find_previous_shared_cache_candidates(dataset_name, pca_dim)
-            for old_dir in old_candidates:
+            for candidate_info in old_candidates:
+                old_dir = candidate_info["path"]
+                old_method_name = candidate_info["old_method_name"]
                 print(f"  Checking old shared cache: {old_dir}")
-                old_validation = validate_shared_cache(old_dir, dataset_root, dataset_name, pca_dim)
+                
+                old_validation = validate_previous_shared_cache(
+                    old_dir, dataset_root, dataset_name, pca_dim,
+                    allowed_old_method_names={old_method_name},
+                )
                 if old_validation["valid"]:
                     print(f"  -> VALID, migrating...")
-                    copy_legacy_cache_to_shared(old_dir, target_dir, dataset_root, dataset_name, pca_dim, source_type="previous_shared_cache")
-                    print(f"MIGRATED_FROM_OLD_SHARED: {old_dir}")
+                    copy_legacy_cache_to_shared(
+                        old_dir, target_dir, dataset_root, dataset_name, pca_dim,
+                        source_type="previous_shared_cache",
+                        source_validation_kind="previous_shared",
+                        allowed_old_method_names={old_method_name},
+                    )
+                    new_method_name = build_extraction_method_name(pca_dim)
+                    print(f"MIGRATED_FROM_OLD_SHARED: {old_dir} -> {target_dir}")
+                    print(f"  Old method: {old_method_name}")
+                    print(f"  New method: {new_method_name}")
+                    print(f"  Original directory preserved: {old_dir}")
                     print(f"SHARED_EMBEDDING_DIR: {target_dir}")
                     migrated = True
                     break

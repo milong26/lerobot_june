@@ -35,6 +35,7 @@ from embedding_utils.cache import (
     build_expected_metadata,
     write_cache_metadata,
     validate_shared_cache,
+    validate_previous_shared_cache,
     find_legacy_embedding_candidates,
     validate_legacy_cache,
     copy_legacy_cache_to_shared,
@@ -140,17 +141,28 @@ def ensure_shared_embeddings(
     print(f"\nChecking for previous shared cache candidates (old method name variants)...")
     old_candidates = find_previous_shared_cache_candidates(dataset_name, pca_dim)
     
-    for old_dir in old_candidates:
+    for candidate_info in old_candidates:
+        old_dir = candidate_info["path"]
+        old_method_name = candidate_info["old_method_name"]
         print(f"  Checking old shared cache: {old_dir}")
-        old_validation = validate_shared_cache(old_dir, dataset_root, dataset_name, pca_dim)
+        
+        old_validation = validate_previous_shared_cache(
+            old_dir, dataset_root, dataset_name, pca_dim,
+            allowed_old_method_names={old_method_name},
+        )
         if old_validation["valid"]:
             print(f"  -> VALID, migrating to new canonical name...")
             try:
                 copy_legacy_cache_to_shared(
                     old_dir, target_dir, dataset_root, dataset_name, pca_dim,
                     source_type="previous_shared_cache",
+                    source_validation_kind="previous_shared",
+                    allowed_old_method_names={old_method_name},
                 )
+                new_method_name = build_extraction_method_name(pca_dim)
                 print(f"MIGRATED_FROM_OLD_SHARED: {old_dir} -> {target_dir}")
+                print(f"  Old method: {old_method_name}")
+                print(f"  New method: {new_method_name}")
                 print(f"  Original directory preserved: {old_dir}")
                 return target_dir
             except Exception as e:

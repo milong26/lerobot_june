@@ -1,0 +1,1 @@
+/data/zhonglinye/jun/lerobot/personal/work2/shared_embeddings/pick_place_corner/smolvlm2-500m_last-hidden-tokenmean_global-first5_wrist-20to70_temporal-mean_pca32_v1
