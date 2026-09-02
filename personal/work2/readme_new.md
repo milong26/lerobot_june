@@ -319,3 +319,6 @@ python personal/work2/collect_dataset/metaworld/collect_metaworld_dataset.py \
         --image-size 480 \
         --randomize-obj \
         --seed-start 0
+
+
+如果实验效果比它低但是推理资源消耗没有太多那就不要写了，但是deminf是目前最接近的
