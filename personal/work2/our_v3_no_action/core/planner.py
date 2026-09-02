@@ -185,6 +185,7 @@ class V3Planner:
             log_entry = {
                 "step": self.state.step + 1,
                 "stage": "initial",
+                "episode_index": ep_idx,
                 "selected_cell_id": cell.cell_id,
                 "cell_depth": cell.depth,
                 "target_init_pos": list(target_pos),
@@ -303,6 +304,7 @@ class V3Planner:
         log_entry = {
             "step": self.state.step + 1,
             "stage": "adaptive",
+            "episode_index": ep_idx,
             "selected_cell_id": best_cell.cell_id,
             "cell_depth": best_cell.depth,
             "target_init_pos": list(target_pos),
@@ -385,8 +387,13 @@ class V3Planner:
         mean_mapping_dist = float(np.mean(mapping_distances)) if mapping_distances else 0.0
         max_mapping_dist = float(np.max(mapping_distances)) if mapping_distances else 0.0
 
+        # Build arrays in true acquisition order (from history), NOT sorted
+        selected_episode_indices = [h["episode_index"] for h in self.state.history]
+        initial_stage_indices = [h["episode_index"] for h in self.state.history if h["stage"] == "initial"]
+        adaptive_stage_indices = [h["episode_index"] for h in self.state.history if h["stage"] == "adaptive"]
+
         return {
-            "selected_episode_indices": sorted(self.state.acquired_indices),
+            "selected_episode_indices": selected_episode_indices,
             "target_init_positions": [
                 list(h["target_init_pos"]) for h in self.state.history
             ],
@@ -395,8 +402,8 @@ class V3Planner:
             ],
             "mapping_distances": mapping_distances,
             "mapping_fallbacks": mapping_fallbacks,
-            "initial_stage_indices": sorted(self.initial_stage_indices),
-            "adaptive_stage_indices": sorted(self.adaptive_stage_indices),
+            "initial_stage_indices": initial_stage_indices,
+            "adaptive_stage_indices": adaptive_stage_indices,
             "selection_method": "dynamicgrid_v3_no_action",
             "parameters": {
                 "total_budget": self.total_budget,

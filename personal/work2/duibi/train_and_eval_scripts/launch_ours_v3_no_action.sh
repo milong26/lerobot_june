@@ -208,17 +208,20 @@ lerobot-train \\
     --policy.train_state_proj=false \\
     --policy.optimizer_lr=1e-4 \\
     --save_freq=2000 \\
-    --steps=16000 \\
+    --steps=12000 \\
     --batch_size=64 \\
     --num_workers=16 \\
     --eval.n_episodes=16 \\
     --eval.batch_size=16 \\
-    --env_eval_freq=16000 \\
+    --env_eval_freq=12000 \\
     --seed=\$SEED \\
     --job_name=smolvla_\$EXP_NAME \\
     --output_dir="\$OUTPUT_BASE_DIR/\$EXP_NAME" \\
     --remove_features='["observation.environment_state"]' \\
     --wandb.enable=true
+
+echo ""
+echo "Training steps: 12000"
 
 echo "" >> "\$TIME_FILE"
 echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"

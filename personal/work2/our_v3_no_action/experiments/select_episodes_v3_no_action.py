@@ -39,6 +39,25 @@ from our_v3_no_action.config import (
 )
 
 
+def get_coarse_ancestor_id(cell_id: str) -> str:
+    """
+    Extract the coarse ancestor ID from any cell_id.
+    All cells descended from the initial 7x4 coarse grid share the same coarse ancestor.
+
+    Examples:
+        c0_0       -> c0_0
+        c0_0_00    -> c0_0
+        c0_0_00_11 -> c0_0
+        c6_3_10_01 -> c6_3
+
+    Raises ValueError if cell_id format is invalid.
+    """
+    parts = cell_id.split("_")
+    if len(parts) < 2 or not parts[0].startswith("c"):
+        raise ValueError(f"Invalid cell_id format: {cell_id}")
+    return f"{parts[0]}_{parts[1]}"
+
+
 def validate_causal_access(planner: V3Planner) -> bool:
     """
     Validate that no unacquired episode embeddings were accessed during selection.
@@ -56,12 +75,21 @@ def validate_results(result: Dict, expected_budget: int) -> Dict:
     - All target/actual positions match episode count
     - All mapping distances are non-negative
     - All visual embeddings correspond to acquired episodes
+    - Strict one-to-one correspondence: selected_episode_indices[i], target_init_positions[i],
+      actual_init_positions[i], mapping_distances[i], mapping_fallbacks[i], acquisition_log[i]
+      must all describe the same acquisition
+    - initial_stage_indices == acquisition_log where stage=="initial" (in order)
+    - adaptive_stage_indices == acquisition_log where stage=="adaptive" (in order)
     """
     selected = result["selected_episode_indices"]
     initial = result["initial_stage_indices"]
     adaptive = result["adaptive_stage_indices"]
     acquisition_log = result["acquisition_log"]
     params = result["parameters"]
+    target_positions = result.get("target_init_positions", [])
+    actual_positions = result.get("actual_init_positions", [])
+    mapping_distances = result.get("mapping_distances", [])
+    mapping_fallbacks = result.get("mapping_fallbacks", [])
 
     issues = []
 
@@ -113,8 +141,6 @@ def validate_results(result: Dict, expected_budget: int) -> Dict:
         issues.append("Not all selected episodes are unique")
 
     # Check target and actual positions count matches
-    target_positions = result.get("target_init_positions", [])
-    actual_positions = result.get("actual_init_positions", [])
     if len(target_positions) != len(selected):
         issues.append(
             f"target_init_positions count ({len(target_positions)}) != "
@@ -127,16 +153,79 @@ def validate_results(result: Dict, expected_budget: int) -> Dict:
         )
 
     # Check all mapping distances are non-negative
-    mapping_distances = result.get("mapping_distances", [])
     if any(d < 0 for d in mapping_distances):
         issues.append("Found negative mapping distances")
 
     # Check mapping_fallbacks array exists and matches length
-    mapping_fallbacks = result.get("mapping_fallbacks", [])
     if len(mapping_fallbacks) != len(selected):
         issues.append(
             f"mapping_fallbacks count ({len(mapping_fallbacks)}) != "
             f"selected episodes ({len(selected)})"
+        )
+
+    # === STRICT ONE-TO-ONE CORRESPONDENCE CHECKS ===
+    n = len(selected)
+    if len(acquisition_log) != n:
+        issues.append(
+            f"acquisition_log length ({len(acquisition_log)}) != "
+            f"selected_episode_indices length ({n})"
+        )
+    if len(target_positions) != n:
+        issues.append(
+            f"target_init_positions length ({len(target_positions)}) != "
+            f"selected_episode_indices length ({n})"
+        )
+    if len(actual_positions) != n:
+        issues.append(
+            f"actual_init_positions length ({len(actual_positions)}) != "
+            f"selected_episode_indices length ({n})"
+        )
+    if len(mapping_distances) != n:
+        issues.append(
+            f"mapping_distances length ({len(mapping_distances)}) != "
+            f"selected_episode_indices length ({n})"
+        )
+    if len(mapping_fallbacks) != n:
+        issues.append(
+            f"mapping_fallbacks length ({len(mapping_fallbacks)}) != "
+            f"selected_episode_indices length ({n})"
+        )
+
+    # Check that all arrays have the same length
+    all_lengths = [
+        len(acquisition_log), len(selected), len(target_positions),
+        len(actual_positions), len(mapping_distances), len(mapping_fallbacks)
+    ]
+    if len(set(all_lengths)) != 1:
+        issues.append(
+            f"Array length mismatch: acquisition_log={len(acquisition_log)}, "
+            f"selected={len(selected)}, target={len(target_positions)}, "
+            f"actual={len(actual_positions)}, mapping_dist={len(mapping_distances)}, "
+            f"mapping_fallback={len(mapping_fallbacks)}"
+        )
+
+    # For each i, check acquisition_log[i]["episode_index"] == selected_episode_indices[i]
+    for i in range(min(len(acquisition_log), len(selected))):
+        log_ep = acquisition_log[i].get("episode_index")
+        if log_ep != selected[i]:
+            issues.append(
+                f"Index {i}: acquisition_log episode_index={log_ep} != "
+                f"selected_episode_indices={selected[i]}"
+            )
+            break  # Report first mismatch only
+
+    # Check initial_stage_indices == acquisition_log where stage=="initial" (in order)
+    expected_initial = [h["episode_index"] for h in acquisition_log if h["stage"] == "initial"]
+    if initial != expected_initial:
+        issues.append(
+            f"initial_stage_indices mismatch: got {initial}, expected {expected_initial}"
+        )
+
+    # Check adaptive_stage_indices == acquisition_log where stage=="adaptive" (in order)
+    expected_adaptive = [h["episode_index"] for h in acquisition_log if h["stage"] == "adaptive"]
+    if adaptive != expected_adaptive:
+        issues.append(
+            f"adaptive_stage_indices mismatch: got {adaptive}, expected {expected_adaptive}"
         )
 
     return {
@@ -222,45 +311,51 @@ def print_detailed_summary(result: Dict, validation: Dict):
 
     # Adaptive behavior diagnosis
     if validation['n_adaptive'] > 0:
-        # Check adaptive density distribution across coarse ancestor regions
+        # Check adaptive density distribution across ALL 28 initial coarse cells
+        params_grid_x = params['initial_grid_x']
+        params_grid_y = params['initial_grid_y']
         coarse_ancestor_counts = {}
+        # Initialize all 28 coarse cells to 0
+        for i in range(params_grid_x):
+            for j in range(params_grid_y):
+                coarse_ancestor_counts[f"c{i}_{j}"] = 0
+        # Accumulate from adaptive logs using get_coarse_ancestor_id
         for l in adaptive_logs:
-            # Extract coarse ancestor (c{i}_{j} part) from cell_id
-            # Cell IDs follow pattern: c{i}_{j} or c{i}_{j}_00 or c{i}_{j}_00_11 etc.
             cid = l["selected_cell_id"]
-            parts = cid.split("_")
-            if len(parts) >= 3 and parts[0].startswith("c"):
-                # First two parts form the coarse ancestor: c{i}_{j}
-                coarse_ancestor = f"{parts[0]}_{parts[1]}_{parts[2]}"
-            else:
-                coarse_ancestor = cid
+            coarse_ancestor = get_coarse_ancestor_id(cid)
             coarse_ancestor_counts[coarse_ancestor] = coarse_ancestor_counts.get(coarse_ancestor, 0) + 1
 
-        if coarse_ancestor_counts:
-            counts = list(coarse_ancestor_counts.values())
-            max_count = max(counts)
-            min_count = min(counts)
-            mean_count = np.mean(counts)
-            std_count = np.std(counts)
+        # Print per-coarse-cell adaptive counts
+        print(f"\n--- Adaptive Count per Initial Coarse Cell (7x4=28) ---")
+        for i in range(params_grid_x):
+            for j in range(params_grid_y):
+                cell_key = f"c{i}_{j}"
+                print(f"  {cell_key}: {coarse_ancestor_counts[cell_key]}")
 
-            print(f"\n--- Adaptive Density Diagnosis ---")
-            print(f"  Coarse ancestor regions with adaptive samples: {len(coarse_ancestor_counts)}")
-            print(f"  Max samples in one region: {max_count}")
-            print(f"  Min samples in one region: {min_count}")
-            print(f"  Mean: {mean_count:.2f}, Std: {std_count:.2f}")
+        counts = list(coarse_ancestor_counts.values())
+        max_count = max(counts)
+        min_count = min(counts)
+        mean_count = np.mean(counts)
+        std_count = np.std(counts)
 
-            adaptive_budget = validation['n_adaptive']
-            n_coarse = params['initial_grid_x'] * params['initial_grid_y']
-            expected_per_region = adaptive_budget / n_coarse
+        print(f"\n--- Adaptive Density Diagnosis ---")
+        print(f"  Coarse ancestor regions with adaptive samples: {sum(1 for c in counts if c > 0)}/{len(counts)}")
+        print(f"  Max samples in one region: {max_count}")
+        print(f"  Min samples in one region: {min_count}")
+        print(f"  Mean: {mean_count:.2f}, Std: {std_count:.2f}")
 
-            # If distribution is nearly uniform, warn about degeneration
-            if std_count < 0.5 * mean_count and mean_count > 0:
-                print(f"  WARNING: Adaptive distribution is nearly uniform (std < 0.5 * mean).")
-                print(f"  Algorithm may be degenerating toward uniform sampling.")
-                print(f"  adaptive_density_confirmed=False")
-            else:
-                print(f"  Adaptive density confirmed: some regions receive more budget than others.")
-                print(f"  adaptive_density_confirmed=True")
+        adaptive_budget = validation['n_adaptive']
+        n_coarse = params_grid_x * params_grid_y
+        expected_per_region = adaptive_budget / n_coarse
+
+        # If distribution is nearly uniform, warn about degeneration
+        if std_count < 0.5 * mean_count and mean_count > 0:
+            print(f"  WARNING: Adaptive distribution is nearly uniform (std < 0.5 * mean).")
+            print(f"  Algorithm may be degenerating toward uniform sampling.")
+            print(f"  adaptive_density_confirmed=False")
+        else:
+            print(f"  Adaptive density confirmed: some regions receive more budget than others.")
+            print(f"  adaptive_density_confirmed=True")
 
     print(f"\n{'='*60}")
     print(f"VALIDATION {'PASSED' if validation['valid'] else 'FAILED'}")
@@ -390,7 +485,21 @@ def main():
 
     print(f"\nTotal time: {elapsed:.2f}s")
 
-    return result
+    # Final validation gate: exit with non-zero if validation or causal access failed
+    causal_passed = result.get("causal_validation", {}).get("passed", False)
+    validation_passed = validation.get("valid", False)
+
+    print(f"\n{'='*60}")
+    if validation_passed and causal_passed:
+        print(f"ALL CHECKS PASSED — VALIDATION PASSED, CAUSAL ACCESS PASSED")
+        print(f"{'='*60}")
+        return result
+    else:
+        print(f"VALIDATION {'PASSED' if validation_passed else 'FAILED'}")
+        print(f"CAUSAL ACCESS {'PASSED' if causal_passed else 'FAILED'}")
+        print(f"EXITING WITH ERROR (non-zero exit code)")
+        print(f"{'='*60}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
