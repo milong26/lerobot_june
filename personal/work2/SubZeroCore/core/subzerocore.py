@@ -42,10 +42,68 @@ def prepare_similarity_matrix(similarity_matrix: np.ndarray) -> np.ndarray:
 
 
 def compute_cosine_distance_matrix(similarity_matrix: np.ndarray) -> np.ndarray:
-    """Compute 1 - similarity and clip to [0, 2]."""
+    """
+    Compute distance from raw cosine similarity: distance = 1 - similarity.
+    Clips result to [0, 2].
+    """
     dist = 1.0 - similarity_matrix
     dist = np.clip(dist, 0.0, 2.0)
     return dist
+
+
+def compute_coverage_probability(
+    candidate_pool_size: int,
+    target_size: int,
+    k: int,
+) -> float:
+    """
+    Compute the coverage probability for a given K using the coverage inversion method.
+
+    coverage = 1 - product_{i=0}^{K-1} ((N - M - i) / (N - i))
+
+    This represents the probability that a random sample's K nearest neighbors
+    contain at least one selected sample when M samples are randomly chosen from N.
+
+    Uses iterative product computation to avoid overflow from large combinations.
+    """
+    n = candidate_pool_size
+    m = target_size
+    prob_not_covered = 1.0
+    for i in range(k):
+        prob_not_covered *= (n - m - i) / (n - i)
+    return 1.0 - prob_not_covered
+
+
+def find_k_for_coverage(
+    candidate_pool_size: int,
+    target_size: int,
+    coverage_gamma: float,
+) -> int:
+    """
+    Find the smallest K such that coverage probability >= coverage_gamma.
+
+    Uses the coverage inversion method from SubZeroCore supplementary:
+    starting from K=1, incrementally compute coverage probability until
+    the target coverage_gamma is reached.
+
+    For N=500, M=112, coverage_gamma=0.6, this yields K=4.
+
+    Returns K clamped to [1, candidate_pool_size - 1].
+    """
+    n = candidate_pool_size
+    m = target_size
+
+    if m >= n:
+        return 1
+
+    k = 1
+    while k < n:
+        coverage = compute_coverage_probability(n, m, k)
+        if coverage >= coverage_gamma:
+            break
+        k += 1
+
+    return max(1, min(k, n - 1))
 
 
 def determine_k(
@@ -56,9 +114,15 @@ def determine_k(
 ) -> int:
     """
     Determine K for KNN radius computation.
-    If k_override is provided, validate and return it.
-    Otherwise compute K based on SubZeroCore coverage target rule:
-    K = ceil(coverage_gamma * N / M), clamped to [1, N-1].
+
+    If k_override is provided, validate that 1 <= K < candidate_pool_size and return it.
+
+    Otherwise, use the coverage probability inversion method from SubZeroCore
+    supplementary: find the smallest K such that the coverage probability
+    (probability that a sample's K-nearest neighbors contain at least one
+    selected sample under random selection) >= coverage_gamma.
+
+    For N=500, M=112, coverage_gamma=0.6, this yields K=4.
     """
     if k_override is not None:
         if k_override < 1 or k_override >= candidate_pool_size:
@@ -67,11 +131,7 @@ def determine_k(
             )
         return k_override
 
-    n = candidate_pool_size
-    m = target_size
-    k = int(np.ceil(coverage_gamma * n / m))
-    k = max(1, min(k, n - 1))
-    return k
+    return find_k_for_coverage(candidate_pool_size, target_size, coverage_gamma)
 
 
 def compute_knn_radius(distance_matrix: np.ndarray, k: int) -> np.ndarray:
@@ -92,14 +152,23 @@ def compute_knn_radius(distance_matrix: np.ndarray, k: int) -> np.ndarray:
 
 def compute_density_weights(knn_radius: np.ndarray, eps: float = EPS) -> np.ndarray:
     """
-    Compute density weights from KNN radius following SubZeroCore algorithm.
-    density_weight_i = 1 / (knn_radius_i + eps)
-    Handles near-zero std by returning uniform weights if all radii are nearly identical.
+    Compute Gaussian density weights from KNN radius per SubZeroCore algorithm.
+
+    Formula: s_i = exp(-(r_i - mu)^2 / (2 * sigma^2))
+
+    where mu = mean(knn_radius), sigma = std(knn_radius).
+
+    If sigma < eps, returns all-ones weights to avoid division by zero.
+
+    Returns non-negative finite weights with same shape as knn_radius.
     """
-    if np.std(knn_radius) < eps:
+    mu = np.mean(knn_radius)
+    sigma = np.std(knn_radius)
+
+    if sigma < eps:
         return np.ones(len(knn_radius))
 
-    weights = 1.0 / (knn_radius + eps)
+    weights = np.exp(-((knn_radius - mu) ** 2) / (2 * sigma ** 2))
     weights = np.clip(weights, 0.0, np.inf)
     return weights
 
@@ -147,10 +216,13 @@ def select_best_candidate(
     Select the candidate with the highest marginal gain.
     Uses deterministic tie-breaking: among equal gains, pick the one with
     the smallest episode index for reproducibility.
+
+    Raises RuntimeError if no valid candidate is available.
     """
     max_gain = -np.inf
     best_row = -1
     best_ep_idx = float("inf")
+    found = False
 
     for j in range(len(marginal_gains)):
         g = marginal_gains[j]
@@ -161,6 +233,13 @@ def select_best_candidate(
             max_gain = g
             best_row = j
             best_ep_idx = ep_idx
+            found = True
+
+    if not found:
+        raise RuntimeError(
+            "No valid candidate available for selection. "
+            "All candidates may already be selected or have invalid gains."
+        )
 
     return best_row
 
@@ -175,12 +254,18 @@ def greedy_facility_location(
     Greedy facility-location selection.
     Maintains current_coverage and selected_mask, selects one episode per round
     until target_size is reached.
+
+    Returns:
+        selected_row_indices: internal row indices of selected candidates
+        selection_order_episode_indices: real episode indices in selection order
+        marginal_gains: marginal gain at each selection step
+        final_objective: final facility-location objective value
     """
     n = weighted_similarity.shape[0]
     selected_mask = np.zeros(n, dtype=bool)
     current_coverage = np.zeros(n)
     selected_row_indices = []
-    selection_order = []
+    selection_order_episode_indices = []
     marginal_gains_history = []
 
     for _ in range(target_size):
@@ -189,8 +274,12 @@ def greedy_facility_location(
         )
         best_row = select_best_candidate(gains, episode_indices, seed)
 
+        assert not selected_mask[best_row], (
+            f"Selected row {best_row} was already marked as selected"
+        )
+
         selected_row_indices.append(int(best_row))
-        selection_order.append(int(best_row))
+        selection_order_episode_indices.append(int(episode_indices[best_row]))
         marginal_gains_history.append(float(gains[best_row]))
 
         selected_mask[best_row] = True
@@ -200,7 +289,7 @@ def greedy_facility_location(
 
     return {
         "selected_row_indices": selected_row_indices,
-        "selection_order": selection_order,
+        "selection_order_episode_indices": selection_order_episode_indices,
         "marginal_gains": marginal_gains_history,
         "final_objective": final_objective,
     }
@@ -224,20 +313,49 @@ def run_subzerocore(
 ) -> Dict:
     """
     Run the full SubZeroCore selection pipeline.
+
+    Pipeline:
+    1. Validate inputs (target_size, episode_indices, embedding matrix)
+    2. Compute raw cosine similarity -> raw cosine distance
+    3. Coverage probability inversion to determine K
+    4. KNN radius from raw cosine distance
+    5. Gaussian density weights from KNN radius
+    6. Prepare similarity for facility-location (non-negative)
+    7. Density-weighted similarity matrix
+    8. Greedy facility-location selection
+    9. Map row indices to real episode indices
+
     Returns a result dictionary with all intermediate and final results.
     """
+    n = X.shape[0]
+
     validate_embedding_matrix(X)
 
-    similarity_matrix = compute_cosine_similarity_matrix(X)
-    sim_prepared = prepare_similarity_matrix(similarity_matrix)
-    distance_matrix = compute_cosine_distance_matrix(sim_prepared)
+    if target_size < 1:
+        raise ValueError(f"target_size must be >= 1, got {target_size}")
+    if target_size > n:
+        raise ValueError(
+            f"target_size ({target_size}) must be <= candidate_pool_size ({n})"
+        )
+    if len(episode_indices) != n:
+        raise ValueError(
+            f"len(episode_indices)={len(episode_indices)} must match X.shape[0]={n}"
+        )
 
-    n = X.shape[0]
+    similarity_matrix = compute_cosine_similarity_matrix(X)
+    distance_matrix = compute_cosine_distance_matrix(similarity_matrix)
+
     k = determine_k(n, target_size, coverage_gamma, k_override)
+
+    if k < 1 or k >= n:
+        raise ValueError(
+            f"Computed K={k} must satisfy 1 <= K < candidate_pool_size ({n})"
+        )
 
     knn_radius = compute_knn_radius(distance_matrix, k)
     density_weights = compute_density_weights(knn_radius)
 
+    sim_prepared = prepare_similarity_matrix(similarity_matrix)
     weighted_sim = compute_weighted_similarity_matrix(sim_prepared, density_weights)
 
     fl_result = greedy_facility_location(weighted_sim, target_size, episode_indices, seed)
@@ -254,7 +372,10 @@ def run_subzerocore(
         "density_weights": density_weights,
         "marginal_gains": fl_result["marginal_gains"],
         "final_objective": fl_result["final_objective"],
-        "selection_order": fl_result["selection_order"],
+        "selection_order_episode_indices": fl_result["selection_order_episode_indices"],
+        "similarity_matrix": similarity_matrix,
+        "prepared_similarity_matrix": sim_prepared,
+        "weighted_similarity_matrix": weighted_sim,
         "candidate_pool_size": n,
         "target_size": target_size,
         "coverage_gamma": coverage_gamma,

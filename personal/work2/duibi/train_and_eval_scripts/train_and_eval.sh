@@ -118,8 +118,11 @@ else
             --num-selected "$NUM_EPISODES" \
             --seed "$SEED"
 
-        # Copy subset file to expected location
-        cp "$OUTPUT_BASE_DIR/subsets/subzerocore_${NUM_EPISODES}_seed${SEED}.json" "$SUBSET_FILE"
+        # Verify subset file exists (SubZeroCore outputs directly to SUBSET_DIR)
+        if [ ! -f "$SUBSET_FILE" ]; then
+            echo "Error: SubZeroCore subset file not found: $SUBSET_FILE"
+            exit 1
+        fi
         echo "=== SubZeroCore selection complete ==="
     else
         # Select episodes using uniform or random

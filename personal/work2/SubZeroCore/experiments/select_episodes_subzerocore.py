@@ -30,7 +30,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from SubZeroCore.config import COVERAGE_GAMMA, SEED
+from SubZeroCore.config import COVERAGE_GAMMA, SEED, GLOBAL_WEIGHT, WRIST_WEIGHT
 from SubZeroCore.core.embedding_loader import load_all_visual_embeddings
 from SubZeroCore.core.subzerocore import run_subzerocore
 from SubZeroCore.core.validation import validate_selection_result
@@ -60,7 +60,7 @@ def parse_args():
     )
     parser.add_argument(
         "--k", type=int, default=None,
-        help="Override K for KNN radius (default: auto-computed)"
+        help="Override K for KNN radius (default: auto-computed via coverage probability inversion)"
     )
     parser.add_argument(
         "--seed", type=int, default=SEED,
@@ -89,6 +89,12 @@ def build_subset_output(
             "seed": args.seed,
             "embedding_dim": embedding_dim,
             "candidate_pool_size": candidate_pool_size,
+            "offline_full_pool_access": True,
+            "embedding_type": "visual_global_wrist",
+            "global_weight": GLOBAL_WEIGHT,
+            "wrist_weight": WRIST_WEIGHT,
+            "similarity_type": "cosine",
+            "density_weight_type": "gaussian_knn_radius",
         },
     }
 
@@ -111,6 +117,8 @@ def build_selection_log(
         "embedding_dim": embedding_dim,
         "coverage_gamma": result["coverage_gamma"],
         "k": result["k"],
+        "k_selection_method": "coverage_probability_inversion",
+        "density_weight_formula": "gaussian_knn_radius",
         "knn_radius_stats": {
             "mean": float(np.mean(knn_radius)),
             "std": float(np.std(knn_radius)),
@@ -123,7 +131,7 @@ def build_selection_log(
             "min": float(np.min(density_weights)),
             "max": float(np.max(density_weights)),
         },
-        "selection_order": result["selection_order"],
+        "selection_order_episode_indices": result["selection_order_episode_indices"],
         "selected_episode_indices": result["selected_episode_indices"],
         "marginal_gains": result["marginal_gains"],
         "final_objective": result["final_objective"],
@@ -170,7 +178,9 @@ def print_summary(
     print(f"Target subset size: {result['target_size']}")
     print(f"Embedding dim: {embedding_dim}")
     print(f"K (KNN): {result['k']}")
+    print(f"K selection method: coverage_probability_inversion")
     print(f"Coverage gamma: {result['coverage_gamma']}")
+    print(f"Density weight method: gaussian_knn_radius")
 
     knn_radius = result["knn_radius"]
     print(f"KNN radius: mean={np.mean(knn_radius):.4f}, "
@@ -257,7 +267,21 @@ def main():
     runtime_seconds = time.time() - start_time
 
     print("\nValidating selection result...")
-    validation = validate_selection_result(result, episode_indices, num_selected)
+    validation = validate_selection_result(
+        result,
+        episode_indices,
+        num_selected,
+        embedding_matrix=embedding_matrix,
+        similarity_matrix=result["similarity_matrix"],
+        weighted_similarity_matrix=result["weighted_similarity_matrix"],
+    )
+
+    if not validation["valid"]:
+        print_summary(result, validation, embedding_dim, candidate_pool_size, runtime_seconds)
+        print(f"\nVALIDATION FAILED. Exiting with error.")
+        for issue in validation["issues"]:
+            print(f"  Issue: {issue}")
+        sys.exit(1)
 
     subset_data = build_subset_output(result, args, embedding_dim, candidate_pool_size)
     selection_log = build_selection_log(
@@ -267,10 +291,6 @@ def main():
     save_json_outputs(subset_data, selection_log, output_dir, num_selected, seed)
 
     print_summary(result, validation, embedding_dim, candidate_pool_size, runtime_seconds)
-
-    if not validation["valid"]:
-        print(f"\nVALIDATION FAILED. Exiting with error.")
-        sys.exit(1)
 
     print(f"\nAll checks passed.")
 
