@@ -49,6 +49,7 @@ from lerobot.utils.import_utils import _peft_available, require_package
 from .evo1.configuration_evo1 import Evo1Config
 from .groot.configuration_groot import GrootConfig
 from .pretrained import PreTrainedPolicy
+from .minivla.configuration_minivla import MiniVLAConfig
 from .smolvla.configuration_smolvla import SmolVLAConfig
 from .tdmpc.configuration_tdmpc import TDMPCConfig
 from .tinyvla.configuration_tinyvla import TinyVLAConfig
@@ -152,6 +153,8 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return VLAJEPAConfig(**kwargs)
     elif policy_type == "tinyvla":
         return TinyVLAConfig(**kwargs)
+    elif policy_type == "minivla":
+        return MiniVLAConfig(**kwargs)
     else:
         try:
             config_cls = PreTrainedConfig.get_choice_class(policy_type)
