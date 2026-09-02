@@ -33,12 +33,14 @@ def validate_selected_indices(
     return issues
 
 
-def validate_knn_radius(knn_radius: np.ndarray) -> List[str]:
-    """Check KNN radius length, finiteness, and non-negativity."""
+def validate_knn_radius(knn_radius: np.ndarray, candidate_pool_size: int) -> List[str]:
+    """Check KNN radius length equals candidate_pool_size, all finite, all >= 0."""
     issues = []
 
-    if len(knn_radius) == 0:
-        issues.append("knn_radius is empty")
+    if len(knn_radius) != candidate_pool_size:
+        issues.append(
+            f"knn_radius length {len(knn_radius)} must equal candidate_pool_size {candidate_pool_size}"
+        )
         return issues
 
     if not np.all(np.isfinite(knn_radius)):
@@ -50,12 +52,17 @@ def validate_knn_radius(knn_radius: np.ndarray) -> List[str]:
     return issues
 
 
-def validate_density_weights(density_weights: np.ndarray) -> List[str]:
-    """Check density weights length, finiteness, and non-negativity."""
+def validate_density_weights(density_weights: np.ndarray, candidate_pool_size: int) -> List[str]:
+    """
+    Check density weights length equals candidate_pool_size, all finite,
+    all >= 0 and <= 1 + 1e-8 (Gaussian formula theoretical range is (0, 1]).
+    """
     issues = []
 
-    if len(density_weights) == 0:
-        issues.append("density_weights is empty")
+    if len(density_weights) != candidate_pool_size:
+        issues.append(
+            f"density_weights length {len(density_weights)} must equal candidate_pool_size {candidate_pool_size}"
+        )
         return issues
 
     if not np.all(np.isfinite(density_weights)):
@@ -64,30 +71,72 @@ def validate_density_weights(density_weights: np.ndarray) -> List[str]:
     if np.any(density_weights < 0):
         issues.append("density_weights contains negative values")
 
+    if np.any(density_weights > 1.0 + 1e-8):
+        issues.append(
+            f"density_weights exceeds theoretical max 1.0, max={np.max(density_weights):.6e}"
+        )
+
     return issues
 
 
-def validate_similarity_matrix(similarity_matrix: np.ndarray) -> List[str]:
-    """Check that similarity matrix is square and all finite."""
+def validate_similarity_matrix(similarity_matrix: np.ndarray, candidate_pool_size: int) -> List[str]:
+    """
+    Check shape is (candidate_pool_size, candidate_pool_size), all finite,
+    all values in [-1 - 1e-8, 1 + 1e-8]. Does NOT require non-negative.
+    """
     issues = []
 
     if similarity_matrix.ndim != 2:
         issues.append(f"similarity_matrix must be 2-D, got {similarity_matrix.ndim}-D")
         return issues
 
-    if similarity_matrix.shape[0] != similarity_matrix.shape[1]:
+    expected_shape = (candidate_pool_size, candidate_pool_size)
+    if similarity_matrix.shape != expected_shape:
         issues.append(
-            f"similarity_matrix must be square, got shape {similarity_matrix.shape}"
+            f"similarity_matrix shape {similarity_matrix.shape} must be {expected_shape}"
         )
+        return issues
 
     if not np.all(np.isfinite(similarity_matrix)):
         issues.append("similarity_matrix contains non-finite values")
 
+    if np.any(similarity_matrix < -1.0 - 1e-8) or np.any(similarity_matrix > 1.0 + 1e-8):
+        issues.append(
+            f"similarity_matrix values out of [-1, 1], "
+            f"min={np.min(similarity_matrix):.6f}, max={np.max(similarity_matrix):.6f}"
+        )
+
     return issues
 
 
-def validate_k(k: int, candidate_pool_size: int) -> List[str]:
-    """Check that 1 <= K < candidate_pool_size."""
+def validate_weighted_similarity_matrix(weighted_similarity: np.ndarray, candidate_pool_size: int) -> List[str]:
+    """
+    Check shape is (N, N), all finite. Does NOT require non-negative
+    because raw cosine can be negative.
+    """
+    issues = []
+
+    if weighted_similarity.ndim != 2:
+        issues.append(
+            f"weighted_similarity_matrix must be 2-D, got {weighted_similarity.ndim}-D"
+        )
+        return issues
+
+    expected_shape = (candidate_pool_size, candidate_pool_size)
+    if weighted_similarity.shape != expected_shape:
+        issues.append(
+            f"weighted_similarity_matrix shape {weighted_similarity.shape} must be {expected_shape}"
+        )
+        return issues
+
+    if not np.all(np.isfinite(weighted_similarity)):
+        issues.append("weighted_similarity_matrix contains non-finite values")
+
+    return issues
+
+
+def validate_k(k: int, candidate_pool_size: int, target_size: int) -> List[str]:
+    """Check 1 <= K < candidate_pool_size and target_size < candidate_pool_size."""
     issues = []
 
     if k < 1:
@@ -98,11 +147,16 @@ def validate_k(k: int, candidate_pool_size: int) -> List[str]:
             f"K must be < candidate_pool_size ({candidate_pool_size}), got {k}"
         )
 
+    if target_size >= candidate_pool_size:
+        issues.append(
+            f"target_size ({target_size}) must be < candidate_pool_size ({candidate_pool_size})"
+        )
+
     return issues
 
 
 def validate_marginal_gains(marginal_gains: List[float], target_size: int) -> List[str]:
-    """Check that marginal gains length equals target_size and all are finite."""
+    """Check length equals target_size and all are finite."""
     issues = []
 
     if len(marginal_gains) != target_size:
@@ -118,23 +172,12 @@ def validate_marginal_gains(marginal_gains: List[float], target_size: int) -> Li
     return issues
 
 
-def validate_weighted_similarity_matrix(weighted_similarity: np.ndarray) -> List[str]:
-    """Check that weighted similarity matrix is 2-D square and all finite."""
+def validate_final_objective(final_objective: float) -> List[str]:
+    """Check that final_objective is finite."""
     issues = []
 
-    if weighted_similarity.ndim != 2:
-        issues.append(
-            f"weighted_similarity_matrix must be 2-D, got {weighted_similarity.ndim}-D"
-        )
-        return issues
-
-    if weighted_similarity.shape[0] != weighted_similarity.shape[1]:
-        issues.append(
-            f"weighted_similarity_matrix must be square, got shape {weighted_similarity.shape}"
-        )
-
-    if not np.all(np.isfinite(weighted_similarity)):
-        issues.append("weighted_similarity_matrix contains non-finite values")
+    if not np.isfinite(final_objective):
+        issues.append(f"final_objective is non-finite: {final_objective}")
 
     return issues
 
@@ -180,13 +223,14 @@ def validate_selection_result(
     - selected count matches target_size
     - selected episodes are unique
     - all selected episodes belong to candidate pool
-    - target_size <= candidate pool size
+    - target_size < candidate_pool_size (SubZeroCore requires pruning)
     - K is valid (1 <= K < candidate_pool_size)
     - knn_radius is valid
     - density_weights is valid
     - similarity_matrix is valid (if provided)
     - weighted_similarity_matrix is valid (if provided)
     - marginal_gains is valid
+    - final_objective is valid
     - embedding_matrix is valid (if provided)
 
     Returns {"valid": bool, "issues": list[str]}.
@@ -202,21 +246,17 @@ def validate_selection_result(
         )
     )
 
-    if target_size > candidate_pool_size:
-        issues.append(
-            f"target_size ({target_size}) must be <= candidate_pool_size ({candidate_pool_size})"
-        )
-
-    issues.extend(validate_k(result["k"], candidate_pool_size))
-    issues.extend(validate_knn_radius(result["knn_radius"]))
-    issues.extend(validate_density_weights(result["density_weights"]))
+    issues.extend(validate_k(result["k"], candidate_pool_size, target_size))
+    issues.extend(validate_knn_radius(result["knn_radius"], candidate_pool_size))
+    issues.extend(validate_density_weights(result["density_weights"], candidate_pool_size))
     issues.extend(validate_marginal_gains(result["marginal_gains"], target_size))
+    issues.extend(validate_final_objective(result["final_objective"]))
 
     if similarity_matrix is not None:
-        issues.extend(validate_similarity_matrix(similarity_matrix))
+        issues.extend(validate_similarity_matrix(similarity_matrix, candidate_pool_size))
 
     if weighted_similarity_matrix is not None:
-        issues.extend(validate_weighted_similarity_matrix(weighted_similarity_matrix))
+        issues.extend(validate_weighted_similarity_matrix(weighted_similarity_matrix, candidate_pool_size))
 
     if embedding_matrix is not None:
         issues.extend(validate_embedding_matrix_result(embedding_matrix))

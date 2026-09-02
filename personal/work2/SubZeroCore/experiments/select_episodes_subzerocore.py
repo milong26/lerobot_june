@@ -60,7 +60,7 @@ def parse_args():
     )
     parser.add_argument(
         "--k", type=int, default=None,
-        help="Override K for KNN radius (default: auto-computed via coverage probability inversion)"
+        help="Override K for KNN radius (default: auto-computed via official numerical inversion)"
     )
     parser.add_argument(
         "--seed", type=int, default=SEED,
@@ -93,8 +93,9 @@ def build_subset_output(
             "embedding_type": "visual_global_wrist",
             "global_weight": GLOBAL_WEIGHT,
             "wrist_weight": WRIST_WEIGHT,
-            "similarity_type": "cosine",
+            "similarity_type": "cosine_raw",
             "density_weight_type": "gaussian_knn_radius",
+            "k_selection_method": "official_numerical_inversion",
         },
     }
 
@@ -117,8 +118,11 @@ def build_selection_log(
         "embedding_dim": embedding_dim,
         "coverage_gamma": result["coverage_gamma"],
         "k": result["k"],
-        "k_selection_method": "coverage_probability_inversion",
-        "density_weight_formula": "gaussian_knn_radius",
+        "k_selection_method": "official_numerical_inversion",
+        "density_weight_formula": "exp(-((r-mu)^2)/(2*sigma^2))",
+        "similarity_formula": "cosine(x_i,x_j)",
+        "weighted_similarity_formula": "s_j*cosine(x_i,x_j)",
+        "facility_location_formula": "sum_i max_{j in S}(s_j*cosine(x_i,x_j))",
         "knn_radius_stats": {
             "mean": float(np.mean(knn_radius)),
             "std": float(np.std(knn_radius)),
@@ -178,9 +182,11 @@ def print_summary(
     print(f"Target subset size: {result['target_size']}")
     print(f"Embedding dim: {embedding_dim}")
     print(f"K (KNN): {result['k']}")
-    print(f"K selection method: coverage_probability_inversion")
+    print(f"K selection method: official_numerical_inversion")
     print(f"Coverage gamma: {result['coverage_gamma']}")
-    print(f"Density weight method: gaussian_knn_radius")
+    print(f"Similarity: raw cosine")
+    print(f"Density weight: Gaussian KNN radius")
+    print(f"Facility location: weighted raw cosine")
 
     knn_radius = result["knn_radius"]
     print(f"KNN radius: mean={np.mean(knn_radius):.4f}, "
