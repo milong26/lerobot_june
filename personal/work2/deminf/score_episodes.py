@@ -2,16 +2,23 @@
 DemInf Episode Scoring
 
 Official DemInf quality inference pipeline:
-1. Encode all timesteps through trained VAEs (posterior mean)
+1. Encode all timesteps through trained VAEs (posterior mean) [via encode_all_timesteps]
 2. Build quality batches with repeat=4, batch_size=1024, drop_remainder=True
 3. Batch-local KSG scoring per official estimator
-4. Filter NaN, global p1/p99 clipping, global z-score normalization
+4. Filter NaN (NOT Inf), global p1/p99 clipping, global z-score normalization
 5. Mean aggregate by episode
 6. Rank episodes by deminf_score (descending)
+
+The core scoring function is score_latents(), which operates on pre-computed
+latents and is the only entry point for the official quality pipeline.
+score_dataset() is kept as a compatibility wrapper that encodes then delegates
+to score_latents().
 """
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -89,7 +96,21 @@ def save_latent_cache(
     global_row_ids: np.ndarray,
     manifest: Dict,
 ) -> None:
-    """Save latent embeddings to cache file with manifest."""
+    """
+    Save latent embeddings to cache file with comprehensive manifest.
+
+    The manifest includes fingerprint, git_commit, checkpoint hashes,
+    dataset info hash, latent shapes, and array hashes for full validation.
+
+    Args:
+        output_dir: Directory to save cache files.
+        z_s: State latents [N, state_latent_dim].
+        z_a: Action latents [N, action_latent_dim].
+        episode_ids: Episode index per transition [N].
+        timestep_ids: Timestep index per transition [N].
+        global_row_ids: Global HF dataset row index per transition [N].
+        manifest: Dictionary with fingerprint and metadata.
+    """
     cache_path = Path(output_dir) / "latents.npz"
     np.savez(
         str(cache_path),
@@ -99,11 +120,130 @@ def save_latent_cache(
         timestep_ids=timestep_ids,
         global_row_ids=global_row_ids,
     )
+
+    # Enhance manifest with array hashes and shapes
+    enhanced_manifest = dict(manifest)
+    enhanced_manifest["z_state_shape"] = list(z_s.shape)
+    enhanced_manifest["z_action_shape"] = list(z_a.shape)
+    enhanced_manifest["episode_ids_hash"] = _array_hash_int64(episode_ids)
+    enhanced_manifest["timestep_ids_hash"] = _array_hash_int64(timestep_ids)
+    enhanced_manifest["global_row_ids_hash"] = _array_hash_int64(global_row_ids)
+    enhanced_manifest["num_transitions"] = len(z_s)
+
     manifest_path = Path(output_dir) / "latents_manifest.json"
-    import json
     with open(manifest_path, "w") as f:
-        json.dump(manifest, f, indent=2)
+        json.dump(enhanced_manifest, f, indent=2)
     logger.info(f"Saved latent cache to {cache_path} with manifest {manifest_path}")
+
+
+def _array_hash_int64(arr: np.ndarray) -> str:
+    """SHA256 hash of an int64 array for cache validation."""
+    return hashlib.sha256(arr.tobytes()).hexdigest()[:16]
+
+
+def validate_latent_cache(
+    output_dir: str | Path,
+    expected_fingerprint: str,
+    expected_num_transitions: Optional[int] = None,
+    expected_global_row_ids: Optional[np.ndarray] = None,
+    expected_z_state_shape: Optional[Tuple[int, int]] = None,
+    expected_z_action_shape: Optional[Tuple[int, int]] = None,
+) -> Tuple[bool, List[str]]:
+    """
+    Validate that a latent cache file matches the current experiment.
+
+    Checks:
+    - npz and manifest files exist
+    - Fingerprint matches
+    - z_state/z_action lengths match expected_num_transitions
+    - episode_ids/timestep_ids/global_row_ids array lengths match
+    - Latent dimensions are correct
+    - No NaN/Inf in latent arrays
+    - global_row_ids hash matches current data
+
+    Args:
+        output_dir: Directory containing cache files.
+        expected_fingerprint: Expected cache fingerprint string.
+        expected_num_transitions: Expected number of transitions (N).
+        expected_global_row_ids: Current global row ids for hash comparison.
+        expected_z_state_shape: Expected z_state shape (N, latent_dim).
+        expected_z_action_shape: Expected z_action shape (N, latent_dim).
+
+    Returns:
+        Tuple of (is_valid, list_of_mismatch_reasons).
+    """
+    reasons = []
+    cache_path = Path(output_dir) / "latents.npz"
+    manifest_path = Path(output_dir) / "latents_manifest.json"
+
+    if not cache_path.exists():
+        reasons.append(f"Latent cache file not found: {cache_path}")
+        return False, reasons
+
+    if not manifest_path.exists():
+        reasons.append(f"Latent manifest file not found: {manifest_path}")
+        return False, reasons
+
+    with open(manifest_path, "r") as f:
+        cached_manifest = json.load(f)
+
+    # Check fingerprint
+    cached_fp = cached_manifest.get("fingerprint", "")
+    if cached_fp != expected_fingerprint:
+        reasons.append(
+            f"fingerprint mismatch: cached='{cached_fp}', expected='{expected_fingerprint}'"
+        )
+
+    # Load cache data
+    data = np.load(str(cache_path))
+    z_s = data["z_state"]
+    z_a = data["z_action"]
+    ep_ids = data["episode_ids"]
+    ts_ids = data["timestep_ids"]
+    gr_ids = data["global_row_ids"] if "global_row_ids" in data else data["timestep_ids"]
+
+    # Check lengths
+    n = len(z_s)
+    if expected_num_transitions is not None and n != expected_num_transitions:
+        reasons.append(
+            f"num_transitions mismatch: cache={n}, expected={expected_num_transitions}"
+        )
+
+    if len(z_a) != n:
+        reasons.append(f"z_action length {len(z_a)} != z_state length {n}")
+    if len(ep_ids) != n:
+        reasons.append(f"episode_ids length {len(ep_ids)} != z_state length {n}")
+    if len(ts_ids) != n:
+        reasons.append(f"timestep_ids length {len(ts_ids)} != z_state length {n}")
+    if len(gr_ids) != n:
+        reasons.append(f"global_row_ids length {len(gr_ids)} != z_state length {n}")
+
+    # Check shapes
+    if expected_z_state_shape is not None and z_s.shape != expected_z_state_shape:
+        reasons.append(
+            f"z_state shape mismatch: cache={z_s.shape}, expected={expected_z_state_shape}"
+        )
+    if expected_z_action_shape is not None and z_a.shape != expected_z_action_shape:
+        reasons.append(
+            f"z_action shape mismatch: cache={z_a.shape}, expected={expected_z_action_shape}"
+        )
+
+    # Check for NaN/Inf
+    if not np.all(np.isfinite(z_s)):
+        reasons.append("z_state contains NaN or Inf")
+    if not np.all(np.isfinite(z_a)):
+        reasons.append("z_action contains NaN or Inf")
+
+    # Check global_row_ids hash
+    if expected_global_row_ids is not None:
+        cached_hash = cached_manifest.get("global_row_ids_hash", "")
+        current_hash = _array_hash_int64(expected_global_row_ids)
+        if cached_hash != current_hash:
+            reasons.append(
+                f"global_row_ids hash mismatch: cached='{cached_hash}', current='{current_hash}'"
+            )
+
+    return (len(reasons) == 0, reasons)
 
 
 def load_latent_cache(
@@ -257,26 +397,41 @@ def score_quality_batches(
 def postprocess_scores(
     results: List[Dict],
     config: DemInfConfig,
-) -> pd.DataFrame:
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Post-process raw timestep scores:
-    1. Filter NaN
+    1. Filter NaN only (NOT Inf, matching official ~jnp.isnan(pred))
     2. Global p1/p99 clipping
     3. Global z-score normalization
     4. Mean aggregate by episode
 
-    Returns episode score DataFrame.
+    Official DemInf only filters NaN. If Inf values exist after NaN filtering,
+    a ValueError is raised to flag degenerate latents rather than silently
+    removing them.
+
+    Returns:
+        ep_scores_df: Per-episode scores with rank.
+        ts_scores_df: Per-timestep raw/clipped/normalized scores.
     """
     df = pd.DataFrame(results)
 
-    # Filter NaN
-    nan_mask = ~np.isfinite(df["raw_score"])
+    # Filter NaN only (official semantics: ~jnp.isnan(pred))
+    nan_mask = np.isnan(df["raw_score"].values)
     n_nan = nan_mask.sum()
     if n_nan > 0:
         logger.info(f"Filtered {n_nan} NaN timestep scores")
         df = df[~nan_mask].reset_index(drop=True)
 
     scores = df["raw_score"].values.astype(np.float64)
+
+    # Check for Inf after NaN filtering (official only filters NaN)
+    inf_mask = np.isinf(scores)
+    if inf_mask.any():
+        n_inf = inf_mask.sum()
+        raise ValueError(
+            f"DemInf KSG produced {n_inf} Inf score(s); official pipeline only "
+            f"filters NaN, investigate duplicate/degenerate latents"
+        )
 
     # Global percentile clipping
     p_low = np.percentile(scores, config.score_clip_low)
@@ -318,6 +473,79 @@ def postprocess_scores(
     return ep_scores, df
 
 
+def score_latents(
+    z_s: np.ndarray,
+    z_a: np.ndarray,
+    episode_ids: np.ndarray,
+    timestep_ids: np.ndarray,
+    global_row_ids: np.ndarray,
+    config: DemInfConfig,
+    output_dir: Optional[str | Path] = None,
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    """
+    Core quality scoring function operating on pre-computed latents.
+
+    This is the ONLY entry point for the official DemInf quality pipeline.
+    It does NOT receive VAE models or raw states/actions; it works entirely
+    on posterior mean latent vectors.
+
+    Pipeline:
+    1. Validate latent shapes (N, latent_dim consistency)
+    2. Build quality records from latents
+    3. Build official quality batches (repeat=4, shuffle, batch_size=1024, drop_remainder)
+    4. Score each batch with deminf_ksg_batch_scores
+    5. Post-process: filter NaN, p1/p99 clipping, global z-score, episode mean
+    6. Save raw_timestep_scores.csv and episode_scores.csv
+
+    Args:
+        z_s: State latents [N, state_latent_dim].
+        z_a: Action latents [N, action_latent_dim].
+        episode_ids: Episode index per transition [N].
+        timestep_ids: Timestep index per transition [N].
+        global_row_ids: Global HF dataset row index per transition [N].
+        config: DemInfConfig with quality inference parameters.
+        output_dir: Optional directory to save CSV outputs.
+
+    Returns:
+        episode_scores_df: Per-episode scores with rank.
+        timestep_scores_df: Per-timestep raw/clipped/normalized scores.
+    """
+    # Validate shapes
+    N = len(z_s)
+    assert len(z_a) == N, f"z_a length {len(z_a)} != z_s length {N}"
+    assert len(episode_ids) == N, f"episode_ids length {len(episode_ids)} != {N}"
+    assert len(timestep_ids) == N, f"timestep_ids length {len(timestep_ids)} != {N}"
+    assert len(global_row_ids) == N, f"global_row_ids length {len(global_row_ids)} != {N}"
+    assert z_s.ndim == 2, f"z_s should be 2D, got {z_s.ndim}"
+    assert z_a.ndim == 2, f"z_a should be 2D, got {z_a.ndim}"
+
+    # Build records
+    records = build_quality_records(z_s, z_a, episode_ids, timestep_ids, global_row_ids)
+
+    # Build quality batches
+    batches = build_official_quality_batches(records, config, base_seed=config.seed)
+
+    # Score batches
+    results = score_quality_batches(batches, ks=config.ks)
+
+    # Post-process
+    ep_scores_df, ts_scores_df = postprocess_scores(results, config)
+
+    # Save outputs
+    if output_dir is not None:
+        ensure_dir(output_dir)
+
+        ts_path = Path(output_dir) / "raw_timestep_scores.csv"
+        ts_scores_df.to_csv(str(ts_path), index=False)
+        logger.info(f"Saved timestep scores to {ts_path}")
+
+        csv_path = Path(output_dir) / "episode_scores.csv"
+        ep_scores_df.to_csv(str(csv_path), index=False)
+        logger.info(f"Saved episode scores to {csv_path}")
+
+    return ep_scores_df, ts_scores_df
+
+
 def score_dataset(
     state_model: BetaVAE,
     action_model: BetaVAE,
@@ -330,42 +558,35 @@ def score_dataset(
     output_dir: Optional[str | Path] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Full official DemInf scoring pipeline.
+    Compatibility wrapper: encodes raw states/actions then delegates to score_latents().
+
+    This function is kept for backward compatibility. The official pipeline
+    should use score_latents() directly with pre-computed latents from
+    encode_all_timesteps() or a validated cache.
+
+    Args:
+        state_model: Trained state VAE in eval mode.
+        action_model: Trained action VAE in eval mode.
+        states: State vectors [N, D_s].
+        actions: Action vectors [N, D_a].
+        episode_ids: Episode index per transition [N].
+        timestep_ids: Timestep index per transition [N].
+        global_row_ids: Global HF dataset row index per transition [N].
+        config: DemInfConfig with quality inference parameters.
+        output_dir: Optional directory to save CSV outputs.
 
     Returns:
         episode_scores_df: Per-episode scores with rank.
         timestep_scores_df: Per-timestep raw/clipped/normalized scores.
     """
-    # Step 1: Encode
+    # Encode (this is the compatibility step; official path uses pre-computed latents)
     z_s, z_a = encode_all_timesteps(
         state_model, action_model, states, actions,
         batch_size=config.quality_batch_size,
     )
 
-    # Step 2: Build records
-    records = build_quality_records(z_s, z_a, episode_ids, timestep_ids, global_row_ids)
-
-    # Step 3: Build quality batches
-    batches = build_official_quality_batches(records, config, base_seed=config.seed)
-
-    # Step 4: Score batches
-    results = score_quality_batches(batches, ks=config.ks)
-
-    # Step 5: Post-process
-    ep_scores_df, ts_scores_df = postprocess_scores(results, config)
-
-    # Save outputs
-    if output_dir is not None:
-        ensure_dir(output_dir)
-
-        # Save timestep scores
-        ts_path = Path(output_dir) / "raw_timestep_scores.csv"
-        ts_scores_df.to_csv(str(ts_path), index=False)
-        logger.info(f"Saved timestep scores to {ts_path}")
-
-        # Save episode scores
-        csv_path = Path(output_dir) / "episode_scores.csv"
-        ep_scores_df.to_csv(str(csv_path), index=False)
-        logger.info(f"Saved episode scores to {csv_path}")
-
-    return ep_scores_df, ts_scores_df
+    # Delegate to core scoring function
+    return score_latents(
+        z_s, z_a, episode_ids, timestep_ids, global_row_ids,
+        config, output_dir,
+    )

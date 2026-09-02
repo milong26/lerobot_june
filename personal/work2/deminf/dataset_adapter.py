@@ -320,7 +320,10 @@ class DemInfNormalizer:
     - Continuous non-gripper dims: Gaussian normalization (x-mean)/std
     - Gripper dims (index 3 and index 21): no normalization (NONE, per official)
     - Action xyz (0:3): Gaussian normalization
-    - Action gripper (3): bounds normalization to [-1,1] if not already in range
+    - Action gripper (3): ALWAYS bounds normalization to [-1,1] using
+      the dataset's actual min/max, matching official NormalizationType.BOUNDS.
+      Even if the gripper values already fall in [-1,1], the bounds transform
+      is still applied (if min=-1, max=1, the result is identical).
     """
 
     def __init__(
@@ -339,7 +342,7 @@ class DemInfNormalizer:
         self.action_std = None
         self.action_gripper_min = None
         self.action_gripper_max = None
-        self.action_gripper_normalized = False
+        self.action_gripper_bounds_applied = True
 
     def fit(self, states: np.ndarray, actions: np.ndarray) -> None:
         """Compute normalization statistics from data."""
@@ -365,17 +368,16 @@ class DemInfNormalizer:
         self.action_mean[:3] = action_xyz_mean
         self.action_std[:3] = np.where(action_xyz_std < 1e-6, 1.0, action_xyz_std)
 
+        # ALWAYS record actual gripper min/max for bounds normalization
         gripper_vals = actions[:, 3]
         g_min, g_max = float(np.min(gripper_vals)), float(np.max(gripper_vals))
         self.action_gripper_min = g_min
         self.action_gripper_max = g_max
 
-        if g_min >= -1.0 - 1e-6 and g_max <= 1.0 + 1e-6:
-            self.action_gripper_normalized = True
-            logger.info(f"Action gripper already in [{g_min:.4f}, {g_max:.4f}] ~ [-1,1], no bounds normalization needed")
-        else:
-            self.action_gripper_normalized = False
-            logger.info(f"Action gripper range [{g_min:.4f}, {g_max:.4f}], will apply bounds normalization to [-1,1]")
+        logger.info(
+            f"Action gripper range [{g_min:.4f}, {g_max:.4f}]; "
+            f"bounds normalization will always be applied (official NormalizationType.BOUNDS)"
+        )
 
     def normalize_state(self, states: np.ndarray) -> np.ndarray:
         """Normalize state array."""
@@ -386,16 +388,25 @@ class DemInfNormalizer:
         return result
 
     def normalize_action(self, actions: np.ndarray) -> np.ndarray:
-        """Normalize action array."""
+        """
+        Normalize action array.
+
+        Action xyz: Gaussian normalization.
+        Action gripper: ALWAYS bounds normalization using dataset min/max,
+        matching official NormalizationType.BOUNDS. If g_max - g_min <= epsilon,
+        outputs 0 (simulate divide_no_nan semantics).
+        """
         result = actions.copy()
         result[:, :3] = ((actions[:, :3] - self.action_mean[:3]) / self.action_std[:3]).astype(np.float32)
 
-        if not self.action_gripper_normalized:
-            g_min, g_max = self.action_gripper_min, self.action_gripper_max
-            if g_max - g_min > 1e-6:
-                result[:, 3] = (2.0 * (actions[:, 3] - g_min) / (g_max - g_min) - 1.0).astype(np.float32)
-            else:
-                result[:, 3] = 0.0
+        # ALWAYS apply bounds normalization (official BOUNDS semantics)
+        g_min, g_max = self.action_gripper_min, self.action_gripper_max
+        g = np.clip(actions[:, 3], g_min, g_max)
+        if g_max - g_min > 1e-6:
+            result[:, 3] = (2.0 * (g - g_min) / (g_max - g_min) - 1.0).astype(np.float32)
+        else:
+            # Constant dimension: output 0 (divide_no_nan semantics)
+            result[:, 3] = 0.0
 
         return result
 
@@ -410,7 +421,7 @@ class DemInfNormalizer:
             state_gripper_indices=np.array(self.state_gripper_indices),
             action_gripper_min=np.array([self.action_gripper_min]),
             action_gripper_max=np.array([self.action_gripper_max]),
-            action_gripper_normalized=np.array([self.action_gripper_normalized]),
+            action_gripper_bounds_applied=np.array([self.action_gripper_bounds_applied]),
         )
         logger.info(f"Saved normalization stats to {path}")
 
@@ -429,7 +440,11 @@ class DemInfNormalizer:
         normalizer.action_std = data["action_std"]
         normalizer.action_gripper_min = float(data["action_gripper_min"][0])
         normalizer.action_gripper_max = float(data["action_gripper_max"][0])
-        normalizer.action_gripper_normalized = bool(data["action_gripper_normalized"][0])
+        # Support both old and new field names
+        if "action_gripper_bounds_applied" in data:
+            normalizer.action_gripper_bounds_applied = bool(data["action_gripper_bounds_applied"][0])
+        else:
+            normalizer.action_gripper_bounds_applied = bool(data.get("action_gripper_normalized", [True])[0])
         return normalizer
 
     def get_manifest(self) -> Dict[str, Any]:
@@ -444,7 +459,7 @@ class DemInfNormalizer:
             "action_std_hash": _array_hash(self.action_std),
             "action_gripper_min": self.action_gripper_min,
             "action_gripper_max": self.action_gripper_max,
-            "action_gripper_normalized": self.action_gripper_normalized,
+            "action_gripper_bounds_applied": self.action_gripper_bounds_applied,
         }
 
 

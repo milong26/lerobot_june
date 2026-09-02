@@ -169,10 +169,18 @@ def ksg_local_scores(
     backend: str = "chunked",
 ) -> np.ndarray:
     """
-    Compute KSG scores for a full dataset using batched processing.
+    LEGACY / DIAGNOSTIC ONLY - NOT USED BY OFFICIAL QUALITY PIPELINE.
 
     This function processes the full dataset in chunks of size `chunk_size`,
-    calling deminf_ksg_batch_scores for each chunk.
+    calling deminf_ksg_batch_scores for each chunk. It does NOT replicate
+    the official repeat/shuffle batch-local KSG scoring, because simply
+    chunking the full latent array sequentially is not equivalent to the
+    official quality inference pipeline (repeat=4 shuffled 1024-sized batches
+    with drop_remainder).
+
+    The official quality pipeline uses:
+        score_latents -> build_official_quality_batches -> score_quality_batches
+        -> deminf_ksg_batch_scores
 
     Args:
         z_s: State latent embeddings [N, d_s].

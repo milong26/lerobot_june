@@ -21,7 +21,7 @@ Usage:
         --ks 5 6 7 \
         --state-source observation.environment_state
 
-Pipeline:
+Pipeline (correct execution order):
     1. Set seed
     2. Load LeRobot dataset
     3. Build verified global episode index
@@ -29,15 +29,15 @@ Pipeline:
     5. Extract observation.environment_state and action
     6. Validate dimensions and relative action
     7. Fit/save DemInf normalization
-    8. Train/load state VAE exactly 50000 optimizer steps
-    9. Train/load action VAE exactly 50000 optimizer steps
-    10. Encode posterior means
-    11. Validate/reuse latent cache
-    12. Construct official random repeated quality batches
-    13. Batch-local official KSG score
-    14. Remove NaNs, global p1/p99 clipping, global z-score
-    15. Mean aggregate by episode
-    16. Rank, Top-K, subset JSON
+    8. Train/load final state VAE exactly 50000 optimizer steps
+    9. Train/load final action VAE exactly 50000 optimizer steps
+   10. Determine final checkpoint paths -> compute cache fingerprint
+   11. Check latent cache (fingerprint includes final checkpoint hashes + git commit)
+   12. Cache valid -> load latents; Cache invalid -> encode + save cache
+   13. score_latents() on pre-computed latents (NO re-encoding if cache hit)
+   14. Remove NaNs, global p1/p99 clipping, global z-score
+   15. Mean aggregate by episode
+   16. Rank, Top-K, subset JSON
 """
 
 from __future__ import annotations
@@ -69,14 +69,22 @@ from deminf.score_episodes import (
     encode_all_timesteps,
     load_latent_cache,
     save_latent_cache,
-    score_dataset,
+    score_latents,
+    validate_latent_cache,
 )
 from deminf.select_subset import save_score_rankings, save_subset_json, select_top_episodes
-from deminf.train_vae import find_checkpoint, load_vae_checkpoint, train_beta_vae
+from deminf.train_vae import (
+    find_checkpoint,
+    load_vae_checkpoint,
+    train_beta_vae,
+    validate_vae_checkpoint,
+)
 from deminf.utils import (
     atomic_save_json,
+    build_cache_fingerprint,
     ensure_dir,
     get_device,
+    get_git_commit,
     init_logger,
     save_metadata,
     set_global_seed,
@@ -167,67 +175,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def build_cache_fingerprint(
-    dataset_path: str,
-    state_source: str,
-    action_key: str,
-    state_dim: int,
-    action_dim: int,
-    state_latent_dim: int,
-    action_latent_dim: int,
-    hidden_dims: list,
-    vae_beta_state: float,
-    vae_beta_action: float,
-    vae_lr: float,
-    vae_steps: int,
-    normalization_manifest: dict,
-    state_ckpt_path: str | None,
-    action_ckpt_path: str | None,
-    git_commit: str,
-) -> str:
-    """Build a comprehensive fingerprint for latent cache validation."""
-    state_ckpt_hash = ""
-    if state_ckpt_path and Path(state_ckpt_path).exists():
-        with open(state_ckpt_path, "rb") as f:
-            state_ckpt_hash = hashlib.sha256(f.read()).hexdigest()[:16]
-
-    action_ckpt_hash = ""
-    if action_ckpt_path and Path(action_ckpt_path).exists():
-        with open(action_ckpt_path, "rb") as f:
-            action_ckpt_hash = hashlib.sha256(f.read()).hexdigest()[:16]
-
-    info_path = Path(dataset_path) / "meta" / "info.json"
-    info_hash = ""
-    if info_path.exists():
-        with open(info_path, "rb") as f:
-            info_hash = hashlib.sha256(f.read()).hexdigest()[:16]
-
-    key_fields = {
-        "dataset_path": dataset_path,
-        "info_hash": info_hash,
-        "state_source": state_source,
-        "action_key": action_key,
-        "state_dim": state_dim,
-        "action_dim": action_dim,
-        "state_latent_dim": state_latent_dim,
-        "action_latent_dim": action_latent_dim,
-        "hidden_dims": hidden_dims,
-        "vae_beta_state": vae_beta_state,
-        "vae_beta_action": vae_beta_action,
-        "vae_lr": vae_lr,
-        "vae_steps": vae_steps,
-        "normalization_manifest": normalization_manifest,
-        "state_ckpt_hash": state_ckpt_hash,
-        "action_ckpt_hash": action_ckpt_hash,
-        "git_commit": git_commit,
-    }
-    raw = json.dumps(key_fields, sort_keys=True)
-    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+def _compute_ckpt_sha256(ckpt_path: str) -> str:
+    """Compute SHA256 hash of a checkpoint file."""
+    if ckpt_path and Path(ckpt_path).exists():
+        with open(ckpt_path, "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:16]
+    return ""
 
 
 def main() -> None:
     """Run the full official DemInf pipeline."""
     args = parse_args()
+
+    # Enforce official KSG mode for deminf selection
+    if args.ksg_mode != "deminf_rank":
+        raise ValueError(
+            f"--ksg-mode must be 'deminf_rank' for official DemInf pipeline, "
+            f"got '{args.ksg_mode}'. The 'full_mi' mode is not equivalent to "
+            f"the official DemInf estimator."
+        )
 
     # Build config
     config = DemInfConfig(
@@ -356,17 +322,93 @@ def main() -> None:
     normalization_manifest = normalizer.get_manifest()
 
     # =========================================================================
-    # Step 7: Train or load state VAE
+    # Step 7: Train or load state VAE (final checkpoint determined here)
     # =========================================================================
     logger.info("\n--- Step 7: Training/loading state VAE ---")
     device = get_device(config.device)
 
-    state_ckpt_path = find_checkpoint(config.checkpoint_dir, "state", config.checkpoint_step)
-    action_ckpt_path = find_checkpoint(config.checkpoint_dir, "action", config.checkpoint_step)
+    state_ckpt_path = find_checkpoint(
+        config.checkpoint_dir, "state", config.vae_steps,
+        config=config, input_dim=state_dim, latent_dim=config.state_latent_dim,
+        normalization_stats=normalization_manifest,
+    )
 
-    # Check latent cache
-    latent_cache_path = Path(config.output_dir) / "latents.npz"
-    manifest_path = Path(config.output_dir) / "latents_manifest.json"
+    if not state_ckpt_path or not config.skip_train_if_checkpoint_exists:
+        state_model, state_log = train_beta_vae(
+            data=states,
+            input_dim=state_dim,
+            latent_dim=config.state_latent_dim,
+            config=config,
+            name="state",
+            normalization_stats=normalization_manifest,
+        )
+        # After training, the final checkpoint path is known
+        state_ckpt_path = str(Path(config.checkpoint_dir) / "state_vae.pt")
+        logger.info(f"State VAE trained: final checkpoint at {state_ckpt_path}")
+    else:
+        logger.info(f"Loading state VAE from {state_ckpt_path}")
+        ckpt = load_vae_checkpoint(state_ckpt_path, device)
+        valid, reasons = validate_vae_checkpoint(
+            ckpt, config, "state", state_dim, config.state_latent_dim,
+            normalization_manifest, require_target_step=True,
+        )
+        if valid:
+            logger.info("state checkpoint valid")
+        else:
+            logger.warning(f"state checkpoint rejected: {'; '.join(reasons)}")
+            raise RuntimeError(
+                f"State checkpoint validation failed: {'; '.join(reasons)}"
+            )
+        state_model = BetaVAE(state_dim, config.state_latent_dim, config.hidden_dims).to(device)
+        state_model.load_state_dict(ckpt["model_state_dict"])
+        state_model.eval()
+
+    # =========================================================================
+    # Step 8: Train or load action VAE (final checkpoint determined here)
+    # =========================================================================
+    logger.info("\n--- Step 8: Training/loading action VAE ---")
+
+    action_ckpt_path = find_checkpoint(
+        config.checkpoint_dir, "action", config.vae_steps,
+        config=config, input_dim=action_dim, latent_dim=config.action_latent_dim,
+        normalization_stats=normalization_manifest,
+    )
+
+    if not action_ckpt_path or not config.skip_train_if_checkpoint_exists:
+        action_model, action_log = train_beta_vae(
+            data=actions,
+            input_dim=action_dim,
+            latent_dim=config.action_latent_dim,
+            config=config,
+            name="action",
+            normalization_stats=normalization_manifest,
+        )
+        action_ckpt_path = str(Path(config.checkpoint_dir) / "action_vae.pt")
+        logger.info(f"Action VAE trained: final checkpoint at {action_ckpt_path}")
+    else:
+        logger.info(f"Loading action VAE from {action_ckpt_path}")
+        ckpt = load_vae_checkpoint(action_ckpt_path, device)
+        valid, reasons = validate_vae_checkpoint(
+            ckpt, config, "action", action_dim, config.action_latent_dim,
+            normalization_manifest, require_target_step=True,
+        )
+        if valid:
+            logger.info("action checkpoint valid")
+        else:
+            logger.warning(f"action checkpoint rejected: {'; '.join(reasons)}")
+            raise RuntimeError(
+                f"Action checkpoint validation failed: {'; '.join(reasons)}"
+            )
+        action_model = BetaVAE(action_dim, config.action_latent_dim, config.hidden_dims).to(device)
+        action_model.load_state_dict(ckpt["model_state_dict"])
+        action_model.eval()
+
+    # =========================================================================
+    # Step 9: Build latent cache fingerprint AFTER final checkpoints are known
+    # =========================================================================
+    logger.info("\n--- Step 9: Building latent cache fingerprint ---")
+    git_commit = get_git_commit(PROJECT_ROOT)
+    logger.info(f"Git commit: {git_commit}")
 
     cache_fingerprint = build_cache_fingerprint(
         dataset_path=config.dataset_path,
@@ -381,103 +423,93 @@ def main() -> None:
         vae_beta_action=config.vae_beta_action,
         vae_lr=config.vae_lr,
         vae_steps=config.vae_steps,
+        weight_decay=config.weight_decay,
         normalization_manifest=normalization_manifest,
         state_ckpt_path=state_ckpt_path,
         action_ckpt_path=action_ckpt_path,
-        git_commit="",
+        git_commit=git_commit,
+        total_episodes=total_episodes,
+        total_frames=structure["total_frames"],
     )
+    logger.info(f"Cache fingerprint: {cache_fingerprint}")
+
+    # =========================================================================
+    # Step 10: Check latent cache (validated, no re-encoding if hit)
+    # =========================================================================
+    logger.info("\n--- Step 10: Checking latent cache ---")
+    latent_cache_path = Path(config.output_dir) / "latents.npz"
+    manifest_path = Path(config.output_dir) / "latents_manifest.json"
 
     use_cache = False
     if config.use_latent_cache and latent_cache_path.exists() and manifest_path.exists():
-        with open(manifest_path, "r") as f:
-            cached_manifest = json.load(f)
-        cached_fp = cached_manifest.get("fingerprint", "")
-        if cached_fp == cache_fingerprint:
+        valid, reasons = validate_latent_cache(
+            config.output_dir,
+            expected_fingerprint=cache_fingerprint,
+            expected_num_transitions=len(states),
+            expected_global_row_ids=global_row_ids,
+            expected_z_state_shape=(len(states), config.state_latent_dim),
+            expected_z_action_shape=(len(states), config.action_latent_dim),
+        )
+        if valid:
             use_cache = True
-            logger.info(f"Latent cache fingerprint matches, reusing cache")
+            logger.info("Latent cache fingerprint matches, reusing cache")
         else:
             logger.info(
-                f"Latent cache fingerprint mismatch (cached={cached_fp}, current={cache_fingerprint}), "
-                f"will re-encode"
+                f"Latent cache rejected: {'; '.join(reasons)}, will re-encode"
             )
 
-    # Train state VAE if needed
-    if not state_ckpt_path or not config.skip_train_if_checkpoint_exists:
-        state_model, state_log = train_beta_vae(
-            data=states,
-            input_dim=state_dim,
-            latent_dim=config.state_latent_dim,
-            config=config,
-            name="state",
-            normalization_stats=normalization_manifest,
-        )
+    # =========================================================================
+    # Step 11: Encode or load latents
+    # =========================================================================
+    if use_cache:
+        z_s, z_a, episode_ids, timestep_ids, global_row_ids = load_latent_cache(config.output_dir)
+        logger.info(f"Latent source: cache | z_s={z_s.shape}, z_a={z_a.shape}")
     else:
-        logger.info(f"Loading state VAE from {state_ckpt_path}")
-        ckpt = load_vae_checkpoint(state_ckpt_path, device)
-        state_model = BetaVAE(state_dim, config.state_latent_dim, config.hidden_dims).to(device)
-        state_model.load_state_dict(ckpt["model_state_dict"])
-        state_model.eval()
-
-    # =========================================================================
-    # Step 8: Train or load action VAE
-    # =========================================================================
-    logger.info("\n--- Step 8: Training/loading action VAE ---")
-
-    if not action_ckpt_path or not config.skip_train_if_checkpoint_exists:
-        action_model, action_log = train_beta_vae(
-            data=actions,
-            input_dim=action_dim,
-            latent_dim=config.action_latent_dim,
-            config=config,
-            name="action",
-            normalization_stats=normalization_manifest,
-        )
-    else:
-        logger.info(f"Loading action VAE from {action_ckpt_path}")
-        ckpt = load_vae_checkpoint(action_ckpt_path, device)
-        action_model = BetaVAE(action_dim, config.action_latent_dim, config.hidden_dims).to(device)
-        action_model.load_state_dict(ckpt["model_state_dict"])
-        action_model.eval()
-
-    # =========================================================================
-    # Step 9: Encode all timesteps
-    # =========================================================================
-    if not use_cache:
-        logger.info("\n--- Step 9: Encoding all timesteps ---")
+        logger.info("\n--- Step 11: Encoding all timesteps ---")
         z_s, z_a = encode_all_timesteps(
             state_model, action_model, states, actions,
             batch_size=config.quality_batch_size,
         )
+        logger.info(f"Latent source: freshly encoded | z_s={z_s.shape}, z_a={z_a.shape}")
 
-        # Save latent cache with manifest
+        # Save latent cache with comprehensive manifest
+        state_ckpt_sha = _compute_ckpt_sha256(state_ckpt_path)
+        action_ckpt_sha = _compute_ckpt_sha256(action_ckpt_path)
+        info_path = Path(config.dataset_path) / "meta" / "info.json"
+        info_hash = ""
+        if info_path.exists():
+            with open(info_path, "rb") as f:
+                info_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+
         cache_manifest = {
             "fingerprint": cache_fingerprint,
+            "git_commit": git_commit,
             "dataset_path": config.dataset_path,
+            "info_hash": info_hash,
             "state_source": config.state_source,
             "state_dim": state_dim,
             "action_dim": action_dim,
             "state_latent_dim": config.state_latent_dim,
             "action_latent_dim": config.action_latent_dim,
             "normalization_manifest": normalization_manifest,
+            "state_ckpt_path": str(Path(state_ckpt_path).name) if state_ckpt_path else "",
+            "state_ckpt_sha256": state_ckpt_sha,
+            "action_ckpt_path": str(Path(action_ckpt_path).name) if action_ckpt_path else "",
+            "action_ckpt_sha256": action_ckpt_sha,
             "num_transitions": len(z_s),
         }
         save_latent_cache(
             config.output_dir, z_s, z_a, episode_ids, timestep_ids, global_row_ids,
             cache_manifest,
         )
-    else:
-        z_s, z_a, episode_ids, timestep_ids, global_row_ids = load_latent_cache(config.output_dir)
-        logger.info(f"Loaded latent cache: z_s={z_s.shape}, z_a={z_a.shape}")
 
     # =========================================================================
-    # Step 10-16: Official quality inference scoring
+    # Step 12-16: Official quality inference scoring (via score_latents)
     # =========================================================================
-    logger.info("\n--- Step 10-16: Official quality inference scoring ---")
-    ep_scores_df, ts_scores_df = score_dataset(
-        state_model=state_model,
-        action_model=action_model,
-        states=states,
-        actions=actions,
+    logger.info("\n--- Step 12-16: Official quality inference scoring ---")
+    ep_scores_df, ts_scores_df = score_latents(
+        z_s=z_s,
+        z_a=z_a,
         episode_ids=episode_ids,
         timestep_ids=timestep_ids,
         global_row_ids=global_row_ids,
@@ -507,6 +539,13 @@ def main() -> None:
         action_dim=action_dim,
     )
 
+    # Enhance subset metadata with git commit and checkpoint info
+    if "parameters" in subset_data:
+        subset_data["parameters"]["git_commit"] = git_commit
+        subset_data["parameters"]["state_ckpt_sha256"] = _compute_ckpt_sha256(state_ckpt_path)
+        subset_data["parameters"]["action_ckpt_sha256"] = _compute_ckpt_sha256(action_ckpt_path)
+        subset_data["parameters"]["latent_cache_fingerprint"] = cache_fingerprint
+
     rankings_path = Path(config.output_dir) / "score_rankings.csv"
     save_score_rankings(ep_scores_df, selected_indices, rankings_path)
 
@@ -535,6 +574,9 @@ def main() -> None:
     logger.info(f"Quality repeat: {config.quality_repeat}")
     logger.info(f"Effective discard fraction: {config.effective_discard_fraction()}")
     logger.info(f"Relative action: {relative_action}")
+    logger.info(f"Latent source: {'cache' if use_cache else 'freshly encoded'}")
+    logger.info(f"Git commit: {git_commit}")
+    logger.info(f"Cache fingerprint: {cache_fingerprint}")
     logger.info(f"Selected episodes: {len(selected_indices)}")
     logger.info(f"Top episode indices: {selected_indices[:10]}...")
     logger.info(f"\nOutput files:")

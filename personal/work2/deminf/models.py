@@ -13,6 +13,20 @@ import torch
 import torch.nn as nn
 
 
+def init_linear_xavier(module: nn.Module) -> None:
+    """
+    Initialize all nn.Linear layers with Xavier uniform weight and zero bias.
+
+    This aligns with the official DemInf OpenX MLP and VAE projection which
+    explicitly use nn.initializers.xavier_uniform for all Dense layers.
+    Applied via module.apply() after network construction in __init__.
+    """
+    if isinstance(module, nn.Linear):
+        torch.nn.init.xavier_uniform_(module.weight)
+        if module.bias is not None:
+            torch.nn.init.zeros_(module.bias)
+
+
 class MLPEncoder(nn.Module):
     """
     MLP Encoder for Beta-VAE.
@@ -21,6 +35,7 @@ class MLPEncoder(nn.Module):
     Then z_proj = Linear(512, 2*latent_dim), split into mu and logvar via torch.chunk.
 
     This matches the official lowdim VAE encoder structure.
+    All Linear layers are initialized with Xavier uniform (official alignment).
     """
 
     def __init__(self, input_dim: int, hidden_dims: List[int] = None, latent_dim: int = 12) -> None:
@@ -37,6 +52,9 @@ class MLPEncoder(nn.Module):
 
         self.shared = nn.Sequential(*layers)
         self.z_proj = nn.Linear(prev_dim, 2 * latent_dim)
+
+        # Apply Xavier uniform initialization to all Linear layers
+        self.apply(init_linear_xavier)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -60,6 +78,7 @@ class MLPDecoder(nn.Module):
     MLP Decoder for Beta-VAE.
 
     Architecture: Linear(latent_dim, 512) + ReLU + Linear(512, 512) + ReLU + Linear(512, output_dim).
+    All Linear layers are initialized with Xavier uniform (official alignment).
     """
 
     def __init__(self, latent_dim: int, hidden_dims: List[int] = None, output_dim: int = 4) -> None:
@@ -76,6 +95,9 @@ class MLPDecoder(nn.Module):
         layers.append(nn.Linear(prev_dim, output_dim))
 
         self.decoder = nn.Sequential(*layers)
+
+        # Apply Xavier uniform initialization to all Linear layers
+        self.apply(init_linear_xavier)
 
     def forward(self, z: torch.Tensor) -> torch.Tensor:
         """

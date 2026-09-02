@@ -158,7 +158,9 @@ deminf/
 
 **Action**（4 维 `(x, y, z, gripper)`）：
 - 前三维 xyz 使用 Gaussian normalization
-- 第 3 维 gripper：若原始范围已在约 [-1,1] 则保持不变，否则使用 bounds normalization 到 [-1,1]
+- 第 3 维 gripper：**始终**使用 bounds normalization 到 [-1,1]，基于 dataset 实际 min/max
+  （即使原始值已经在 [-1,1] 范围内，仍然执行该变换；若 min=-1, max=1 则结果与原值相同）
+  这与官方 `NormalizationType.BOUNDS` 完全一致，不再以"已在[-1,1]则跳过"
 - MetaWorld expert action 属于增量/relative control，metadata 记录 `relative_action=true`
 
 ## 运行命令
@@ -318,3 +320,12 @@ Quality score batch 本身还依赖 quality seed、batch size、repeat、discard
 | Self distance 设为 inf | 保持为 0，自动计入 count |
 | Count 额外 +1 | 移除，与官方一致 |
 | VAE 训练使用 epochs + early stopping | 改为固定 50000 optimizer steps |
+| PyTorch Linear 使用默认 Kaiming 初始化 | 改为 Xavier uniform，对齐官方 `nn.initializers.xavier_uniform` |
+| Action gripper 已在[-1,1]则跳过 normalization | 始终执行 BOUNDS normalization，使用 dataset 实际 min/max |
+| 50-step smoke checkpoint 被误用于 50000-step 正式实验 | 新增 `validate_vae_checkpoint()`，检查 global_step >= vae_steps + 全字段 fingerprint |
+| Latent cache 实际上没有用于 quality scoring | 重构为 `score_latents()` 核心函数，cache 命中直接调用，不重新 encode |
+| Cache fingerprint 使用空字符串代替 git commit | 新增 `get_git_commit()` 获取真实 git commit hash |
+| NaN/Inf 过滤语义与官方不一致 | 只过滤 NaN（`~jnp.isnan`），Inf 视为异常并抛出明确 ValueError |
+| `ksg_local_scores()` 被正式 pipeline 误调用 | 标记为 legacy/diagnostic，正式路径只使用 `deminf_ksg_batch_scores` |
+| `test_ks_indices_are_zero_based_5_6_7` 使用错误的 `torch.diag` | 修正为直接比较 `sorted_joint[:, 0]` 与 zeros |
+| Cache fingerprint 在 VAE 训练前构建，checkpoint hash 为空 | 重构执行顺序：先完成 VAE 训练→确定最终 checkpoint→计算 fingerprint→检查 cache |

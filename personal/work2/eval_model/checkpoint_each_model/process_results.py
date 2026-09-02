@@ -5,7 +5,7 @@ import json
 import sys
 from pathlib import Path
 
-def process(results_json_path, per_seed_csv_path, per_checkpoint_json_path, model_name, checkpoint, gpu_id, status="ok", exitcode=None):
+def process(results_json_path, per_seed_csv_path, per_checkpoint_json_path, model_name, checkpoint, gpu_id, status="ok", exitcode=None, checkpoint_path=None, log_path=None):
     results_json = Path(results_json_path)
     if not results_json.is_file():
         return False
@@ -44,6 +44,7 @@ def process(results_json_path, per_seed_csv_path, per_checkpoint_json_path, mode
     summary = {
         "model": model_name,
         "checkpoint": checkpoint,
+        "checkpoint_path": checkpoint_path or "",
         "gpu": gpu_id,
         "n_episodes": n_episodes,
         "success_count": success_count,
@@ -53,6 +54,8 @@ def process(results_json_path, per_seed_csv_path, per_checkpoint_json_path, mode
         "pc_success": round(success_rate * 100, 4),
         "pc_grasp_success": round(grasp_rate * 100, 4),
         "status": status,
+        "result_file": str(results_json_path),
+        "log_file": log_path or "",
     }
 
     per_checkpoint = Path(per_checkpoint_json_path)
@@ -62,10 +65,11 @@ def process(results_json_path, per_seed_csv_path, per_checkpoint_json_path, mode
 
     return True
 
-def process_failed(per_checkpoint_json_path, model_name, checkpoint, gpu_id, exitcode, log_path):
+def process_failed(per_checkpoint_json_path, model_name, checkpoint, gpu_id, exitcode, log_path, checkpoint_path=None):
     summary = {
         "model": model_name,
         "checkpoint": checkpoint,
+        "checkpoint_path": checkpoint_path or "",
         "gpu": gpu_id,
         "n_episodes": 0,
         "success_count": 0,
@@ -76,7 +80,9 @@ def process_failed(per_checkpoint_json_path, model_name, checkpoint, gpu_id, exi
         "pc_grasp_success": 0.0,
         "status": "failed",
         "exitcode": exitcode,
+        "result_file": "",
         "log_path": log_path,
+        "log_file": log_path,
     }
     per_checkpoint = Path(per_checkpoint_json_path)
     per_checkpoint.parent.mkdir(parents=True, exist_ok=True)
@@ -92,7 +98,9 @@ if __name__ == "__main__":
         model_name = sys.argv[5]
         checkpoint = sys.argv[6]
         gpu_id = sys.argv[7]
-        ok = process(results_json, per_seed_csv, per_checkpoint_json, model_name, checkpoint, gpu_id)
+        checkpoint_path = sys.argv[8] if len(sys.argv) > 8 else None
+        log_path = sys.argv[9] if len(sys.argv) > 9 else None
+        ok = process(results_json, per_seed_csv, per_checkpoint_json, model_name, checkpoint, gpu_id, checkpoint_path=checkpoint_path, log_path=log_path)
         sys.exit(0 if ok else 1)
     elif mode == "failed":
         per_checkpoint_json = sys.argv[2]
@@ -101,5 +109,6 @@ if __name__ == "__main__":
         gpu_id = sys.argv[5]
         exitcode = sys.argv[6]
         log_path = sys.argv[7]
-        process_failed(per_checkpoint_json, model_name, checkpoint, gpu_id, exitcode, log_path)
+        checkpoint_path = sys.argv[8] if len(sys.argv) > 8 else None
+        process_failed(per_checkpoint_json, model_name, checkpoint, gpu_id, exitcode, log_path, checkpoint_path=checkpoint_path)
         sys.exit(0)

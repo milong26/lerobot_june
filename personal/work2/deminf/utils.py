@@ -161,6 +161,139 @@ def save_metadata(output_dir: str | Path, config: Any) -> Dict[str, Any]:
     return metadata
 
 
+def get_git_commit(repo_root: Optional[str | Path] = None) -> str:
+    """
+    Get the current git commit hash using local subprocess.
+
+    This is used for latent cache fingerprinting to ensure cache validity
+    is tied to the exact code version. No network access is required.
+
+    Args:
+        repo_root: Root directory of the git repository. If None, uses
+                   the directory containing this utils.py file's parent
+                   (i.e., the project root).
+
+    Returns:
+        40-char git commit hash string, or 'unknown' if git is unavailable.
+    """
+    if repo_root is None:
+        repo_root = Path(__file__).parent.parent.parent.parent
+
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            capture_output=True, text=True, timeout=10,
+            cwd=str(repo_root),
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except Exception:
+        pass
+
+    logging.getLogger("deminf").warning(
+        "git rev-parse HEAD failed or not available; using 'unknown' for cache fingerprint"
+    )
+    return "unknown"
+
+
+def build_cache_fingerprint(
+    dataset_path: str,
+    state_source: str,
+    action_key: str,
+    state_dim: int,
+    action_dim: int,
+    state_latent_dim: int,
+    action_latent_dim: int,
+    hidden_dims: list,
+    vae_beta_state: float,
+    vae_beta_action: float,
+    vae_lr: float,
+    vae_steps: int,
+    weight_decay: float,
+    normalization_manifest: dict,
+    state_ckpt_path: str,
+    action_ckpt_path: str,
+    git_commit: str,
+    total_episodes: int,
+    total_frames: int,
+) -> str:
+    """
+    Build a comprehensive fingerprint for latent cache validation.
+
+    The fingerprint includes all fields that affect latent embeddings:
+    dataset identity, normalization, VAE architecture/hyperparameters,
+    final checkpoint SHA256 hashes, and git commit.
+
+    IMPORTANT: This must be called AFTER final VAE checkpoints are determined,
+    because the checkpoint hashes are part of the fingerprint.
+
+    Args:
+        dataset_path: Absolute path to the dataset.
+        state_source: State observation key.
+        action_key: Action field key.
+        state_dim: State input dimensionality.
+        action_dim: Action input dimensionality.
+        state_latent_dim: State VAE latent dimension.
+        action_latent_dim: Action VAE latent dimension.
+        hidden_dims: VAE hidden layer sizes.
+        vae_beta_state: State VAE beta.
+        vae_beta_action: Action VAE beta.
+        vae_lr: VAE learning rate.
+        vae_steps: VAE training steps.
+        weight_decay: Adam weight decay.
+        normalization_manifest: Normalization stats hash manifest.
+        state_ckpt_path: Final state VAE checkpoint file path.
+        action_ckpt_path: Final action VAE checkpoint file path.
+        git_commit: Current git commit hash.
+        total_episodes: Total episodes in dataset.
+        total_frames: Total frames in dataset.
+
+    Returns:
+        32-char hex SHA256 fingerprint string.
+    """
+    import hashlib as _hashlib
+
+    def _file_sha256(path: str) -> str:
+        if path and Path(path).exists():
+            with open(path, "rb") as f:
+                return _hashlib.sha256(f.read()).hexdigest()[:16]
+        return ""
+
+    info_path = Path(dataset_path) / "meta" / "info.json"
+    info_hash = ""
+    if info_path.exists():
+        with open(info_path, "rb") as f:
+            info_hash = _hashlib.sha256(f.read()).hexdigest()[:16]
+
+    state_ckpt_hash = _file_sha256(state_ckpt_path)
+    action_ckpt_hash = _file_sha256(action_ckpt_path)
+
+    key_fields = {
+        "dataset_path": str(Path(dataset_path).resolve()),
+        "info_hash": info_hash,
+        "total_episodes": total_episodes,
+        "total_frames": total_frames,
+        "state_source": state_source,
+        "action_key": action_key,
+        "state_dim": state_dim,
+        "action_dim": action_dim,
+        "state_latent_dim": state_latent_dim,
+        "action_latent_dim": action_latent_dim,
+        "hidden_dims": hidden_dims,
+        "vae_beta_state": vae_beta_state,
+        "vae_beta_action": vae_beta_action,
+        "vae_lr": vae_lr,
+        "vae_steps": vae_steps,
+        "weight_decay": weight_decay,
+        "normalization_manifest": normalization_manifest,
+        "state_ckpt_hash": state_ckpt_hash,
+        "action_ckpt_hash": action_ckpt_hash,
+        "git_commit": git_commit,
+    }
+    raw = json.dumps(key_fields, sort_keys=True)
+    return _hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
 def init_logger(output_dir: str | Path, name: str = "deminf") -> logging.Logger:
     """
     Initialize logger that writes to both console and file.

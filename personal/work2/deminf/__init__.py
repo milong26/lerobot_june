@@ -11,12 +11,13 @@ Core API:
 """
 
 from deminf.config import DemInfConfig
-from deminf.score_episodes import score_dataset
+from deminf.score_episodes import score_dataset, score_latents
 from deminf.select_subset import select_top_episodes, save_subset_json
 
 __all__ = [
     "DemInfConfig",
     "score_dataset",
+    "score_latents",
     "select_top_episodes",
     "save_subset_json",
 ]

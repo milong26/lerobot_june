@@ -110,9 +110,12 @@ class TestDemInfNormalizer:
         normalizer = DemInfNormalizer(state_dim=39, action_dim=4)
         normalizer.fit(states, actions)
 
-        assert normalizer.action_gripper_normalized is True
+        # Bounds normalization is ALWAYS applied (official BOUNDS semantics)
+        assert normalizer.action_gripper_bounds_applied is True
 
         norm_actions = normalizer.normalize_action(actions)
+        # Even if values are already in [-1,1], bounds transform is still applied
+        # If min=-1, max=1, the result is identical to original
         np.testing.assert_allclose(
             norm_actions[:, 3], actions[:, 3], rtol=1e-6
         )
@@ -136,7 +139,7 @@ class TestDemInfNormalizer:
         np.testing.assert_allclose(loaded.action_mean, normalizer.action_mean)
         np.testing.assert_allclose(loaded.action_std, normalizer.action_std)
         assert loaded.state_gripper_indices == normalizer.state_gripper_indices
-        assert loaded.action_gripper_normalized == normalizer.action_gripper_normalized
+        assert loaded.action_gripper_bounds_applied == normalizer.action_gripper_bounds_applied
 
 
 class TestCacheFingerprint:
@@ -207,6 +210,169 @@ class TestArrayHash:
         arr1 = np.array([1.0, 2.0, 3.0], dtype=np.float32)
         arr2 = np.array([1.0, 2.0, 4.0], dtype=np.float32)
         assert _array_hash(arr1) != _array_hash(arr2)
+
+
+class TestBuildEpisodeIndexGlobalHfRows:
+    """Test that build_episode_index_from_lerobot uses global HF dataset rows."""
+
+    def test_build_episode_index_uses_global_hf_rows(self):
+        """
+        Verify that build_episode_index_from_lerobot builds the mapping
+        using global HF dataset row indices, not parquet-local indices.
+
+        Construct a fake hf_dataset where global rows 0..8 belong to:
+        - episode0: rows 0,1,2 (frame_index 0,1,2)
+        - episode1: rows 3,4,5 (frame_index 0,1,2)
+        - episode2: rows 6,7,8 (frame_index 0,1,2)
+
+        The result must be {0:[0,1,2], 1:[3,4,5], 2:[6,7,8]}.
+        """
+        from deminf.dataset_adapter import build_episode_index_from_lerobot
+
+        # Create fake hf_dataset rows
+        fake_rows = []
+        for global_idx in range(9):
+            ep_idx = global_idx // 3
+            frame_idx = global_idx % 3
+            fake_rows.append({
+                "episode_index": ep_idx,
+                "frame_index": frame_idx,
+            })
+
+        # Mock LeRobotDataset
+        class FakeHFDataset:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def __len__(self):
+                return len(self._rows)
+
+            def __getitem__(self, idx):
+                return self._rows[int(idx)]
+
+        class FakeLeRobotDataset:
+            def __init__(self, repo_id, root):
+                self.hf_dataset = FakeHFDataset(fake_rows)
+                self.num_episodes = 3
+                self.num_frames = 9
+
+        with patch(
+            "deminf.dataset_adapter.LeRobotDataset",
+            FakeLeRobotDataset,
+        ):
+            result = build_episode_index_from_lerobot("/tmp/fake", "fake_repo")
+
+        assert result == {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}, (
+            f"Expected global row mapping, got {result}"
+        )
+
+    def test_build_episode_index_with_shuffled_physical_order(self):
+        """
+        Test that even if the HF dataset physical order is shuffled,
+        the mapping still uses the correct global row IDs and sorts
+        by frame_index within each episode.
+
+        Construct a shuffled case:
+        - Physical row 0: episode1, frame_index=1 (global row 4)
+        - Physical row 1: episode0, frame_index=0 (global row 0)
+        - Physical row 2: episode2, frame_index=2 (global row 8)
+        - Physical row 3: episode0, frame_index=1 (global row 1)
+        - Physical row 4: episode1, frame_index=0 (global row 3)
+        - Physical row 5: episode2, frame_index=0 (global row 6)
+        - Physical row 6: episode0, frame_index=2 (global row 2)
+        - Physical row 7: episode1, frame_index=2 (global row 5)
+        - Physical row 8: episode2, frame_index=1 (global row 7)
+
+        Expected result (sorted by frame_index within each episode):
+        {0: [0, 1, 2], 1: [3, 4, 5], 2: [6, 7, 8]}
+        """
+        from deminf.dataset_adapter import build_episode_index_from_lerobot
+
+        shuffled_rows = [
+            {"episode_index": 1, "frame_index": 1},  # global 4
+            {"episode_index": 0, "frame_index": 0},  # global 0
+            {"episode_index": 2, "frame_index": 2},  # global 8
+            {"episode_index": 0, "frame_index": 1},  # global 1
+            {"episode_index": 1, "frame_index": 0},  # global 3
+            {"episode_index": 2, "frame_index": 0},  # global 6
+            {"episode_index": 0, "frame_index": 2},  # global 2
+            {"episode_index": 1, "frame_index": 2},  # global 5
+            {"episode_index": 2, "frame_index": 1},  # global 7
+        ]
+
+        class FakeHFDataset:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def __len__(self):
+                return len(self._rows)
+
+            def __getitem__(self, idx):
+                return self._rows[int(idx)]
+
+        class FakeLeRobotDataset:
+            def __init__(self, repo_id, root):
+                self.hf_dataset = FakeHFDataset(shuffled_rows)
+                self.num_episodes = 3
+                self.num_frames = 9
+
+        with patch(
+            "deminf.dataset_adapter.LeRobotDataset",
+            FakeLeRobotDataset,
+        ):
+            result = build_episode_index_from_lerobot("/tmp/fake", "fake_repo")
+
+        # Should still get global row IDs sorted by frame_index
+        assert result[0] == [0, 1, 2], f"Episode 0: expected [0,1,2], got {result[0]}"
+        assert result[1] == [3, 4, 5], f"Episode 1: expected [3,4,5], got {result[1]}"
+        assert result[2] == [6, 7, 8], f"Episode 2: expected [6,7,8], got {result[2]}"
+
+    def test_validate_episode_index_detects_wrong_global_row(self):
+        """
+        Test that validate_episode_index raises an assertion error
+        when given an incorrect episode mapping.
+        """
+        from deminf.dataset_adapter import validate_episode_index
+
+        # Create fake hf_dataset rows
+        fake_rows = []
+        for global_idx in range(9):
+            ep_idx = global_idx // 3
+            frame_idx = global_idx % 3
+            fake_rows.append({
+                "episode_index": ep_idx,
+                "frame_index": frame_idx,
+            })
+
+        class FakeHFDataset:
+            def __init__(self, rows):
+                self._rows = rows
+
+            def __len__(self):
+                return len(self._rows)
+
+            def __getitem__(self, idx):
+                return self._rows[int(idx)]
+
+        class FakeLeRobotDataset:
+            def __init__(self, repo_id, root):
+                self.hf_dataset = FakeHFDataset(fake_rows)
+                self.num_episodes = 3
+                self.num_frames = 9
+
+        # Construct WRONG mapping: swap some rows between episodes
+        wrong_mapping = {
+            0: [3, 1, 2],  # row 3 actually belongs to episode 1
+            1: [0, 4, 5],  # row 0 actually belongs to episode 0
+            2: [6, 7, 8],
+        }
+
+        with patch(
+            "deminf.dataset_adapter.LeRobotDataset",
+            FakeLeRobotDataset,
+        ):
+            with pytest.raises(AssertionError, match="episode_index"):
+                validate_episode_index("/tmp/fake", "fake_repo", wrong_mapping)
 
 
 class TestEffectiveDiscardFraction:

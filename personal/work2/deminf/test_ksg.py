@@ -92,13 +92,27 @@ class TestKsIndicesZeroBased:
         joint_dist = torch.maximum(torch.cdist(z_s_t, z_s_t, p=2.0), torch.cdist(z_a_t, z_a_t, p=2.0))
         sorted_joint = torch.sort(joint_dist, dim=-1).values
 
-        # Index 0 should be self-distance (0)
-        assert torch.allclose(torch.diag(sorted_joint[:, 0]), torch.zeros(B), atol=1e-7)
+        # Index 0 should be self-distance (0), shape [B] not [B, B]
+        assert torch.allclose(sorted_joint[:, 0], torch.zeros(B), atol=1e-7)
 
         # Index 5, 6, 7 should be increasing
         for i in range(B):
             assert sorted_joint[i, 5] <= sorted_joint[i, 6]
             assert sorted_joint[i, 6] <= sorted_joint[i, 7]
+
+        # Verify that indices 5, 6, 7 are actually the 5th, 6th, 7th neighbors
+        # (not 6th, 7th, 8th which would happen with 1-based indexing)
+        # We check that sorted_joint[:, 5] < sorted_joint[:, 6] < sorted_joint[:, 7]
+        # for at least some samples (strict inequality should hold for random data)
+        eps5 = sorted_joint[:, 5].numpy()
+        eps6 = sorted_joint[:, 6].numpy()
+        eps7 = sorted_joint[:, 7].numpy()
+
+        # For random data, these should be strictly increasing for most samples
+        strict_56 = np.sum(eps5 < eps6)
+        strict_67 = np.sum(eps6 < eps7)
+        assert strict_56 > B * 0.9, f"epsilon[5] < epsilon[6] for only {strict_56}/{B} samples"
+        assert strict_67 > B * 0.9, f"epsilon[6] < epsilon[7] for only {strict_67}/{B} samples"
 
 
 class TestStrictLessThanNoEpsilonOffset:

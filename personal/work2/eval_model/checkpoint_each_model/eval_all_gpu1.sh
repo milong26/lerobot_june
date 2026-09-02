@@ -7,14 +7,21 @@ cd "${REPO_ROOT}"
 
 GPU_ID=1
 SCAN_ROOT="personal/work2/duibi"
+
+# Shared output root and manifest for both GPUs
+SHARED_OUTPUT_ROOT="personal/work2/eval_model/checkpoint_each_model/results"
+TASK_MANIFEST="${SHARED_OUTPUT_ROOT}/tasks_manifest.json"
+
+# Per-GPU output directories (for per-seed csv, logs, eval_results)
 OUTPUT_ROOT="personal/work2/eval_model/checkpoint_each_model/results_gpu${GPU_ID}"
-TASK_LIST="${OUTPUT_ROOT}/.task_list.jsonl"
 PID_FILE="${OUTPUT_ROOT}/.worker.pid"
-SUMMARY_DIR="${OUTPUT_ROOT}/per_checkpoint"
-SUMMARY_CSV="${OUTPUT_ROOT}/summary.csv"
 PER_SEED_DIR="${OUTPUT_ROOT}/per_seed"
 LOG_DIR="${OUTPUT_ROOT}/logs"
 RUN_LOG="${OUTPUT_ROOT}/run.log"
+
+# Shared summary directory and CSV (both GPUs write to the same location)
+SUMMARY_DIR="${SHARED_OUTPUT_ROOT}/per_checkpoint"
+SUMMARY_CSV="${SHARED_OUTPUT_ROOT}/summary.csv"
 
 N_EPISODES=200
 BATCH_SIZE=4
@@ -25,7 +32,8 @@ DISCOVER_SCRIPT="${SCRIPT_DIR}/discover_tasks.py"
 PROCESS_SCRIPT="${SCRIPT_DIR}/process_results.py"
 BUILD_SUMMARY_SCRIPT="${SCRIPT_DIR}/build_summary.py"
 
-mkdir -p "${OUTPUT_ROOT}" "${SUMMARY_DIR}" "${PER_SEED_DIR}" "${LOG_DIR}"
+mkdir -p "${OUTPUT_ROOT}" "${PER_SEED_DIR}" "${LOG_DIR}"
+mkdir -p "${SUMMARY_DIR}" "${SHARED_OUTPUT_ROOT}"
 
 # ============================================================
 # Persistence: auto-restart via setsid/nohup if not already running
@@ -79,26 +87,32 @@ echo "Camera: ${CAMERA_NAME}"
 echo "Output: ${OUTPUT_ROOT}"
 
 # ============================================================
-# GPU check
+# GPU check: set CUDA_VISIBLE_DEVICES FIRST, then check
 # ============================================================
-if ! python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print(f'CUDA OK: {torch.cuda.get_device_name(0)}')" 2>&1; then
-    echo "[FATAL] CUDA is not available. Aborting."
-    exit 1
-fi
-
+export CUDA_VISIBLE_DEVICES="${GPU_ID}"
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
-export CUDA_VISIBLE_DEVICES="${GPU_ID}"
+
+ACTUAL_GPU_NAME=$(python -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print(torch.cuda.get_device_name(0))" 2>&1) || {
+    echo "[FATAL] CUDA is not available. Aborting."
+    exit 1
+}
+echo "[GPU] Using GPU ${GPU_ID} (CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES}): ${ACTUAL_GPU_NAME}"
 
 # ============================================================
-# Discover tasks
+# Discover tasks: shared manifest (only generate once)
 # ============================================================
-echo "[DISCOVER] Scanning ${SCAN_ROOT} ..."
-> "${TASK_LIST}"
+(
+    flock -x 200
+    if [[ ! -f "${TASK_MANIFEST}" ]] || [[ ! -s "${TASK_MANIFEST}" ]]; then
+        echo "[DISCOVER] Generating shared task manifest at ${TASK_MANIFEST} ..."
+        python "${DISCOVER_SCRIPT}" > "${TASK_MANIFEST}" 2>&1
+    else
+        echo "[DISCOVER] Using existing shared task manifest at ${TASK_MANIFEST}"
+    fi
+) 200>"${SHARED_OUTPUT_ROOT}/.manifest.lock"
 
-python "${DISCOVER_SCRIPT}" > "${TASK_LIST}" 2>&1
-
-TOTAL_TASKS=$(wc -l < "${TASK_LIST}")
+TOTAL_TASKS=$(wc -l < "${TASK_MANIFEST}")
 echo "[DISCOVER] Found ${TOTAL_TASKS} total model-checkpoint tasks"
 
 # ============================================================
@@ -113,10 +127,10 @@ while IFS= read -r line; do
         echo "${line}" >> "${MY_TASKS_FILE}"
     fi
     IDX=$((IDX + 1))
-done < "${TASK_LIST}"
+done < "${TASK_MANIFEST}"
 
 MY_TASK_COUNT=$(wc -l < "${MY_TASKS_FILE}")
-echo "[ASSIGN] GPU${GPU_ID} assigned ${MY_TASK_COUNT} tasks (odd-indexed from sorted list)"
+echo "[ASSIGN] GPU${GPU_ID} assigned ${MY_TASK_COUNT} tasks (odd-indexed from shared manifest)"
 
 if [[ "${MY_TASK_COUNT}" -eq 0 ]]; then
     echo "[INFO] No tasks assigned to GPU${GPU_ID}. Exiting."
@@ -148,18 +162,67 @@ while IFS= read -r task_line; do
     echo "[START] model=${MODEL} checkpoint=${CHECKPOINT}"
 
     # ============================================================
-    # Checkpoint resume: skip if complete results exist
+    # Checkpoint resume: strict validation before skipping
     # ============================================================
+    SHOULD_SKIP=false
     if [[ -f "${PER_CP_JSON}" ]] && [[ -f "${PER_SEED_CSV}" ]]; then
-        SEED_COUNT=$(tail -n +2 "${PER_SEED_CSV}" 2>/dev/null | wc -l)
-        STATUS=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(d.get('status',''))" 2>/dev/null || echo "")
-        if [[ "${STATUS}" == "ok" ]] && [[ "${SEED_COUNT}" -ge "${N_EPISODES}" ]]; then
-            SR=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(f\"{d['success_count']}/{d['n_episodes']}={d['pc_success']:.1f}%\")" 2>/dev/null || echo "?")
-            GR=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(f\"{d['grasp_success_count']}/{d['n_episodes']}={d['pc_grasp_success']:.1f}%\")" 2>/dev/null || echo "?")
-            echo "[SKIP] model=${MODEL} checkpoint=${CHECKPOINT} already complete: success=${SR} grasp=${GR}"
-            SKIP_COUNT=$((SKIP_COUNT + 1))
-            continue
+        VALIDATION_OK=$(python -c "
+import csv, json, sys
+try:
+    with open('${PER_CP_JSON}') as f:
+        summary = json.load(f)
+    if summary.get('status') != 'ok':
+        print('no')
+        sys.exit(0)
+
+    rows = []
+    with open('${PER_SEED_CSV}') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            rows.append(row)
+
+    if len(rows) != ${N_EPISODES}:
+        print('no')
+        sys.exit(0)
+
+    seeds = set()
+    for row in rows:
+        seeds.add(int(row['seed']))
+
+    if len(seeds) != ${N_EPISODES}:
+        print('no')
+        sys.exit(0)
+
+    expected_seeds = set(range(${SEED}, ${SEED} + ${N_EPISODES}))
+    if seeds != expected_seeds:
+        print('no')
+        sys.exit(0)
+
+    success_count = sum(1 for r in rows if int(r['success']) == 1)
+    grasp_count = sum(1 for r in rows if int(r['grasp_success']) == 1)
+
+    if success_count != summary.get('success_count'):
+        print('no')
+        sys.exit(0)
+    if grasp_count != summary.get('grasp_success_count'):
+        print('no')
+        sys.exit(0)
+
+    print('yes')
+except Exception as e:
+    print('no')
+" 2>/dev/null || echo "no")
+        if [[ "${VALIDATION_OK}" == "yes" ]]; then
+            SHOULD_SKIP=true
         fi
+    fi
+
+    if [[ "${SHOULD_SKIP}" == "true" ]]; then
+        SR=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(f\"{d['success_count']}/{d['n_episodes']}={d['pc_success']:.1f}%\")" 2>/dev/null || echo "?")
+        GR=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(f\"{d['grasp_success_count']}/{d['n_episodes']}={d['pc_grasp_success']:.1f}%\")" 2>/dev/null || echo "?")
+        echo "[SKIP] model=${MODEL} checkpoint=${CHECKPOINT} already complete: success=${SR} grasp=${GR}"
+        SKIP_COUNT=$((SKIP_COUNT + 1))
+        continue
     fi
 
     # ============================================================
@@ -183,7 +246,7 @@ while IFS= read -r task_line; do
 
     if [[ "${EVAL_EXIT}" -ne 0 ]]; then
         echo "[FAILED] model=${MODEL} checkpoint=${CHECKPOINT} exit_code=${EVAL_EXIT}"
-        python "${PROCESS_SCRIPT}" failed "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "${EVAL_EXIT}" "${EVAL_LOG}" 2>/dev/null || true
+        python "${PROCESS_SCRIPT}" failed "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "${EVAL_EXIT}" "${EVAL_LOG}" "${CP_PATH}" 2>/dev/null || true
         FAIL_COUNT=$((FAIL_COUNT + 1))
         continue
     fi
@@ -195,7 +258,7 @@ while IFS= read -r task_line; do
 
     if [[ -z "${RESULTS_JSON}" ]]; then
         echo "[FAILED] model=${MODEL} checkpoint=${CHECKPOINT} no eval_episode_results.json found"
-        python "${PROCESS_SCRIPT}" failed "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "no_results" "${EVAL_LOG}" 2>/dev/null || true
+        python "${PROCESS_SCRIPT}" failed "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "no_results" "${EVAL_LOG}" "${CP_PATH}" 2>/dev/null || true
         FAIL_COUNT=$((FAIL_COUNT + 1))
         continue
     fi
@@ -203,14 +266,14 @@ while IFS= read -r task_line; do
     # ============================================================
     # Process results
     # ============================================================
-    if python "${PROCESS_SCRIPT}" ok "${RESULTS_JSON}" "${PER_SEED_CSV}" "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}"; then
+    if python "${PROCESS_SCRIPT}" ok "${RESULTS_JSON}" "${PER_SEED_CSV}" "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "${CP_PATH}" "${EVAL_LOG}"; then
         SR=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(f\"{d['success_count']}/{d['n_episodes']}={d['pc_success']:.1f}%\")" 2>/dev/null || echo "?")
         GR=$(python -c "import json; d=json.load(open('${PER_CP_JSON}')); print(f\"{d['grasp_success_count']}/{d['n_episodes']}={d['pc_grasp_success']:.1f}%\")" 2>/dev/null || echo "?")
         echo "[DONE] model=${MODEL} checkpoint=${CHECKPOINT} success=${SR} grasp=${GR}"
         DONE_COUNT=$((DONE_COUNT + 1))
     else
         echo "[FAILED] model=${MODEL} checkpoint=${CHECKPOINT} result processing failed"
-        python "${PROCESS_SCRIPT}" failed "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "parse_failed" "${EVAL_LOG}" 2>/dev/null || true
+        python "${PROCESS_SCRIPT}" failed "${PER_CP_JSON}" "${MODEL}" "${CHECKPOINT}" "${GPU_ID}" "parse_failed" "${EVAL_LOG}" "${CP_PATH}" 2>/dev/null || true
         FAIL_COUNT=$((FAIL_COUNT + 1))
     fi
 
@@ -220,7 +283,7 @@ while IFS= read -r task_line; do
     (
         flock -x 200
         python "${BUILD_SUMMARY_SCRIPT}" "${SUMMARY_DIR}" "${SUMMARY_CSV}" 2>/dev/null || true
-    ) 200>"${OUTPUT_ROOT}/.summary.lock"
+    ) 200>"${SHARED_OUTPUT_ROOT}/.summary.lock"
 
 done < "${MY_TASKS_FILE}"
 

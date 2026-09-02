@@ -1,7 +1,9 @@
 #!/usr/bin/env python
 """Rebuild unified summary.csv from all per-checkpoint JSON files."""
 import csv
+import fcntl
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -28,7 +30,7 @@ def build_summary(summary_dir, output_csv):
         "n_episodes", "success_count", "grasp_success_count",
         "success_rate", "grasp_success_rate",
         "pc_success", "pc_grasp_success",
-        "status", "exitcode", "log_path", "result_file"
+        "status", "exitcode", "log_path", "log_file", "result_file"
     ]
 
     output_csv.parent.mkdir(parents=True, exist_ok=True)
