@@ -38,6 +38,26 @@ TEMPORAL_ACTION_STEPS = 16
 ACTION_EMBED_DIM = None  # Will be computed from action sequence shape + statistics
 ACTION_NORMALIZE = True
 
+# Action embedding internal feature group weights
+# These control the relative contribution of each feature group INSIDE the action embedding.
+# They are distinct from ACTION_WEIGHT, which controls how much the entire action
+# disagreement signal contributes to the final cell priority.
+#
+# Final ActionEmbedding formula:
+#   ActionEmb = [
+#       ACTION_TEMPORAL_WEIGHT * L2_norm(temporal_flat),
+#       ACTION_STATS_WEIGHT  * L2_norm(statistics_vector),
+#       ACTION_LENGTH_WEIGHT * scaled_length
+#   ]
+# The temporal part is the PRIMARY signal; statistics and length are auxiliary.
+ACTION_TEMPORAL_WEIGHT = 1.0
+ACTION_STATS_WEIGHT = 0.25
+ACTION_LENGTH_WEIGHT = 0.1
+
+# Length scaling factor for stable trajectory length representation.
+# Uses np.log1p(T) / ACTION_LENGTH_SCALE to avoid T dominating the embedding.
+ACTION_LENGTH_SCALE = 10.0
+
 # Random seed
 SEED = 42
 

@@ -4,6 +4,30 @@ Action Embedding Module for V4
 Implements strictly causal temporal ActionEmbedding.
 Action embeddings are computed ONLY AFTER an episode has been officially acquired.
 No pre-computation over the full pool is allowed.
+
+Final ActionEmbedding formula:
+    ActionEmb = [
+        ACTION_TEMPORAL_WEIGHT * L2_norm(temporal_flat),
+        ACTION_STATS_WEIGHT  * L2_norm(statistics_vector),
+        ACTION_LENGTH_WEIGHT * scaled_length
+    ]
+
+Where:
+    - temporal_flat: resampled 16-step action trajectory flattened (PRIMARY signal)
+    - statistics_vector: action mean, std, velocity mean/std, range, initial/final action
+    - scaled_length: np.log1p(T) / ACTION_LENGTH_SCALE (stable bounded scalar)
+
+The temporal part is the PRIMARY signal; statistics and length are auxiliary.
+After group-wise weighting, the combined vector may optionally undergo a final
+L2-normalization (controlled by ACTION_NORMALIZE), but the group weight ratios
+(1.0 : 0.25 : 0.1) are preserved through the normalization.
+
+Two-level weight distinction:
+    - ACTION_TEMPORAL_WEIGHT / ACTION_STATS_WEIGHT / ACTION_LENGTH_WEIGHT:
+        Control internal composition of the ActionEmbedding vector.
+    - ACTION_WEIGHT (in config.py, default 0.5):
+        Controls how much the ActionDisagreement signal contributes to the
+        final cell priority in the planner. These are independent.
 """
 
 import sys
@@ -15,7 +39,11 @@ PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from our_v4.config import TEMPORAL_ACTION_STEPS, ACTION_NORMALIZE
+from our_v4.config import (
+    TEMPORAL_ACTION_STEPS, ACTION_NORMALIZE,
+    ACTION_TEMPORAL_WEIGHT, ACTION_STATS_WEIGHT, ACTION_LENGTH_WEIGHT,
+    ACTION_LENGTH_SCALE,
+)
 
 
 def _detect_action_key(dataset) -> str:
@@ -27,6 +55,14 @@ def _detect_action_key(dataset) -> str:
     raise ValueError(
         f"No action feature found in dataset. Available features: {list(features.keys())}"
     )
+
+
+def _l2_normalize_group(vec: np.ndarray) -> np.ndarray:
+    """L2-normalize a 1-D feature group vector. Returns zero vector if norm is near-zero."""
+    norm = np.linalg.norm(vec)
+    if norm < 1e-8:
+        return vec
+    return vec / norm
 
 
 def load_acquired_action_sequence(
@@ -114,24 +150,46 @@ def resample_action_sequence(
     return resampled
 
 
-def extract_temporal_action_embedding(
+def extract_temporal_features(
     action_sequence: np.ndarray,
     n_steps: int = TEMPORAL_ACTION_STEPS,
 ) -> np.ndarray:
     """
-    Extract a fixed-length action embedding that preserves temporal structure.
+    Extract the PRIMARY temporal feature group: resampled action trajectory flattened.
 
-    Core features:
-    - Resampled temporal action sequence [n_steps, action_dim] flattened -> main signal
-    - Auxiliary statistics: mean, std, velocity mean, velocity std, range,
-      trajectory length, initial action, final action
+    This is the main signal in the ActionEmbedding, preserving the full temporal
+    structure of the action sequence as a fixed-length vector of shape [n_steps * action_dim].
 
     Args:
         action_sequence: numpy array of shape [T, action_dim]
         n_steps: number of temporal steps for resampling
 
     Returns:
-        1-D numpy array combining temporal representation + statistics
+        1-D numpy array of shape [n_steps * action_dim]
+    """
+    if action_sequence.ndim != 2:
+        raise ValueError(f"Expected 2D action sequence [T, D], got {action_sequence.shape}")
+
+    resampled = resample_action_sequence(action_sequence, n_steps=n_steps)
+    return resampled.flatten()
+
+
+def extract_statistical_features(
+    action_sequence: np.ndarray,
+) -> np.ndarray:
+    """
+    Extract the auxiliary statistical feature group.
+
+    Includes: action mean, std, velocity mean, velocity std, action range,
+    initial action, final action (per dimension).
+
+    These are secondary signals that complement the temporal features.
+
+    Args:
+        action_sequence: numpy array of shape [T, action_dim]
+
+    Returns:
+        1-D numpy array of statistical features
     """
     if action_sequence.ndim != 2:
         raise ValueError(f"Expected 2D action sequence [T, D], got {action_sequence.shape}")
@@ -139,11 +197,6 @@ def extract_temporal_action_embedding(
     T, D = action_sequence.shape
     parts = []
 
-    # Primary signal: resampled temporal action (flattened)
-    resampled = resample_action_sequence(action_sequence, n_steps=n_steps)
-    parts.append(resampled.flatten())
-
-    # Auxiliary statistics
     action_mean = np.mean(action_sequence, axis=0)
     parts.append(action_mean)
 
@@ -163,12 +216,32 @@ def extract_temporal_action_embedding(
     action_range = np.max(action_sequence, axis=0) - np.min(action_sequence, axis=0)
     parts.append(action_range)
 
-    parts.append(np.array([float(T)]))
-
     parts.append(action_sequence[0])
     parts.append(action_sequence[-1])
 
     return np.concatenate(parts)
+
+
+def extract_length_feature(
+    action_sequence: np.ndarray,
+    length_scale: float = ACTION_LENGTH_SCALE,
+) -> np.ndarray:
+    """
+    Extract the trajectory length feature with stable scaling.
+
+    Uses np.log1p(T) / length_scale to avoid raw T dominating the embedding.
+    This ensures that episodes with T in [50, 300] produce comparable length
+    signals without overwhelming the temporal trajectory features.
+
+    Args:
+        action_sequence: numpy array of shape [T, action_dim]
+        length_scale: scaling divisor for log-transformed length
+
+    Returns:
+        1-D numpy array of shape [1]
+    """
+    T = action_sequence.shape[0]
+    return np.array([np.log1p(float(T)) / length_scale])
 
 
 def normalize_action_embedding(embedding: np.ndarray) -> np.ndarray:
@@ -191,23 +264,60 @@ def build_action_embedding_for_acquired_episode(
     action_sequence: np.ndarray,
     normalize: bool = ACTION_NORMALIZE,
     n_steps: int = TEMPORAL_ACTION_STEPS,
+    temporal_weight: float = ACTION_TEMPORAL_WEIGHT,
+    stats_weight: float = ACTION_STATS_WEIGHT,
+    length_weight: float = ACTION_LENGTH_WEIGHT,
+    length_scale: float = ACTION_LENGTH_SCALE,
 ) -> np.ndarray:
     """
-    Build a complete action embedding for an acquired episode.
+    Build a complete action embedding for an acquired episode with group-wise weighting.
 
-    Steps:
-    1. Extract temporal + statistics embedding
-    2. Optionally L2-normalize
+    ActionEmbedding composition:
+        ActionEmb = [
+            temporal_weight  * L2_norm(temporal_features),
+            stats_weight     * L2_norm(statistical_features),
+            length_weight    * scaled_length_feature
+        ]
+
+    The temporal part is the PRIMARY signal (weight=1.0).
+    Statistics and length are auxiliary (weights=0.25 and 0.1).
+
+    After concatenation, an optional final L2-normalization is applied.
+    Even after this final normalization, the group weight ratios are preserved
+    because L2-normalization is scale-invariant with respect to relative proportions.
 
     Args:
         action_sequence: numpy array of shape [T, action_dim]
-        normalize: whether to L2-normalize the result
+        normalize: whether to apply final L2-normalization to the combined vector
         n_steps: temporal resampling steps
+        temporal_weight: weight for the temporal feature group
+        stats_weight: weight for the statistical feature group
+        length_weight: weight for the length feature
+        length_scale: scaling factor for log-transformed length
 
     Returns:
         1-D numpy array (the action embedding)
     """
-    emb = extract_temporal_action_embedding(action_sequence, n_steps=n_steps)
+    if action_sequence.ndim != 2:
+        raise ValueError(f"Expected 2D action sequence [T, D], got {action_sequence.shape}")
+
+    # Group 1: Temporal features (PRIMARY signal)
+    temporal_flat = extract_temporal_features(action_sequence, n_steps=n_steps)
+    temporal_norm = _l2_normalize_group(temporal_flat) * temporal_weight
+
+    # Group 2: Statistical features (auxiliary)
+    stats_vector = extract_statistical_features(action_sequence)
+    stats_norm = _l2_normalize_group(stats_vector) * stats_weight
+
+    # Group 3: Length feature (auxiliary, stable-scaled)
+    length_feat = extract_length_feature(action_sequence, length_scale=length_scale)
+    length_scaled = length_feat * length_weight
+
+    # Concatenate all groups
+    combined = np.concatenate([temporal_norm, stats_norm, length_scaled])
+
+    # Optional final L2-normalization
     if normalize:
-        emb = normalize_action_embedding(emb)
-    return emb
+        combined = normalize_action_embedding(combined)
+
+    return combined
