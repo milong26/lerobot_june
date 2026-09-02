@@ -8,7 +8,6 @@ with the existing training pipeline.
 from __future__ import annotations
 
 import logging
-import random
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -45,15 +44,12 @@ def select_top_episodes(
         )
         target_episodes = len(score_table)
 
-    # Sort by score descending, then by episode_idx ascending for stable tie-breaking
     sorted_df = score_table.sort_values(
         by=["deminf_score", "episode_idx"],
         ascending=[False, True],
     ).reset_index(drop=True)
 
     selected = sorted_df.head(target_episodes)["episode_idx"].tolist()
-
-    # Sort ascending for compatibility with existing subset loaders
     selected = sorted(selected)
 
     logger.info(f"Selected {len(selected)} episodes: {selected[:10]}...{selected[-5:]}")
@@ -67,27 +63,13 @@ def save_subset_json(
     config: DemInfConfig,
     output_path: str | Path,
     relative_action: bool = False,
+    state_dim: int = 39,
+    action_dim: int = 4,
 ) -> Dict[str, Any]:
     """
     Save subset JSON compatible with existing training pipeline.
 
-    Format matches random/uniform/SubZeroCore subset files:
-    {
-        "selected_episode_indices": [...],
-        "num_episodes": K,
-        "selection_method": "deminf",
-        "parameters": {...}
-    }
-
-    Args:
-        selected_indices: List of selected episode indices (ascending sorted).
-        score_table: Full episode score DataFrame.
-        config: DemInfConfig.
-        output_path: Output JSON file path.
-        relative_action: Whether actions are relative/delta control.
-
-    Returns:
-        Subset dictionary.
+    Format matches random/uniform/SubZeroCore subset files with official DemInf parameters.
     """
     ensure_dir(Path(output_path).parent)
 
@@ -96,18 +78,32 @@ def save_subset_json(
         "num_episodes": len(selected_indices),
         "selection_method": "deminf",
         "parameters": {
+            "official_deminf": True,
             "target_episodes": config.target_episodes,
             "seed": config.seed,
+            "vae_steps": config.vae_steps,
+            "vae_lr": config.vae_lr,
+            "vae_batch_size": config.batch_size,
+            "quality_batch_size": config.quality_batch_size,
+            "quality_repeat": config.quality_repeat,
+            "requested_discard_fraction": config.quality_discard_fraction,
+            "effective_discard_fraction": config.effective_discard_fraction(),
+            "quality_cache": config.quality_cache,
             "ks": list(config.ks),
+            "state_source": config.state_source,
+            "state_dim": state_dim,
+            "action_dim": action_dim,
             "state_latent_dim": config.state_latent_dim,
             "action_latent_dim": config.action_latent_dim,
             "vae_beta_state": config.vae_beta_state,
             "vae_beta_action": config.vae_beta_action,
-            "vae_epochs": config.vae_epochs,
             "hidden_dims": config.hidden_dims,
             "relative_action": relative_action,
             "dataset_path": config.dataset_path,
             "score_aggregation": "mean",
+            "score_clip_percentiles": [config.score_clip_low, config.score_clip_high],
+            "score_normalization": "global_zscore_after_clipping",
+            "episode_aggregation": "mean",
             "ksg_mode": config.ksg_mode,
             "ksg_backend": config.ksg_backend,
             "representation": config.representation,
@@ -125,14 +121,7 @@ def save_score_rankings(
     selected_indices: List[int],
     output_path: str | Path,
 ) -> None:
-    """
-    Save detailed score rankings with selection status.
-
-    Args:
-        score_table: Full episode score DataFrame.
-        selected_indices: Selected episode indices.
-        output_path: Output CSV file path.
-    """
+    """Save detailed score rankings with selection status."""
     df = score_table.copy()
     df["selected"] = df["episode_idx"].isin(selected_indices)
 

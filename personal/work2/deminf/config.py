@@ -2,11 +2,13 @@
 DemInf Configuration
 
 Unified dataclass for all DemInf hyperparameters and paths.
+Faithful to the official state-based DemInf (RSS 2025) configuration.
 """
 
 from __future__ import annotations
 
-import os
+import hashlib
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Tuple
@@ -16,52 +18,7 @@ from typing import List, Optional, Tuple
 class DemInfConfig:
     """
     Unified configuration for DemInf episode selection.
-
-    Attributes:
-        dataset_path: Path to the LeRobot dataset directory.
-        output_dir: Directory to save all outputs (scores, checkpoints, subset JSON).
-        target_episodes: Number of episodes to select (e.g., 112).
-        seed: Random seed for reproducibility.
-        device: PyTorch device string ('cuda', 'cpu', or 'cuda:0').
-
-        # Data loading
-        batch_size: Batch size for VAE training.
-        num_workers: Number of DataLoader workers.
-        state_keys: Keys to extract from each timestep for state vector.
-                    If None, auto-detected from dataset features.
-        action_key: Key to extract action vector. Default: 'action'.
-        max_timesteps_per_episode: Max timesteps per episode to use. None = all.
-        normalize_state: Whether to z-score normalize state vectors.
-        normalize_action: Whether to z-score normalize action vectors.
-        relative_action: Whether actions are relative/delta control. Auto-detected if None.
-
-        # VAE architecture
-        state_latent_dim: Latent dimension for state VAE (default 12, per paper).
-        action_latent_dim: Latent dimension for action VAE (default 6, per paper).
-        hidden_dims: Hidden layer dimensions for both VAEs. Default [512, 512].
-
-        # VAE training
-        vae_beta_state: Beta coefficient for state VAE KL term.
-        vae_beta_action: Beta coefficient for action VAE KL term.
-        vae_lr: Learning rate for VAE optimizers.
-        vae_epochs: Number of training epochs for VAEs.
-        weight_decay: Weight decay for Adam optimizer.
-
-        # KSG MI estimation
-        ks: Tuple of k values for KSG estimator. Default (5, 6, 7) per paper.
-        score_batch_size: Batch size for KSG pairwise distance computation.
-        ksg_chunk_size: Chunk size for pairwise distance computation. None = auto.
-
-        # Checkpointing
-        checkpoint_dir: Directory to save VAE checkpoints. None = output_dir/checkpoints.
-        resume: Whether to resume training from existing checkpoints.
-        skip_train_if_checkpoint_exists: Skip VAE training if checkpoint exists.
-        use_latent_cache: Whether to load/save latent embeddings from cache.
-
-        # Advanced
-        representation: 'state' or 'image'. Only 'state' is fully implemented.
-        ksg_backend: 'chunked' (default, memory-safe) or 'full' (for small data validation).
-        ksg_mode: 'deminf_rank' (default, for ranking) or 'full_mi' (complete MI contribution).
+    Official state-based defaults from DemInf (RSS 2025).
     """
 
     # Paths
@@ -74,7 +31,7 @@ class DemInfConfig:
     # Data loading
     batch_size: int = 256
     num_workers: int = 4
-    state_keys: Optional[List[str]] = None
+    state_source: str = "observation.environment_state"
     action_key: str = "action"
     max_timesteps_per_episode: Optional[int] = None
     normalize_state: bool = True
@@ -89,20 +46,31 @@ class DemInfConfig:
     # VAE training
     vae_beta_state: float = 0.05
     vae_beta_action: float = 0.05
-    vae_lr: float = 1e-3
+    vae_lr: float = 1e-4
     vae_epochs: int = 100
-    weight_decay: float = 1e-5
+    vae_steps: int = 50000
+    weight_decay: float = 0.0
 
     # KSG MI estimation
     ks: Tuple[int, ...] = (5, 6, 7)
     score_batch_size: int = 1024
     ksg_chunk_size: Optional[int] = None
 
+    # Quality inference (official DemInf scoring)
+    quality_batch_size: int = 1024
+    quality_repeat: int = 4
+    quality_discard_fraction: float = 0.5
+    quality_cache: bool = True
+    quality_drop_remainder: bool = True
+    score_clip_low: float = 1.0
+    score_clip_high: float = 99.0
+
     # Checkpointing
     checkpoint_dir: Optional[str] = None
     resume: bool = False
     skip_train_if_checkpoint_exists: bool = True
     use_latent_cache: bool = True
+    checkpoint_step: int = 50000
 
     # Advanced
     representation: str = "state"
@@ -115,12 +83,7 @@ class DemInfConfig:
             self.checkpoint_dir = str(Path(self.output_dir) / "checkpoints")
 
     def validate(self) -> None:
-        """
-        Validate configuration values.
-
-        Raises:
-            ValueError: If any configuration value is invalid.
-        """
+        """Validate configuration values."""
         if not self.dataset_path:
             raise ValueError("dataset_path must be specified")
         if not Path(self.dataset_path).exists():
@@ -141,10 +104,21 @@ class DemInfConfig:
             raise ValueError(f"vae_beta_action must be non-negative, got {self.vae_beta_action}")
         if self.vae_lr <= 0:
             raise ValueError(f"vae_lr must be positive, got {self.vae_lr}")
-        if self.vae_epochs <= 0:
-            raise ValueError(f"vae_epochs must be positive, got {self.vae_epochs}")
+        if self.vae_steps <= 0:
+            raise ValueError(f"vae_steps must be positive, got {self.vae_steps}")
         if not self.ks or any(k <= 0 for k in self.ks):
             raise ValueError(f"ks must be positive integers, got {self.ks}")
+        if self.quality_batch_size <= max(self.ks):
+            raise ValueError(
+                f"quality_batch_size ({self.quality_batch_size}) must be > max(ks) ({max(self.ks)})"
+            )
+        if self.quality_repeat <= 0:
+            raise ValueError(f"quality_repeat must be positive, got {self.quality_repeat}")
+        if not (0 <= self.score_clip_low < self.score_clip_high <= 100):
+            raise ValueError(
+                f"score_clip_low/high must satisfy 0 <= low < high <= 100, "
+                f"got low={self.score_clip_low}, high={self.score_clip_high}"
+            )
         if self.score_batch_size <= 0:
             raise ValueError(f"score_batch_size must be positive, got {self.score_batch_size}")
         if self.representation not in ("state", "image"):
@@ -158,3 +132,30 @@ class DemInfConfig:
 
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.checkpoint_dir).mkdir(parents=True, exist_ok=True)
+
+    def effective_discard_fraction(self) -> float:
+        """
+        When quality_cache=True, official OpenX dataloader forces discard_fraction=0.0.
+        Returns the effective discard fraction actually used.
+        """
+        if self.quality_cache:
+            return 0.0
+        return self.quality_discard_fraction
+
+    def config_fingerprint(self) -> str:
+        """Generate a fingerprint string for cache validation."""
+        key_fields = {
+            "state_latent_dim": self.state_latent_dim,
+            "action_latent_dim": self.action_latent_dim,
+            "hidden_dims": self.hidden_dims,
+            "vae_beta_state": self.vae_beta_state,
+            "vae_beta_action": self.vae_beta_action,
+            "vae_lr": self.vae_lr,
+            "vae_steps": self.vae_steps,
+            "weight_decay": self.weight_decay,
+            "state_source": self.state_source,
+            "action_key": self.action_key,
+            "representation": self.representation,
+        }
+        raw = json.dumps(key_fields, sort_keys=True)
+        return hashlib.sha256(raw.encode()).hexdigest()[:16]

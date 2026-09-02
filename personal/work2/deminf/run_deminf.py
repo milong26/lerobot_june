@@ -2,8 +2,8 @@
 """
 DemInf Episode Selection - Main Entry Point
 
-Faithful reimplementation of DemInf (Demonstration Information) core algorithm
-in the current LeRobot/PyTorch pipeline.
+Algorithmically and numerically validated PyTorch/LeRobot reimplementation of
+the official DemInf estimator (RSS 2025, state-based).
 
 Usage:
     python run_deminf.py \
@@ -11,41 +11,43 @@ Usage:
         --output-dir /path/to/output \
         --target-episodes 112 \
         --seed 42 \
-        --device cuda \
-        --vae-epochs 100 \
-        --batch-size 256 \
-        --score-batch-size 1024 \
+        --vae-steps 50000 \
+        --vae-lr 1e-4 \
+        --vae-batch-size 256 \
+        --quality-batch-size 1024 \
+        --quality-repeat 4 \
         --state-latent-dim 12 \
         --action-latent-dim 6 \
         --ks 5 6 7 \
-        --resume
+        --state-source observation.environment_state
 
 Pipeline:
     1. Set seed
-    2. Read LeRobot dataset
-    3. Build episode index
-    4. Extract per-timestep state/action
-    5. Check relative action
-    6. Compute and save normalization statistics
-    7. Normalize state/action
-    8. Train or load state VAE
-    9. Train or load action VAE
-    10. Batch encode all timesteps
-    11. KSG local scoring
-    12. Episode mean aggregation
-    13. Episode ranking
-    14. Select top K
-    15. Output files
-    16. Print summary
+    2. Load LeRobot dataset
+    3. Build verified global episode index
+    4. Drop terminal transitions
+    5. Extract observation.environment_state and action
+    6. Validate dimensions and relative action
+    7. Fit/save DemInf normalization
+    8. Train/load state VAE exactly 50000 optimizer steps
+    9. Train/load action VAE exactly 50000 optimizer steps
+    10. Encode posterior means
+    11. Validate/reuse latent cache
+    12. Construct official random repeated quality batches
+    13. Batch-local official KSG score
+    14. Remove NaNs, global p1/p99 clipping, global z-score
+    15. Mean aggregate by episode
+    16. Rank, Top-K, subset JSON
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import sys
 from pathlib import Path
 
-# Add project root to path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -54,17 +56,23 @@ import numpy as np
 
 from deminf.config import DemInfConfig
 from deminf.dataset_adapter import (
-    build_episode_index,
+    build_episode_index_from_lerobot,
     check_relative_action,
     collect_training_arrays,
-    compute_normalization_stats,
+    drop_terminal_transitions,
     infer_episode_structure,
-    normalize_array,
+    validate_episode_index,
+    DemInfNormalizer,
 )
 from deminf.models import BetaVAE
-from deminf.score_episodes import load_latent_cache, save_latent_cache, score_dataset
+from deminf.score_episodes import (
+    encode_all_timesteps,
+    load_latent_cache,
+    save_latent_cache,
+    score_dataset,
+)
 from deminf.select_subset import save_score_rankings, save_subset_json, select_top_episodes
-from deminf.train_vae import load_vae_checkpoint, train_beta_vae
+from deminf.train_vae import find_checkpoint, load_vae_checkpoint, train_beta_vae
 from deminf.utils import (
     atomic_save_json,
     ensure_dir,
@@ -78,7 +86,7 @@ from deminf.utils import (
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description="DemInf Episode Selection",
+        description="DemInf Episode Selection (Official State-Based, RSS 2025)",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
 
@@ -97,26 +105,46 @@ def parse_args() -> argparse.Namespace:
                         help="PyTorch device (cuda, cpu, cuda:0)")
 
     # VAE training
-    parser.add_argument("--vae-epochs", type=int, default=100,
-                        help="Number of VAE training epochs")
-    parser.add_argument("--batch-size", type=int, default=256,
+    parser.add_argument("--vae-steps", type=int, default=50000,
+                        help="Number of VAE optimizer steps (official: 50000)")
+    parser.add_argument("--vae-lr", type=float, default=1e-4,
+                        help="VAE learning rate (official: 1e-4)")
+    parser.add_argument("--vae-batch-size", type=int, default=256,
                         help="Batch size for VAE training")
-    parser.add_argument("--score-batch-size", type=int, default=1024,
-                        help="Batch size for KSG scoring")
     parser.add_argument("--state-latent-dim", type=int, default=12,
-                        help="State VAE latent dimension")
+                        help="State VAE latent dimension (official: 12)")
     parser.add_argument("--action-latent-dim", type=int, default=6,
-                        help="Action VAE latent dimension")
+                        help="Action VAE latent dimension (official: 6)")
     parser.add_argument("--ks", type=int, nargs="+", default=[5, 6, 7],
-                        help="K values for KSG estimator")
-    parser.add_argument("--vae-lr", type=float, default=1e-3,
-                        help="VAE learning rate")
+                        help="K values for KSG estimator (official: 5 6 7)")
     parser.add_argument("--vae-beta-state", type=float, default=0.05,
-                        help="State VAE beta coefficient")
+                        help="State VAE beta coefficient (official: 0.05)")
     parser.add_argument("--vae-beta-action", type=float, default=0.05,
-                        help="Action VAE beta coefficient")
-    parser.add_argument("--weight-decay", type=float, default=1e-5,
-                        help="Weight decay for Adam optimizer")
+                        help="Action VAE beta coefficient (official: 0.05)")
+    parser.add_argument("--weight-decay", type=float, default=0.0,
+                        help="Weight decay for Adam optimizer (official: 0.0)")
+
+    # Quality inference
+    parser.add_argument("--quality-batch-size", type=int, default=1024,
+                        help="Batch size for quality KSG scoring (official: 1024)")
+    parser.add_argument("--quality-repeat", type=int, default=4,
+                        help="Number of quality repeat iterations (official: 4)")
+    parser.add_argument("--quality-cache", action="store_true", default=True,
+                        help="Use quality cache (forces effective_discard_fraction=0)")
+    parser.add_argument("--no-quality-cache", action="store_true",
+                        help="Disable quality cache")
+    parser.add_argument("--quality-discard-fraction", type=float, default=0.5,
+                        help="Discard fraction per episode (overridden to 0 if quality_cache=True)")
+    parser.add_argument("--score-clip-low", type=float, default=1.0,
+                        help="Lower percentile for score clipping")
+    parser.add_argument("--score-clip-high", type=float, default=99.0,
+                        help="Upper percentile for score clipping")
+
+    # Data
+    parser.add_argument("--state-source", type=str, default="observation.environment_state",
+                        help="State source key (official: observation.environment_state)")
+    parser.add_argument("--max-timesteps", type=int, default=None,
+                        help="Max timesteps per episode (None = all)")
 
     # Checkpointing
     parser.add_argument("--resume", action="store_true",
@@ -135,14 +163,70 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ksg-mode", type=str, default="deminf_rank",
                         choices=["deminf_rank", "full_mi"],
                         help="KSG scoring mode")
-    parser.add_argument("--max-timesteps", type=int, default=None,
-                        help="Max timesteps per episode (None = all)")
 
     return parser.parse_args()
 
 
+def build_cache_fingerprint(
+    dataset_path: str,
+    state_source: str,
+    action_key: str,
+    state_dim: int,
+    action_dim: int,
+    state_latent_dim: int,
+    action_latent_dim: int,
+    hidden_dims: list,
+    vae_beta_state: float,
+    vae_beta_action: float,
+    vae_lr: float,
+    vae_steps: int,
+    normalization_manifest: dict,
+    state_ckpt_path: str | None,
+    action_ckpt_path: str | None,
+    git_commit: str,
+) -> str:
+    """Build a comprehensive fingerprint for latent cache validation."""
+    state_ckpt_hash = ""
+    if state_ckpt_path and Path(state_ckpt_path).exists():
+        with open(state_ckpt_path, "rb") as f:
+            state_ckpt_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+
+    action_ckpt_hash = ""
+    if action_ckpt_path and Path(action_ckpt_path).exists():
+        with open(action_ckpt_path, "rb") as f:
+            action_ckpt_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+
+    info_path = Path(dataset_path) / "meta" / "info.json"
+    info_hash = ""
+    if info_path.exists():
+        with open(info_path, "rb") as f:
+            info_hash = hashlib.sha256(f.read()).hexdigest()[:16]
+
+    key_fields = {
+        "dataset_path": dataset_path,
+        "info_hash": info_hash,
+        "state_source": state_source,
+        "action_key": action_key,
+        "state_dim": state_dim,
+        "action_dim": action_dim,
+        "state_latent_dim": state_latent_dim,
+        "action_latent_dim": action_latent_dim,
+        "hidden_dims": hidden_dims,
+        "vae_beta_state": vae_beta_state,
+        "vae_beta_action": vae_beta_action,
+        "vae_lr": vae_lr,
+        "vae_steps": vae_steps,
+        "normalization_manifest": normalization_manifest,
+        "state_ckpt_hash": state_ckpt_hash,
+        "action_ckpt_hash": action_ckpt_hash,
+        "git_commit": git_commit,
+    }
+    raw = json.dumps(key_fields, sort_keys=True)
+    return hashlib.sha256(raw.encode()).hexdigest()[:32]
+
+
 def main() -> None:
-    """Run the full DemInf pipeline."""
+    """Run the full official DemInf pipeline."""
     args = parse_args()
 
     # Build config
@@ -152,17 +236,23 @@ def main() -> None:
         target_episodes=args.target_episodes,
         seed=args.seed,
         device=args.device,
-        batch_size=args.batch_size,
+        batch_size=args.vae_batch_size,
         num_workers=4,
+        state_source=args.state_source,
         state_latent_dim=args.state_latent_dim,
         action_latent_dim=args.action_latent_dim,
-        vae_epochs=args.vae_epochs,
+        vae_steps=args.vae_steps,
         vae_lr=args.vae_lr,
         vae_beta_state=args.vae_beta_state,
         vae_beta_action=args.vae_beta_action,
         weight_decay=args.weight_decay,
         ks=tuple(args.ks),
-        score_batch_size=args.score_batch_size,
+        quality_batch_size=args.quality_batch_size,
+        quality_repeat=args.quality_repeat,
+        quality_cache=not args.no_quality_cache,
+        quality_discard_fraction=args.quality_discard_fraction,
+        score_clip_low=args.score_clip_low,
+        score_clip_high=args.score_clip_high,
         max_timesteps_per_episode=args.max_timesteps,
         checkpoint_dir=str(Path(args.output_dir) / "checkpoints"),
         resume=args.resume,
@@ -175,16 +265,12 @@ def main() -> None:
     if args.no_skip_train:
         config.skip_train_if_checkpoint_exists = False
 
-    # Validate config
     config.validate()
-
-    # Set seed
     set_global_seed(config.seed)
 
-    # Initialize logger
     logger = init_logger(config.output_dir)
     logger.info("=" * 60)
-    logger.info("DemInf Episode Selection")
+    logger.info("DemInf Episode Selection (Official State-Based, RSS 2025)")
     logger.info("=" * 60)
     logger.info(f"Dataset: {config.dataset_path}")
     logger.info(f"Output: {config.output_dir}")
@@ -192,7 +278,6 @@ def main() -> None:
     logger.info(f"Seed: {config.seed}")
     logger.info(f"Device: {config.device}")
 
-    # Save metadata
     save_metadata(config.output_dir, config)
 
     # =========================================================================
@@ -202,87 +287,73 @@ def main() -> None:
     structure = infer_episode_structure(config.dataset_path)
     logger.info(f"Total episodes: {structure['total_episodes']}")
     logger.info(f"Total frames: {structure['total_frames']}")
-    logger.info(f"FPS: {structure['fps']}")
-    logger.info(f"State keys: {structure['state_keys']}")
-    logger.info(f"State shape: {structure['state_shape']}")
-    logger.info(f"Action shape: {structure['action_shape']}")
 
-    state_keys = structure["state_keys"]
-    if not state_keys:
-        state_keys = ["observation.state"]
-        logger.info(f"Using default state key: {state_keys}")
+    repo_id = str(Path(config.dataset_path).name)
 
     # =========================================================================
-    # Step 2: Build episode index
+    # Step 2: Build verified global episode index
     # =========================================================================
-    logger.info("\n--- Step 2: Building episode index ---")
-    episode_map = build_episode_index(config.dataset_path)
+    logger.info("\n--- Step 2: Building verified global episode index ---")
+    episode_map = build_episode_index_from_lerobot(config.dataset_path, repo_id)
+    validate_episode_index(config.dataset_path, repo_id, episode_map)
+
     total_episodes = len(episode_map)
-
     if config.target_episodes > total_episodes:
         logger.warning(
-            f"target_episodes={config.target_episodes} > total_episodes={total_episodes}, "
-            f"will select all available episodes"
+            f"target_episodes={config.target_episodes} > total_episodes={total_episodes}"
         )
 
     # =========================================================================
-    # Step 3: Extract per-timestep state/action
+    # Step 3: Drop terminal transitions
     # =========================================================================
-    logger.info("\n--- Step 3: Extracting state/action arrays ---")
-    states, actions, episode_ids, timestep_ids = collect_training_arrays(
+    logger.info("\n--- Step 3: Dropping terminal transitions ---")
+    episode_map = drop_terminal_transitions(episode_map)
+
+    # =========================================================================
+    # Step 4: Extract state and action arrays
+    # =========================================================================
+    logger.info("\n--- Step 4: Extracting state/action arrays ---")
+    states, actions, episode_ids, timestep_ids, global_row_ids = collect_training_arrays(
         dataset_root=config.dataset_path,
+        repo_id=repo_id,
         episode_map=episode_map,
-        state_keys=state_keys,
+        state_source=config.state_source,
         action_key=config.action_key,
         max_timesteps_per_episode=config.max_timesteps_per_episode,
     )
 
     state_dim = states.shape[1]
     action_dim = actions.shape[1]
-    logger.info(f"State dimension: {state_dim}")
-    logger.info(f"Action dimension: {action_dim}")
+    logger.info(f"state_source={config.state_source}, state_dim={state_dim}")
+    logger.info(f"action_dim={action_dim}")
     logger.info(f"Total timesteps: {len(states)}")
 
-    # =========================================================================
-    # Step 4: Check relative action
-    # =========================================================================
-    logger.info("\n--- Step 4: Checking action type ---")
-    relative_action = check_relative_action(config.dataset_path)
-    if config.relative_action is not None:
-        relative_action = config.relative_action
-    logger.info(f"Relative action: {relative_action}")
+    assert state_dim == 39, f"Expected state_dim=39, got {state_dim}"
+    assert action_dim == 4, f"Expected action_dim=4, got {action_dim}"
 
     # =========================================================================
-    # Step 5: Compute and save normalization statistics
+    # Step 5: Check relative action
     # =========================================================================
-    logger.info("\n--- Step 5: Computing normalization statistics ---")
-    state_stats = compute_normalization_stats(states)
-    action_stats = compute_normalization_stats(actions)
+    logger.info("\n--- Step 5: Checking action type ---")
+    relative_action, action_evidence = check_relative_action(config.dataset_path, repo_id)
+    logger.info(f"Relative action: {relative_action} (evidence: {action_evidence})")
+
+    # =========================================================================
+    # Step 6: Fit and save DemInf normalization
+    # =========================================================================
+    logger.info("\n--- Step 6: Fitting DemInf normalization ---")
+    normalizer = DemInfNormalizer(state_dim=state_dim, action_dim=action_dim)
+    normalizer.fit(states, actions)
 
     norm_stats_path = Path(config.output_dir) / "normalization_stats.npz"
-    np.savez(
-        str(norm_stats_path),
-        state_mean=state_stats["mean"],
-        state_std=state_stats["std"],
-        action_mean=action_stats["mean"],
-        action_std=action_stats["std"],
-    )
-    logger.info(f"Saved normalization stats to {norm_stats_path}")
-    logger.info(f"State mean: {state_stats['mean'][:4]}... (first 4 dims)")
-    logger.info(f"State std: {state_stats['std'][:4]}... (first 4 dims)")
-    logger.info(f"Action mean: {action_stats['mean']}")
-    logger.info(f"Action std: {action_stats['std']}")
+    normalizer.save(str(norm_stats_path))
 
-    # =========================================================================
-    # Step 6: Normalize state/action
-    # =========================================================================
-    logger.info("\n--- Step 6: Normalizing state/action ---")
-    if config.normalize_state:
-        states = normalize_array(states, state_stats)
-        logger.info(f"Normalized states: mean~{states.mean():.4f}, std~{states.std():.4f}")
-    if config.normalize_action:
-        actions = normalize_array(actions, action_stats)
-        logger.info(f"Normalized actions: mean~{actions.mean():.4f}, std~{actions.std():.4f}")
+    states = normalizer.normalize_state(states)
+    actions = normalizer.normalize_action(actions)
+    logger.info(f"Normalized states: mean~{states.mean():.4f}, std~{states.std():.4f}")
+    logger.info(f"Normalized actions: mean~{actions.mean():.4f}, std~{actions.std():.4f}")
+
+    normalization_manifest = normalizer.get_manifest()
 
     # =========================================================================
     # Step 7: Train or load state VAE
@@ -290,115 +361,160 @@ def main() -> None:
     logger.info("\n--- Step 7: Training/loading state VAE ---")
     device = get_device(config.device)
 
-    # Check for latent cache
-    latent_cache_path = Path(config.output_dir) / "latents.npz"
-    use_cache = config.use_latent_cache and latent_cache_path.exists()
+    state_ckpt_path = find_checkpoint(config.checkpoint_dir, "state", config.checkpoint_step)
+    action_ckpt_path = find_checkpoint(config.checkpoint_dir, "action", config.checkpoint_step)
 
-    if use_cache:
-        logger.info(f"Loading latent cache from {latent_cache_path}")
-        z_s_cached, z_a_cached, ep_ids_cached, ts_ids_cached = load_latent_cache(config.output_dir)
-        logger.info(f"Loaded cached latents: z_s={z_s_cached.shape}, z_a={z_a_cached.shape}")
-        # We still need VAE models for the checkpoint, but can skip encoding
-        # Create dummy models for compatibility
-        state_model = BetaVAE(state_dim, config.state_latent_dim, config.hidden_dims).to(device)
-        action_model = BetaVAE(action_dim, config.action_latent_dim, config.hidden_dims).to(device)
-    else:
+    # Check latent cache
+    latent_cache_path = Path(config.output_dir) / "latents.npz"
+    manifest_path = Path(config.output_dir) / "latents_manifest.json"
+
+    cache_fingerprint = build_cache_fingerprint(
+        dataset_path=config.dataset_path,
+        state_source=config.state_source,
+        action_key=config.action_key,
+        state_dim=state_dim,
+        action_dim=action_dim,
+        state_latent_dim=config.state_latent_dim,
+        action_latent_dim=config.action_latent_dim,
+        hidden_dims=config.hidden_dims,
+        vae_beta_state=config.vae_beta_state,
+        vae_beta_action=config.vae_beta_action,
+        vae_lr=config.vae_lr,
+        vae_steps=config.vae_steps,
+        normalization_manifest=normalization_manifest,
+        state_ckpt_path=state_ckpt_path,
+        action_ckpt_path=action_ckpt_path,
+        git_commit="",
+    )
+
+    use_cache = False
+    if config.use_latent_cache and latent_cache_path.exists() and manifest_path.exists():
+        with open(manifest_path, "r") as f:
+            cached_manifest = json.load(f)
+        cached_fp = cached_manifest.get("fingerprint", "")
+        if cached_fp == cache_fingerprint:
+            use_cache = True
+            logger.info(f"Latent cache fingerprint matches, reusing cache")
+        else:
+            logger.info(
+                f"Latent cache fingerprint mismatch (cached={cached_fp}, current={cache_fingerprint}), "
+                f"will re-encode"
+            )
+
+    # Train state VAE if needed
+    if not state_ckpt_path or not config.skip_train_if_checkpoint_exists:
         state_model, state_log = train_beta_vae(
             data=states,
             input_dim=state_dim,
             latent_dim=config.state_latent_dim,
             config=config,
             name="state",
-            normalization_stats=state_stats,
+            normalization_stats=normalization_manifest,
         )
-        logger.info(f"State VAE training complete")
+    else:
+        logger.info(f"Loading state VAE from {state_ckpt_path}")
+        ckpt = load_vae_checkpoint(state_ckpt_path, device)
+        state_model = BetaVAE(state_dim, config.state_latent_dim, config.hidden_dims).to(device)
+        state_model.load_state_dict(ckpt["model_state_dict"])
+        state_model.eval()
 
     # =========================================================================
     # Step 8: Train or load action VAE
     # =========================================================================
     logger.info("\n--- Step 8: Training/loading action VAE ---")
 
-    if not use_cache:
+    if not action_ckpt_path or not config.skip_train_if_checkpoint_exists:
         action_model, action_log = train_beta_vae(
             data=actions,
             input_dim=action_dim,
             latent_dim=config.action_latent_dim,
             config=config,
             name="action",
-            normalization_stats=action_stats,
+            normalization_stats=normalization_manifest,
         )
-        logger.info(f"Action VAE training complete")
+    else:
+        logger.info(f"Loading action VAE from {action_ckpt_path}")
+        ckpt = load_vae_checkpoint(action_ckpt_path, device)
+        action_model = BetaVAE(action_dim, config.action_latent_dim, config.hidden_dims).to(device)
+        action_model.load_state_dict(ckpt["model_state_dict"])
+        action_model.eval()
 
     # =========================================================================
-    # Step 9: Batch encode all timesteps (if not using cache)
+    # Step 9: Encode all timesteps
     # =========================================================================
     if not use_cache:
         logger.info("\n--- Step 9: Encoding all timesteps ---")
-        from deminf.score_episodes import encode_all_timesteps
-
         z_s, z_a = encode_all_timesteps(
-            state_model, action_model, states, actions, config
+            state_model, action_model, states, actions,
+            batch_size=config.quality_batch_size,
         )
-        save_latent_cache(config.output_dir, z_s, z_a, episode_ids, timestep_ids)
+
+        # Save latent cache with manifest
+        cache_manifest = {
+            "fingerprint": cache_fingerprint,
+            "dataset_path": config.dataset_path,
+            "state_source": config.state_source,
+            "state_dim": state_dim,
+            "action_dim": action_dim,
+            "state_latent_dim": config.state_latent_dim,
+            "action_latent_dim": config.action_latent_dim,
+            "normalization_manifest": normalization_manifest,
+            "num_transitions": len(z_s),
+        }
+        save_latent_cache(
+            config.output_dir, z_s, z_a, episode_ids, timestep_ids, global_row_ids,
+            cache_manifest,
+        )
     else:
-        z_s = z_s_cached
-        z_a = z_a_cached
-        episode_ids = ep_ids_cached
-        timestep_ids = ts_ids_cached
+        z_s, z_a, episode_ids, timestep_ids, global_row_ids = load_latent_cache(config.output_dir)
+        logger.info(f"Loaded latent cache: z_s={z_s.shape}, z_a={z_a.shape}")
 
     # =========================================================================
-    # Step 10: KSG local scoring
+    # Step 10-16: Official quality inference scoring
     # =========================================================================
-    logger.info("\n--- Step 10: KSG local scoring ---")
-    from deminf.score_episodes import compute_timestep_information_scores
-
-    local_scores = compute_timestep_information_scores(z_s, z_a, config)
-
-    # =========================================================================
-    # Step 11: Episode mean aggregation
-    # =========================================================================
-    logger.info("\n--- Step 11: Episode aggregation ---")
-    from deminf.score_episodes import aggregate_episode_scores, sanity_check_scores
-
-    score_df = aggregate_episode_scores(local_scores, episode_ids)
-    sanity_check_scores(score_df)
-
-    # Save CSV
-    csv_path = Path(config.output_dir) / "episode_scores.csv"
-    score_df.to_csv(str(csv_path), index=False)
-    logger.info(f"Saved episode scores to {csv_path}")
-
-    # =========================================================================
-    # Step 12: Select top K episodes
-    # =========================================================================
-    logger.info("\n--- Step 12: Selecting top episodes ---")
-    selected_indices = select_top_episodes(
-        score_df, config.target_episodes, tie_break_seed=config.seed
+    logger.info("\n--- Step 10-16: Official quality inference scoring ---")
+    ep_scores_df, ts_scores_df = score_dataset(
+        state_model=state_model,
+        action_model=action_model,
+        states=states,
+        actions=actions,
+        episode_ids=episode_ids,
+        timestep_ids=timestep_ids,
+        global_row_ids=global_row_ids,
+        config=config,
+        output_dir=config.output_dir,
     )
 
     # =========================================================================
-    # Step 13: Save outputs
+    # Step 17: Select top episodes
     # =========================================================================
-    logger.info("\n--- Step 13: Saving outputs ---")
+    logger.info("\n--- Step 17: Selecting top episodes ---")
+    selected_indices = select_top_episodes(
+        ep_scores_df, config.target_episodes, tie_break_seed=config.seed
+    )
 
-    # Subset JSON
+    # =========================================================================
+    # Step 18: Save outputs
+    # =========================================================================
+    logger.info("\n--- Step 18: Saving outputs ---")
+
     subset_filename = f"deminf_{config.target_episodes}_seed{config.seed}.json"
     subset_path = Path(config.output_dir) / "subsets" / subset_filename
     subset_data = save_subset_json(
-        selected_indices, score_df, config, subset_path,
+        selected_indices, ep_scores_df, config, subset_path,
         relative_action=relative_action,
+        state_dim=state_dim,
+        action_dim=action_dim,
     )
 
-    # Score rankings
     rankings_path = Path(config.output_dir) / "score_rankings.csv"
-    save_score_rankings(score_df, selected_indices, rankings_path)
+    save_score_rankings(ep_scores_df, selected_indices, rankings_path)
 
-    # Config
     config_path = Path(config.output_dir) / "config.json"
     atomic_save_json(vars(config), config_path)
 
     # =========================================================================
-    # Step 14: Print summary
+    # Summary
     # =========================================================================
     logger.info("\n" + "=" * 60)
     logger.info("DemInf Selection Summary")
@@ -406,18 +522,25 @@ def main() -> None:
     logger.info(f"Dataset: {config.dataset_path}")
     logger.info(f"Total episodes: {total_episodes}")
     logger.info(f"Total timesteps: {len(states)}")
+    logger.info(f"State source: {config.state_source}")
     logger.info(f"State dimension: {state_dim}")
     logger.info(f"Action dimension: {action_dim}")
     logger.info(f"State latent dim: {config.state_latent_dim}")
     logger.info(f"Action latent dim: {config.action_latent_dim}")
+    logger.info(f"VAE steps: {config.vae_steps}")
+    logger.info(f"VAE lr: {config.vae_lr}")
+    logger.info(f"VAE beta (state/action): {config.vae_beta_state}/{config.vae_beta_action}")
     logger.info(f"KSG ks: {config.ks}")
-    logger.info(f"KSG mode: {config.ksg_mode}")
+    logger.info(f"Quality batch size: {config.quality_batch_size}")
+    logger.info(f"Quality repeat: {config.quality_repeat}")
+    logger.info(f"Effective discard fraction: {config.effective_discard_fraction()}")
     logger.info(f"Relative action: {relative_action}")
     logger.info(f"Selected episodes: {len(selected_indices)}")
     logger.info(f"Top episode indices: {selected_indices[:10]}...")
     logger.info(f"\nOutput files:")
     logger.info(f"  Subset JSON: {subset_path}")
-    logger.info(f"  Episode scores: {csv_path}")
+    logger.info(f"  Episode scores: {config.output_dir}/episode_scores.csv")
+    logger.info(f"  Timestep scores: {config.output_dir}/raw_timestep_scores.csv")
     logger.info(f"  Score rankings: {rankings_path}")
     logger.info(f"  Config: {config_path}")
     logger.info(f"  Normalization stats: {norm_stats_path}")

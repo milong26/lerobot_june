@@ -2,6 +2,7 @@
 DemInf VAE Models
 
 Pure PyTorch Beta-VAE implementation for state and action latent encoding.
+Architecture matches official low-dimensional DemInf VAE.
 """
 
 from __future__ import annotations
@@ -10,7 +11,6 @@ from typing import List, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 class MLPEncoder(nn.Module):
@@ -18,16 +18,9 @@ class MLPEncoder(nn.Module):
     MLP Encoder for Beta-VAE.
 
     Architecture: Linear(input_dim, 512) + ReLU + Linear(512, 512) + ReLU
-    Then two heads: mu and logvar, each Linear(512, latent_dim).
+    Then z_proj = Linear(512, 2*latent_dim), split into mu and logvar via torch.chunk.
 
-    Args:
-        input_dim: Dimension of input vector.
-        hidden_dims: List of hidden layer dimensions. Default [512, 512].
-        latent_dim: Dimension of latent space.
-
-    Forward:
-        x: [batch, input_dim]
-        Returns: mu [batch, latent_dim], logvar [batch, latent_dim]
+    This matches the official lowdim VAE encoder structure.
     """
 
     def __init__(self, input_dim: int, hidden_dims: List[int] = None, latent_dim: int = 12) -> None:
@@ -43,8 +36,7 @@ class MLPEncoder(nn.Module):
             prev_dim = h
 
         self.shared = nn.Sequential(*layers)
-        self.mu_head = nn.Linear(prev_dim, latent_dim)
-        self.logvar_head = nn.Linear(prev_dim, latent_dim)
+        self.z_proj = nn.Linear(prev_dim, 2 * latent_dim)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         """
@@ -58,8 +50,8 @@ class MLPEncoder(nn.Module):
             logvar: Posterior log-variance [batch, latent_dim].
         """
         h = self.shared(x)
-        mu = self.mu_head(h)
-        logvar = self.logvar_head(h)
+        z_params = self.z_proj(h)
+        mu, logvar = torch.chunk(z_params, 2, dim=-1)
         return mu, logvar
 
 
@@ -68,15 +60,6 @@ class MLPDecoder(nn.Module):
     MLP Decoder for Beta-VAE.
 
     Architecture: Linear(latent_dim, 512) + ReLU + Linear(512, 512) + ReLU + Linear(512, output_dim).
-
-    Args:
-        latent_dim: Dimension of latent space.
-        hidden_dims: List of hidden layer dimensions. Default [512, 512].
-        output_dim: Dimension of output (reconstruction) vector.
-
-    Forward:
-        z: [batch, latent_dim]
-        Returns: x_recon [batch, output_dim]
     """
 
     def __init__(self, latent_dim: int, hidden_dims: List[int] = None, output_dim: int = 4) -> None:
@@ -111,17 +94,7 @@ class BetaVAE(nn.Module):
     """
     Beta-VAE combining MLPEncoder and MLPDecoder.
 
-    Args:
-        input_dim: Dimension of input data.
-        latent_dim: Dimension of latent space.
-        hidden_dims: Hidden layer dimensions for both encoder and decoder.
-
-    Methods:
-        encode(x): Returns mu, logvar.
-        reparameterize(mu, logvar): Samples z using reparameterization trick.
-        decode(z): Returns reconstruction.
-        forward(x): Returns x_recon, mu, logvar.
-        get_embedding(x, use_mean=True): Returns deterministic mu or sampled z.
+    For scoring, use get_embedding(x, use_mean=True) to get deterministic posterior mean.
     """
 
     def __init__(self, input_dim: int, latent_dim: int, hidden_dims: List[int] = None) -> None:
@@ -134,56 +107,21 @@ class BetaVAE(nn.Module):
         self.decoder = MLPDecoder(latent_dim, self.hidden_dims, input_dim)
 
     def encode(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """
-        Encode input to posterior parameters.
-
-        Args:
-            x: Input tensor [batch, input_dim].
-
-        Returns:
-            mu: [batch, latent_dim], logvar: [batch, latent_dim].
-        """
+        """Encode input to posterior parameters."""
         return self.encoder(x)
 
     def reparameterize(self, mu: torch.Tensor, logvar: torch.Tensor) -> torch.Tensor:
-        """
-        Reparameterization trick: z = mu + std * epsilon.
-
-        Args:
-            mu: Posterior mean [batch, latent_dim].
-            logvar: Posterior log-variance [batch, latent_dim].
-
-        Returns:
-            z: Sampled latent [batch, latent_dim].
-        """
+        """Reparameterization trick: z = mu + std * epsilon."""
         std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
         return mu + eps * std
 
     def decode(self, z: torch.Tensor) -> torch.Tensor:
-        """
-        Decode latent to reconstruction.
-
-        Args:
-            z: Latent tensor [batch, latent_dim].
-
-        Returns:
-            x_recon: Reconstruction [batch, input_dim].
-        """
+        """Decode latent to reconstruction."""
         return self.decoder(z)
 
     def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """
-        Full forward pass.
-
-        Args:
-            x: Input tensor [batch, input_dim].
-
-        Returns:
-            x_recon: Reconstruction [batch, input_dim].
-            mu: Posterior mean [batch, latent_dim].
-            logvar: Posterior log-variance [batch, latent_dim].
-        """
+        """Full forward pass."""
         mu, logvar = self.encode(x)
         z = self.reparameterize(mu, logvar)
         x_recon = self.decode(z)
@@ -194,13 +132,6 @@ class BetaVAE(nn.Module):
         Get latent embedding for a batch of inputs.
 
         For scoring, use_mean=True to get deterministic posterior mean.
-
-        Args:
-            x: Input tensor [batch, input_dim].
-            use_mean: If True, return mu; if False, sample from posterior.
-
-        Returns:
-            z: Latent embedding [batch, latent_dim].
         """
         mu, logvar = self.encode(x)
         if use_mean:
@@ -216,12 +147,17 @@ def vae_loss(
     beta: float = 1.0,
 ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
-    Compute Beta-VAE loss.
+    Compute Beta-VAE loss matching official DemInf formulation.
 
-    Formula:
-        L = L_recon + beta * L_KL
-        L_recon = mean_i sum_d (recon_{i,d} - x_{i,d})^2  (MSE)
-        L_KL = -0.5 * mean_j [1 + logvar_j - mu_j^2 - exp(logvar_j)]
+    Reconstruction: sum over feature dimensions, then mean over batch.
+        recon_per_sample = ((x - x_hat)**2).sum(dim=-1)
+        recon_loss = recon_per_sample.mean()
+
+    KL: sum over latent dimensions, then mean over batch.
+        kl_per_sample = 0.5 * sum(-logvar - 1 + exp(logvar) + mu**2, dim=-1)
+        kl_loss = kl_per_sample.mean()
+
+    Total: loss = recon_loss + beta * kl_loss
 
     Args:
         x_recon: Reconstructed output [batch, D].
@@ -232,14 +168,14 @@ def vae_loss(
 
     Returns:
         total_loss: Scalar tensor.
-        recon_loss: Scalar tensor (MSE).
-        kl_loss: Scalar tensor (KL divergence).
+        recon_loss: Scalar tensor.
+        kl_loss: Scalar tensor.
     """
-    # Reconstruction loss: mean squared error
-    recon_loss = F.mse_loss(x_recon, x, reduction="mean")
+    recon_per_sample = ((x_recon - x) ** 2).sum(dim=-1)
+    recon_loss = recon_per_sample.mean()
 
-    # KL divergence: KL(q(z|x) || N(0, I))
-    kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+    kl_per_sample = 0.5 * torch.sum(-logvar - 1 + torch.exp(logvar) + mu ** 2, dim=-1)
+    kl_loss = kl_per_sample.mean()
 
     total_loss = recon_loss + beta * kl_loss
 

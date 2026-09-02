@@ -2,75 +2,125 @@
 
 ## 概述
 
-本模块是 DemInf (Demonstration Information, Robot Data Curation with Mutual Information Estimators) 核心算法在当前 LeRobot/PyTorch pipeline 中的 **忠实复现 (faithful reimplementation)**。
+本模块是 DemInf (Robot Data Curation with Mutual Information Estimators, RSS 2025) 核心算法在 LeRobot/PyTorch 框架下的 **算法级忠实复现 (algorithmically and numerically validated PyTorch/LeRobot reimplementation of the official DemInf estimator)**。
 
-**不是**对原始 JAX/OpenX 代码的复制。所有实现仅依赖当前仓库已有环境（Python、PyTorch、NumPy、SciPy、LeRobot 数据读取接口），不引入 JAX、Flax、TensorFlow、RLDS、OpenX。
+**不是**对原始 JAX/OpenX 代码的复制。所有实现仅依赖当前仓库已有环境（Python、PyTorch、NumPy、SciPy、LeRobot 数据读取接口），不引入 JAX、Flax、TensorFlow、RLDS、OpenX。除"JAX/OpenX→PyTorch/LeRobot 数据接口"这一工程适配外，DemInf 的 VAE 架构、VAE loss、训练超参数、KSG estimator、batch scoring 方式、repeat 方式、score clipping、score normalization、episode aggregation 和最终 ranking 与原始 DemInf 官方实现一致。
 
 ## 算法流程
 
 DemInf 通过估计 state-action 之间的互信息 (Mutual Information) 来评估每条 demonstration 的信息量：
 
-1. **读取完整 demonstration pool**：每个 episode 的逐 timestep observation/state 和 action
-2. **训练 State VAE**：得到每个 timestep 的低维 latent `z_s`
-3. **训练 Action VAE**：得到每个 timestep 的低维 latent `z_a`
-4. **KSG MI 估计**：在 latent space 中对每个 state-action pair 计算信息分数
-5. **Episode 聚合**：将一个 episode 内所有有效 timestep 的 information contribution 取平均
-6. **排序选择**：按 score 降序排序，选出 top-K episode
+1. **读取完整 demonstration pool**：通过 LeRobotDataset 加载本地数据，基于 `dataset.hf_dataset` 的真实全局索引构造 episode mapping
+2. **删除 terminal transition**：每个 episode 删除最后一个 timestep（官方 `_stepify` 行为：`x[:-1]`）
+3. **提取 state/action**：默认使用 `observation.environment_state`（39维），action 为原始4维 `(x,y,z,gripper)`
+4. **DemInf 归一化**：连续非 gripper 维 Gaussian normalization，gripper 维保持原尺度；action xyz Gaussian normalization，gripper bounds normalization
+5. **训练 State VAE**：固定 50000 Adam optimizer steps（非 epochs），lr=1e-4，weight_decay=0，beta=0.05
+6. **训练 Action VAE**：同上配置
+7. **编码 latent**：使用 VAE posterior mean（不采样），得到每个 timestep 的 `z_s` 和 `z_a`
+8. **构建 quality batches**：repeat=4，batch_size=1024，drop_remainder=True，每次用确定性 seed shuffle
+9. **Batch-local KSG scoring**：在每个 1024 batch 内计算官方 KSG estimator
+10. **后处理**：过滤 NaN → 全局 1st/99th percentile clipping → 全局 z-score normalization
+11. **Episode 聚合**：对归属于同一 episode 的所有 normalized score 取算术平均
+12. **排序选择**：按 deminf_score 降序排序，选出 top-K episode
 
 ### 数学公式
 
-**VAE Loss**:
+**VAE Loss**（先对 feature/latent 维求和，再对 batch 求 mean）：
 ```
-L = L_recon + beta * L_KL
-L_recon = MSE(recon, x)
-L_KL = -0.5 * mean[1 + logvar - mu^2 - exp(logvar)]
+recon_per_sample = sum_d (x_d - x_hat_d)^2          # 对 feature 维求和
+recon_loss = mean_batch(recon_per_sample)            # 对 batch 求 mean
+
+kl_per_sample = 0.5 * sum_j (-logvar_j - 1 + exp(logvar_j) + mu_j^2)  # 对 latent 维求和
+kl_loss = mean_batch(kl_per_sample)                   # 对 batch 求 mean
+
+total_loss = recon_loss + beta * kl_loss
 ```
 
-**KSG MI 估计** (per DemInf paper):
+**注意**：严禁使用 `F.mse_loss(..., reduction="mean")`（会同时对 batch 和 feature 平均），严禁对 latent 维直接 mean。
+
+**KSG MI 估计**（官方 DemInf batch-local estimator）：
+
+对于一个 batch 大小 B：
 ```
-d_s(i,j) = ||z_s_i - z_s_j||_2          # state latent 欧氏距离
-d_a(i,j) = ||z_a_i - z_a_j||_2          # action latent 欧氏距离
-d_joint(i,j) = max(d_s(i,j), d_a(i,j))  # 联合空间 max metric
+state_dist[i,j]  = ||z_s_i - z_s_j||_2              # 包含对角线 self distance = 0
+action_dist[i,j] = ||z_a_i - z_a_j||_2              # 包含对角线 self distance = 0
+joint_dist       = max(state_dist, action_dist)
 
-epsilon_i^k = k-th nearest neighbor distance in joint space (excluding self)
-n_s(i,k) = #{j != i | d_s(i,j) < epsilon_i^k}
-n_a(i,k) = #{j != i | d_a(i,j) < epsilon_i^k}
+sorted_joint = sort(joint_dist, dim=-1)              # 升序排序
 
-# DemInf ranking mode (用于 episode 排序):
-score_i(k) = -(psi(n_s(i,k) + 1) + psi(n_a(i,k) + 1))
+# ks = [5, 6, 7] 是零基下标（Python/JAX 数组索引）
+# 第0列是 self distance = 0，所以 [5,6,7] 对应第5/6/7个邻居
+epsilon_k = sorted_joint[:, k]                       # 对每个 k 取阈值
 
-# Full KSG MI mode:
-i_hat_i(k) = psi(k) + psi(N) - psi(n_s(i,k) + 1) - psi(n_a(i,k) + 1)
+# 严格 < 比较，self distance = 0 通常 < epsilon，自动计入 count
+obs_count_k    = sum_j (state_dist[i,j]  < epsilon_k[i])   # 不要手动排除 self
+action_count_k = sum_j (action_dist[i,j] < epsilon_k[i])   # 不要对 count +1
 
-# 最终 score: 对所有 k 取平均
+# 官方 DemInf ranking score（唯一用于 episode ranking 的公式）
+score_i(k) = -(digamma(obs_count_k[i]) + digamma(action_count_k[i]))
+
+# 最终 score：对所有 k 取平均
 score_i = mean_k score_i(k)
 ```
 
-**Episode Score**:
+**重要**：
+- 对角线 self distance **不**设为 inf，保持为 0
+- **不**给 epsilon 加 1e-10 偏移（官方是严格 `<`）
+- **不**对 count 额外 +1
+- **不**加 textbook KSG 中的 `psi(k) + psi(N)` 项
+- **不使用** `psi(count + 1)`
+
+**Quality Inference Pipeline**：
+1. 对每个 repeat（默认4次），用 `seed + repeat_id` 确定性 shuffle 全部 transition
+2. 按 `quality_batch_size=1024` 切 batch，`drop_remainder=True` 丢弃尾部不足 batch
+3. 对每个 batch 调用 `deminf_ksg_batch_scores()` 得到 per-sample score
+4. 同一 transition 在 4 次 repeat 中出现在不同 batch 上下文中，产生 4 个不同 score
+
+**Score 后处理**（在 episode aggregation 之前执行）：
 ```
-S(tau_e) = 1/T_e * sum_{t=1}^{T_e} I_hat(z_s_{e,t}; z_a_{e,t})
+# 1. 过滤 NaN
+scores = scores[isfinite(scores)]
+
+# 2. 全局 percentile clipping
+p1 = percentile(scores, 1)
+p99 = percentile(scores, 99)
+scores_clipped = clip(scores, p1, p99)
+
+# 3. 全局 z-score normalization
+scores_norm = (scores_clipped - mean(scores_clipped)) / std(scores_clipped)
+
+# 4. Episode 聚合（算术平均）
+episode_score[e] = mean(scores_norm for all timesteps belonging to episode e)
 ```
+
+**Episode Score**：
+```
+S(tau_e) = mean_t ( normalized_score_{e,t} )
+```
+由于 quality_repeat=4，同一 episode 通常有多次 transition appearance，全部参与 mean。
 
 ## 文件结构
 
 ```
 deminf/
-├── __init__.py           # 对外暴露 API
-├── config.py             # DemInfConfig dataclass
-├── dataset_adapter.py    # LeRobot 数据读取适配
-├── models.py             # Beta-VAE (MLP Encoder/Decoder)
-├── train_vae.py          # VAE 训练循环 + checkpoint
-├── ksg.py                # KSG MI 估计器 (核心算法)
-├── score_episodes.py     # Episode 评分流水线
-├── select_subset.py      # Top-K 选择 + JSON 输出
-├── run_deminf.py         # 主入口 (唯一推荐直接运行的脚本)
-├── utils.py              # 工具函数 (seed, I/O, logging)
-├── test_ksg.py           # KSG 单元测试
-├── test_vae.py           # VAE 冒烟测试
-└── README.md             # 本文件
+├── __init__.py              # 对外暴露 API
+├── config.py                # DemInfConfig dataclass（官方 state-based 配置）
+├── dataset_adapter.py       # LeRobot 数据读取适配（全局 row index、归一化）
+├── models.py                # Beta-VAE（MLP Encoder/Decoder，官方架构）
+├── train_vae.py             # VAE 训练循环（固定 50000 steps）+ checkpoint
+├── ksg.py                   # KSG MI 估计器（官方 batch-local 实现）
+├── score_episodes.py        # Episode 评分流水线（quality inference）
+├── select_subset.py         # Top-K 选择 + JSON 输出
+├── run_deminf.py            # 主入口（完整 pipeline）
+├── utils.py                 # 工具函数（seed, I/O, logging）
+├── test_ksg.py              # KSG 单元测试
+├── test_vae.py              # VAE 单元测试
+├── test_quality_pipeline.py # Quality pipeline 单元测试
+├── test_dataset_adapter.py  # Dataset adapter 单元测试
+└── README.md                # 本文件
 ```
 
-## 默认参数
+## 默认参数（官方 state-based 配置）
 
 | 参数 | 默认值 | 说明 |
 |------|--------|------|
@@ -79,18 +129,37 @@ deminf/
 | hidden_dims | [512, 512] | VAE hidden layers |
 | vae_beta_state | 0.05 | State VAE KL 权重 |
 | vae_beta_action | 0.05 | Action VAE KL 权重 |
-| vae_lr | 1e-3 | VAE 学习率 |
-| vae_epochs | 100 | VAE 训练轮数 |
-| ks | (5, 6, 7) | KSG k 值 |
-| batch_size | 256 | VAE 训练 batch size |
-| score_batch_size | 1024 | KSG 评分 batch size |
-| ksg_backend | chunked | 分块计算 (内存安全) |
-| ksg_mode | deminf_rank | 用于排序的兼容模式 |
+| vae_lr | 1e-4 | VAE 学习率（Adam） |
+| vae_steps | 50000 | VAE 固定 optimizer steps（非 epochs） |
+| weight_decay | 0.0 | Adam weight decay（与官方 optax.adam 对齐） |
+| vae_batch_size | 256 | VAE 训练 batch size |
+| quality_batch_size | 1024 | Quality inference batch size |
+| quality_repeat | 4 | KSG estimator repeat 次数 |
+| quality_cache | True | 强制 effective_discard_fraction=0 |
+| quality_discard_fraction | 0.5 | 请求的丢弃比例（cache=True 时实际为 0） |
+| quality_drop_remainder | True | 丢弃不足 batch_size 的尾部 batch |
+| ks | (5, 6, 7) | KSG k 值（零基下标） |
+| score_clip_low | 1.0 | Score clipping 下百分位 |
+| score_clip_high | 99.0 | Score clipping 上百分位 |
+| state_source | observation.environment_state | State 来源（39维） |
 | representation | state | 仅支持 state-based |
 
-## Relative Action 注意事项
+## State/Action 数据说明
 
-DemInf 经验上更适合 **relative/delta action**。当前 MetaWorld 数据集的 action 为 `(dx, dy, dz, gripper)` 增量控制命令，已经是 relative action。代码会自动检测并在日志中记录 `relative_action=true`。
+**State**（默认 39 维 `observation.environment_state`）：
+- 0:3 当前 hand xyz 位置
+- 3 当前 gripper（**不做** Gaussian normalization）
+- 4:18 当前 object 相关状态
+- 18:36 上一帧 0:18 的复制
+- 21 上一帧 gripper（**不做** Gaussian normalization）
+- 36:39 goal xyz 位置
+
+**注意**：不再拼接 4 维 `observation.state` 成 43 维，因为 `environment_state` 的前 4 维已包含相同 robot state，会重复加权。
+
+**Action**（4 维 `(x, y, z, gripper)`）：
+- 前三维 xyz 使用 Gaussian normalization
+- 第 3 维 gripper：若原始范围已在约 [-1,1] 则保持不变，否则使用 bounds normalization 到 [-1,1]
+- MetaWorld expert action 属于增量/relative control，metadata 记录 `relative_action=true`
 
 ## 运行命令
 
@@ -105,15 +174,19 @@ python personal/work2/deminf/run_deminf.py \
     --target-episodes 112 \
     --seed 42 \
     --device cuda \
-    --vae-epochs 100 \
-    --batch-size 256 \
-    --score-batch-size 1024 \
+    --vae-steps 50000 \
+    --vae-lr 1e-4 \
+    --vae-batch-size 256 \
+    --quality-batch-size 1024 \
+    --quality-repeat 4 \
     --state-latent-dim 12 \
     --action-latent-dim 6 \
-    --ks 5 6 7
+    --ks 5 6 7 \
+    --state-source observation.environment_state \
+    --quality-cache
 ```
 
-### Smoke Test (快速验证)
+### Smoke Test（快速验证）
 
 ```bash
 python personal/work2/deminf/run_deminf.py \
@@ -122,8 +195,9 @@ python personal/work2/deminf/run_deminf.py \
     --target-episodes 5 \
     --seed 42 \
     --device cuda \
-    --vae-epochs 2 \
-    --batch-size 64 \
+    --vae-steps 50 \
+    --vae-batch-size 64 \
+    --quality-batch-size 128 \
     --max-timesteps 50
 ```
 
@@ -133,6 +207,8 @@ python personal/work2/deminf/run_deminf.py \
 cd /data/zhonglinye/jun/lerobot
 python -m pytest personal/work2/deminf/test_ksg.py -v
 python -m pytest personal/work2/deminf/test_vae.py -v
+python -m pytest personal/work2/deminf/test_quality_pipeline.py -v
+python -m pytest personal/work2/deminf/test_dataset_adapter.py -v
 ```
 
 ## 输出文件
@@ -143,13 +219,15 @@ python -m pytest personal/work2/deminf/test_vae.py -v
 |------|------|
 | `subsets/deminf_{K}_seed{seed}.json` | 与现有训练流程兼容的 subset JSON |
 | `episode_scores.csv` | 所有 episode 的 DemInf score 排名 |
+| `raw_timestep_scores.csv` | 每个 timestep 的 raw/clipped/normalized score |
 | `score_rankings.csv` | 带 selected 标记的完整排名 |
 | `config.json` | 运行配置 |
 | `normalization_stats.npz` | State/Action 归一化统计量 |
-| `latents.npz` | VAE 编码的 latent 缓存 (可复用) |
-| `checkpoints/state_vae.pt` | State VAE checkpoint |
-| `checkpoints/action_vae.pt` | Action VAE checkpoint |
-| `deminf_metadata.json` | 运行元数据 (含 git commit) |
+| `latents.npz` | VAE 编码的 latent 缓存（带 manifest 验证） |
+| `latents_manifest.json` | Latent cache fingerprint 元数据 |
+| `checkpoints/state_vae_step50000.pt` | State VAE 最终 checkpoint |
+| `checkpoints/action_vae_step50000.pt` | Action VAE 最终 checkpoint |
+| `deminf_metadata.json` | 运行元数据（含 git commit） |
 | `deminf.log` | 运行日志 |
 
 ### Subset JSON 格式
@@ -160,21 +238,31 @@ python -m pytest personal/work2/deminf/test_vae.py -v
   "num_episodes": 112,
   "selection_method": "deminf",
   "parameters": {
+    "official_deminf": true,
     "target_episodes": 112,
     "seed": 42,
+    "vae_steps": 50000,
+    "vae_lr": 1e-4,
+    "vae_batch_size": 256,
+    "quality_batch_size": 1024,
+    "quality_repeat": 4,
+    "requested_discard_fraction": 0.5,
+    "effective_discard_fraction": 0.0,
+    "quality_cache": true,
     "ks": [5, 6, 7],
+    "state_source": "observation.environment_state",
+    "state_dim": 39,
+    "action_dim": 4,
     "state_latent_dim": 12,
     "action_latent_dim": 6,
     "vae_beta_state": 0.05,
     "vae_beta_action": 0.05,
-    "vae_epochs": 100,
     "hidden_dims": [512, 512],
     "relative_action": true,
     "dataset_path": "...",
-    "score_aggregation": "mean",
-    "ksg_mode": "deminf_rank",
-    "ksg_backend": "chunked",
-    "representation": "state"
+    "score_clip_percentiles": [1.0, 99.0],
+    "score_normalization": "global_zscore_after_clipping",
+    "episode_aggregation": "mean"
   }
 }
 ```
@@ -193,18 +281,40 @@ lerobot-train \
     ...  # 其他训练参数与已有实验完全相同
 ```
 
-## 缓存文件含义
+## 缓存机制
 
-| 文件 | 内容 | 可复用场景 |
-|------|------|-----------|
-| `latents.npz` | z_state, z_action, episode_ids, timestep_ids | 修改 ks 时无需重新训练 VAE |
-| `checkpoints/state_vae.pt` | State VAE 模型 + 优化器状态 | `--resume` 继续训练 |
-| `checkpoints/action_vae.pt` | Action VAE 模型 + 优化器状态 | `--resume` 继续训练 |
-| `normalization_stats.npz` | state_mean, state_std, action_mean, action_std | 确保评分使用同一套归一化 |
+### Latent Cache
 
-## 实验公平性
+`latents.npz` 旁边保存 `latents_manifest.json`，包含 comprehensive fingerprint：
+- dataset 路径 + info.json hash
+- total episodes + total frames
+- state_source + action_key
+- normalization stats hash
+- state/action input dims + latent dims + hidden dims
+- VAE beta + lr + vae_steps
+- state/action checkpoint SHA256
+- 代码 git commit
 
-- DemInf 的 State/Action VAE **仅使用无监督表示学习**
-- **不使用**环境 success label、策略 evaluation success rate、reward、最终 checkpoint 表现或人工质量标签
-- 候选 full pool 可以全部参与无监督 VAE 训练和 MI scoring（这是 DemInf offline data curation 的定义）
-- 最终策略模型使用和 Random、SubZeroCore、ours_v3/ours_v4 **完全相同的训练代码、训练步数和 evaluation set**，只改变选中的 episode indices
+只有所有关键字段一致才能 reuse，否则日志说明 cache mismatch 并重新 encode。
+
+### Quality Score Cache
+
+Quality score batch 本身还依赖 quality seed、batch size、repeat、discard fraction 和 ks，如需增加 score cache，必须单独具有 score fingerprint。
+
+## 关键修复说明
+
+本实现修复了以下早期版本中的问题：
+
+| 问题 | 修复方式 |
+|------|----------|
+| 全局 N×N KNN pool | 改为 batch-local KSG（1024 batch 内计算） |
+| VAE loss 使用 F.mse_loss reduction="mean" | 改为 feature 维 sum → batch 维 mean |
+| KL 对 latent 维 mean | 改为 latent 维 sum → batch 维 mean |
+| Parquet local index 误作 global index | 统一通过 LeRobotDataset hf_dataset 全局索引 |
+| 全数据 torch.from_numpy(data).to(cuda) 后 DataLoader | 数据留 CPU，batch.to(device, non_blocking=True) |
+| 43 维 state（拼接重复 robot state） | 默认只用 39 维 environment_state |
+| Cache 无条件 reuse | 实现 comprehensive fingerprint 验证 |
+| KSG epsilon 加 1e-10 偏移 | 移除，使用严格 `<` 比较 |
+| Self distance 设为 inf | 保持为 0，自动计入 count |
+| Count 额外 +1 | 移除，与官方一致 |
+| VAE 训练使用 epochs + early stopping | 改为固定 50000 optimizer steps |

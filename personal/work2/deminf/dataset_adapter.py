@@ -2,43 +2,37 @@
 DemInf Dataset Adapter
 
 Adapts LeRobot dataset format for DemInf state-based MI estimation.
-Reads observation.state and action from LeRobot parquet data.
+Uses LeRobotDataset with proper global row indexing.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
-import pandas as pd
 
 logger = logging.getLogger("deminf")
+
+ENV_STATE_LAYOUT = {
+    "hand_pos": slice(0, 3),
+    "gripper": slice(3, 4),
+    "obj1_pos": slice(4, 7),
+    "obj1_quat": slice(7, 11),
+    "obj2_pos": slice(11, 14),
+    "obj2_quat": slice(14, 18),
+    "prev_frame_stack": slice(18, 36),
+    "prev_gripper": slice(21, 22),
+    "goal_pos": slice(36, 39),
+}
 
 
 def infer_episode_structure(dataset_root: str | Path) -> Dict[str, Any]:
     """
     Infer the episode structure from a LeRobot dataset.
-
-    Reads meta/info.json to identify state, action, and episode fields.
-
-    Args:
-        dataset_root: Path to LeRobot dataset directory.
-
-    Returns:
-        Dictionary with keys:
-            - features: feature specification from info.json
-            - state_keys: list of state field names
-            - action_key: action field name
-            - total_episodes: total number of episodes
-            - total_frames: total number of frames
-            - fps: frames per second
-            - state_shape: shape of observation.state
-            - action_shape: shape of action
     """
-    import json
-
     info_path = Path(dataset_root) / "meta" / "info.json"
     if not info_path.exists():
         raise FileNotFoundError(f"info.json not found at {info_path}")
@@ -51,19 +45,14 @@ def infer_episode_structure(dataset_root: str | Path) -> Dict[str, Any]:
     total_frames = info.get("total_frames", 0)
     fps = info.get("fps", 80)
 
-    # Identify state and action fields
-    state_keys = []
     state_shape = None
-    action_key = "action"
     action_shape = None
 
     if "observation.state" in features:
-        state_keys.append("observation.state")
         state_shape = features["observation.state"].get("shape", [4])
         logger.info(f"Found observation.state with shape {state_shape}")
 
     if "observation.environment_state" in features:
-        state_keys.append("observation.environment_state")
         env_state_shape = features["observation.environment_state"].get("shape", [39])
         logger.info(f"Found observation.environment_state with shape {env_state_shape}")
 
@@ -73,8 +62,6 @@ def infer_episode_structure(dataset_root: str | Path) -> Dict[str, Any]:
 
     return {
         "features": features,
-        "state_keys": state_keys,
-        "action_key": action_key,
         "total_episodes": total_episodes,
         "total_frames": total_frames,
         "fps": fps,
@@ -83,162 +70,49 @@ def infer_episode_structure(dataset_root: str | Path) -> Dict[str, Any]:
     }
 
 
-def extract_state_vector(
-    sample: Dict[str, Any],
-    state_keys: Optional[List[str]] = None,
-) -> np.ndarray:
+def build_episode_index_from_lerobot(
+    dataset_root: str | Path,
+    repo_id: str,
+) -> Dict[int, List[int]]:
     """
-    Extract a 1-D float32 state vector from a single timestep sample.
+    Build mapping from episode index to global row indices using LeRobotDataset.
 
-    Concatenates all specified state fields into a single vector.
-
-    Args:
-        sample: Dictionary from LeRobot dataset __getitem__.
-        state_keys: List of keys to extract. If None, uses ['observation.state'].
-
-    Returns:
-        1-D float32 numpy array of shape [D_s].
-    """
-    if state_keys is None:
-        state_keys = ["observation.state"]
-
-    parts = []
-    for key in state_keys:
-        if key not in sample:
-            raise KeyError(f"State key '{key}' not found in sample. Available keys: {list(sample.keys())}")
-        val = sample[key]
-        if isinstance(val, np.ndarray):
-            arr = val
-        elif hasattr(val, "numpy"):
-            arr = val.numpy()
-        else:
-            arr = np.array(val)
-        parts.append(arr.flatten())
-
-    return np.concatenate(parts).astype(np.float32)
-
-
-def extract_action_vector(sample: Dict[str, Any], action_key: str = "action") -> np.ndarray:
-    """
-    Extract a 1-D float32 action vector from a single timestep sample.
-
-    Args:
-        sample: Dictionary from LeRobot dataset __getitem__.
-        action_key: Key for action data. Default: 'action'.
-
-    Returns:
-        1-D float32 numpy array of shape [D_a].
-    """
-    if action_key not in sample:
-        raise KeyError(f"Action key '{action_key}' not found in sample. Available keys: {list(sample.keys())}")
-    val = sample[action_key]
-    if isinstance(val, np.ndarray):
-        arr = val
-    elif hasattr(val, "numpy"):
-        arr = val.numpy()
-    else:
-        arr = np.array(val)
-    return arr.flatten().astype(np.float32)
-
-
-def check_relative_action(dataset_root: str | Path) -> bool:
-    """
-    Check whether actions in the dataset are relative/delta control.
-
-    For MetaWorld pick-place-v3, actions are (dx, dy, dz, gripper) which
-    represent relative displacement commands. This is determined by reading
-    the dataset collection code and feature names.
+    Traverses global row indices in dataset.hf_dataset, reads episode_index
+    and frame_index for each row, and builds {episode_idx: [global_row_idx...]}
+    sorted by frame_index.
 
     Args:
         dataset_root: Path to LeRobot dataset directory.
+        repo_id: Repository ID for LeRobotDataset.
 
     Returns:
-        True if actions are relative/delta, False if absolute.
+        Dictionary {episode_idx: [global_row_idx...]} with rows sorted by frame_index.
     """
-    info_path = Path(dataset_root) / "meta" / "info.json"
-    if not info_path.exists():
-        logger.warning("info.json not found, assuming relative action")
-        return True
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-    import json
-    with open(info_path, "r") as f:
-        info = json.load(f)
+    dataset = LeRobotDataset(repo_id=repo_id, root=str(dataset_root))
+    hf_dataset = dataset.hf_dataset
 
-    features = info.get("features", {})
-    action_info = features.get("action", {})
-    names = action_info.get("names", {})
+    total_episodes = dataset.num_episodes
+    total_frames = dataset.num_frames
 
-    # MetaWorld actions are (x, y, z, gripper) delta commands
-    # The axes names indicate displacement control
-    if isinstance(names, dict):
-        axes = names.get("axes", [])
-        if axes == ["x", "y", "z", "gripper"]:
-            logger.info("Action axes are [x, y, z, gripper] - these are delta/relative control commands")
-            return True
-
-    # Default: MetaWorld actions are relative
-    logger.info("Assuming relative/delta action based on MetaWorld convention")
-    return True
-
-
-def build_episode_index(dataset_root: str | Path) -> Dict[int, List[int]]:
-    """
-    Build mapping from episode index to dataset row indices.
-
-    Reads parquet data files to get episode_index for each row.
-
-    Args:
-        dataset_root: Path to LeRobot dataset directory.
-
-    Returns:
-        Dictionary {episode_idx: [row_indices...]} with rows sorted by frame_index.
-    """
-    import json
-
-    info_path = Path(dataset_root) / "meta" / "info.json"
-    with open(info_path, "r") as f:
-        info = json.load(f)
-
-    total_episodes = info.get("total_episodes", 0)
-    if total_episodes == 0:
-        raise ValueError("total_episodes is 0 in info.json")
-
-    # Read all parquet files to build episode index
-    data_dir = Path(dataset_root) / "data"
-    if not data_dir.exists():
-        raise FileNotFoundError(f"Data directory not found: {data_dir}")
+    logger.info(f"LeRobotDataset: {total_episodes} episodes, {total_frames} frames")
 
     episode_map: Dict[int, List[int]] = {i: [] for i in range(total_episodes)}
 
-    # Find all parquet files
-    parquet_files = sorted(data_dir.rglob("*.parquet"))
-    if not parquet_files:
-        raise FileNotFoundError(f"No parquet files found in {data_dir}")
+    for global_idx in range(len(hf_dataset)):
+        row = hf_dataset[int(global_idx)]
+        ep_idx = int(row["episode_index"])
+        frame_idx = int(row["frame_index"])
+        episode_map[ep_idx].append((frame_idx, global_idx))
 
-    logger.info(f"Reading {len(parquet_files)} parquet files to build episode index")
-
-    for pf in parquet_files:
-        df = pd.read_parquet(pf)
-        if "episode_index" not in df.columns:
-            continue
-
-        for ep_idx in df["episode_index"].unique():
-            ep_rows = df[df["episode_index"] == ep_idx]
-            # Sort by frame_index within episode
-            if "frame_index" in ep_rows.columns:
-                ep_rows = ep_rows.sort_values("frame_index")
-            row_indices = ep_rows.index.tolist()
-            episode_map[int(ep_idx)].extend(row_indices)
-
-    # Sort row indices within each episode
     for ep_idx in episode_map:
-        episode_map[ep_idx].sort()
+        episode_map[ep_idx].sort(key=lambda x: x[0])
+        episode_map[ep_idx] = [gidx for _, gidx in episode_map[ep_idx]]
 
-    # Validate
     valid_episodes = {k: v for k, v in episode_map.items() if len(v) > 0}
     logger.info(f"Built episode index: {len(valid_episodes)} episodes with data")
 
-    # Print timestep statistics
     lengths = [len(v) for v in valid_episodes.values()]
     logger.info(
         f"Timesteps per episode: min={min(lengths)}, max={max(lengths)}, "
@@ -248,114 +122,332 @@ def build_episode_index(dataset_root: str | Path) -> Dict[int, List[int]]:
     return valid_episodes
 
 
+def validate_episode_index(
+    dataset_root: str | Path,
+    repo_id: str,
+    episode_map: Dict[int, List[int]],
+    max_checks: int = 100,
+) -> None:
+    """
+    Validate that episode_map global row indices have correct episode_index.
+
+    Samples up to max_checks row indices per episode and asserts
+    dataset.hf_dataset[row_idx]["episode_index"] == ep_idx.
+
+    Raises:
+        AssertionError: If any row index has wrong episode_index.
+    """
+    import random
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+    dataset = LeRobotDataset(repo_id=repo_id, root=str(dataset_root))
+    hf_dataset = dataset.hf_dataset
+
+    for ep_idx, row_indices in episode_map.items():
+        if not row_indices:
+            continue
+        check_indices = row_indices
+        if len(row_indices) > max_checks:
+            rng = random.Random(42)
+            check_indices = rng.sample(row_indices, max_checks)
+
+        for global_idx in check_indices:
+            actual_ep = int(hf_dataset[int(global_idx)]["episode_index"])
+            assert actual_ep == ep_idx, (
+                f"Row {global_idx} has episode_index={actual_ep}, expected {ep_idx}"
+            )
+
+    logger.info(f"Episode index validation passed: {len(episode_map)} episodes verified")
+
+
+def drop_terminal_transitions(episode_map: Dict[int, List[int]]) -> Dict[int, List[int]]:
+    """
+    Drop the last terminal transition from each episode.
+
+    Official DemInf _stepify behavior: after chunking, all transitions use x[:-1].
+    This removes the final timestep from each episode's row list.
+
+    Args:
+        episode_map: {episode_idx: [global_row_idx...]} sorted by frame_index.
+
+    Returns:
+        Episode map with last row removed from each episode.
+    """
+    result = {}
+    dropped = 0
+    for ep_idx, rows in episode_map.items():
+        if len(rows) > 1:
+            result[ep_idx] = rows[:-1]
+            dropped += 1
+        else:
+            result[ep_idx] = rows
+            logger.warning(f"Episode {ep_idx} has only 1 row, cannot drop terminal")
+
+    logger.info(f"Dropped terminal transitions from {dropped} episodes")
+    return result
+
+
 def collect_training_arrays(
     dataset_root: str | Path,
+    repo_id: str,
     episode_map: Optional[Dict[int, List[int]]] = None,
-    state_keys: Optional[List[str]] = None,
+    state_source: str = "observation.environment_state",
     action_key: str = "action",
     episode_indices: Optional[List[int]] = None,
     max_timesteps_per_episode: Optional[int] = None,
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
-    Collect state and action arrays from the dataset.
+    Collect state and action arrays from the dataset using global row indices.
 
     Args:
         dataset_root: Path to LeRobot dataset directory.
+        repo_id: Repository ID for LeRobotDataset.
         episode_map: Pre-built episode index mapping. If None, will be built.
-        state_keys: State field keys to extract.
+        state_source: Which observation key to use for state.
         action_key: Action field key.
         episode_indices: Which episodes to include. None = all.
         max_timesteps_per_episode: Max timesteps per episode. None = all.
 
     Returns:
-        Tuple of (states [N, D_s], actions [N, D_a], episode_ids [N], timestep_ids [N]).
+        Tuple of (states [N, D_s], actions [N, D_a], episode_ids [N],
+                  timestep_ids [N], global_row_ids [N]).
     """
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
     if episode_map is None:
-        episode_map = build_episode_index(dataset_root)
+        episode_map = build_episode_index_from_lerobot(dataset_root, repo_id)
 
     if episode_indices is not None:
         episode_map = {k: v for k, v in episode_map.items() if k in episode_indices}
 
-    if state_keys is None:
-        structure = infer_episode_structure(dataset_root)
-        state_keys = structure["state_keys"]
-        if not state_keys:
-            state_keys = ["observation.state"]
-
-    # Load dataset
-    repo_id = str(Path(dataset_root).name)
     dataset = LeRobotDataset(repo_id=repo_id, root=str(dataset_root))
+    hf_dataset = dataset.hf_dataset
 
     all_states = []
     all_actions = []
     all_episode_ids = []
     all_timestep_ids = []
+    all_global_row_ids = []
 
     for ep_idx, row_indices in episode_map.items():
         rows_to_use = row_indices
         if max_timesteps_per_episode is not None:
             rows_to_use = row_indices[:max_timesteps_per_episode]
 
-        for row_idx in rows_to_use:
-            sample = dataset.hf_dataset[int(row_idx)]
+        for global_idx in rows_to_use:
+            sample = hf_dataset[int(global_idx)]
 
-            state_vec = extract_state_vector(sample, state_keys)
-            action_vec = extract_action_vector(sample, action_key)
+            state_val = sample[state_source]
+            if isinstance(state_val, np.ndarray):
+                state_vec = state_val.flatten().astype(np.float32)
+            elif hasattr(state_val, "numpy"):
+                state_vec = state_val.numpy().flatten().astype(np.float32)
+            else:
+                state_vec = np.array(state_val).flatten().astype(np.float32)
 
-            # Check for NaN/Inf
+            action_val = sample[action_key]
+            if isinstance(action_val, np.ndarray):
+                action_vec = action_val.flatten().astype(np.float32)
+            elif hasattr(action_val, "numpy"):
+                action_vec = action_val.numpy().flatten().astype(np.float32)
+            else:
+                action_vec = np.array(action_val).flatten().astype(np.float32)
+
             if not np.all(np.isfinite(state_vec)) or not np.all(np.isfinite(action_vec)):
                 continue
 
             all_states.append(state_vec)
             all_actions.append(action_vec)
             all_episode_ids.append(ep_idx)
-            all_timestep_ids.append(sample.get("frame_index", row_idx))
+            all_timestep_ids.append(int(sample.get("frame_index", global_idx)))
+            all_global_row_ids.append(int(global_idx))
 
     states = np.array(all_states, dtype=np.float32)
     actions = np.array(all_actions, dtype=np.float32)
     episode_ids = np.array(all_episode_ids, dtype=np.int64)
     timestep_ids = np.array(all_timestep_ids, dtype=np.int64)
+    global_row_ids = np.array(all_global_row_ids, dtype=np.int64)
 
     logger.info(f"Collected {len(states)} valid timesteps from {len(episode_map)} episodes")
     logger.info(f"State shape: {states.shape}, Action shape: {actions.shape}")
 
-    # Check for NaN/Inf in final arrays
     assert np.all(np.isfinite(states)), "States contain NaN/Inf after collection"
     assert np.all(np.isfinite(actions)), "Actions contain NaN/Inf after collection"
 
-    return states, actions, episode_ids, timestep_ids
+    return states, actions, episode_ids, timestep_ids, global_row_ids
 
 
-def compute_normalization_stats(x: np.ndarray) -> Dict[str, np.ndarray]:
+def check_relative_action(
+    dataset_root: str | Path,
+    repo_id: str,
+) -> Tuple[bool, str]:
     """
-    Compute mean and std for normalization.
+    Check whether actions in the dataset are relative/delta control.
 
-    Args:
-        x: Input array of shape [N, D].
+    Uses feature axes names and MetaWorld collection code to determine.
+    Returns (is_relative, evidence_string).
 
-    Returns:
-        Dictionary with 'mean' [D] and 'std' [D] arrays.
+    MetaWorld actions are (x, y, z, gripper) delta commands.
     """
-    mean = np.mean(x, axis=0)
-    std = np.std(x, axis=0)
-    # Prevent division by zero
-    std = np.where(std < 1e-6, 1.0, std)
-    return {"mean": mean.astype(np.float32), "std": std.astype(np.float32)}
+    info_path = Path(dataset_root) / "meta" / "info.json"
+    evidence_parts = []
+
+    if info_path.exists():
+        with open(info_path, "r") as f:
+            info = json.load(f)
+
+        features = info.get("features", {})
+        action_info = features.get("action", {})
+        names = action_info.get("names", {})
+
+        if isinstance(names, dict):
+            axes = names.get("axes", [])
+            if axes == ["x", "y", "z", "gripper"]:
+                evidence_parts.append(f"Action axes are {axes} - delta/relative control commands")
+                logger.info("Action axes are [x, y, z, gripper] - these are delta/relative control commands")
+                return True, "; ".join(evidence_parts)
+
+    evidence_parts.append("MetaWorld expert action uses (x,y,z,gripper) incremental/relative control")
+    logger.info("Assuming relative/delta action based on MetaWorld convention")
+    return True, "; ".join(evidence_parts)
 
 
-def normalize_array(x: np.ndarray, stats: Dict[str, np.ndarray]) -> np.ndarray:
+class DemInfNormalizer:
     """
-    Normalize array using precomputed statistics.
+    Normalization following DemInf official conventions.
 
-    Args:
-        x: Input array of shape [N, D] or [D].
-        stats: Dictionary with 'mean' and 'std' arrays.
-
-    Returns:
-        Normalized array of same shape.
+    For MetaWorld environment_state (39-dim):
+    - Continuous non-gripper dims: Gaussian normalization (x-mean)/std
+    - Gripper dims (index 3 and index 21): no normalization (NONE, per official)
+    - Action xyz (0:3): Gaussian normalization
+    - Action gripper (3): bounds normalization to [-1,1] if not already in range
     """
-    mean = stats["mean"]
-    std = stats["std"]
-    return ((x - mean) / std).astype(np.float32)
+
+    def __init__(
+        self,
+        state_dim: int,
+        action_dim: int,
+        state_gripper_indices: Optional[List[int]] = None,
+    ):
+        self.state_dim = state_dim
+        self.action_dim = action_dim
+        self.state_gripper_indices = state_gripper_indices or [3, 21]
+
+        self.state_mean = None
+        self.state_std = None
+        self.action_mean = None
+        self.action_std = None
+        self.action_gripper_min = None
+        self.action_gripper_max = None
+        self.action_gripper_normalized = False
+
+    def fit(self, states: np.ndarray, actions: np.ndarray) -> None:
+        """Compute normalization statistics from data."""
+        state_non_gripper = np.ones(self.state_dim, dtype=bool)
+        state_non_gripper[self.state_gripper_indices] = False
+
+        self.state_mean = np.zeros(self.state_dim, dtype=np.float32)
+        self.state_std = np.ones(self.state_dim, dtype=np.float32)
+
+        mean_all = np.mean(states, axis=0)
+        std_all = np.std(states, axis=0)
+
+        self.state_mean[state_non_gripper] = mean_all[state_non_gripper]
+        self.state_std[state_non_gripper] = np.where(
+            std_all[state_non_gripper] < 1e-6, 1.0, std_all[state_non_gripper]
+        )
+
+        self.action_mean = np.zeros(self.action_dim, dtype=np.float32)
+        self.action_std = np.ones(self.action_dim, dtype=np.float32)
+
+        action_xyz_mean = np.mean(actions[:, :3], axis=0)
+        action_xyz_std = np.std(actions[:, :3], axis=0)
+        self.action_mean[:3] = action_xyz_mean
+        self.action_std[:3] = np.where(action_xyz_std < 1e-6, 1.0, action_xyz_std)
+
+        gripper_vals = actions[:, 3]
+        g_min, g_max = float(np.min(gripper_vals)), float(np.max(gripper_vals))
+        self.action_gripper_min = g_min
+        self.action_gripper_max = g_max
+
+        if g_min >= -1.0 - 1e-6 and g_max <= 1.0 + 1e-6:
+            self.action_gripper_normalized = True
+            logger.info(f"Action gripper already in [{g_min:.4f}, {g_max:.4f}] ~ [-1,1], no bounds normalization needed")
+        else:
+            self.action_gripper_normalized = False
+            logger.info(f"Action gripper range [{g_min:.4f}, {g_max:.4f}], will apply bounds normalization to [-1,1]")
+
+    def normalize_state(self, states: np.ndarray) -> np.ndarray:
+        """Normalize state array."""
+        result = ((states - self.state_mean) / self.state_std).astype(np.float32)
+        for idx in self.state_gripper_indices:
+            if idx < states.shape[-1]:
+                result[..., idx] = states[..., idx]
+        return result
+
+    def normalize_action(self, actions: np.ndarray) -> np.ndarray:
+        """Normalize action array."""
+        result = actions.copy()
+        result[:, :3] = ((actions[:, :3] - self.action_mean[:3]) / self.action_std[:3]).astype(np.float32)
+
+        if not self.action_gripper_normalized:
+            g_min, g_max = self.action_gripper_min, self.action_gripper_max
+            if g_max - g_min > 1e-6:
+                result[:, 3] = (2.0 * (actions[:, 3] - g_min) / (g_max - g_min) - 1.0).astype(np.float32)
+            else:
+                result[:, 3] = 0.0
+
+        return result
+
+    def save(self, path: str | Path) -> None:
+        """Save normalization statistics."""
+        np.savez(
+            str(path),
+            state_mean=self.state_mean,
+            state_std=self.state_std,
+            action_mean=self.action_mean,
+            action_std=self.action_std,
+            state_gripper_indices=np.array(self.state_gripper_indices),
+            action_gripper_min=np.array([self.action_gripper_min]),
+            action_gripper_max=np.array([self.action_gripper_max]),
+            action_gripper_normalized=np.array([self.action_gripper_normalized]),
+        )
+        logger.info(f"Saved normalization stats to {path}")
+
+    @classmethod
+    def load(cls, path: str | Path) -> "DemInfNormalizer":
+        """Load normalization statistics."""
+        data = np.load(str(path), allow_pickle=True)
+        normalizer = cls(
+            state_dim=len(data["state_mean"]),
+            action_dim=len(data["action_mean"]),
+            state_gripper_indices=data["state_gripper_indices"].tolist(),
+        )
+        normalizer.state_mean = data["state_mean"]
+        normalizer.state_std = data["state_std"]
+        normalizer.action_mean = data["action_mean"]
+        normalizer.action_std = data["action_std"]
+        normalizer.action_gripper_min = float(data["action_gripper_min"][0])
+        normalizer.action_gripper_max = float(data["action_gripper_max"][0])
+        normalizer.action_gripper_normalized = bool(data["action_gripper_normalized"][0])
+        return normalizer
+
+    def get_manifest(self) -> Dict[str, Any]:
+        """Get normalization manifest for cache fingerprinting."""
+        return {
+            "state_dim": self.state_dim,
+            "action_dim": self.action_dim,
+            "state_gripper_indices": self.state_gripper_indices,
+            "state_mean_hash": _array_hash(self.state_mean),
+            "state_std_hash": _array_hash(self.state_std),
+            "action_mean_hash": _array_hash(self.action_mean),
+            "action_std_hash": _array_hash(self.action_std),
+            "action_gripper_min": self.action_gripper_min,
+            "action_gripper_max": self.action_gripper_max,
+            "action_gripper_normalized": self.action_gripper_normalized,
+        }
+
+
+def _array_hash(arr: np.ndarray) -> str:
+    import hashlib
+    return hashlib.sha256(arr.tobytes()).hexdigest()[:16]
