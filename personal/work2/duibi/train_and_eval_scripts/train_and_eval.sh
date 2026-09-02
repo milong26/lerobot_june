@@ -1,7 +1,7 @@
 #!/bin/bash
 # Train and evaluate with selected episodes
 # Usage: bash train_and_eval.sh <mode> <num_episodes> <seed> <gpu_id> <output_base_dir>
-#   mode: uniform, random, or dynamicanchor
+#   mode: uniform, random, dynamicanchor, or subzerocore
 
 set -e
 
@@ -33,8 +33,11 @@ elif [ "$MODE" = "random" ]; then
 elif [ "$MODE" = "dynamicanchor" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT=""
+elif [ "$MODE" = "subzerocore" ]; then
+    EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
+    SELECT_SCRIPT=""
 else
-    echo "Error: mode must be 'uniform', 'random', or 'dynamicanchor'"
+    echo "Error: mode must be 'uniform', 'random', 'dynamicanchor', or 'subzerocore'"
     exit 1
 fi
 
@@ -88,6 +91,36 @@ else
         # Copy subset file to expected location
         cp "$RESULTS_DIR/subset.json" "$SUBSET_FILE"
         echo "=== Iterative selection complete ==="
+    elif [ "$MODE" = "subzerocore" ]; then
+        # SubZeroCore: load embeddings, run facility-location selection
+        echo "=== Running SubZeroCore pipeline ==="
+
+        SUBZEROCORE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/SubZeroCore"
+        EMBEDDINGS_DIR="$OUTPUT_BASE_DIR/embeddings"
+        RESULTS_DIR="$OUTPUT_BASE_DIR/results"
+
+        mkdir -p "$EMBEDDINGS_DIR" "$RESULTS_DIR"
+
+        # Step 1: Extract embeddings (reuse our_v4 embedding extraction)
+        echo "=== Step 1: Extracting VLM embeddings ==="
+        python "$OUR_DIR/embeddings/extract_embeddings.py" \
+            --dataset-dir "$DATASET_DIR" \
+            --output-dir "$EMBEDDINGS_DIR" \
+            --n-components 32 \
+            --device cuda
+
+        # Step 2: Run SubZeroCore selection
+        echo "=== Step 2: Running SubZeroCore episode selection ==="
+        python "$SUBZEROCORE_DIR/experiments/select_episodes_subzerocore.py" \
+            --dataset-root "$DATASET_DIR" \
+            --embedding-dir "$EMBEDDINGS_DIR" \
+            --output-dir "$OUTPUT_BASE_DIR" \
+            --num-selected "$NUM_EPISODES" \
+            --seed "$SEED"
+
+        # Copy subset file to expected location
+        cp "$OUTPUT_BASE_DIR/subsets/subzerocore_${NUM_EPISODES}_seed${SEED}.json" "$SUBSET_FILE"
+        echo "=== SubZeroCore selection complete ==="
     else
         # Select episodes using uniform or random
         echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
