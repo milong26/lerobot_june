@@ -1,8 +1,10 @@
 """
-Visual Embedding Module for V3 No-Action
+Visual Embedding Module for V4
 
 Loads and manages visual embeddings with strict causal access control:
 embeddings can only be loaded for episodes that have been officially acquired.
+
+Directly reused from V3_no_action without modification.
 """
 
 import sys
@@ -10,11 +12,11 @@ import numpy as np
 from pathlib import Path
 from typing import Dict, Set, Optional
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
+PROJECT_ROOT = Path(__file__).parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from our_v3_no_action.config import PCA_DIM, VISUAL_NORMALIZE, VISUAL_GLOBAL_WEIGHT, VISUAL_WRIST_WEIGHT
+from our_v4.config import PCA_DIM, VISUAL_NORMALIZE, VISUAL_GLOBAL_WEIGHT, VISUAL_WRIST_WEIGHT
 
 
 def _l2_normalize(vec: np.ndarray) -> np.ndarray:
@@ -112,15 +114,6 @@ def build_weighted_visual_embedding(
     2. Scale each by its respective weight
     3. Concatenate
     4. Optionally L2-normalize the combined result
-
-    Args:
-        phi_global: global visual embedding vector
-        phi_wrist: wrist visual embedding vector
-        global_weight: weight for the global component
-        wrist_weight: weight for the wrist component
-
-    Returns:
-        Weighted combined embedding vector
     """
     phi_global_norm = _l2_normalize(phi_global)
     phi_wrist_norm = _l2_normalize(phi_wrist)
