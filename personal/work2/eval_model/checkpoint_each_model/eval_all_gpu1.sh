@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../../.." && pwd)"
+REPO_ROOT="/data/zhonglinye/jun/lerobot"
 cd "${REPO_ROOT}"
 
 GPU_ID=1
@@ -28,9 +27,9 @@ BATCH_SIZE=4
 SEED=1000
 CAMERA_NAME="corner,gripperPOV"
 
-DISCOVER_SCRIPT="${SCRIPT_DIR}/discover_tasks.py"
-PROCESS_SCRIPT="${SCRIPT_DIR}/process_results.py"
-BUILD_SUMMARY_SCRIPT="${SCRIPT_DIR}/build_summary.py"
+DISCOVER_SCRIPT="personal/work2/eval_model/checkpoint_each_model/discover_tasks.py"
+PROCESS_SCRIPT="personal/work2/eval_model/checkpoint_each_model/process_results.py"
+BUILD_SUMMARY_SCRIPT="personal/work2/eval_model/checkpoint_each_model/build_summary.py"
 
 mkdir -p "${OUTPUT_ROOT}" "${PER_SEED_DIR}" "${LOG_DIR}"
 mkdir -p "${SUMMARY_DIR}" "${SHARED_OUTPUT_ROOT}"
