@@ -6,6 +6,52 @@
 
 **不是**对原始 JAX/OpenX 代码的复制。所有实现仅依赖当前仓库已有环境（Python、PyTorch、NumPy、SciPy、LeRobot 数据读取接口），不引入 JAX、Flax、TensorFlow、RLDS、OpenX。除"JAX/OpenX→PyTorch/LeRobot 数据接口"这一工程适配外，DemInf 的 VAE 架构、VAE loss、训练超参数、KSG estimator、batch scoring 方式、repeat 方式、score clipping、score normalization、episode aggregation 和最终 ranking 与原始 DemInf 官方实现一致。
 
+## DemInf 模块说明
+
+### 数据输入
+
+- **数据来源**：LeRobot 框架采集的 MetaWorld trajectory 数据
+- **State 字段**：固定使用 `observation.environment_state`（39维）
+- **Action 字段**：MetaWorld 原始 4维 action `(x, y, z, gripper)`
+- **数据级别**：trajectory demonstration 级别的数据价值评估
+
+### 评分流程
+
+```
+LeRobot MetaWorld trajectory
+    → observation.environment_state (39维) + action (4维)
+    → Normalization (state: Gaussian, action xyz: Gaussian, action gripper: Bounds)
+    → State Beta-VAE (latent_dim=12) + Action Beta-VAE (latent_dim=6)
+    → Latent encoding (posterior mean)
+    → KSG Mutual Information Estimator (batch-local, ks=[5,6,7])
+    → Per-timestep MI scores
+    → NaN filtering → 1%/99% percentile clipping → global z-score normalization
+    → Episode score (mean aggregation)
+    → Top-K episode selection
+```
+
+### 模块限制
+
+本模块 **不使用** 以下内容：
+- ❌ 视觉 embedding（VLM、CLIP、image feature 等）
+- ❌ Reward 信息
+- ❌ Policy rollout / 策略执行结果
+- ❌ 策略性能反馈
+- ❌ 环境测试结果
+- ❌ Ours 方法评分
+- ❌ SIC 评分
+- ❌ Embedding 评分
+
+本模块 **仅依赖**：
+- ✅ State Beta-VAE 编码的 latent
+- ✅ Action Beta-VAE 编码的 latent
+- ✅ KSG mutual information estimator
+- ✅ LeRobot MetaWorld 数据（observation.environment_state + action）
+
+### 独立运行
+
+DemInf 模块必须独立运行，不依赖 `personal/work2` 中的 Ours 方法、embedding 方法、VLM 特征、视觉编码器、策略执行结果或 reward 信息。启动前会执行环境隔离检查，确保不存在 forbidden 模块依赖。
+
 ## 算法流程
 
 DemInf 通过估计 state-action 之间的互信息 (Mutual Information) 来评估每条 demonstration 的信息量：
@@ -240,6 +286,19 @@ python -m pytest personal/work2/deminf/test_dataset_adapter.py -v
   "num_episodes": 112,
   "selection_method": "deminf",
   "parameters": {
+    "algorithm": "DemInf",
+    "representation": "state_action",
+    "state_key": "observation.environment_state",
+    "action_key": "action",
+    "state_dim": 39,
+    "action_dim": 4,
+    "state_latent_dim": 12,
+    "action_latent_dim": 6,
+    "score_type": "ksg_mutual_information",
+    "episode_aggregation": "mean",
+    "uses_policy_rollout": false,
+    "uses_reward": false,
+    "uses_visual_embedding": false,
     "official_deminf": true,
     "target_episodes": 112,
     "seed": 42,
@@ -253,18 +312,13 @@ python -m pytest personal/work2/deminf/test_dataset_adapter.py -v
     "quality_cache": true,
     "ks": [5, 6, 7],
     "state_source": "observation.environment_state",
-    "state_dim": 39,
-    "action_dim": 4,
-    "state_latent_dim": 12,
-    "action_latent_dim": 6,
     "vae_beta_state": 0.05,
     "vae_beta_action": 0.05,
     "hidden_dims": [512, 512],
     "relative_action": true,
     "dataset_path": "...",
     "score_clip_percentiles": [1.0, 99.0],
-    "score_normalization": "global_zscore_after_clipping",
-    "episode_aggregation": "mean"
+    "score_normalization": "global_zscore_after_clipping"
   }
 }
 ```

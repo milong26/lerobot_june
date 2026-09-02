@@ -30,7 +30,7 @@ import torch
 from deminf.config import DemInfConfig
 from deminf.ksg import deminf_ksg_batch_scores
 from deminf.models import BetaVAE
-from deminf.utils import ensure_dir
+from deminf.utils import ensure_dir, validate_latent_cache_metadata
 
 logger = logging.getLogger("deminf")
 
@@ -248,11 +248,42 @@ def validate_latent_cache(
 
 def load_latent_cache(
     output_dir: str | Path,
+    current_config: Optional[DemInfConfig] = None,
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Load latent embeddings from cache file."""
+    """
+    Load latent embeddings from cache file.
+
+    Before loading, validates cache metadata against current experiment config
+    if current_config is provided. Raises RuntimeError on validation failure.
+
+    Args:
+        output_dir: Directory containing cache files.
+        current_config: Current DemInfConfig for validation. If None, skips validation.
+
+    Returns:
+        Tuple of (z_state, z_action, episode_ids, timestep_ids, global_row_ids).
+    """
     cache_path = Path(output_dir) / "latents.npz"
+    manifest_path = Path(output_dir) / "latents_manifest.json"
+
     if not cache_path.exists():
         raise FileNotFoundError(f"Latent cache not found: {cache_path}")
+
+    if current_config is not None:
+        if not manifest_path.exists():
+            raise FileNotFoundError(
+                f"Latent manifest not found: {manifest_path}. "
+                f"Cannot validate cache without manifest."
+            )
+        with open(manifest_path, "r") as f:
+            metadata = json.load(f)
+
+        is_valid, error_reason = validate_latent_cache_metadata(metadata, current_config)
+        if not is_valid:
+            raise RuntimeError(
+                f"Latent cache validation failed: {error_reason}. "
+                f"Cache does not match current experiment configuration."
+            )
 
     data = np.load(str(cache_path))
     global_row_ids = data["global_row_ids"] if "global_row_ids" in data else data["timestep_ids"]
@@ -473,6 +504,68 @@ def postprocess_scores(
     return ep_scores, df
 
 
+def save_episode_scores(
+    ep_scores_df: pd.DataFrame,
+    output_dir: str | Path,
+) -> None:
+    """
+    Save episode scores to CSV.
+
+    Fields: episode_id, deminf_score, num_timestep_samples, raw_score_mean,
+            normalized_score_mean, rank
+    """
+    output_dir = Path(output_dir)
+    ensure_dir(output_dir)
+
+    save_df = ep_scores_df.rename(columns={"episode_idx": "episode_id"}).copy()
+    save_df = save_df.rename(columns={
+        "num_score_samples": "num_timestep_samples",
+        "raw_mean": "raw_score_mean",
+        "normalized_score": "deminf_score",
+    })
+
+    if "normalized_score_mean" not in save_df.columns:
+        save_df["normalized_score_mean"] = save_df["deminf_score"]
+
+    cols = ["episode_id", "deminf_score", "num_timestep_samples",
+            "raw_score_mean", "normalized_score_mean", "rank"]
+    available_cols = [c for c in cols if c in save_df.columns]
+    save_df = save_df[available_cols]
+
+    csv_path = output_dir / "episode_scores.csv"
+    save_df.to_csv(str(csv_path), index=False)
+    logger.info(f"Saved episode scores to {csv_path}")
+
+
+def save_timestep_scores(
+    ts_scores_df: pd.DataFrame,
+    output_dir: str | Path,
+) -> None:
+    """
+    Save timestep scores to CSV.
+
+    Fields: episode_id, timestep_id, raw_ksg_score, normalized_score,
+            repeat_id, batch_id
+    """
+    output_dir = Path(output_dir)
+    ensure_dir(output_dir)
+
+    save_df = ts_scores_df.rename(columns={
+        "episode_idx": "episode_id",
+        "timestep_idx": "timestep_id",
+        "raw_score": "raw_ksg_score",
+    })
+
+    cols = ["episode_id", "timestep_id", "raw_ksg_score", "normalized_score",
+            "repeat_id", "batch_id"]
+    available_cols = [c for c in cols if c in save_df.columns]
+    save_df = save_df[available_cols]
+
+    csv_path = output_dir / "timestep_scores.csv"
+    save_df.to_csv(str(csv_path), index=False)
+    logger.info(f"Saved timestep scores to {csv_path}")
+
+
 def score_latents(
     z_s: np.ndarray,
     z_a: np.ndarray,
@@ -534,14 +627,8 @@ def score_latents(
     # Save outputs
     if output_dir is not None:
         ensure_dir(output_dir)
-
-        ts_path = Path(output_dir) / "raw_timestep_scores.csv"
-        ts_scores_df.to_csv(str(ts_path), index=False)
-        logger.info(f"Saved timestep scores to {ts_path}")
-
-        csv_path = Path(output_dir) / "episode_scores.csv"
-        ep_scores_df.to_csv(str(csv_path), index=False)
-        logger.info(f"Saved episode scores to {csv_path}")
+        save_episode_scores(ep_scores_df, output_dir)
+        save_timestep_scores(ts_scores_df, output_dir)
 
     return ep_scores_df, ts_scores_df
 
@@ -558,11 +645,11 @@ def score_dataset(
     output_dir: Optional[str | Path] = None,
 ) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
-    Compatibility wrapper: encodes raw states/actions then delegates to score_latents().
+    COMPATIBILITY WRAPPER ONLY - NOT USED IN OFFICIAL run_deminf.py PIPELINE.
 
-    This function is kept for backward compatibility. The official pipeline
-    should use score_latents() directly with pre-computed latents from
-    encode_all_timesteps() or a validated cache.
+    This function encodes raw states/actions through VAEs then delegates to
+    score_latents(). The official pipeline in run_deminf.py directly calls
+    score_latents() with pre-computed latents.
 
     Args:
         state_model: Trained state VAE in eval mode.
@@ -579,7 +666,7 @@ def score_dataset(
         episode_scores_df: Per-episode scores with rank.
         timestep_scores_df: Per-timestep raw/clipped/normalized scores.
     """
-    # Encode (this is the compatibility step; official path uses pre-computed latents)
+    # Encode (compatibility step; official path uses pre-computed latents)
     z_s, z_a = encode_all_timesteps(
         state_model, action_model, states, actions,
         batch_size=config.quality_batch_size,

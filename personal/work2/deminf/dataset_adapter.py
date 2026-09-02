@@ -411,7 +411,7 @@ class DemInfNormalizer:
         return result
 
     def save(self, path: str | Path) -> None:
-        """Save normalization statistics."""
+        """Save normalization statistics to both npz and json."""
         np.savez(
             str(path),
             state_mean=self.state_mean,
@@ -424,6 +424,26 @@ class DemInfNormalizer:
             action_gripper_bounds_applied=np.array([self.action_gripper_bounds_applied]),
         )
         logger.info(f"Saved normalization stats to {path}")
+
+        json_path = str(path).replace(".npz", ".json")
+        stats_json = {
+            "state": {
+                "mean": self.state_mean.tolist(),
+                "std": self.state_std.tolist(),
+                "dimension": self.state_dim,
+                "source_key": "observation.environment_state",
+            },
+            "action": {
+                "xyz_mean": self.action_mean[:3].tolist(),
+                "xyz_std": self.action_std[:3].tolist(),
+                "gripper_min": self.action_gripper_min,
+                "gripper_max": self.action_gripper_max,
+            },
+            "normalization_type": "gaussian_state_bounds_action",
+        }
+        with open(json_path, "w") as f:
+            json.dump(stats_json, f, indent=2)
+        logger.info(f"Saved normalization stats JSON to {json_path}")
 
     @classmethod
     def load(cls, path: str | Path) -> "DemInfNormalizer":
@@ -466,3 +486,34 @@ class DemInfNormalizer:
 def _array_hash(arr: np.ndarray) -> str:
     import hashlib
     return hashlib.sha256(arr.tobytes()).hexdigest()[:16]
+
+
+def get_deminf_data_manifest(
+    dataset_root: str | Path,
+    repo_id: str,
+    state_source: str = "observation.environment_state",
+    action_key: str = "action",
+    episode_map: Optional[Dict[int, List[int]]] = None,
+) -> Dict[str, Any]:
+    """
+    Return a data manifest for DemInf pipeline.
+
+    Returns:
+        Dictionary with state_key, action_key, state_dim, action_dim,
+        episode_count, transition_count, normalization_type.
+    """
+    if episode_map is None:
+        episode_map = build_episode_index_from_lerobot(dataset_root, repo_id)
+
+    episode_count = len(episode_map)
+    transition_count = sum(len(rows) for rows in episode_map.values())
+
+    return {
+        "state_key": state_source,
+        "action_key": action_key,
+        "state_dim": 39,
+        "action_dim": 4,
+        "episode_count": episode_count,
+        "transition_count": transition_count,
+        "normalization_type": "gaussian_state_bounds_action",
+    }

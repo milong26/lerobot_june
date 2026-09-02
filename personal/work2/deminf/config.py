@@ -74,6 +74,7 @@ class DemInfConfig:
 
     # Advanced
     representation: str = "state"
+    representation_type: str = "state_action"
     ksg_backend: str = "chunked"
     ksg_mode: str = "deminf_rank"
 
@@ -133,6 +134,46 @@ class DemInfConfig:
         Path(self.output_dir).mkdir(parents=True, exist_ok=True)
         Path(self.checkpoint_dir).mkdir(parents=True, exist_ok=True)
 
+    def validate_representation_type(self) -> None:
+        """Validate representation_type is state_action."""
+        if self.representation_type != "state_action":
+            raise RuntimeError(
+                f"DemInf requires representation_type='state_action', "
+                f"got '{self.representation_type}'"
+            )
+
+    def validate_state_source(self) -> None:
+        """Validate state_source is observation.environment_state."""
+        if self.state_source != "observation.environment_state":
+            raise RuntimeError(
+                f"DemInf requires state_source='observation.environment_state', "
+                f"got '{self.state_source}'"
+            )
+
+    def validate_no_visual_config(self) -> None:
+        """Ensure no visual embedding configuration exists."""
+        visual_fields = [
+            "visual_embedding_path", "vlm_checkpoint", "clip_model", "image_feature",
+        ]
+        for field_name in visual_fields:
+            if hasattr(self, field_name) and getattr(self, field_name) is not None:
+                raise RuntimeError(
+                    f"DemInf does not support visual configuration: "
+                    f"'{field_name}' is set to '{getattr(self, field_name)}'"
+                )
+
+    def validate_no_other_scores(self) -> None:
+        """Ensure no non-DemInf scoring parameters exist."""
+        forbidden_fields = [
+            "ours_score", "sic_score", "embedding_score",
+        ]
+        for field_name in forbidden_fields:
+            if hasattr(self, field_name) and getattr(self, field_name) is not None:
+                raise RuntimeError(
+                    f"DemInf does not support non-DemInf scoring parameter: "
+                    f"'{field_name}' is set to '{getattr(self, field_name)}'"
+                )
+
     def effective_discard_fraction(self) -> float:
         """
         When quality_cache=True, official OpenX dataloader forces discard_fraction=0.0.
@@ -159,3 +200,25 @@ class DemInfConfig:
         }
         raw = json.dumps(key_fields, sort_keys=True)
         return hashlib.sha256(raw.encode()).hexdigest()[:16]
+
+
+def validate_deminf_config(config: DemInfConfig) -> None:
+    """
+    Validate DemInf running configuration.
+
+    Checks:
+    - representation_type must be 'state_action'
+    - state_source must be 'observation.environment_state'
+    - No visual embedding configuration (visual_embedding_path, vlm_checkpoint, clip_model, image_feature)
+    - No non-DemInf scoring parameters (ours_score, sic_score, embedding_score)
+
+    Args:
+        config: DemInfConfig instance to validate.
+
+    Raises:
+        RuntimeError: If any validation check fails.
+    """
+    config.validate_representation_type()
+    config.validate_state_source()
+    config.validate_no_visual_config()
+    config.validate_no_other_scores()

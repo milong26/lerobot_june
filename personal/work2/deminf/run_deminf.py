@@ -54,7 +54,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 import numpy as np
 
-from deminf.config import DemInfConfig
+from deminf.config import DemInfConfig, validate_deminf_config
 from deminf.dataset_adapter import (
     build_episode_index_from_lerobot,
     check_relative_action,
@@ -89,6 +89,37 @@ from deminf.utils import (
     save_metadata,
     set_global_seed,
 )
+
+
+def validate_deminf_isolation_environment() -> None:
+    """
+    Check that the current running environment only loads DemInf-related modules.
+
+    Prohibits importing ours, embedding, vlm, clip, visual_feature related modules.
+    Raises RuntimeError if any forbidden dependency is detected.
+    """
+    import importlib
+
+    forbidden_modules = [
+        "ours", "embedding", "vlm", "clip", "visual_feature",
+        "personal.work2.ours", "personal.work2.embedding",
+        "personal.work2.vlm", "personal.work2.clip",
+        "personal.work2.visual_feature",
+    ]
+
+    found_modules = []
+    for mod_name in forbidden_modules:
+        try:
+            importlib.import_module(mod_name)
+            found_modules.append(mod_name)
+        except (ImportError, ModuleNotFoundError):
+            pass
+
+    if found_modules:
+        raise RuntimeError(
+            f"DemInf isolation check failed: forbidden modules detected: {found_modules}. "
+            f"DemInf must not depend on ours, embedding, vlm, clip, or visual_feature modules."
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -232,6 +263,8 @@ def main() -> None:
         config.skip_train_if_checkpoint_exists = False
 
     config.validate()
+    validate_deminf_config(config)
+    validate_deminf_isolation_environment()
     set_global_seed(config.seed)
 
     logger = init_logger(config.output_dir)
@@ -462,7 +495,9 @@ def main() -> None:
     # Step 11: Encode or load latents
     # =========================================================================
     if use_cache:
-        z_s, z_a, episode_ids, timestep_ids, global_row_ids = load_latent_cache(config.output_dir)
+        z_s, z_a, episode_ids, timestep_ids, global_row_ids = load_latent_cache(
+            config.output_dir, current_config=config,
+        )
         logger.info(f"Latent source: cache | z_s={z_s.shape}, z_a={z_a.shape}")
     else:
         logger.info("\n--- Step 11: Encoding all timesteps ---")

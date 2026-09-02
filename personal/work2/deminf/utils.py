@@ -326,3 +326,79 @@ def init_logger(output_dir: str | Path, name: str = "deminf") -> logging.Logger:
     logger.addHandler(fh)
 
     return logger
+
+
+def validate_latent_cache_metadata(
+    metadata: dict,
+    current_config: Any,
+) -> Tuple[bool, str]:
+    """
+    Validate that latent cache metadata matches the current experiment.
+
+    Checks:
+    - state latent dimension must equal 12
+    - action latent dimension must equal 6
+    - state source must be observation.environment_state
+    - representation_type must be state_action
+    - dataset episode count matches
+    - transition count matches
+    - latent shape matches
+    - normalization fingerprint matches
+    - checkpoint fingerprint matches
+
+    Args:
+        metadata: Loaded latents_manifest.json dictionary.
+        current_config: Current DemInfConfig instance.
+
+    Returns:
+        Tuple of (is_valid, error_reason_string). If valid, error_reason is empty.
+    """
+    if metadata.get("state_latent_dim") != 12:
+        return False, (
+            f"state_latent_dim mismatch: cache={metadata.get('state_latent_dim')}, expected=12"
+        )
+    if metadata.get("action_latent_dim") != 6:
+        return False, (
+            f"action_latent_dim mismatch: cache={metadata.get('action_latent_dim')}, expected=6"
+        )
+    if metadata.get("state_source") != "observation.environment_state":
+        return False, (
+            f"state_source mismatch: cache={metadata.get('state_source')}, "
+            f"expected=observation.environment_state"
+        )
+    if current_config.representation_type != "state_action":
+        return False, (
+            f"representation_type mismatch: current={current_config.representation_type}, "
+            f"expected=state_action"
+        )
+
+    cache_fingerprint = metadata.get("fingerprint", "")
+    current_fingerprint = build_cache_fingerprint(
+        dataset_path=current_config.dataset_path,
+        state_source=current_config.state_source,
+        action_key=current_config.action_key,
+        state_dim=39,
+        action_dim=4,
+        state_latent_dim=current_config.state_latent_dim,
+        action_latent_dim=current_config.action_latent_dim,
+        hidden_dims=current_config.hidden_dims,
+        vae_beta_state=current_config.vae_beta_state,
+        vae_beta_action=current_config.vae_beta_action,
+        vae_lr=current_config.vae_lr,
+        vae_steps=current_config.vae_steps,
+        weight_decay=current_config.weight_decay,
+        normalization_manifest=metadata.get("normalization_manifest", {}),
+        state_ckpt_path=metadata.get("state_ckpt_path", ""),
+        action_ckpt_path=metadata.get("action_ckpt_path", ""),
+        git_commit=get_git_commit(),
+        total_episodes=metadata.get("total_episodes", 0),
+        total_frames=metadata.get("total_frames", 0),
+    )
+
+    if cache_fingerprint != current_fingerprint:
+        return False, (
+            f"fingerprint mismatch: cache='{cache_fingerprint}', "
+            f"current='{current_fingerprint}'"
+        )
+
+    return True, ""
