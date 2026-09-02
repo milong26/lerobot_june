@@ -62,21 +62,38 @@ else
     echo "=== No checkpoint found, starting fresh training ==="
 
     if [ "$MODE" = "dynamicanchor" ]; then
-        # DynamicAnchor V1: extract embeddings, run offline simulation, select episodes
+        # DynamicAnchor V1: use shared embedding cache, run offline simulation, select episodes
         echo "=== Running DynamicAnchor V1 pipeline ==="
 
-        EMBEDDINGS_DIR="$OUTPUT_BASE_DIR/embeddings"
+        EMBEDDING_UTIL="$WORK2_ROOT/embedding_utils/ensure_embeddings.py"
+        EMBEDDING_PATH_FILE="$OUTPUT_BASE_DIR/shared_embedding_path.txt"
         RESULTS_DIR="$OUTPUT_BASE_DIR/results"
 
-        mkdir -p "$EMBEDDINGS_DIR" "$RESULTS_DIR"
+        mkdir -p "$RESULTS_DIR"
 
-        # Step 1: Extract embeddings
-        echo "=== Step 1: Extracting VLM embeddings ==="
-        python "$OUR_DIR/embeddings/extract_embeddings.py" \
-            --dataset-dir "$DATASET_DIR" \
-            --output-dir "$EMBEDDINGS_DIR" \
-            --n-components 32 \
-            --device cuda
+        # Step 1: Ensure shared embedding cache exists
+        echo "=== Step 1: Ensuring shared embedding cache ==="
+        export CUDA_VISIBLE_DEVICES=$GPU_ID
+        
+        python "$EMBEDDING_UTIL" \
+            --dataset-root "$DATASET_DIR" \
+            --dataset-name "$DATASET_NAME" \
+            --gpu-id "$GPU_ID" \
+            --pca-dim 32 \
+            --path-file "$EMBEDDING_PATH_FILE"
+        
+        if [ $? -ne 0 ]; then
+            echo "ERROR: ensure_embeddings.py failed"
+            exit 1
+        fi
+        
+        EMBEDDINGS_DIR="$(cat "$EMBEDDING_PATH_FILE")"
+        echo "Shared embedding directory: $EMBEDDINGS_DIR"
+        
+        if [ ! -d "$EMBEDDINGS_DIR" ]; then
+            echo "ERROR: Shared embedding directory does not exist: $EMBEDDINGS_DIR"
+            exit 1
+        fi
 
         # Step 2: Run iterative SIC selection (V1)
         echo "=== Step 2: Running iterative SIC episode selection (V1) ==="
@@ -95,21 +112,38 @@ else
         echo "=== V1 Iterative selection complete ==="
 
     elif [ "$MODE" = "dynamicanchor_v2" ]; then
-        # DynamicAnchor V2: use existing embeddings, run V2 selection
+        # DynamicAnchor V2: use shared embedding cache, run V2 selection
         echo "=== Running DynamicAnchor V2 pipeline ==="
 
-        EMBEDDINGS_DIR="$OUTPUT_BASE_DIR/embeddings"
+        EMBEDDING_UTIL="$WORK2_ROOT/embedding_utils/ensure_embeddings.py"
+        EMBEDDING_PATH_FILE="$OUTPUT_BASE_DIR/shared_embedding_path.txt"
         RESULTS_DIR="$OUTPUT_BASE_DIR/results"
 
-        mkdir -p "$EMBEDDINGS_DIR" "$RESULTS_DIR"
+        mkdir -p "$RESULTS_DIR"
 
-        # Step 1: Extract embeddings (reuse cache if exists)
-        echo "=== Step 1: Extracting VLM embeddings (cached) ==="
-        python "$OUR_DIR/embeddings/extract_embeddings.py" \
-            --dataset-dir "$DATASET_DIR" \
-            --output-dir "$EMBEDDINGS_DIR" \
-            --n-components 32 \
-            --device cuda
+        # Step 1: Ensure shared embedding cache exists
+        echo "=== Step 1: Ensuring shared embedding cache ==="
+        export CUDA_VISIBLE_DEVICES=$GPU_ID
+        
+        python "$EMBEDDING_UTIL" \
+            --dataset-root "$DATASET_DIR" \
+            --dataset-name "$DATASET_NAME" \
+            --gpu-id "$GPU_ID" \
+            --pca-dim 32 \
+            --path-file "$EMBEDDING_PATH_FILE"
+        
+        if [ $? -ne 0 ]; then
+            echo "ERROR: ensure_embeddings.py failed"
+            exit 1
+        fi
+        
+        EMBEDDINGS_DIR="$(cat "$EMBEDDING_PATH_FILE")"
+        echo "Shared embedding directory: $EMBEDDINGS_DIR"
+        
+        if [ ! -d "$EMBEDDINGS_DIR" ]; then
+            echo "ERROR: Shared embedding directory does not exist: $EMBEDDINGS_DIR"
+            exit 1
+        fi
 
         # Step 2: Run iterative SIC selection (V2)
         echo "=== Step 2: Running fixed-anchor sequential SIC episode selection (V2) ==="

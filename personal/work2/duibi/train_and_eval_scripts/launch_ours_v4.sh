@@ -20,7 +20,7 @@ TMUX_SESSION="ours_v4_${NUM_EPISODES}_s${SEED}_${DATASET_NAME}"
 mkdir -p "$LOG_DIR"
 
 # Kill existing session if exists
-tmux kill-session -t $TMUX_SESSION 2>/dev/null || true
+tmux kill-session -t "$TMUX_SESSION" 2>/dev/null || true
 
 # Create runner script
 RUNNER_SCRIPT="$LOG_DIR/${EXP_NAME}_runner.sh"
@@ -48,9 +48,6 @@ LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
 OUR_V4_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our_v4"
-OUR_V3_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our_v3_no_action"
-OUR_V2_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our_v2"
-OUR_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our"
 
 mkdir -p "\$LOG_DIR"
 
@@ -83,62 +80,32 @@ SUBSET_DIR="\$OUTPUT_BASE_DIR/subsets"
 
 mkdir -p "\$RESULTS_DIR" "\$SUBSET_DIR"
 
-# Step 1: Find existing visual embedding (reuse, do not re-extract)
-echo "=== Step 1: Looking for existing visual embeddings ==="
+# Step 1: Ensure shared embedding cache exists
+echo "=== Step 1: Ensuring shared embedding cache ==="
+export CUDA_VISIBLE_DEVICES=\$GPU_ID
 
-V4_EMBEDDINGS_DIR="\$OUTPUT_BASE_DIR/embeddings"
-V3_EMBEDDINGS_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_v3_no_action_\${NUM_EPISODES}_seed\${SEED}_\${DATASET_NAME}/embeddings"
-V2_EMBEDDINGS_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_v2_\${NUM_EPISODES}_seed\${SEED}_\${DATASET_NAME}/embeddings"
-V1_EMBEDDINGS_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_112_seed42_\${DATASET_NAME}/embeddings"
+EMBEDDING_UTIL="/data/zhonglinye/jun/lerobot/personal/work2/embedding_utils/ensure_embeddings.py"
+EMBEDDING_PATH_FILE="\$OUTPUT_BASE_DIR/shared_embedding_path.txt"
 
-EMBEDDINGS_DIR=""
+python "\$EMBEDDING_UTIL" \\
+    --dataset-root "\$DATASET_DIR" \\
+    --dataset-name "\$DATASET_NAME" \\
+    --gpu-id "\$GPU_ID" \\
+    --pca-dim 32 \\
+    --path-file "\$EMBEDDING_PATH_FILE"
 
-# Priority 1: Check v4 experiment directory
-if [ -d "\$V4_EMBEDDINGS_DIR" ] && [ "\$(ls -A \$V4_EMBEDDINGS_DIR/*.npy 2>/dev/null)" ]; then
-    EMBEDDINGS_DIR="\$V4_EMBEDDINGS_DIR"
-    echo "Embedding source: v4 directory"
-    echo "Embedding path: \$EMBEDDINGS_DIR"
-# Priority 2: Check v3 experiment directory
-elif [ -d "\$V3_EMBEDDINGS_DIR" ] && [ "\$(ls -A \$V3_EMBEDDINGS_DIR/*.npy 2>/dev/null)" ]; then
-    EMBEDDINGS_DIR="\$V3_EMBEDDINGS_DIR"
-    echo "Embedding source: v3 directory (reuse)"
-    echo "Embedding path: \$EMBEDDINGS_DIR"
-# Priority 3: Check v2 experiment directory
-elif [ -d "\$V2_EMBEDDINGS_DIR" ] && [ "\$(ls -A \$V2_EMBEDDINGS_DIR/*.npy 2>/dev/null)" ]; then
-    EMBEDDINGS_DIR="\$V2_EMBEDDINGS_DIR"
-    echo "Embedding source: v2 directory (reuse)"
-    echo "Embedding path: \$EMBEDDINGS_DIR"
-# Priority 4: Check v1 ours directory
-elif [ -d "\$V1_EMBEDDINGS_DIR" ] && [ "\$(ls -A \$V1_EMBEDDINGS_DIR/*.npy 2>/dev/null)" ]; then
-    EMBEDDINGS_DIR="\$V1_EMBEDDINGS_DIR"
-    echo "Embedding source: v1 directory (reuse)"
-    echo "Embedding path: \$EMBEDDINGS_DIR"
-else
-    echo "ERROR: No existing visual embedding found."
-    echo "  v4 directory: \$V4_EMBEDDINGS_DIR"
-    echo "  v3 directory: \$V3_EMBEDDINGS_DIR"
-    echo "  v2 directory: \$V2_EMBEDDINGS_DIR"
-    echo "  v1 directory: \$V1_EMBEDDINGS_DIR"
-    echo "Please run embedding extraction first:"
-    echo "  python \$OUR_DIR/embeddings/extract_embeddings.py \\"
-    echo "      --dataset-dir \$DATASET_DIR \\"
-    echo "      --output-dir \$V4_EMBEDDINGS_DIR \\"
-    echo "      --n-components 32 \\"
-    echo "      --device cuda"
+if [ \$? -ne 0 ]; then
+    echo "ERROR: ensure_embeddings.py failed"
     exit 1
 fi
 
-# Copy embeddings to v4 directory for future reuse
-if [ "\$EMBEDDINGS_DIR" != "\$V4_EMBEDDINGS_DIR" ]; then
-    echo "Copying embeddings to v4 directory for future reuse..."
-    mkdir -p "\$V4_EMBEDDINGS_DIR"
-    cp "\$EMBEDDINGS_DIR"/*.npy "\$V4_EMBEDDINGS_DIR/"
-    EMBEDDINGS_DIR="\$V4_EMBEDDINGS_DIR"
-    echo "Embedding source: copied to v4"
-    echo "Embedding path: \$EMBEDDINGS_DIR"
-fi
+EMBEDDINGS_DIR="\$(cat "\$EMBEDDING_PATH_FILE")"
+echo "Shared embedding directory: \$EMBEDDINGS_DIR"
 
-echo "Final embedding directory: \$EMBEDDINGS_DIR"
+if [ ! -d "\$EMBEDDINGS_DIR" ]; then
+    echo "ERROR: Shared embedding directory does not exist: \$EMBEDDINGS_DIR"
+    exit 1
+fi
 
 # Step 2: Run v4 episode selection
 echo ""
@@ -247,7 +214,7 @@ RUNNER_EOF
 chmod +x "$RUNNER_SCRIPT"
 
 # Launch in tmux
-tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $NUM_EPISODES $SEED $DATASET_NAME $MODE"
+tmux new-session -d -s "$TMUX_SESSION" "bash $RUNNER_SCRIPT $GPU_ID $NUM_EPISODES $SEED $DATASET_NAME $MODE"
 
 echo "Launched experiment: $EXP_NAME"
 echo "tmux session: $TMUX_SESSION"

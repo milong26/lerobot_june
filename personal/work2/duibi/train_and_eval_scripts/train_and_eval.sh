@@ -59,22 +59,38 @@ else
     echo "=== No checkpoint found, starting fresh training ==="
     
     if [ "$MODE" = "dynamicanchor" ]; then
-        # DynamicAnchor: extract embeddings, run offline simulation, select episodes
+        # DynamicAnchor: use shared embedding cache, run offline simulation, select episodes
         echo "=== Running DynamicAnchor pipeline ==="
         
-        EMBEDDINGS_DIR="$OUTPUT_BASE_DIR/embeddings"
+        EMBEDDING_UTIL="/data/zhonglinye/jun/lerobot/personal/work2/embedding_utils/ensure_embeddings.py"
+        EMBEDDING_PATH_FILE="$OUTPUT_BASE_DIR/shared_embedding_path.txt"
         RESULTS_DIR="$OUTPUT_BASE_DIR/results"
-        PLANNING_RESULT="$RESULTS_DIR/planning_result.json"
         
-        mkdir -p "$EMBEDDINGS_DIR" "$RESULTS_DIR"
+        mkdir -p "$RESULTS_DIR"
         
-        # Step 1: Extract embeddings
-        echo "=== Step 1: Extracting VLM embeddings ==="
-        python "$OUR_DIR/embeddings/extract_embeddings.py" \
-            --dataset-dir "$DATASET_DIR" \
-            --output-dir "$EMBEDDINGS_DIR" \
-            --n-components 32 \
-            --device cuda
+        # Step 1: Ensure shared embedding cache exists
+        echo "=== Step 1: Ensuring shared embedding cache ==="
+        export CUDA_VISIBLE_DEVICES=$GPU_ID
+        
+        python "$EMBEDDING_UTIL" \
+            --dataset-root "$DATASET_DIR" \
+            --dataset-name "$DATASET_NAME" \
+            --gpu-id "$GPU_ID" \
+            --pca-dim 32 \
+            --path-file "$EMBEDDING_PATH_FILE"
+        
+        if [ $? -ne 0 ]; then
+            echo "ERROR: ensure_embeddings.py failed"
+            exit 1
+        fi
+        
+        EMBEDDINGS_DIR="$(cat "$EMBEDDING_PATH_FILE")"
+        echo "Shared embedding directory: $EMBEDDINGS_DIR"
+        
+        if [ ! -d "$EMBEDDINGS_DIR" ]; then
+            echo "ERROR: Shared embedding directory does not exist: $EMBEDDINGS_DIR"
+            exit 1
+        fi
         
         # Step 2: Run iterative SIC selection
         echo "=== Step 2: Running iterative SIC episode selection ==="
@@ -92,22 +108,39 @@ else
         cp "$RESULTS_DIR/subset.json" "$SUBSET_FILE"
         echo "=== Iterative selection complete ==="
     elif [ "$MODE" = "subzerocore" ]; then
-        # SubZeroCore: load embeddings, run facility-location selection
+        # SubZeroCore: use shared embedding cache, run facility-location selection
         echo "=== Running SubZeroCore pipeline ==="
 
         SUBZEROCORE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/SubZeroCore"
-        EMBEDDINGS_DIR="$OUTPUT_BASE_DIR/embeddings"
+        EMBEDDING_UTIL="/data/zhonglinye/jun/lerobot/personal/work2/embedding_utils/ensure_embeddings.py"
+        EMBEDDING_PATH_FILE="$OUTPUT_BASE_DIR/shared_embedding_path.txt"
         RESULTS_DIR="$OUTPUT_BASE_DIR/results"
 
-        mkdir -p "$EMBEDDINGS_DIR" "$RESULTS_DIR"
+        mkdir -p "$RESULTS_DIR"
 
-        # Step 1: Extract embeddings (reuse our_v4 embedding extraction)
-        echo "=== Step 1: Extracting VLM embeddings ==="
-        python "$OUR_DIR/embeddings/extract_embeddings.py" \
-            --dataset-dir "$DATASET_DIR" \
-            --output-dir "$EMBEDDINGS_DIR" \
-            --n-components 32 \
-            --device cuda
+        # Step 1: Ensure shared embedding cache exists
+        echo "=== Step 1: Ensuring shared embedding cache ==="
+        export CUDA_VISIBLE_DEVICES=$GPU_ID
+        
+        python "$EMBEDDING_UTIL" \
+            --dataset-root "$DATASET_DIR" \
+            --dataset-name "$DATASET_NAME" \
+            --gpu-id "$GPU_ID" \
+            --pca-dim 32 \
+            --path-file "$EMBEDDING_PATH_FILE"
+        
+        if [ $? -ne 0 ]; then
+            echo "ERROR: ensure_embeddings.py failed"
+            exit 1
+        fi
+        
+        EMBEDDINGS_DIR="$(cat "$EMBEDDING_PATH_FILE")"
+        echo "Shared embedding directory: $EMBEDDINGS_DIR"
+        
+        if [ ! -d "$EMBEDDINGS_DIR" ]; then
+            echo "ERROR: Shared embedding directory does not exist: $EMBEDDINGS_DIR"
+            exit 1
+        fi
 
         # Step 2: Run SubZeroCore selection
         echo "=== Step 2: Running SubZeroCore episode selection ==="
