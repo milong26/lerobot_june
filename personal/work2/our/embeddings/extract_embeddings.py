@@ -24,11 +24,19 @@ os.environ["PYOPENGL_PLATFORM"] = "egl"
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+WORK2_ROOT = Path(__file__).resolve().parents[2]
+if str(WORK2_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORK2_ROOT))
+
 import torch
 from sklearn.decomposition import PCA
 
-# Import constants from shared config
-from embedding_utils.config import MODEL_NAME, PROMPT_TEXT, GLOBAL_FRAME_RULE, WRIST_START_RATIO, WRIST_END_RATIO
+# Import constants from shared config (config.py only)
+from embedding_utils.config import (
+    MODEL_NAME, PROMPT_TEXT, TOKEN_POOLING,
+    GLOBAL_FRAME_RULE, WRIST_START_RATIO, WRIST_END_RATIO,
+    TEMPORAL_POOLING, DEFAULT_PCA_DIM, EXTRACTOR_VERSION,
+)
 
 
 def load_vlm_model(device: str = "cuda"):
@@ -228,23 +236,26 @@ def process_dataset(
     output_dir: Path,
     n_components: int = 32,
     device: str = "cuda",
-    allow_partial_cache: bool = False,
 ) -> Dict:
     """
     处理整个数据集，提取嵌入并缓存
+    
+    缓存状态只有三种情况：
+    1. existing_count == 0: 允许完整提取整个dataset
+    2. existing_count == num_episodes 且PCA模型完整: 认为是完整cache，直接返回skipped=True
+    3. 其它任何情况（部分文件、缺失PCA等）: raise RuntimeError
     
     参数:
         dataset_dir: 数据集目录
         output_dir: 输出目录
         n_components: PCA降维维度
         device: 计算设备
-        allow_partial_cache: 如果为False（默认），检测到部分缓存时报错；
-                           如果为True，允许跳过已有缓存（仅用于旧CLI兼容）
     
     返回:
         包含处理信息的字典，包括episode_indices、pca_global、pca_wrist等
     """
     from lerobot.datasets.lerobot_dataset import LeRobotDataset
+    from embedding_utils.cache import get_dataset_episode_indices
     
     process_start_time = time.time()
     print(f"\n处理数据集: {dataset_dir}")
@@ -256,43 +267,51 @@ def process_dataset(
     )
     print(f"数据集加载完成，共 {dataset.num_episodes} 个 episodes，{dataset.num_frames} 帧")
     
-    # 获取真实episode数量
-    num_episodes = dataset.num_episodes
+    # 获取真实episode indices
+    expected_episode_indices = get_dataset_episode_indices(str(dataset_dir))
+    num_episodes = len(expected_episode_indices)
     
     # 检查已存在的缓存文件
     output_dir.mkdir(parents=True, exist_ok=True)
-    existing_files = {f.stem for f in output_dir.glob("*.npy")}
-    existing_count = len(existing_files)
     
-    if existing_count > 0 and existing_count < num_episodes:
-        # 部分缓存：不允许混合新旧PCA
-        if not allow_partial_cache:
-            print(f"\n错误: 检测到部分缓存 ({existing_count}/{num_episodes} episodes)")
-            print(f"  不允许在缺失episode上拟合新PCA然后与旧embedding混合")
-            print(f"  请使用全新output-dir或使用shared ensure流程")
-            print(f"  当前output-dir: {output_dir}")
-            sys.exit(1)
-        else:
-            print(f"\n发现 {existing_count}/{num_episodes} 个已存在的缓存文件 (跳过模式)")
-    elif existing_count >= num_episodes:
-        # 检查PCA模型是否也完整
-        pca_dir = output_dir / "pca_models"
-        pca_global_file = pca_dir / f"pca_global_{n_components}.joblib"
-        pca_wrist_file = pca_dir / f"pca_wrist_{n_components}.joblib"
-        if pca_global_file.exists() and pca_wrist_file.exists():
-            print(f"\n缓存已完整 ({existing_count} episodes + PCA models)，跳过提取")
-            return {
-                "episode_indices": list(range(num_episodes)),
-                "num_episodes": num_episodes,
-                "output_dir": str(output_dir),
-                "skipped": True,
-            }
-        else:
-            print(f"\n错误: 检测到完整episode缓存但PCA模型缺失")
-            print(f"  请使用全新output-dir或使用shared ensure流程")
-            sys.exit(1)
-    else:
+    # 严格检查：逐个确认expected episode的npy文件存在
+    existing_count = 0
+    for ep_idx in expected_episode_indices:
+        ep_file = output_dir / f"({ep_idx}).npy"
+        if ep_file.exists():
+            existing_count += 1
+    
+    # 检查PCA模型
+    pca_dir = output_dir / "pca_models"
+    pca_global_file = pca_dir / f"pca_global_{n_components}.joblib"
+    pca_wrist_file = pca_dir / f"pca_wrist_{n_components}.joblib"
+    pca_complete = pca_global_file.exists() and pca_wrist_file.exists()
+    
+    if existing_count == 0:
+        # 情况1：无缓存，完整提取
         print(f"\n未发现缓存文件，将提取全部 {num_episodes} 个 episodes")
+    elif existing_count == num_episodes and pca_complete:
+        # 情况2：完整cache，跳过
+        print(f"\n缓存已完整 ({existing_count} episodes + PCA models)，跳过提取")
+        return {
+            "episode_indices": expected_episode_indices,
+            "num_episodes": num_episodes,
+            "output_dir": str(output_dir),
+            "skipped": True,
+        }
+    else:
+        # 情况3：部分或不一致缓存，报错
+        print(f"\n错误: PARTIAL_OR_INCONSISTENT_CACHE")
+        print(f"  已有 {existing_count}/{num_episodes} 个episode文件")
+        print(f"  PCA模型完整: {pca_complete}")
+        print(f"  不允许在缺失episode上拟合新PCA然后与旧embedding混合")
+        print(f"  请使用全新output-dir或使用shared ensure流程")
+        print(f"  当前output-dir: {output_dir}")
+        raise RuntimeError(
+            f"PARTIAL_OR_INCONSISTENT_CACHE: {existing_count}/{num_episodes} episodes, "
+            f"PCA complete: {pca_complete}. "
+            f"Use a fresh output directory or the shared ensure flow."
+        )
     
     print("\n加载 VLM 模型...")
     model, processor = load_vlm_model(device)
@@ -302,8 +321,6 @@ def process_dataset(
     global_embs_list = []
     wrist_embs_list = []
     episode_coords = []
-    
-    skipped_count = existing_count if allow_partial_cache else 0
     
     # 预构建 episode 索引映射，使用 meta.episodes 的 dataset_from_index/to_index
     print("\n构建 episode 帧索引映射...")
@@ -318,14 +335,6 @@ def process_dataset(
     
     for ep_idx in range(dataset.num_episodes):
         ep_start_time = time.time()
-        
-        # 检查是否已存在缓存
-        coord_key = f"({ep_idx})"
-        if coord_key in existing_files and allow_partial_cache:
-            print(f"\n跳过 episode {ep_idx}：已存在缓存")
-            sys.stdout.flush()
-            skipped_count += 1
-            continue
         
         print(f"\n处理 episode {ep_idx + 1}/{dataset.num_episodes} (索引 {ep_idx})")
         sys.stdout.flush()
@@ -438,7 +447,6 @@ def process_dataset(
     print(f"总提取时间: {total_extract_time:.2f}s ({total_extract_time/60:.1f} 分钟)")
     if len(global_embs_list) > 0:
         print(f"平均每个 episode: {total_extract_time/len(global_embs_list):.2f}s")
-    print(f"跳过已缓存: {skipped_count} 个 episodes")
     sys.stdout.flush()
     
     global_embs_array = np.array(global_embs_list)
@@ -468,7 +476,7 @@ def process_dataset(
         np.save(output_file, {
             "phi_global": phi_global_pca,
             "phi_wrist": phi_wrist_pca,
-            "episode_index": ep_idx
+            "episode_index": coord
         }, allow_pickle=True)
         
         if (ep_idx + 1) % 10 == 0 or ep_idx == len(episode_coords) - 1:
@@ -513,8 +521,6 @@ if __name__ == "__main__":
                        help="批量处理大小 (默认128，显存充足可增大到256)")
     parser.add_argument("--metadata-output", type=str, default=None,
                        help="可选：输出metadata.json路径供ensure_embeddings.py使用")
-    parser.add_argument("--allow-partial-cache", action="store_true",
-                       help="允许跳过已有缓存（仅用于旧CLI兼容）")
     args = parser.parse_args()
     
     result = process_dataset(
@@ -522,11 +528,10 @@ if __name__ == "__main__":
         output_dir=Path(args.output_dir),
         n_components=args.n_components,
         device=args.device,
-        allow_partial_cache=args.allow_partial_cache,
     )
     
     if args.metadata_output and not result.get("skipped", False):
-        from embedding_utils.config import build_expected_metadata
+        from embedding_utils.cache import build_expected_metadata
         meta = build_expected_metadata(
             dataset_root=str(args.dataset_dir),
             dataset_name=Path(args.dataset_dir).name.replace("pick_place_", ""),

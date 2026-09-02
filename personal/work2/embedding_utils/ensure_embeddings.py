@@ -24,9 +24,9 @@ import argparse
 import time
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+WORK2_ROOT = Path(__file__).resolve().parent.parent
+if str(WORK2_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORK2_ROOT))
 
 from embedding_utils.config import DEFAULT_PCA_DIM, build_extraction_method_name
 from embedding_utils.cache import (
@@ -38,6 +38,8 @@ from embedding_utils.cache import (
     find_legacy_embedding_candidates,
     validate_legacy_cache,
     copy_legacy_cache_to_shared,
+    find_previous_shared_cache_candidates,
+    AUTO_MIGRATION_ALLOWED_TYPES,
 )
 
 
@@ -70,8 +72,9 @@ def ensure_shared_embeddings(
     
     Priority:
     1. Return existing valid shared cache
-    2. Migrate from legacy cache if available
-    3. Generate new embeddings from scratch
+    2. Migrate from legacy cache if available (only known same-method sources)
+    3. Migrate from old shared cache with previous method name variant
+    4. Generate new embeddings from scratch
     
     Returns the canonical shared embedding directory path.
     """
@@ -96,14 +99,21 @@ def ensure_shared_embeddings(
     if len(validation["issues"]) > 3:
         print(f"    ... and {len(validation['issues']) - 3} more")
     
-    # Step 2: Try legacy migration
+    # Step 2: Try legacy migration (only known same-method sources)
     if allow_legacy_migration:
         print(f"\nSearching for legacy embedding candidates...")
         candidates = find_legacy_embedding_candidates(dataset_name)
         
-        for candidate in candidates:
-            print(f"  Checking: {candidate}")
-            legacy_validation = validate_legacy_cache(candidate, dataset_root, pca_dim)
+        for candidate_info in candidates:
+            candidate = candidate_info["path"]
+            source_type = candidate_info["source_type"]
+            print(f"  Checking: {candidate} (source_type={source_type})")
+            
+            if source_type not in AUTO_MIGRATION_ALLOWED_TYPES:
+                print(f"  -> SKIP_UNKNOWN_LEGACY_SOURCE (not in allowed auto-migration types)")
+                continue
+            
+            legacy_validation = validate_legacy_cache(candidate, dataset_root, pca_dim, source_type=source_type)
             if legacy_validation["valid"]:
                 print(f"  -> VALID")
                 print(f"MIGRATING_LEGACY_CACHE: {candidate}")
@@ -111,7 +121,10 @@ def ensure_shared_embeddings(
                 print(f"  Target: {target_dir}")
                 
                 try:
-                    copy_legacy_cache_to_shared(candidate, target_dir, dataset_root, dataset_name, pca_dim)
+                    copy_legacy_cache_to_shared(
+                        candidate, target_dir, dataset_root, dataset_name, pca_dim,
+                        source_type=source_type,
+                    )
                     print(f"COPY_VALIDATION_PASSED")
                     print(f"MIGRATED_SHARED_CACHE: {target_dir}")
                     return target_dir
@@ -121,9 +134,31 @@ def ensure_shared_embeddings(
             else:
                 print(f"  -> INCOMPLETE ({len(legacy_validation['issues'])} issues)")
         
-        print(f"No complete legacy cache found for migration.")
+        print(f"No complete legacy cache found for auto-migration.")
     
-    # Step 3: Generate new embeddings
+    # Step 3: Try migrating from old shared cache with previous method name
+    print(f"\nChecking for previous shared cache candidates (old method name variants)...")
+    old_candidates = find_previous_shared_cache_candidates(dataset_name, pca_dim)
+    
+    for old_dir in old_candidates:
+        print(f"  Checking old shared cache: {old_dir}")
+        old_validation = validate_shared_cache(old_dir, dataset_root, dataset_name, pca_dim)
+        if old_validation["valid"]:
+            print(f"  -> VALID, migrating to new canonical name...")
+            try:
+                copy_legacy_cache_to_shared(
+                    old_dir, target_dir, dataset_root, dataset_name, pca_dim,
+                    source_type="previous_shared_cache",
+                )
+                print(f"MIGRATED_FROM_OLD_SHARED: {old_dir} -> {target_dir}")
+                print(f"  Original directory preserved: {old_dir}")
+                return target_dir
+            except Exception as e:
+                print(f"  Migration from old shared cache failed: {e}")
+        else:
+            print(f"  -> INVALID ({len(old_validation['issues'])} issues)")
+    
+    # Step 4: Generate new embeddings
     print(f"\nNO_VALID_CACHE_FOUND")
     print(f"GENERATING_SHARED_EMBEDDINGS")
     print(f"  GPU: {gpu_id}")
@@ -139,9 +174,18 @@ def ensure_shared_embeddings(
     episode_indices = get_dataset_episode_indices(dataset_root)
     print(f"  Expected episodes: {len(episode_indices)}")
     
-    # Create temporary building directory (never write directly to canonical)
+    # Create unique temporary building directory (never reuse existing)
     pid = os.getpid()
-    building_dir = Path(str(target_dir) + f".building.{pid}")
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    building_dir_name = f"{target_dir.name}.building.{timestamp}.{pid}"
+    building_dir = Path(str(target_dir.parent) + "/" + building_dir_name)
+    
+    # If building dir already exists, generate a new unique name
+    if building_dir.exists():
+        timestamp2 = time.strftime("%Y%m%d_%H%M%S_%f")
+        building_dir_name = f"{target_dir.name}.building.{timestamp2}.{pid}"
+        building_dir = Path(str(target_dir.parent) + "/" + building_dir_name)
+    
     print(f"  Temporary path: {building_dir}")
     
     try:
@@ -150,7 +194,7 @@ def ensure_shared_embeddings(
             dataset_dir=Path(dataset_root),
             output_dir=building_dir,
             n_components=pca_dim,
-            device="cuda"
+            device="cuda",
         )
         
         # Write metadata
@@ -166,6 +210,7 @@ def ensure_shared_embeddings(
             print(f"GENERATION_VALIDATION_FAILED:")
             for issue in validation["issues"]:
                 print(f"  - {issue}")
+            print(f"Building directory preserved for debugging: {building_dir}")
             raise RuntimeError(f"Generation validation failed: {validation['issues']}")
         
         print(f"GENERATION_VALIDATION_PASSED")
@@ -174,10 +219,10 @@ def ensure_shared_embeddings(
         if target_dir.exists():
             # Target exists but was invalid, move to backup
             import shutil
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            timestamp_move = time.strftime("%Y%m%d_%H%M%S")
             backup_root = target_dir.parent.parent / "_invalid_backups"
             backup_root.mkdir(parents=True, exist_ok=True)
-            backup_name = f"{dataset_name}_{method_name}_{timestamp}"
+            backup_name = f"{dataset_name}_{method_name}_{timestamp_move}"
             backup_dir = backup_root / backup_name
             shutil.move(str(target_dir), str(backup_dir))
             print(f"Moved invalid target to backup: {backup_dir}")

@@ -41,6 +41,12 @@ def sanitize_name(value: str) -> str:
     return safe
 
 
+# Explicit mapping for token_pooling to method name segment
+TOKEN_POOLING_NAMES = {
+    "last_hidden_token_mean": "last-hidden-tokenmean",
+}
+
+
 def build_extraction_method_name(pca_dim: int = DEFAULT_PCA_DIM) -> str:
     """
     Build a unique extraction method name based on all extraction parameters.
@@ -52,7 +58,10 @@ def build_extraction_method_name(pca_dim: int = DEFAULT_PCA_DIM) -> str:
     smolvlm2-500m_last-hidden-tokenmean_global-first5_wrist-20to70_temporal-mean_pca32_v1
     """
     model_short = sanitize_name(MODEL_NAME).lower().replace("huggingfacetb-", "").replace("smolvlm2-500m-video-instruct", "smolvlm2-500m")
-    token_pooling_short = TOKEN_POOLING.replace("_", "-")
+    
+    # Use explicit mapping for token_pooling, fallback to sanitize
+    token_pooling_short = TOKEN_POOLING_NAMES.get(TOKEN_POOLING, sanitize_name(TOKEN_POOLING).replace("_", "-"))
+    
     global_rule_short = GLOBAL_FRAME_RULE.replace("_", "-")
     wrist_start_pct = int(WRIST_START_RATIO * 100)
     wrist_end_pct = int(WRIST_END_RATIO * 100)

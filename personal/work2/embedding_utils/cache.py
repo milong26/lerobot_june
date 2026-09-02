@@ -28,6 +28,19 @@ from .config import (
     build_extraction_method_name,
 )
 
+# Legacy source types that are known to use the same SmolVLM extraction method
+AUTO_MIGRATION_ALLOWED_TYPES = {
+    "ours_v1",
+    "ours_v3",
+    "ours_v4",
+    "ours_v2",
+}
+
+# Old method name variants that should be checked for migration to new canonical name
+OLD_METHOD_NAME_VARIANTS = [
+    "smolvlm2-500m_last-hidden-token-mean_global-first5_wrist-20to70_temporal-mean_pca{pca_dim}_v1",
+]
+
 
 def normalize_dataset_name(dataset_name: str) -> str:
     """
@@ -88,10 +101,17 @@ def build_expected_metadata(
     episode_indices: List[int],
     source: Optional[str] = None,
 ) -> Dict:
-    """Build metadata dictionary for the shared embedding cache."""
+    """
+    Build metadata dictionary for the shared embedding cache.
+    
+    dataset_name is stored in normalized (canonical) form.
+    dataset_realpath stores the resolved absolute path of dataset_root.
+    """
+    canonical_name = normalize_dataset_name(dataset_name)
     return {
-        "dataset_name": dataset_name,
+        "dataset_name": canonical_name,
         "dataset_root": dataset_root,
+        "dataset_realpath": str(Path(dataset_root).resolve()),
         "num_episodes": len(episode_indices),
         "episode_indices": episode_indices,
         "model_name": MODEL_NAME,
@@ -202,14 +222,33 @@ def validate_shared_cache(
             "num_found": 0,
         }
     
+    # Get expected episode indices FIRST (ground truth from dataset)
+    expected_episode_indices = get_dataset_episode_indices(dataset_root)
+    num_expected = len(expected_episode_indices)
+    canonical_name = normalize_dataset_name(dataset_name)
+    
     # Check metadata
     metadata = load_cache_metadata(cache_dir)
     if metadata is None:
         issues.append("metadata.json not found in cache directory")
     else:
         expected_method = build_extraction_method_name(pca_dim)
+        
+        # Check num_episodes matches real dataset
+        meta_num = metadata.get("num_episodes")
+        if meta_num != num_expected:
+            issues.append(f"Metadata num_episodes mismatch: expected {num_expected}, got {meta_num}")
+        
+        # Check episode_indices exactly (order matters)
+        meta_episodes = metadata.get("episode_indices")
+        if meta_episodes is not None and meta_episodes != expected_episode_indices:
+            issues.append(
+                f"Metadata episode_indices mismatch: "
+                f"expected {expected_episode_indices}, got {meta_episodes}"
+            )
+        
         checks = {
-            "dataset_name": dataset_name,
+            "dataset_name": canonical_name,
             "model_name": MODEL_NAME,
             "prompt_text": PROMPT_TEXT,
             "token_pooling": TOKEN_POOLING,
@@ -225,14 +264,20 @@ def validate_shared_cache(
             actual_val = metadata.get(key)
             if actual_val != expected_val:
                 issues.append(f"Metadata mismatch for '{key}': expected {expected_val!r}, got {actual_val!r}")
+        
+        # Check dataset_realpath consistency
+        meta_realpath = metadata.get("dataset_realpath")
+        if meta_realpath is not None:
+            current_realpath = str(Path(dataset_root).resolve())
+            if meta_realpath != current_realpath:
+                issues.append(
+                    f"Dataset realpath mismatch: "
+                    f"cache has '{meta_realpath}', current is '{current_realpath}'"
+                )
     
-    # Get expected episode indices
-    episode_indices = get_dataset_episode_indices(dataset_root)
-    num_expected = len(episode_indices)
-    
-    # Check each episode file exists
+    # Check each expected episode file exists and is valid
     num_found = 0
-    for ep_idx in episode_indices:
+    for ep_idx in expected_episode_indices:
         ep_file = cache_dir / f"({ep_idx}).npy"
         if ep_file.exists():
             valid, file_issues = validate_embedding_file(ep_file, ep_idx)
@@ -266,19 +311,15 @@ def find_legacy_embedding_candidates(
     dataset_name: str,
     num_episodes: Optional[int] = None,
     seed: Optional[int] = None,
-) -> List[Path]:
+) -> List[Dict]:
     """
     Find potential legacy embedding directories in duibi experiment directories.
     
-    Searches for embeddings in:
-    - ours_112_seed42_{dataset_name}/embeddings (highest priority)
-    - ours_v3_no_action_*_{dataset_name}/embeddings
-    - ours_v4_*_{dataset_name}/embeddings
-    - ours_v2_*_{dataset_name}/embeddings
-    - subzerocore_*_{dataset_name}/embeddings
-    - Any other duibi/**{dataset_name}/embeddings
+    Returns list of dicts with structure:
+        {"path": Path(...), "source_type": "ours_v1"}
     
-    Returns list of candidate directories (does not validate them).
+    Priority: ours_v1 -> ours_v3 -> ours_v4 -> ours_v2 -> known subzerocore
+    Generic duibi/**/{dataset}*/embeddings is NOT included in auto-migration candidates.
     """
     duibi_root = Path("/data/zhonglinye/jun/lerobot/personal/work2/duibi")
     candidates = []
@@ -289,29 +330,37 @@ def find_legacy_embedding_candidates(
     normalized = normalize_dataset_name(dataset_name)
     short_name = normalized.replace("pick_place_", "")
     
-    # Priority 1: ours original (complete cache)
-    ours_pattern = f"ours_112_seed42_{short_name}"
-    ours_dir = duibi_root / ours_pattern / "embeddings"
-    if ours_dir.exists():
-        candidates.append(ours_dir)
+    # Priority 1: ours original (ours_112_seed42_{dataset_name}/embeddings)
+    ours_pattern = f"ours_*_seed*_{short_name}"
+    for d in sorted(duibi_root.glob(ours_pattern)):
+        emb_dir = d / "embeddings"
+        if emb_dir.exists():
+            candidates.append({"path": emb_dir, "source_type": "ours_v1"})
     
-    # Priority 2: v3, v4, v2, subzerocore
-    search_patterns = [
-        f"ours_v3_no_action_*_{short_name}/embeddings",
-        f"ours_v4_*_{short_name}/embeddings",
-        f"ours_v2_*_{short_name}/embeddings",
-        f"subzerocore_*_{short_name}/embeddings",
-    ]
+    # Priority 2: ours_v3_no_action
+    for d in sorted(duibi_root.glob(f"ours_v3_no_action_*_{short_name}")):
+        emb_dir = d / "embeddings"
+        if emb_dir.exists():
+            candidates.append({"path": emb_dir, "source_type": "ours_v3"})
     
-    for pattern in search_patterns:
-        for d in sorted(duibi_root.glob(pattern)):
-            if d.exists() and d not in candidates:
-                candidates.append(d)
+    # Priority 3: ours_v4
+    for d in sorted(duibi_root.glob(f"ours_v4_*_{short_name}")):
+        emb_dir = d / "embeddings"
+        if emb_dir.exists():
+            candidates.append({"path": emb_dir, "source_type": "ours_v4"})
     
-    # Priority 3: any other duibi/**{dataset_name}/embeddings
-    for d in sorted(duibi_root.glob(f"**/{short_name}*/embeddings")):
-        if d.exists() and d not in candidates:
-            candidates.append(d)
+    # Priority 4: ours_v2
+    for d in sorted(duibi_root.glob(f"ours_v2_*_{short_name}")):
+        emb_dir = d / "embeddings"
+        if emb_dir.exists():
+            candidates.append({"path": emb_dir, "source_type": "ours_v2"})
+    
+    # Priority 5: subzerocore (only if we can verify it uses the same extraction method)
+    # These are lower priority because SubZeroCore may have its own embedding logic
+    for d in sorted(duibi_root.glob(f"subzerocore_*_{short_name}")):
+        emb_dir = d / "embeddings"
+        if emb_dir.exists():
+            candidates.append({"path": emb_dir, "source_type": "subzerocore"})
     
     return candidates
 
@@ -320,6 +369,7 @@ def validate_legacy_cache(
     source_dir: Path,
     dataset_root: str,
     pca_dim: int = DEFAULT_PCA_DIM,
+    source_type: Optional[str] = None,
 ) -> Dict:
     """
     Validate a legacy cache directory (which may not have metadata.json).
@@ -329,7 +379,7 @@ def validate_legacy_cache(
     - Each file has valid phi_global and phi_wrist
     - PCA model files exist
     
-    Does NOT require metadata.json (legacy dirs typically don't have it).
+    source_type helps distinguish known-same-method caches from unknown ones.
     """
     issues = []
     
@@ -372,6 +422,7 @@ def copy_legacy_cache_to_shared(
     dataset_root: str,
     dataset_name: str,
     pca_dim: int = DEFAULT_PCA_DIM,
+    source_type: Optional[str] = None,
 ) -> Path:
     """
     Copy a legacy cache to the shared cache directory.
@@ -391,9 +442,18 @@ def copy_legacy_cache_to_shared(
     episode_indices = get_dataset_episode_indices(dataset_root)
     method_name = build_extraction_method_name(pca_dim)
     
-    # Create temporary building directory
+    # Create unique temporary building directory with timestamp+pid
     pid = os.getpid()
-    building_dir = Path(str(target_dir) + f".building.{pid}")
+    timestamp = time.strftime("%Y%m%d_%H%M%S")
+    building_dir_name = f"{target_dir.name}.building.{timestamp}.{pid}"
+    building_dir = Path(str(target_dir.parent) + "/" + building_dir_name)
+    
+    # If building dir already exists, don't reuse it
+    if building_dir.exists():
+        timestamp2 = time.strftime("%Y%m%d_%H%M%S_%f")
+        building_dir_name = f"{target_dir.name}.building.{timestamp2}.{pid}"
+        building_dir = Path(str(target_dir.parent) + "/" + building_dir_name)
+    
     building_dir.mkdir(parents=True, exist_ok=True)
     
     try:
@@ -428,16 +488,17 @@ def copy_legacy_cache_to_shared(
         validation = validate_shared_cache(building_dir, dataset_root, dataset_name, pca_dim)
         if not validation["valid"]:
             print(f"COPY_VALIDATION_FAILED: {validation['issues']}")
+            print(f"BUILDING_DIR_PRESERVED: {building_dir}")
             raise RuntimeError(f"Validation failed after copy: {validation['issues']}")
         
         print(f"COPY_VALIDATION_PASSED")
         
         # If target exists but is invalid, move it to backups
         if target_dir.exists():
-            timestamp = time.strftime("%Y%m%d_%H%M%S")
+            timestamp_move = time.strftime("%Y%m%d_%H%M%S")
             backup_root = SHARED_EMBEDDING_ROOT / "_invalid_backups"
             backup_root.mkdir(parents=True, exist_ok=True)
-            backup_name = f"{dataset_name}_{method_name}_{timestamp}"
+            backup_name = f"{normalize_dataset_name(dataset_name)}_{method_name}_{timestamp_move}"
             backup_dir = backup_root / backup_name
             shutil.move(str(target_dir), str(backup_dir))
             print(f"Moved invalid target to backup: {backup_dir}")
@@ -448,8 +509,36 @@ def copy_legacy_cache_to_shared(
         
         return target_dir
         
-    except Exception:
-        # Clean up building dir on failure, never touch source
+    except Exception as e:
+        # Never touch source, preserve building dir for debugging
         if building_dir.exists():
-            shutil.rmtree(building_dir)
+            print(f"BUILDING_DIR_PRESERVED: {building_dir}")
         raise
+
+
+def find_previous_shared_cache_candidates(
+    dataset_name: str,
+    pca_dim: int = DEFAULT_PCA_DIM,
+) -> List[Path]:
+    """
+    Find old shared cache directories that used a previous method name variant.
+    
+    For example, if the old method name used "last-hidden-token-mean" instead of
+    "last-hidden-tokenmean", this function finds those directories so they can
+    be migrated without re-extracting embeddings.
+    """
+    normalized = normalize_dataset_name(dataset_name)
+    dataset_dir = SHARED_EMBEDDING_ROOT / normalized
+    
+    if not dataset_dir.exists():
+        return []
+    
+    candidates = []
+    
+    for old_pattern in OLD_METHOD_NAME_VARIANTS:
+        old_method = old_pattern.format(pca_dim=pca_dim)
+        old_dir = dataset_dir / old_method
+        if old_dir.exists():
+            candidates.append(old_dir)
+    
+    return candidates
