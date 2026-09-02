@@ -74,7 +74,6 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
         if dataset_meta is not None and hasattr(dataset_meta, "tasks"):
             task_list = [str(t) for t in dataset_meta.tasks.index]
-            task_list = sorted(set(task_list))
             if not config.task_texts:
                 config.task_texts = task_list
             if len(config.vocab) <= 2:
@@ -114,7 +113,6 @@ class MiniVLAPolicy(PreTrainedPolicy):
             available = [k for k in batch if k.startswith("observation.images")]
             if available:
                 image_key = sorted(available)[0]
-                self.config.image_key = image_key
             else:
                 raise ValueError(f"No image key found in batch. Expected '{self.config.image_key}'.")
 
@@ -126,6 +124,11 @@ class MiniVLAPolicy(PreTrainedPolicy):
                     "MiniVLA only supports single-step observation."
                 )
             image = image.squeeze(1)
+
+        if image.dim() != 4:
+            raise ValueError(
+                f"Expected image with shape (B, C, H, W), got {tuple(image.shape)}."
+            )
 
         if image.dtype == torch.uint8:
             image = image.float() / 255.0
@@ -145,8 +148,17 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
     def _prepare_state(self, batch):
         state = batch[OBS_STATE]
-        if state.dim() == 3 and state.shape[1] == 1:
+        if state.dim() == 3:
+            if state.shape[1] != 1:
+                raise ValueError(
+                    f"MiniVLA only supports single-step observation, but received time length {state.shape[1]}. "
+                    f"Expected shape (B, 1, state_dim), got {tuple(state.shape)}."
+                )
             state = state.squeeze(1)
+        if state.dim() != 2:
+            raise ValueError(
+                f"Expected state with shape (B, state_dim), got {tuple(state.shape)}."
+            )
         state = state.float().to(self.config.device)
         if state.shape[-1] != self.config.state_dim:
             raise ValueError(
@@ -156,8 +168,17 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
     def _prepare_action(self, batch):
         action = batch[ACTION]
-        if action.dim() == 3 and action.shape[1] == 1:
+        if action.dim() == 3:
+            if action.shape[1] != 1:
+                raise ValueError(
+                    f"MiniVLA only supports single-step action, but received time length {action.shape[1]}. "
+                    f"Expected shape (B, 1, action_dim), got {tuple(action.shape)}."
+                )
             action = action.squeeze(1)
+        if action.dim() != 2:
+            raise ValueError(
+                f"Expected action with shape (B, action_dim), got {tuple(action.shape)}."
+            )
         action = action.float().to(self.config.device)
         if action.shape[-1] != self.config.action_dim:
             raise ValueError(

@@ -186,11 +186,13 @@ def test_missing_task_uses_default():
 
 def test_save_load_vocab_consistency():
     feats = _make_dummy_features()
+    vocab = {"<pad>": 0, "<unk>": 1, "pick": 2, "up": 3, "the": 4, "block": 5}
     cfg = MiniVLAConfig(
         **feats,
         diffusion_T=2,
         device="cpu",
         task_texts=["pick up the block"],
+        vocab=vocab,
     )
     cfg.validate_features()
 

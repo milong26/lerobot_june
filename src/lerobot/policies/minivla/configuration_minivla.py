@@ -2,7 +2,6 @@ from dataclasses import dataclass, field
 
 from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature, PreTrainedConfig
 from lerobot.optim import AdamWConfig
-from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
 
 
 @PreTrainedConfig.register_subclass("minivla")
@@ -59,7 +58,7 @@ class MiniVLAConfig(PreTrainedConfig):
 
         image_features = self.image_features
         if self.image_key not in image_features:
-            if OBS_IMAGES in image_features and "observation.images.top" in image_features:
+            if "observation.images.top" in image_features:
                 self.image_key = "observation.images.top"
             else:
                 keys = sorted(image_features.keys())

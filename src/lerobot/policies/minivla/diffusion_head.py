@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -29,8 +31,8 @@ class SinusoidalTimeEmbedding(nn.Module):
     def forward(self, t):
         half_dim = self.dim // 2
         freqs = torch.exp(
-            torch.linspace(0, torch.log(torch.tensor(10000.0)), half_dim)
-        ).to(t.device)
+            torch.linspace(math.log(1.0), math.log(1000.0), half_dim, device=t.device)
+        )
         args = t.float().unsqueeze(-1) * freqs.unsqueeze(0)
         emb = torch.cat([torch.sin(args), torch.cos(args)], dim=-1)
         if self.dim % 2 == 1:
@@ -83,7 +85,11 @@ class DiffusionPolicyHead(nn.Module):
         return F.mse_loss(eps_pred, noise)
 
     def sample(self, cond, n_samples=None):
-        B = cond.shape[0] if n_samples is None else n_samples
+        if n_samples is None:
+            B = cond.size(0)
+        else:
+            B = n_samples
+            cond = cond.expand(B, -1)
         action_dim = self.cfg.action_dim
         x_t = torch.randn(B, action_dim, device=cond.device)
 
