@@ -82,7 +82,7 @@ class MultiImageVisionEncoder(nn.Module):
         self.encoder = VisionEncoderWrapper(
             vision_encoder_path=config.vision_encoder_path,
             image_size=config.image_size,
-            hidden_dim=config.d_model,
+            hidden_dim=config.vision_hidden_dim,
             freeze=config.freeze_vision_encoder,
         )
         self.config = config

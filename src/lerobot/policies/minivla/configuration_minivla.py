@@ -17,6 +17,8 @@ class MiniVLAConfig(PreTrainedConfig):
     vision_encoder_path: str = ""
     language_model_path: str = ""
     tokenizer_path: str = ""
+    vision_hidden_dim: int = 768
+    language_hidden_dim: int = 768
 
     image_size: int = 224
     main_image_key: str = "observation.images.top"
@@ -27,14 +29,13 @@ class MiniVLAConfig(PreTrainedConfig):
     action_chunk_size: int = 8
     action_vocab_size: int = 256
     vq_codebook_size: int = 256
+    vq_num_layers: int = 2
 
     state_dim: int = 0
     action_dim: int = 0
 
     freeze_vision_encoder: bool = True
     freeze_language_model: bool = False
-    use_state_projection: bool = True
-    use_residual_vq: bool = True
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {

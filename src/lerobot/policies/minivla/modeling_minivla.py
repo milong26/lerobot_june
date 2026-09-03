@@ -10,7 +10,6 @@ from lerobot.utils.constants import ACTION, OBS_STATE
 from ..pretrained import PreTrainedPolicy
 from .configuration_minivla import MiniVLAConfig
 from .encoders import MultiImageVisionEncoder
-from .fusion import StateProjector
 from .tokenizer import VLATokenizerWrapper
 from .vla_backbone import MiniVLABackbone
 from .vq_action import ResidualVQActionHead
@@ -24,28 +23,18 @@ class MiniVLACore(nn.Module):
         self.config = config
 
         self.vision_encoder = MultiImageVisionEncoder(config)
-
+        self.tokenizer = VLATokenizerWrapper(config.tokenizer_path)
         self.vla_backbone = MiniVLABackbone(config)
-
         self.action_decoder = ResidualVQActionHead(config)
 
-        if config.use_state_projection:
-            self.state_projector = StateProjector(
-                state_dim=config.state_dim,
-                llm_hidden_dim=config.d_model,
-            )
-        else:
-            self.state_projector = None
-
     def encode_observation(self, images: list[torch.Tensor],
-                           text_dict: dict,
+                           texts: list[str],
                            state: torch.Tensor) -> torch.Tensor:
         image_tokens = self.vision_encoder(images)
 
-        state_embedding = None
-        if state is not None and self.state_projector is not None:
-            state_embedding = self.state_projector(state)
-
+        text_dict = self.tokenizer.batch_encode(
+            texts, max_length=64, device=self.config.device
+        )
         input_ids = text_dict["input_ids"]
         attention_mask = text_dict.get("attention_mask", None)
 
@@ -53,15 +42,15 @@ class MiniVLACore(nn.Module):
             input_ids=input_ids,
             attention_mask=attention_mask,
             image_tokens=image_tokens,
-            state_embedding=state_embedding,
+            state_embedding=state,
         )
         return hidden_states
 
     def forward(self, images: list[torch.Tensor],
-                text_dict: dict,
+                texts: list[str],
                 state: torch.Tensor,
                 actions: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.encode_observation(images, text_dict, state)
+        hidden_states = self.encode_observation(images, texts, state)
 
         b = hidden_states.shape[0]
         if actions.dim() == 2:
@@ -78,9 +67,9 @@ class MiniVLACore(nn.Module):
         return loss
 
     def predict_action_chunk(self, images: list[torch.Tensor],
-                             text_dict: dict,
+                             texts: list[str],
                              state: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.encode_observation(images, text_dict, state)
+        hidden_states = self.encode_observation(images, texts, state)
 
         _, logits = self.action_decoder(hidden_states)
 
@@ -100,8 +89,6 @@ class MiniVLAPolicy(PreTrainedPolicy):
         self.config = config
         config.validate_features()
         config.validate_vla_config()
-
-        self.tokenizer = VLATokenizerWrapper(tokenizer_path=config.tokenizer_path)
 
         self.model = MiniVLACore(config)
 
@@ -152,12 +139,9 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
         return images
 
-    def _prepare_text(self, batch) -> dict:
+    def _prepare_text(self, batch) -> list[str]:
         batch_size = self._get_batch_size(batch)
-        texts = self._extract_texts(batch, batch_size)
-        return self.tokenizer.batch_encode(
-            texts, max_length=64, device=self.config.device
-        )
+        return self._extract_texts(batch, batch_size)
 
     def _prepare_state(self, batch) -> torch.Tensor:
         state = batch[OBS_STATE]
@@ -216,7 +200,7 @@ class MiniVLAPolicy(PreTrainedPolicy):
     def forward(self, batch):
         images = self._prepare_images(batch)
         state = self._prepare_state(batch)
-        text_dict = self._prepare_text(batch)
+        texts = self._prepare_text(batch)
 
         action = batch[ACTION]
         if action.dim() == 3:
@@ -234,15 +218,15 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
         action = action.float().to(self.config.device)
 
-        loss = self.model(images, text_dict, state, action)
+        loss = self.model(images, texts, state, action)
         return loss, None
 
     def predict_action_chunk(self, batch, **kwargs):
         images = self._prepare_images(batch)
         state = self._prepare_state(batch)
-        text_dict = self._prepare_text(batch)
+        texts = self._prepare_text(batch)
 
-        actions = self.model.predict_action_chunk(images, text_dict, state)
+        actions = self.model.predict_action_chunk(images, texts, state)
         return actions
 
     def select_action(self, batch, **kwargs):
@@ -256,9 +240,9 @@ class MiniVLAPolicy(PreTrainedPolicy):
             else:
                 images = self._prepare_images(batch)
                 state = self._prepare_state(batch)
-                text_dict = self._prepare_text(batch)
+                texts = self._prepare_text(batch)
 
-                chunk = self.model.predict_action_chunk(images, text_dict, state)
+                chunk = self.model.predict_action_chunk(images, texts, state)
                 chunk_i = chunk[i]
 
                 queue = deque()

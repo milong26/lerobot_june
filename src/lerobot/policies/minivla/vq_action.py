@@ -66,7 +66,8 @@ class ResidualVQActionHead(nn.Module):
         self.chunk_size = config.action_chunk_size
         self.vocab_size = config.action_vocab_size
         self.codebook_size = config.vq_codebook_size
-        self.hidden_dim = config.d_model
+        self.num_vq_layers = config.vq_num_layers
+        self.hidden_dim = config.language_hidden_dim
 
         self.action_tokenizer = ActionTokenizer(
             action_dim=self.action_dim,
@@ -79,7 +80,7 @@ class ResidualVQActionHead(nn.Module):
         self.vq = ResidualVectorQuantizer(
             dim=self.hidden_dim,
             codebook_size=self.codebook_size,
-            num_stages=1,
+            num_stages=self.num_vq_layers,
         )
 
         self.action_logits_head = nn.Sequential(

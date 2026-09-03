@@ -11,7 +11,8 @@ class MiniVLABackbone(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.hidden_dim = config.d_model
+        self.vision_hidden_dim = config.vision_hidden_dim
+        self.language_hidden_dim = config.language_hidden_dim
         self.language_model_path = config.language_model_path
         self.freeze_language_model = config.freeze_language_model
 
@@ -25,7 +26,7 @@ class MiniVLABackbone(nn.Module):
                 if hasattr(self.language_model, "model"):
                     self.language_model = self.language_model.model
                 if hasattr(self.language_model, "embed_tokens"):
-                    self.hidden_dim = self.language_model.embed_tokens.embedding_dim
+                    self.language_hidden_dim = self.language_model.embed_tokens.embedding_dim
                 logger.info(f"Loaded language model from {self.language_model_path}")
             except Exception as e:
                 warnings.warn(
@@ -41,21 +42,17 @@ class MiniVLABackbone(nn.Module):
             for param in self.language_model.parameters():
                 param.requires_grad = False
 
-        self.vision_projector = nn.Linear(self.hidden_dim, self.hidden_dim)
-
-        if config.use_state_projection:
-            self.state_projector = nn.Linear(config.state_dim, self.hidden_dim)
-        else:
-            self.state_projector = None
+        self.vision_projector = nn.Linear(self.vision_hidden_dim, self.language_hidden_dim)
+        self.state_projector = nn.Linear(config.state_dim, self.language_hidden_dim)
 
     def _build_dummy_backbone(self):
         self.dummy_layers = nn.Sequential(
-            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.Linear(self.language_hidden_dim, self.language_hidden_dim),
             nn.GELU(),
-            nn.LayerNorm(self.hidden_dim),
-            nn.Linear(self.hidden_dim, self.hidden_dim),
+            nn.LayerNorm(self.language_hidden_dim),
+            nn.Linear(self.language_hidden_dim, self.language_hidden_dim),
             nn.GELU(),
-            nn.LayerNorm(self.hidden_dim),
+            nn.LayerNorm(self.language_hidden_dim),
         )
         self._is_dummy = True
 
@@ -67,15 +64,12 @@ class MiniVLABackbone(nn.Module):
         image_embeds = self.vision_projector(image_tokens)
 
         text_embeds = self.language_model.embed_tokens(input_ids) if not getattr(self, "_is_dummy", False) \
-            else torch.zeros(b, input_ids.shape[1], self.hidden_dim, device=image_tokens.device)
+            else torch.zeros(b, input_ids.shape[1], self.language_hidden_dim, device=image_tokens.device)
 
         inputs_embeds = torch.cat([image_embeds, text_embeds], dim=1)
 
         if state_embedding is not None:
-            if self.state_projector is not None:
-                state_token = self.state_projector(state_embedding).unsqueeze(1)
-            else:
-                state_token = state_embedding.unsqueeze(1)
+            state_token = self.state_projector(state_embedding).unsqueeze(1)
             inputs_embeds = torch.cat([inputs_embeds, state_token], dim=1)
 
         return inputs_embeds
