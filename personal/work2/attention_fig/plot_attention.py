@@ -2983,6 +2983,26 @@ def main():
                         seed_rows, seed_model_traces, camera_groups, output_dir, seed=current_seed
                     )
 
+                # Save per-seed inference_attention_trace.csv for each model
+                inference_fieldnames = [
+                    "model_name", "method", "camera", "seed", "eval_task_success", "eval_grasp_success",
+                    "denoise_index", "timestep", "layer", "attention_source",
+                    "query_length", "key_length", "query_count",
+                    "camera1_mass", "camera2_mass", "visual_total",
+                    "language_mass", "state_mass", "suffix_mass", "other_mass",
+                    "x_t_norm", "v_t_norm", "suffix_hidden_norm",
+                ]
+                for mc in models_to_process:
+                    mname = mc["name"]
+                    model_dir = output_dir / mname / f"seed_{current_seed}"
+                    model_rows = [r for r in seed_rows if r["model_name"] == mname]
+                    if model_rows:
+                        csv_path = model_dir / "inference_attention_trace.csv"
+                        with open(csv_path, "w", newline="") as f:
+                            writer = csv.DictWriter(f, fieldnames=inference_fieldnames)
+                            writer.writeheader()
+                            writer.writerows(model_rows)
+
             inference_csv = base_output_dir / "inference_attention_trace.csv"
             if all_rows:
                 fieldnames = [
@@ -3013,6 +3033,7 @@ def main():
                 print(f"SEED {current_seed}")
                 print(f"{'='*80}")
 
+            seed_rows = []
             for model_cfg in models_to_process:
                 rows, _ = process_single_model(
                     model_cfg, device, current_seed, args.mode, args.query_mode,
@@ -3020,6 +3041,27 @@ def main():
                 )
                 if rows:
                     all_rows.extend(rows)
+                    seed_rows.extend(rows)
+
+            # Save per-seed attention_summary.csv for each model
+            if seed_rows:
+                summary_fieldnames = [
+                    "model_name", "method", "camera", "seed", "phase",
+                    "success", "grasp_reached", "layer",
+                    "attention_source", "query_length", "key_length", "query_count",
+                    "camera1_mass", "camera2_mass", "language_mass", "state_mass",
+                    "suffix_mass", "other_mass"
+                ]
+                for mc in models_to_process:
+                    mname = mc["name"]
+                    model_dir = output_dir / mname / f"seed_{current_seed}"
+                    model_rows = [r for r in seed_rows if r["model_name"] == mname]
+                    if model_rows:
+                        csv_path = model_dir / "attention_summary.csv"
+                        with open(csv_path, "w", newline="") as f:
+                            writer = csv.DictWriter(f, fieldnames=summary_fieldnames)
+                            writer.writeheader()
+                            writer.writerows(model_rows)
 
     if all_rows and args.mode != "inference_trace":
         summary_csv = base_output_dir / "attention_summary.csv"
@@ -3034,12 +3076,12 @@ def main():
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             writer.writerows(all_rows)
-        print(f"\nSaved summary to {summary_csv}")
+        print(f"\nSaved global summary to {summary_csv}")
 
         summary_json = base_output_dir / "attention_metrics.json"
         with open(summary_json, "w") as f:
             json.dump(all_rows, f, indent=2)
-        print(f"Saved metrics JSON to {summary_json}")
+        print(f"Saved global metrics JSON to {summary_json}")
 
     print(f"\n{'='*80}")
     print("DONE")

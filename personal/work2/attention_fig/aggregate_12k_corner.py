@@ -161,7 +161,7 @@ def aggregate_attention_metrics():
                     all_rows.append(row)
 
     if not all_rows:
-        print("  WARNING: No attention_summary.csv data found. Trying root-level CSV...")
+        print("  WARNING: No per-seed attention_summary.csv data found. Trying root-level CSV...")
         root_csv = RESULT_DIR / "attention_summary.csv"
         if root_csv.exists():
             all_rows = _read_csv_rows(root_csv)
@@ -554,7 +554,7 @@ def aggregate_pairwise_action_divergence():
         for seed_dir in sorted(plots_dir.iterdir()):
             if not seed_dir.is_dir() or not seed_dir.name.startswith("seed_"):
                 continue
-            for csv_file in sorted(seed_dir.glob("*pairwise_action_divergence.csv")):
+            for csv_file in sorted(seed_dir.glob("*pairwise*divergence.csv")):
                 rows = _read_csv_rows(csv_file)
                 for row in rows:
                     row["_seed"] = seed_dir.name
@@ -568,7 +568,7 @@ def aggregate_pairwise_action_divergence():
         for seed_val, seed_dir in _discover_seed_dirs(model_dir):
             plots_sub = seed_dir / "plots"
             if plots_sub.exists():
-                for csv_file in sorted(plots_sub.glob("*pairwise_action_divergence.csv")):
+                for csv_file in sorted(plots_sub.glob("*pairwise*divergence.csv")):
                     rows = _read_csv_rows(csv_file)
                     for row in rows:
                         row["_seed"] = seed_dir.name
@@ -584,7 +584,7 @@ def aggregate_pairwise_action_divergence():
             for seed_val, seed_dir in _discover_seed_dirs(model_dir):
                 plots_sub = seed_dir / "plots"
                 if plots_sub.exists():
-                    for csv_file in sorted(plots_sub.glob("*pairwise_action_divergence.csv")):
+                    for csv_file in sorted(plots_sub.glob("*pairwise*divergence.csv")):
                         rows = _read_csv_rows(csv_file)
                         for row in rows:
                             row["_seed"] = seed_dir.name
