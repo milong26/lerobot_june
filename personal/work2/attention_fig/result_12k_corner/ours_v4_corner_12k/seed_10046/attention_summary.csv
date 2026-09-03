@@ -1,0 +1,4 @@
+model_name,method,camera,seed,phase,success,grasp_reached,layer,attention_source,query_length,key_length,query_count,camera1_mass,camera2_mass,language_mass,state_mass,suffix_mass,other_mass
+ours_v4_corner_12k,ours_v4,"corner,gripperPOV",10046,initial,False,False,3,expert_cross,50,177,50,0.3349003791809082,0.30127444863319397,0.20089592039585114,0.1629292368888855,0,1.4901161193847656e-08
+ours_v4_corner_12k,ours_v4,"corner,gripperPOV",10046,initial,False,False,7,expert_cross,50,177,50,0.34244877099990845,0.2993738055229187,0.254830539226532,0.10334690660238266,0,0.0
+ours_v4_corner_12k,ours_v4,"corner,gripperPOV",10046,initial,False,False,11,expert_cross,50,177,50,0.4196527600288391,0.40242716670036316,0.15482598543167114,0.023094113916158676,0,0.0
