@@ -39,8 +39,11 @@ elif [ "$MODE" = "subzerocore" ]; then
 elif [ "$MODE" = "deminf" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT=""
+elif [ "$MODE" = "our_v5" ]; then
+    EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
+    SELECT_SCRIPT=""
 else
-    echo "Error: mode must be 'uniform', 'random', 'dynamicanchor', 'subzerocore', or 'deminf'"
+    echo "Error: mode must be 'uniform', 'random', 'dynamicanchor', 'subzerocore', 'deminf', or 'our_v5'"
     exit 1
 fi
 
@@ -175,6 +178,56 @@ else
         cp "$DEMINF_SUBSET" "$SUBSET_FILE"
         echo "Copied DemInf subset from: $DEMINF_SUBSET"
         echo "=== DemInf subset ready ==="
+    elif [ "$MODE" = "our_v5" ]; then
+        # Our V5: use vision-action embedding, run iterative SIC selection
+        echo "=== Running Our V5 pipeline ==="
+
+        EMBEDDING_UTIL="/data/zhonglinye/jun/lerobot/personal/work2/embedding_utils/ensure_embeddings_v5.py"
+        EMBEDDING_PATH_FILE="$OUTPUT_BASE_DIR/shared_embedding_path.txt"
+        RESULTS_DIR="$OUTPUT_BASE_DIR/results"
+
+        mkdir -p "$RESULTS_DIR"
+
+        # Step 1: Ensure V5 embedding cache exists
+        echo "=== Step 1: Ensuring V5 shared embedding cache ==="
+        export CUDA_VISIBLE_DEVICES=$GPU_ID
+
+        python "$EMBEDDING_UTIL" \
+            --dataset-root "$DATASET_DIR" \
+            --dataset-name "$DATASET_NAME" \
+            --gpu-id "$GPU_ID" \
+            --pca-dim 32 \
+            --path-file "$EMBEDDING_PATH_FILE"
+
+        if [ $? -ne 0 ]; then
+            echo "ERROR: ensure_embeddings_v5.py failed"
+            exit 1
+        fi
+
+        EMBEDDINGS_DIR="$(cat "$EMBEDDING_PATH_FILE")"
+        echo "V5 shared embedding directory: $EMBEDDINGS_DIR"
+
+        if [ ! -d "$EMBEDDINGS_DIR" ]; then
+            echo "ERROR: V5 shared embedding directory does not exist: $EMBEDDINGS_DIR"
+            exit 1
+        fi
+
+        # Step 2: Run V5 episode selection
+        echo "=== Step 2: Running V5 episode selection ==="
+        V5_SELECT_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/our_v5/select_episodes_v5.py"
+        python "$V5_SELECT_SCRIPT" \
+            --embeddings-dir "$EMBEDDINGS_DIR" \
+            --output-dir "$RESULTS_DIR" \
+            --b0-size 18 \
+            --target-size "$NUM_EPISODES" \
+            --n-add-per-round 9 \
+            --seed "$SEED" \
+            --alpha 1.0 \
+            --lambda-wrist 1.0
+
+        # Copy subset file to expected location
+        cp "$RESULTS_DIR/subset.json" "$SUBSET_FILE"
+        echo "=== V5 selection complete ==="
     else
         # Select episodes using uniform or random
         echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
