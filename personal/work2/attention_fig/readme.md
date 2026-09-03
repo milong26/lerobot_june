@@ -182,3 +182,12 @@ python personal/work2/attention_fig/aggregate_12k_corner.py \
 - 报告必须明确区分 correlation 和 causality
 - 如果不同 seed 结果不一致必须明确写不稳定
 - 如果只有单个 seed 出现差异必须明确标记 single-seed artifact
+
+## 6. 重要声明
+
+**本分析仅用于解释性研究**：
+- 仅用于解释 random、uniform、zero、ours_v1、ours_v2、ours_v3、ours_v4 之间的 policy attention 和 action trajectory 差异
+- **不用于**修改 selection 策略
+- **不用于**优化 success 率
+- **不用于** our_v5 设计闭环
+- eval_task_success 和 eval_grasp_success 仅作为 metadata 写入 model_performance_metadata.csv 和最终报告，**不参与**任何模型选择、参数调整或分析输入计算

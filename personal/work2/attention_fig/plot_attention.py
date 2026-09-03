@@ -123,6 +123,21 @@ MODEL_SETS = {
     "corner_12k": CORNER_12K_MODEL_CONFIGS,
 }
 
+
+def load_model_configs(model_set):
+    """Load model configurations based on model_set name.
+
+    Args:
+        model_set: String identifier. "corner_12k" returns CORNER_12K_MODEL_CONFIGS,
+                   anything else returns the original MODEL_CONFIGS.
+
+    Returns:
+        List of model config dicts.
+    """
+    if model_set == "corner_12k":
+        return CORNER_12K_MODEL_CONFIGS
+    return MODEL_CONFIGS
+
 PHASES = ["initial", "pre_grasp", "post_grasp", "pre_place"]
 
 DEFAULT_LAYERS = [0, 3, 7, 11]
@@ -1124,8 +1139,24 @@ def create_heatmap_from_attention(attn_1d, original_image, grid_h, grid_w):
 
 
 def generate_summary_figure(phase_data, model_name, method, phase_name, layer_indices,
-                           average_heads, query_mode, output_path, image_features):
-    """Generate a summary figure for one model/phase."""
+                           average_heads, query_mode, output_path, image_features,
+                           seed=None, npz_output_dir=None):
+    """Generate a summary figure for one model/phase.
+
+    Args:
+        phase_data: Dict with captured attention, spans, images, etc.
+        model_name: Model name string.
+        method: Method name string.
+        phase_name: Phase name string (e.g. "initial", "pre_grasp").
+        layer_indices: List of layer indices to visualize.
+        average_heads: Whether to average attention across heads.
+        query_mode: Query aggregation mode.
+        output_path: Path to save the PNG summary figure.
+        image_features: List or dict of image feature keys.
+        seed: Optional seed identifier for NPZ metadata.
+        npz_output_dir: Optional directory to save per-layer/camera NPZ files.
+                        If None, only PNG is saved.
+    """
     if "reached" in phase_data and not phase_data["reached"]:
         return None
 
@@ -1286,6 +1317,52 @@ def generate_summary_figure(phase_data, model_name, method, phase_name, layer_in
             "query_count": len(query_indices),
             "masses": masses,
         })
+
+        if npz_output_dir is not None:
+            cam1_attn_local = None
+            if cam1_key and cam1_key in spans and cam1_key in image_grids:
+                c1_start, c1_end = spans[cam1_key]
+                cam1_attn_local = attn_1d[c1_start:c1_end]
+                grid_h = image_grids[cam1_key]["grid_h"]
+                grid_w = image_grids[cam1_key]["grid_w"]
+                if len(cam1_attn_local) == grid_h * grid_w:
+                    attn_2d = cam1_attn_local.reshape(grid_h, grid_w)
+                    npz_dir = npz_output_dir / cam1_key / f"layer_{layer_idx}"
+                    npz_dir.mkdir(parents=True, exist_ok=True)
+                    npz_path = npz_dir / f"{phase_name}.npz"
+                    np.savez(
+                        str(npz_path),
+                        attention_map=attn_2d,
+                        model_name=model_name,
+                        method=method,
+                        seed=seed if seed is not None else -1,
+                        phase=phase_name,
+                        layer=layer_idx,
+                        attention_source=source,
+                        camera=cam1_key,
+                    )
+
+            if cam2_key and cam2_key in spans and cam2_key in image_grids and wrist_image is not None:
+                c2_start, c2_end = spans[cam2_key]
+                cam2_attn_local = attn_1d[c2_start:c2_end]
+                grid_h = image_grids[cam2_key]["grid_h"]
+                grid_w = image_grids[cam2_key]["grid_w"]
+                if len(cam2_attn_local) == grid_h * grid_w:
+                    attn_2d = cam2_attn_local.reshape(grid_h, grid_w)
+                    npz_dir = npz_output_dir / cam2_key / f"layer_{layer_idx}"
+                    npz_dir.mkdir(parents=True, exist_ok=True)
+                    npz_path = npz_dir / f"{phase_name}.npz"
+                    np.savez(
+                        str(npz_path),
+                        attention_map=attn_2d,
+                        model_name=model_name,
+                        method=method,
+                        seed=seed if seed is not None else -1,
+                        phase=phase_name,
+                        layer=layer_idx,
+                        attention_source=source,
+                        camera=cam2_key,
+                    )
 
         mass_text = [f"source={source}", f"q={query_length}, k={key_length}", f"queries={len(query_indices)}"]
         for k, v in masses.items():
@@ -2493,10 +2570,12 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                 print(f"  Phase '{phase_name}': reached at step {pdata.get('step')}")
 
                 output_path = model_dir / f"{phase_name}_summary.png"
+                npz_dir = model_dir / "heatmaps" / phase_name
 
                 metrics = generate_summary_figure(
                     pdata, model_name, method, phase_name, layer_indices,
-                    average_heads, query_mode, output_path, policy.config.image_features
+                    average_heads, query_mode, output_path, policy.config.image_features,
+                    seed=seed, npz_output_dir=npz_dir
                 )
 
                 if metrics:
@@ -2554,9 +2633,12 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
             }
 
             output_path = model_dir / "initial_summary.png"
+            npz_dir = model_dir / "heatmaps" / "initial"
+
             metrics = generate_summary_figure(
                 phase_data, model_name, method, "initial (probe)", layer_indices,
-                average_heads, query_mode, output_path, policy.config.image_features
+                average_heads, query_mode, output_path, policy.config.image_features,
+                seed=seed, npz_output_dir=npz_dir
             )
 
             if metrics:
@@ -2666,7 +2748,7 @@ def main():
         }
         models_to_process = [model_cfg]
     else:
-        models_to_process = MODEL_SETS.get(args.model_set, MODEL_CONFIGS)
+        models_to_process = load_model_configs(args.model_set)
 
     if args.model_set == "corner_12k":
         if args.mode == "inference_trace":
@@ -2932,7 +3014,7 @@ def main():
                 print(f"{'='*80}")
 
             for model_cfg in models_to_process:
-                rows = process_single_model(
+                rows, _ = process_single_model(
                     model_cfg, device, current_seed, args.mode, args.query_mode,
                     output_dir, layer_indices, average_heads, args.max_steps
                 )

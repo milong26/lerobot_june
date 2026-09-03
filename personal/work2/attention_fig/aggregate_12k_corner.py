@@ -20,6 +20,7 @@ from pathlib import Path
 from collections import defaultdict
 
 import numpy as np
+import torch
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -429,24 +430,70 @@ def aggregate_heatmap_statistics():
 
 
 def aggregate_inference_trace():
-    """Read inference_attention_trace.csv and aggregate x_t_norm, v_t_norm, suffix_hidden_norm.
+    """Read inference trace data from per-seed directories and aggregate x_t_l2, v_t_l2, v_t_cosine, hidden_cosine, etc.
 
-    Groups by model_name/layer/denoise_index, computes mean/std/count.
+    Reads from:
+      - INFERENCE_TRACE_DIR/model_name/seed_xxxx/ (trace.pt + metadata.json)
+      - INFERENCE_TRACE_DIR/model_name/seed_xxxx/inference_attention_trace.csv (if exists)
+      - INFERENCE_TRACE_DIR/plots/seed_xxxx/*pairwise_action_divergence.csv (for pairwise data)
+
+    Groups by model_name/denoise_index for x_t_l2, v_t_l2, v_t_cosine, hidden_cosine.
     """
-    print("  Scanning inference trace CSV...")
+    print("  Scanning inference trace data from per-seed directories...")
 
     all_rows = []
-    csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
-    if csv_path.exists():
-        all_rows = _read_csv_rows(csv_path)
+
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        model_name = cfg["name"]
+        model_dir = INFERENCE_TRACE_DIR / model_name
+        if not model_dir.exists():
+            continue
+
+        for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+            csv_path = seed_dir / "inference_attention_trace.csv"
+            if csv_path.exists():
+                rows = _read_csv_rows(csv_path)
+                for row in rows:
+                    row["_seed"] = seed_val
+                    all_rows.append(row)
+                continue
+
+            trace_pt_path = seed_dir / "trace.pt"
+            meta_path = seed_dir / "metadata.json"
+            if trace_pt_path.exists():
+                try:
+                    trace_data = torch.load(trace_pt_path, map_location="cpu")
+                    x_t = trace_data.get("x_t")
+                    v_t = trace_data.get("v_t")
+                    suffix_hidden = trace_data.get("suffix_hidden")
+                    timesteps = trace_data.get("timesteps")
+                    if x_t is not None and v_t is not None:
+                        num_steps = x_t.shape[0]
+                        for step_idx in range(num_steps):
+                            row = {
+                                "model_name": model_name,
+                                "seed": seed_val,
+                                "denoise_index": step_idx,
+                                "x_t_norm": float(torch.norm(x_t[step_idx]).item()),
+                                "v_t_norm": float(torch.norm(v_t[step_idx]).item()),
+                                "suffix_hidden_norm": float(torch.norm(suffix_hidden[step_idx]).item()) if suffix_hidden is not None and step_idx < suffix_hidden.shape[0] else 0.0,
+                                "timestep": float(timesteps[step_idx].item()) if timesteps is not None and step_idx < timesteps.shape[0] else 0.0,
+                            }
+                            if meta_path.exists():
+                                with open(meta_path, "r") as f:
+                                    meta = json.load(f)
+                                row["method"] = meta.get("method", "")
+                                row["eval_task_success"] = meta.get("eval_task_success", None)
+                                row["eval_grasp_success"] = meta.get("eval_grasp_success", None)
+                            all_rows.append(row)
+                except Exception as e:
+                    print(f"  WARNING: Failed to read trace.pt for {model_name}/{seed_dir.name}: {e}")
 
     if not all_rows:
-        print("  Trying per-model inference trace CSVs...")
-        for cfg in CORNER_12K_MODEL_CONFIGS:
-            model_name = cfg["name"]
-            model_csv = INFERENCE_TRACE_DIR / model_name / "inference_attention_trace.csv"
-            if model_csv.exists():
-                all_rows.extend(_read_csv_rows(model_csv))
+        print("  Trying root-level inference trace CSV...")
+        csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
+        if csv_path.exists():
+            all_rows = _read_csv_rows(csv_path)
 
     if not all_rows:
         print("  WARNING: No inference trace data found.")
@@ -513,13 +560,25 @@ def aggregate_pairwise_action_divergence():
                     row["_seed"] = seed_dir.name
                     all_rows.append(row)
 
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        model_name = cfg["name"]
+        model_dir = INFERENCE_TRACE_DIR / model_name
+        if not model_dir.exists():
+            continue
+        for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+            plots_sub = seed_dir / "plots"
+            if plots_sub.exists():
+                for csv_file in sorted(plots_sub.glob("*pairwise_action_divergence.csv")):
+                    rows = _read_csv_rows(csv_file)
+                    for row in rows:
+                        row["_seed"] = seed_dir.name
+                        all_rows.append(row)
+
     if not all_rows:
         print("  Trying per-model pairwise CSVs in result dirs...")
         for cfg in CORNER_12K_MODEL_CONFIGS:
             model_name = cfg["name"]
-            model_dir = INFERENCE_TRACE_DIR / model_name
-            if not model_dir.exists():
-                model_dir = RESULT_DIR / model_name
+            model_dir = RESULT_DIR / model_name
             if not model_dir.exists():
                 continue
             for seed_val, seed_dir in _discover_seed_dirs(model_dir):
@@ -592,9 +651,45 @@ def aggregate_velocity_statistics():
     print("  Computing velocity statistics from inference trace...")
 
     all_rows = []
-    csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
-    if csv_path.exists():
-        all_rows = _read_csv_rows(csv_path)
+
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        model_name = cfg["name"]
+        model_dir = INFERENCE_TRACE_DIR / model_name
+        if not model_dir.exists():
+            continue
+
+        for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+            csv_path = seed_dir / "inference_attention_trace.csv"
+            if csv_path.exists():
+                rows = _read_csv_rows(csv_path)
+                for row in rows:
+                    row["_seed"] = seed_val
+                    all_rows.append(row)
+                continue
+
+            trace_pt_path = seed_dir / "trace.pt"
+            if trace_pt_path.exists():
+                try:
+                    trace_data = torch.load(trace_pt_path, map_location="cpu")
+                    v_t = trace_data.get("v_t")
+                    timesteps = trace_data.get("timesteps")
+                    if v_t is not None:
+                        num_steps = v_t.shape[0]
+                        for step_idx in range(num_steps):
+                            all_rows.append({
+                                "model_name": model_name,
+                                "seed": seed_val,
+                                "denoise_index": step_idx,
+                                "v_t_norm": float(torch.norm(v_t[step_idx]).item()),
+                                "timestep": float(timesteps[step_idx].item()) if timesteps is not None and step_idx < timesteps.shape[0] else 0.0,
+                            })
+                except Exception as e:
+                    print(f"  WARNING: Failed to read trace.pt for {model_name}/{seed_dir.name}: {e}")
+
+    if not all_rows:
+        csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
+        if csv_path.exists():
+            all_rows = _read_csv_rows(csv_path)
 
     if not all_rows:
         for cfg in CORNER_12K_MODEL_CONFIGS:
@@ -611,7 +706,7 @@ def aggregate_velocity_statistics():
 
     for row in all_rows:
         model_name = row.get("model_name", "")
-        seed = row.get("seed", "")
+        seed = row.get("seed", row.get("_seed", ""))
         key = (model_name, seed)
         val = _safe_float(row.get("v_t_norm"))
         if val is not None:
