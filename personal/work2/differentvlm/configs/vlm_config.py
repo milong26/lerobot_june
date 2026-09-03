@@ -3,6 +3,11 @@ DifferentVLM Experiment Configuration
 
 Manages all experiment configurations for different VLM backbone experiments.
 Supports llava_pythia400m and prismatic_qwen25_05b experiments.
+
+Key design:
+- selection_vlm_model_id: the VLM backbone used ONLY for dataset selection embedding extraction
+- SmolVLA policy backbone is FIXED to HuggingFaceTB/SmolVLM2-500M-Video-Instruct (not configurable)
+- The experiment variable is ONLY the selection VLM, NOT the training policy
 """
 
 import os
@@ -29,7 +34,7 @@ EVAL_N_EPISODES = 200
 EVAL_SEED = 42
 EVAL_BATCH_SIZE = 16
 
-VLM_MODEL_NAME = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+SmolVLA_POLICY_MODEL = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
 CAMERA_NAMES = "corner,gripperPOV"
 RENAME_MAP = '{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}'
 
@@ -38,8 +43,46 @@ PCA_DIM = 32
 
 @dataclass
 class VLMExperimentConfig:
+    """
+    Configuration for a single differentvlm experiment.
+
+    Fields:
+        vlm_name: short name for this VLM (e.g. "llava_pythia400m")
+        selection_vlm_model_id: HuggingFace model id of the VLM used for SELECTION embedding extraction
+        selection_vlm_description: human-readable description of the selection VLM
+        is_prismatic: whether this VLM uses Prismatic architecture (vision_encoder + projector + LLM)
+        prismatic_base_model_id: base LLM model id for Prismatic construction (only if is_prismatic=True)
+        prismatic_vision_model_id: vision encoder model id for Prismatic construction
+        embedding_cache_dir: directory to store VLM-extracted episode embeddings
+        dataset_root: path to the dataset directory
+        lerobot_repo_id: LeRobot dataset repo id
+        camera: camera configuration name (e.g. "corner")
+        gpu_id: GPU device id
+        selection_num_episodes: number of episodes to select
+        selection_seed: random seed for selection
+        train_steps: training steps for SmolVLA
+        train_save_freq: checkpoint save frequency
+        train_batch_size: training batch size
+        train_num_workers: training num workers
+        train_lr: training learning rate
+        eval_n_episodes: number of evaluation episodes (fixed to 200)
+        eval_seed: evaluation seed (fixed to 42)
+        eval_batch_size: evaluation batch size
+        smolvla_policy_model: SmolVLA policy model (FIXED, not experiment variable)
+        camera_names: camera names for training/eval
+        rename_map: feature rename map for training
+        pca_dim: PCA dimensionality for embeddings
+        results_dir: output directory for results
+        checkpoints_dir: output directory for training checkpoints
+        logs_dir: output directory for logs
+        selected_dataset_dir: output directory for selected dataset
+    """
     vlm_name: str
-    hf_model_id: str
+    selection_vlm_model_id: str
+    selection_vlm_description: str = ""
+    is_prismatic: bool = False
+    prismatic_base_model_id: Optional[str] = None
+    prismatic_vision_model_id: Optional[str] = None
     embedding_cache_dir: Optional[str] = None
     dataset_root: str = DATASET_ROOT
     lerobot_repo_id: str = LEROBOT_REPO_ID
@@ -55,7 +98,7 @@ class VLMExperimentConfig:
     eval_n_episodes: int = EVAL_N_EPISODES
     eval_seed: int = EVAL_SEED
     eval_batch_size: int = EVAL_BATCH_SIZE
-    vlm_model_name: str = VLM_MODEL_NAME
+    smolvla_policy_model: str = SmolVLA_POLICY_MODEL
     camera_names: str = CAMERA_NAMES
     rename_map: str = RENAME_MAP
     pca_dim: int = PCA_DIM
@@ -63,8 +106,6 @@ class VLMExperimentConfig:
     checkpoints_dir: Optional[str] = None
     logs_dir: Optional[str] = None
     selected_dataset_dir: Optional[str] = None
-    is_prismatic: bool = False
-    prismatic_base_model_id: Optional[str] = None
 
     def __post_init__(self):
         if self.results_dir is None:
@@ -85,9 +126,20 @@ class VLMExperimentConfig:
 
 
 def get_llava_pythia400m_config(gpu_id: int = 0, camera: str = "corner") -> VLMExperimentConfig:
+    """
+    LLaVA-Pythia-400M configuration for selection embedding extraction.
+
+    Model: lesjie/Llava-Pythia-400M
+    - This is the VLM used by TinyVLA-S for visual representation
+    - Uses LLaVA architecture with Pythia-400M as language backbone
+    - Loaded via transformers.AutoModelForImageTextToText
+    - Visual embedding extracted from the vision encoder's last hidden state
+    - Only visual features are used, no text generation
+    """
     return VLMExperimentConfig(
         vlm_name="llava_pythia400m",
-        hf_model_id="lesjie/Llava-Pythia-400M",
+        selection_vlm_model_id="lesjie/Llava-Pythia-400M",
+        selection_vlm_description="LLaVA-Pythia-400M (TinyVLA-S VLM backbone)",
         camera=camera,
         gpu_id=gpu_id,
         is_prismatic=False,
@@ -95,13 +147,27 @@ def get_llava_pythia400m_config(gpu_id: int = 0, camera: str = "corner") -> VLME
 
 
 def get_prismatic_qwen25_05b_config(gpu_id: int = 0, camera: str = "corner") -> VLMExperimentConfig:
+    """
+    Prismatic-Qwen2.5-0.5B configuration for selection embedding extraction.
+
+    Model: Prismatic VLM architecture with Qwen2.5-0.5B as language backbone
+    - Architecture: Vision Encoder (SigLIP/CLIP) -> Projector (MLP) -> Language Model (Qwen2.5-0.5B)
+    - Visual embedding extracted from: image -> vision_encoder -> projector -> visual_feature
+    - Does NOT use Qwen language hidden states as visual embedding
+    - If lucidrains/prismatic-qwen2.5-0.5b checkpoint is unavailable, falls back to manual construction:
+        1. Vision encoder: google/siglip-so400m-patch14-384 (or openai/clip-vit-large-patch14 as fallback)
+        2. Projector: linear layer mapping vision_dim -> LLM_dim
+        3. Language backbone: Qwen/Qwen2.5-0.5B
+    """
     return VLMExperimentConfig(
         vlm_name="prismatic_qwen25_05b",
-        hf_model_id="lucidrains/prismatic-qwen2.5-0.5b",
+        selection_vlm_model_id="lucidrains/prismatic-qwen2.5-0.5b",
+        selection_vlm_description="Prismatic-Qwen2.5-0.5B (MiniVLA VLM backbone)",
         camera=camera,
         gpu_id=gpu_id,
         is_prismatic=True,
         prismatic_base_model_id="Qwen/Qwen2.5-0.5B",
+        prismatic_vision_model_id="google/siglip-so400m-patch14-384",
     )
 
 

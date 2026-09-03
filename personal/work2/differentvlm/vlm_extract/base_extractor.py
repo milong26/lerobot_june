@@ -3,6 +3,29 @@ Base VLM Embedding Extractor Abstract Interface
 
 Defines the unified interface for different VLM backends to extract episode-level
 visual embeddings. All concrete extractors must implement these methods.
+
+Unified output format (per episode):
+- JSON metadata file: episode_{idx}.json
+  {
+    "episode_id": int,
+    "global_embedding": list[float],
+    "wrist_embedding": list[float],
+    "embedding_dim": int,
+    "model_name": str,
+    "camera": str,
+    "n_global_frames": int,
+    "n_wrist_frames": int,
+  }
+- PT tensor file: episode_{idx}.pt
+  {
+    "phi_global": torch.Tensor (dim,),
+    "phi_wrist": torch.Tensor (dim,),
+    "episode_id": int,
+    "model_name": str,
+    "camera": str,
+  }
+
+This unified format ensures select_v4_wrapper does NOT need to check VLM type.
 """
 
 import sys
@@ -25,11 +48,15 @@ class BaseVLMExtractor(ABC):
     def __init__(
         self,
         model_id: str,
+        model_name: str,
+        camera: str = "corner",
         device: str = "cuda",
         pca_dim: int = 32,
         output_dir: Optional[str] = None,
     ):
         self.model_id = model_id
+        self.model_name = model_name
+        self.camera = camera
         self.device = device
         self.pca_dim = pca_dim
         self.output_dir = Path(output_dir) if output_dir else None
@@ -45,6 +72,9 @@ class BaseVLMExtractor(ABC):
     def encode_image(self, image: torch.Tensor) -> np.ndarray:
         """
         Encode a single image tensor to a 1-D embedding vector.
+        MUST use the vision encoder to extract visual features.
+        MUST NOT use text embedding or random projection.
+
         Args:
             image: torch.Tensor of shape (C, H, W) or (H, W, C)
         Returns:
@@ -59,6 +89,9 @@ class BaseVLMExtractor(ABC):
     ) -> Dict[str, np.ndarray]:
         """
         Extract episode-level visual embedding from global and wrist camera frames.
+        Only uses visual information from camera images.
+        Does NOT read obj_init_pos, goal_pose, environment_state, success, grasp_success, eval results.
+
         Args:
             global_frames: torch.Tensor of shape (N, C, H, W)
             wrist_frames: torch.Tensor of shape (M, C, H, W)
@@ -76,7 +109,7 @@ class BaseVLMExtractor(ABC):
         wrist_end = int(n_wrist * 0.7)
         wrist_selected = wrist_frames[wrist_start:wrist_end]
 
-        print(f"  Encoding {len(global_selected)} global frames...")
+        print(f"  Encoding {len(global_selected)} global frames (from {n_global} total)...")
         sys.stdout.flush()
         global_embs = []
         for i in range(len(global_selected)):
@@ -84,7 +117,7 @@ class BaseVLMExtractor(ABC):
             global_embs.append(emb)
         phi_global = np.mean(global_embs, axis=0)
 
-        print(f"  Encoding {len(wrist_selected)} wrist frames...")
+        print(f"  Encoding {len(wrist_selected)} wrist frames (from {n_wrist} total)...")
         sys.stdout.flush()
         wrist_embs = []
         for i in range(len(wrist_selected)):
@@ -92,43 +125,103 @@ class BaseVLMExtractor(ABC):
             wrist_embs.append(emb)
         phi_wrist = np.mean(wrist_embs, axis=0)
 
-        return {"phi_global": phi_global, "phi_wrist": phi_wrist}
+        return {
+            "phi_global": phi_global,
+            "phi_wrist": phi_wrist,
+            "n_global_frames": n_global,
+            "n_wrist_frames": n_wrist,
+        }
 
     def save_embedding(
         self,
         episode_index: int,
         phi_global: np.ndarray,
         phi_wrist: np.ndarray,
+        n_global_frames: int = 0,
+        n_wrist_frames: int = 0,
         output_dir: Optional[Path] = None,
     ) -> Path:
-        """Save episode embedding to .npy file compatible with our_v4 format."""
+        """
+        Save episode embedding in unified JSON + PT format.
+        Format is identical regardless of VLM type.
+        """
         out_dir = output_dir or self.output_dir
         if out_dir is None:
             raise ValueError("output_dir must be specified")
         out_dir.mkdir(parents=True, exist_ok=True)
 
-        coord_key = f"({episode_index})"
-        output_file = out_dir / f"{coord_key}.npy"
+        embedding_dim = phi_global.shape[0]
 
-        np.save(output_file, {
-            "phi_global": phi_global,
-            "phi_wrist": phi_wrist,
-            "episode_index": episode_index,
-        }, allow_pickle=True)
-        return output_file
+        json_data = {
+            "episode_id": int(episode_index),
+            "global_embedding": phi_global.tolist(),
+            "wrist_embedding": phi_wrist.tolist(),
+            "embedding_dim": int(embedding_dim),
+            "model_name": self.model_name,
+            "camera": self.camera,
+            "n_global_frames": int(n_global_frames),
+            "n_wrist_frames": int(n_wrist_frames),
+        }
+
+        json_file = out_dir / f"episode_{episode_index}.json"
+        with open(json_file, "w") as f:
+            json.dump(json_data, f)
+
+        pt_data = {
+            "phi_global": torch.from_numpy(phi_global.astype(np.float32)),
+            "phi_wrist": torch.from_numpy(phi_wrist.astype(np.float32)),
+            "episode_id": int(episode_index),
+            "model_name": self.model_name,
+            "camera": self.camera,
+        }
+        pt_file = out_dir / f"episode_{episode_index}.pt"
+        torch.save(pt_data, pt_file)
+
+        return json_file
 
     @staticmethod
     def load_embedding(episode_index: int, embedding_dir: Path) -> Dict[str, np.ndarray]:
-        """Load episode embedding from .npy file."""
-        coord_key = f"({episode_index})"
-        embedding_file = embedding_dir / f"{coord_key}.npy"
-        if not embedding_file.exists():
-            raise FileNotFoundError(f"Embedding not found: {embedding_file}")
-        data = np.load(embedding_file, allow_pickle=True).item()
+        """Load episode embedding from unified JSON format."""
+        json_file = embedding_dir / f"episode_{episode_index}.json"
+        if not json_file.exists():
+            raise FileNotFoundError(f"Embedding not found: {json_file}")
+        with open(json_file, "r") as f:
+            data = json.load(f)
         return {
-            "phi_global": data["phi_global"],
-            "phi_wrist": data["phi_wrist"],
+            "phi_global": np.array(data["global_embedding"], dtype=np.float32),
+            "phi_wrist": np.array(data["wrist_embedding"], dtype=np.float32),
+            "episode_id": data["episode_id"],
+            "model_name": data["model_name"],
+            "camera": data["camera"],
+            "embedding_dim": data["embedding_dim"],
         }
+
+    @staticmethod
+    def check_embedding_metadata(embedding_dir: Path, expected_model_name: str, expected_camera: str) -> Tuple[bool, str]:
+        """
+        Check if embedding cache exists and matches the expected model and camera.
+        Returns (is_valid, reason).
+        """
+        if not embedding_dir.exists():
+            return False, f"Directory does not exist: {embedding_dir}"
+
+        ep0_file = embedding_dir / "episode_0.json"
+        if not ep0_file.exists():
+            return False, f"episode_0.json not found in {embedding_dir}"
+
+        with open(ep0_file, "r") as f:
+            meta = json.load(f)
+
+        cached_model = meta.get("model_name", "unknown")
+        cached_camera = meta.get("camera", "unknown")
+
+        if cached_model != expected_model_name:
+            return False, f"Model mismatch: cached={cached_model}, expected={expected_model_name}"
+
+        if cached_camera != expected_camera:
+            return False, f"Camera mismatch: cached={cached_camera}, expected={expected_camera}"
+
+        return True, f"Cache valid: model={cached_model}, camera={cached_camera}"
 
     def extract_and_save_all(
         self,
@@ -151,6 +244,11 @@ class BaseVLMExtractor(ABC):
 
         total_episodes = dataset.num_episodes
         print(f"\nExtracting embeddings for {total_episodes} episodes...")
+        print(f"  Model: {self.model_name}")
+        print(f"  Model ID: {self.model_id}")
+        print(f"  Camera: {self.camera}")
+        print(f"  Device: {self.device}")
+        print(f"  Output: {out_dir}")
         sys.stdout.flush()
 
         ep_indices_map = {}
@@ -189,7 +287,14 @@ class BaseVLMExtractor(ABC):
 
                 emb = self.extract_episode_embedding(global_frames, wrist_frames)
 
-                self.save_embedding(ep_idx, emb["phi_global"], emb["phi_wrist"], out_dir)
+                self.save_embedding(
+                    ep_idx,
+                    emb["phi_global"],
+                    emb["phi_wrist"],
+                    emb.get("n_global_frames", 0),
+                    emb.get("n_wrist_frames", 0),
+                    out_dir,
+                )
 
                 global_embs_list.append(emb["phi_global"])
                 wrist_embs_list.append(emb["phi_wrist"])
@@ -232,7 +337,12 @@ class BaseVLMExtractor(ABC):
             for i, ep_idx in enumerate(episode_coords):
                 phi_g = pca_global.transform(global_embs_array[i:i+1])[0]
                 phi_w = pca_wrist.transform(wrist_embs_array[i:i+1])[0]
-                self.save_embedding(ep_idx, phi_g, phi_w, out_dir)
+                self.save_embedding(
+                    ep_idx,
+                    phi_g,
+                    phi_w,
+                    output_dir=out_dir,
+                )
 
             print(f"PCA applied: global_var={explained_var_g:.4f}, wrist_var={explained_var_w:.4f}")
             sys.stdout.flush()
@@ -243,4 +353,6 @@ class BaseVLMExtractor(ABC):
             "fail_count": fail_count,
             "output_dir": str(out_dir),
             "pca_dim": self.pca_dim,
+            "model_name": self.model_name,
+            "camera": self.camera,
         }

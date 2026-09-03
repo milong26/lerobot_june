@@ -3,6 +3,13 @@ SmolVLA Training Wrapper for DifferentVLM
 
 Calls the existing lerobot-train entry point with the selected dataset.
 Does NOT modify training code.
+
+Experiment isolation:
+- Output directory: differentvlm/checkpoints/{vlm_name}_{camera}
+- Log file: differentvlm/logs/{vlm_name}_{camera}/training.log
+- Training uses ONLY selected episode dataset, NOT full dataset
+- SmolVLA policy model is FIXED (not the selection VLM)
+- Selection VLM is NOT passed to SmolVLA policy parameters
 """
 
 import sys
@@ -25,12 +32,6 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
     print(f"\n{'='*60}")
     print(f"Running SmolVLA Training")
     print(f"{'='*60}")
-    print(f"Subset file: {subset_file}")
-    print(f"Output dir: {cfg.checkpoints_dir}")
-    print(f"Steps: {cfg.train_steps}")
-    print(f"Batch size: {cfg.train_batch_size}")
-    print(f"GPU: {cfg.gpu_id}")
-    print(f"{'='*60}")
 
     with open(subset_file, "r") as f:
         subset_data = json.load(f)
@@ -38,19 +39,29 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
     episode_indices = subset_data["selected_episode_indices"]
     episodes_str = "[" + ",".join(str(x) for x in episode_indices) + "]"
 
-    print(f"Training with {len(episode_indices)} episodes")
+    exp_name = f"smolvla_{cfg.vlm_name}_{cfg.camera}"
+    output_dir = Path(cfg.checkpoints_dir) / exp_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    train_log = Path(cfg.logs_dir) / f"{exp_name}_training.log"
+
+    print(f"Experiment name: {exp_name}")
+    print(f"Selected episodes: {len(episode_indices)}")
     print(f"Episode indices: {episodes_str}")
+    print(f"Dataset root: {cfg.dataset_root}")
+    print(f"Output dir: {output_dir}")
+    print(f"Checkpoint dir: {output_dir / 'checkpoints'}")
+    print(f"Training log: {train_log}")
+    print(f"SmolVLA policy model: {cfg.smolvla_policy_model}")
+    print(f"Steps: {cfg.train_steps}")
+    print(f"Batch size: {cfg.train_batch_size}")
+    print(f"GPU: {cfg.gpu_id}")
+    print(f"{'='*60}")
     sys.stdout.flush()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu_id)
     os.environ["MUJOCO_GL"] = "egl"
     os.environ["PYOPENGL_PLATFORM"] = "egl"
-
-    exp_name = f"smolvla_{cfg.vlm_name}_{cfg.selection_num_episodes}_seed{cfg.selection_seed}_{cfg.camera}"
-    output_dir = Path(cfg.checkpoints_dir) / exp_name
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    train_log = Path(cfg.logs_dir) / f"{exp_name}.log"
 
     cmd = [
         "lerobot-train",
@@ -65,7 +76,7 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
         "--env.type=metaworld",
         "--env.task=pick-place-v3",
         f"--env.camera_name={cfg.camera_names}",
-        f"--policy.vlm_model_name={cfg.vlm_model_name}",
+        f"--policy.vlm_model_name={cfg.smolvla_policy_model}",
         "--policy.freeze_vision_encoder=true",
         "--policy.train_expert_only=true",
         "--policy.train_state_proj=false",
@@ -84,7 +95,7 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
         "--wandb.enable=true",
     ]
 
-    print(f"Running: lerobot-train ...")
+    print(f"\nRunning: lerobot-train ...")
     print(f"Output dir: {output_dir}")
     print(f"Log file: {train_log}")
     sys.stdout.flush()
@@ -103,6 +114,7 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
         sys.stdout.flush()
 
     checkpoint_dir = output_dir / "checkpoints"
-    print(f"Training complete. Checkpoint dir: {checkpoint_dir}")
+    print(f"\nTraining complete.")
+    print(f"Checkpoint dir: {checkpoint_dir}")
     sys.stdout.flush()
     return str(checkpoint_dir)
