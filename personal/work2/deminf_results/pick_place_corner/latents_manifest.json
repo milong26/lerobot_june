@@ -1,0 +1,42 @@
+{
+  "fingerprint": "904a9259a6e2a76c63293dcfc99d10dc",
+  "git_commit": "f3602379688d714c63da71d1c019202a366b193f",
+  "dataset_path": "personal/work2/dataset_view/pick_place_corner",
+  "info_hash": "1a8b0d33c510d36b",
+  "state_source": "observation.environment_state",
+  "state_dim": 39,
+  "action_dim": 4,
+  "state_latent_dim": 12,
+  "action_latent_dim": 6,
+  "normalization_manifest": {
+    "state_dim": 39,
+    "action_dim": 4,
+    "state_gripper_indices": [
+      3,
+      21
+    ],
+    "state_mean_hash": "029e299c7bdabf70",
+    "state_std_hash": "d0430b510b1d76f9",
+    "action_mean_hash": "659e549a3833e8d1",
+    "action_std_hash": "02fef6d4639b398a",
+    "action_gripper_min": 0.0,
+    "action_gripper_max": 1.0,
+    "action_gripper_bounds_applied": true
+  },
+  "state_ckpt_path": "state_vae.pt",
+  "state_ckpt_sha256": "150d8ebb476a9f55",
+  "action_ckpt_path": "action_vae.pt",
+  "action_ckpt_sha256": "4e119b8b22812f84",
+  "num_transitions": 18230,
+  "z_state_shape": [
+    18230,
+    12
+  ],
+  "z_action_shape": [
+    18230,
+    6
+  ],
+  "episode_ids_hash": "9be04574dcd44da5",
+  "timestep_ids_hash": "331d56c09bf511fc",
+  "global_row_ids_hash": "0ea6ecf7228fe0ce"
+}

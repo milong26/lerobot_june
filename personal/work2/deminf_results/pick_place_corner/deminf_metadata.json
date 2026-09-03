@@ -1,0 +1,26 @@
+{
+  "config": {
+    "dataset_path": "personal/work2/dataset_view/pick_place_corner",
+    "target_episodes": 112,
+    "seed": 42,
+    "state_latent_dim": 12,
+    "action_latent_dim": 6,
+    "hidden_dims": [
+      512,
+      512
+    ],
+    "vae_beta_state": 0.05,
+    "vae_beta_action": 0.05,
+    "vae_lr": 0.0001,
+    "vae_epochs": 100,
+    "ks": [
+      5,
+      6,
+      7
+    ],
+    "ksg_mode": "deminf_rank",
+    "ksg_backend": "chunked",
+    "representation": "state"
+  },
+  "git_commit": "f3602379688d714c63da71d1c019202a366b193f"
+}

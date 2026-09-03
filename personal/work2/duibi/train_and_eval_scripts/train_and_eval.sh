@@ -1,7 +1,7 @@
 #!/bin/bash
 # Train and evaluate with selected episodes
 # Usage: bash train_and_eval.sh <mode> <num_episodes> <seed> <gpu_id> <output_base_dir>
-#   mode: uniform, random, dynamicanchor, or subzerocore
+#   mode: uniform, random, dynamicanchor, subzerocore, or deminf
 
 set -e
 
@@ -36,8 +36,11 @@ elif [ "$MODE" = "dynamicanchor" ]; then
 elif [ "$MODE" = "subzerocore" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT=""
+elif [ "$MODE" = "deminf" ]; then
+    EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
+    SELECT_SCRIPT=""
 else
-    echo "Error: mode must be 'uniform', 'random', 'dynamicanchor', or 'subzerocore'"
+    echo "Error: mode must be 'uniform', 'random', 'dynamicanchor', 'subzerocore', or 'deminf'"
     exit 1
 fi
 
@@ -157,6 +160,21 @@ else
             exit 1
         fi
         echo "=== SubZeroCore selection complete ==="
+    elif [ "$MODE" = "deminf" ]; then
+        # DemInf: use pre-computed subset from deminf_results
+        echo "=== Using pre-computed DemInf subset ==="
+        
+        DEMINF_SUBSET="/data/zhonglinye/jun/lerobot/personal/work2/deminf_results/pick_place_${DATASET_NAME}/subsets/deminf_${NUM_EPISODES}_seed${SEED}.json"
+        
+        if [ ! -f "$DEMINF_SUBSET" ]; then
+            echo "Error: DemInf subset file not found: $DEMINF_SUBSET"
+            echo "Please run DemInf selection first."
+            exit 1
+        fi
+        
+        cp "$DEMINF_SUBSET" "$SUBSET_FILE"
+        echo "Copied DemInf subset from: $DEMINF_SUBSET"
+        echo "=== DemInf subset ready ==="
     else
         # Select episodes using uniform or random
         echo "=== Selecting $NUM_EPISODES $MODE episodes (seed=$SEED) ==="
