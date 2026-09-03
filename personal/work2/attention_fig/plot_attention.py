@@ -665,14 +665,18 @@ def prepare_batch_for_model(model_data, policy, device):
 # Attention extraction
 # ============================================================
 
-def extract_attention_from_model(policy, batch, device):
+def extract_attention_from_model(policy, batch, device, extractor=None):
     """Extract attention weights from SmolVLA model.
 
     Runs in eval mode (not training mode) to avoid dropout effects.
     """
     vlm_with_expert = policy.model.vlm_with_expert
 
-    extractor = AttentionExtractor(vlm_with_expert)
+    if extractor is None:
+        extractor = AttentionExtractor(vlm_with_expert)
+        should_restore = True
+    else:
+        should_restore = False
 
     try:
         images, img_masks = policy.prepare_images(batch)
@@ -740,8 +744,10 @@ def extract_attention_from_model(policy, batch, device):
         att_masks = torch.cat([prefix_att_masks, suffix_att_masks], dim=1)
 
         from lerobot.policies.common.vla_utils import make_att_2d_masks
-        att_2d_masks = make_att_2d_masks(pad_masks, att_masks)
+        # 第二个代码运行不成功，加上bool
+        att_2d_masks = make_att_2d_masks(pad_masks, att_masks).bool()
         position_ids = torch.cumsum(pad_masks, dim=1) - 1
+
 
         extractor.reset()
 
@@ -783,7 +789,8 @@ def extract_attention_from_model(policy, batch, device):
         traceback.print_exc()
         return [], {}, 0, 0, {}, {}
     finally:
-        extractor.restore()
+        if should_restore:
+            extractor.restore()
 
 
 # ============================================================
@@ -858,102 +865,112 @@ def run_rollout_with_phases(policy, env, model_data, device, max_steps, mode):
     grasp_detected = False
     prev_object_z = 0.0
 
-    for step in range(max_steps):
-        phase = detect_phase_from_env(env, step, max_steps)
+    vlm_with_expert = policy.model.vlm_with_expert
+    extractor = AttentionExtractor(vlm_with_expert)
+    try:
+        for step in range(max_steps):
+            phase = detect_phase_from_env(env, step, max_steps)
 
-        if phase and phase not in phases_seen:
-            phases_seen.add(phase)
+            if phase and phase not in phases_seen:
+                phases_seen.add(phase)
 
-            batch = prepare_batch_for_model(obs, policy, device)
-            captured, spans, prefix_len, suffix_len, img_token_counts, img_grids = extract_attention_from_model(
-                policy, batch, device
-            )
+                batch = prepare_batch_for_model(obs, policy, device)
+                extractor.reset()
+                captured, spans, prefix_len, suffix_len, img_token_counts, img_grids = extract_attention_from_model(
+                    policy, batch, device, extractor=extractor
+                )
 
-            phase_data[phase] = {
-                "captured": captured,
-                "spans": spans,
-                "prefix_length": prefix_len,
-                "suffix_length": suffix_len,
-                "image_token_counts": img_token_counts,
-                "image_grids": img_grids,
-                "top_image": obs["top_image_np"].copy(),
-                "wrist_image": obs["wrist_image_np"].copy() if obs["wrist_image_np"] is not None else None,
-                "step": step,
-                "state": obs["state"].copy(),
-            }
+                phase_data[phase] = {
+                    "captured": captured,
+                    "spans": spans,
+                    "prefix_length": prefix_len,
+                    "suffix_length": suffix_len,
+                    "image_token_counts": img_token_counts,
+                    "image_grids": img_grids,
+                    "top_image": obs["top_image_np"].copy(),
+                    "wrist_image": obs["wrist_image_np"].copy() if obs["wrist_image_np"] is not None else None,
+                    "step": step,
+                    "state": obs["state"].copy(),
+                }
 
-            print(f"  Phase '{phase}' detected at step {step}")
+                print(f"  Phase '{phase}' detected at step {step}")
 
-        try:
-            mjc = env._env
-            if mjc is not None:
-                qpos = mjc.data.qpos.copy()
-                object_pos = mjc.obj_init_pos.copy() if hasattr(mjc, 'obj_init_pos') and mjc.obj_init_pos is not None else None
-                goal_pos = mjc.goal.copy() if hasattr(mjc, 'goal') and mjc.goal is not None else None
+            try:
+                mjc = env._env
+                if mjc is not None:
+                    qpos = mjc.data.qpos.copy()
+                    object_pos = mjc.obj_init_pos.copy() if hasattr(mjc, 'obj_init_pos') and mjc.obj_init_pos is not None else None
+                    goal_pos = mjc.goal.copy() if hasattr(mjc, 'goal') and mjc.goal is not None else None
 
-                if object_pos is not None:
-                    object_z = object_pos[2] if len(object_pos) > 2 else 0.0
-                    episode_metrics["max_object_height"] = max(episode_metrics["max_object_height"], object_z)
+                    if object_pos is not None:
+                        object_z = object_pos[2] if len(object_pos) > 2 else 0.0
+                        episode_metrics["max_object_height"] = max(episode_metrics["max_object_height"], object_z)
 
-                    if object_z > OBJECT_HEIGHT_POST_GRASP:
-                        if not grasp_detected:
-                            grasp_detected = True
-                            episode_metrics["first_grasp_step"] = step
-                            episode_metrics["grasp_reached"] = True
+                        if object_z > OBJECT_HEIGHT_POST_GRASP:
+                            if not grasp_detected:
+                                grasp_detected = True
+                                episode_metrics["first_grasp_step"] = step
+                                episode_metrics["grasp_reached"] = True
 
-                    if grasp_detected and goal_pos is not None:
-                        obj_goal_dist = np.linalg.norm(object_pos[:2] - goal_pos[:2])
-                        if episode_metrics["min_object_goal_distance_after_grasp"] is None:
-                            episode_metrics["min_object_goal_distance_after_grasp"] = obj_goal_dist
-                        else:
-                            episode_metrics["min_object_goal_distance_after_grasp"] = min(
-                                episode_metrics["min_object_goal_distance_after_grasp"], obj_goal_dist
+                        if grasp_detected and goal_pos is not None:
+                            obj_goal_dist = np.linalg.norm(object_pos[:2] - goal_pos[:2])
+                            if episode_metrics["min_object_goal_distance_after_grasp"] is None:
+                                episode_metrics["min_object_goal_distance_after_grasp"] = obj_goal_dist
+                            else:
+                                episode_metrics["min_object_goal_distance_after_grasp"] = min(
+                                    episode_metrics["min_object_goal_distance_after_grasp"], obj_goal_dist
+                                )
+
+                        if goal_pos is not None:
+                            episode_metrics["final_object_goal_distance"] = np.linalg.norm(
+                                object_pos[:2] - goal_pos[:2]
                             )
 
-                    if goal_pos is not None:
-                        episode_metrics["final_object_goal_distance"] = np.linalg.norm(
-                            object_pos[:2] - goal_pos[:2]
-                        )
+                        prev_object_z = object_z
+            except Exception:
+                pass
 
-                    prev_object_z = object_z
-        except Exception:
-            pass
+            batch = prepare_batch_for_model(obs, policy, device)
+            with torch.no_grad():
+                actions = policy.predict_action_chunk(batch)
+            action = actions[0, 0].cpu().numpy()
 
-        batch = prepare_batch_for_model(obs, policy, device)
-        with torch.no_grad():
-            actions = policy.predict_action_chunk(batch)
-        action = actions[0, 0].cpu().numpy()
+            obs_raw, reward, terminated, truncated, info = env.step(action)
+            episode_metrics["episode_length"] = step + 1
 
-        obs_raw, reward, terminated, truncated, info = env.step(action)
-        episode_metrics["episode_length"] = step + 1
+            if info.get("grasp_success", 0):
+                episode_metrics["grasp_reached"] = True
+                if not grasp_detected:
+                    episode_metrics["first_grasp_step"] = step
+                    grasp_detected = True
 
-        if info.get("grasp_success", 0):
-            episode_metrics["grasp_reached"] = True
-            if not grasp_detected:
-                episode_metrics["first_grasp_step"] = step
-                grasp_detected = True
+            if info.get("is_success", False):
+                episode_metrics["success"] = True
 
-        if info.get("is_success", False):
-            episode_metrics["success"] = True
+            obs = {
+                "observation.images.camera1": torch.from_numpy(
+                    np.transpose(obs_raw["pixels/top"], (2, 0, 1))
+                ).unsqueeze(0).unsqueeze(0).float() / 255.0,
+                "observation.images.camera2": torch.from_numpy(
+                    np.transpose(obs_raw["pixels/wrist"], (2, 0, 1))
+                ).unsqueeze(0).unsqueeze(0).float() / 255.0 if "pixels/wrist" in obs_raw else None,
+                "observation.state": torch.from_numpy(obs_raw["agent_pos"]).unsqueeze(0).float(),
+                "task": obs["task"],
+                "top_image_np": obs_raw["pixels/top"].copy(),
+                "wrist_image_np": obs_raw["pixels/wrist"].copy() if "pixels/wrist" in obs_raw else None,
+                "state": obs_raw["agent_pos"].copy(),
+                "env": env,
+                "info": info,
+            }
 
-        obs = {
-            "observation.images.camera1": torch.from_numpy(
-                np.transpose(obs_raw["pixels/top"], (2, 0, 1))
-            ).unsqueeze(0).unsqueeze(0).float() / 255.0,
-            "observation.images.camera2": torch.from_numpy(
-                np.transpose(obs_raw["pixels/wrist"], (2, 0, 1))
-            ).unsqueeze(0).unsqueeze(0).float() / 255.0 if "pixels/wrist" in obs_raw else None,
-            "observation.state": torch.from_numpy(obs_raw["agent_pos"]).unsqueeze(0).float(),
-            "task": obs["task"],
-            "top_image_np": obs_raw["pixels/top"].copy(),
-            "wrist_image_np": obs_raw["pixels/wrist"].copy() if "pixels/wrist" in obs_raw else None,
-            "state": obs_raw["agent_pos"].copy(),
-            "env": env,
-            "info": info,
-        }
+            for key in ["observation.images.camera1", "observation.images.camera2", "observation.state"]:
+                if obs[key] is not None:
+                    obs[key] = obs[key].to(device)
 
-        if terminated or truncated:
-            break
+            if terminated or truncated:
+                break
+    finally:
+        extractor.restore()
 
     for phase in PHASES:
         if phase not in phase_data:
