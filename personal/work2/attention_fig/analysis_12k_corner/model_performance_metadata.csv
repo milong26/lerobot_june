@@ -1,0 +1,8 @@
+model_name,method,checkpoint_path,eval_task_success,eval_grasp_success
+ours_v1_corner_12k,ours_v1,personal/work2/duibi/ours_112_seed42_corner/dynamicanchor_112_seed42/checkpoints/012000/pretrained_model,20.0,90.0
+ours_v2_corner_12k,ours_v2,personal/work2/duibi/ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42/checkpoints/012000/pretrained_model,25.5,95.5
+ours_v3_corner_12k,ours_v3,personal/work2/duibi/ours_v3_no_action_112_seed42_corner/dynamicanchor_v3_no_action_112_seed42/checkpoints/012000/pretrained_model,32.0,94.5
+ours_v4_corner_12k,ours_v4,personal/work2/duibi/ours_v4_112_seed42_corner/dynamicgrid_v4_112_seed42/checkpoints/012000/pretrained_model,34.5,95.0
+random_corner_12k,random,personal/work2/duibi/random_42_corner/random_112_seed42/checkpoints/012000/pretrained_model,32.0,94.5
+uniform_corner_12k,uniform,personal/work2/duibi/uniform_42_corner/uniform_112_seed42/checkpoints/012000/pretrained_model,28.2,92.5
+zero_corner_12k,zero,personal/work2/duibi/subzerocore_112_seed42_corner/subzerocore_112_seed42/checkpoints/012000/pretrained_model,32.0,95.0

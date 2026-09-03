@@ -775,9 +775,13 @@ def _load_csv_for_report(filename):
 
 def _fmt(val, decimals=4):
     """Format a number for markdown table."""
-    if val is None:
+    if val is None or val == "":
         return "N/A"
-    return f"{val:.{decimals}f}"
+    try:
+        numeric_val = float(val)
+        return f"{numeric_val:.{decimals}f}"
+    except (ValueError, TypeError):
+        return "N/A"
 
 
 def write_summary_report(model_records):
