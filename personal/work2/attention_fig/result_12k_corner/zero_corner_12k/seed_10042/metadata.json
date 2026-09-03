@@ -1,0 +1,59 @@
+{
+  "model_name": "zero_corner_12k",
+  "method": "zero",
+  "camera_name": "corner,gripperPOV",
+  "seed": 10042,
+  "eval_task_success": 32.0,
+  "eval_grasp_success": 95.0,
+  "mode": "rollout",
+  "query_mode": "mean_suffix",
+  "layer_indices": [
+    3,
+    7,
+    11
+  ],
+  "average_heads": true,
+  "max_steps": 500,
+  "task_name": "pick-place-v3",
+  "language_instruction": "Pick and place a puck to a goal",
+  "language_instruction_source": "metaworld_config.json",
+  "phase_detection_thresholds": {
+    "gripper_object_dist_pre_grasp": 0.15,
+    "object_height_post_grasp": 0.02,
+    "object_goal_dist_pre_place": 0.12
+  },
+  "phases": {
+    "initial": {
+      "reached": true,
+      "step": 0
+    },
+    "pre_grasp": {
+      "reached": false
+    },
+    "post_grasp": {
+      "reached": false
+    },
+    "pre_place": {
+      "reached": false
+    }
+  },
+  "episode_metrics": {
+    "first_grasp_step": null,
+    "grasp_reached": false,
+    "max_object_height": 0.02,
+    "min_object_goal_distance_after_grasp": null,
+    "final_object_goal_distance": 0.18439240663045522,
+    "success": false,
+    "episode_length": 500,
+    "post_grasp_drop": null,
+    "release_detected": null
+  },
+  "obj_init_pos": "[-0.04702116  0.68871057  0.02      ]",
+  "goal_pos": "[0.1 0.8 0.2]",
+  "state": [
+    0.0047398237114848725,
+    0.6013941554408069,
+    0.1951077138533845,
+    1.0
+  ]
+}

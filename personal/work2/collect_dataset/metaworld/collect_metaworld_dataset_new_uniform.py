@@ -39,7 +39,7 @@ os.environ["HF_LEROBOT_HOME"] = str(Path(__file__).parent / "outputs")
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-CONFIG_PATH = Path(__file__).parent.parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
+CONFIG_PATH = Path(__file__).parent.parent.parent.parent.parent / "src" / "lerobot" / "envs" / "metaworld_config.json"
 with open(CONFIG_PATH) as f:
     METAWORLD_CONFIG = json.load(f)
 
@@ -79,7 +79,6 @@ def introspect_task_space(task_name, seed=42):
         obj_pos_dim: int (obj_init_pos 的维度，不存在则为 0)
         has_goal: bool (是否存在 goal 属性)
         goal_pos_dim: int (goal 的维度，不存在则为 0)
-        rejection_constraint: str or None
     """
     env = create_metaworld_env(task_name, seed=seed)
     env._freeze_rand_vec = False
@@ -98,9 +97,6 @@ def introspect_task_space(task_name, seed=42):
 
     env.reset()
 
-    rejection_constraint = None
-    if task_name == "pick-place-v3":
-        rejection_constraint = "planar_dist(obj_xy, goal_xy) >= 0.15"
 
     env.close()
 
@@ -113,7 +109,6 @@ def introspect_task_space(task_name, seed=42):
         "obj_pos_dim": obj_pos_dim,
         "has_goal": has_goal,
         "goal_pos_dim": goal_pos_dim,
-        "rejection_constraint": rejection_constraint,
     }
 
 
@@ -353,7 +348,6 @@ def save_episode_metadata(output_dir, episode_infos, task_name, task_space_info=
                 "obj_pos_dim": task_space_info["obj_pos_dim"] if task_space_info else None,
                 "has_goal": task_space_info["has_goal"] if task_space_info else None,
                 "goal_pos_dim": task_space_info["goal_pos_dim"] if task_space_info else None,
-                "rejection_constraint": task_space_info["rejection_constraint"] if task_space_info else None,
             },
             "episodes": [],
         }
@@ -430,7 +424,6 @@ def main():
     print(f"  Reset space dim: {task_space_info['dim']}")
     print(f"  Has obj: {task_space_info['has_obj']} (dim={task_space_info['obj_pos_dim']})")
     print(f"  Has goal: {task_space_info['has_goal']} (dim={task_space_info['goal_pos_dim']})")
-    print(f"  Rejection constraint: {task_space_info['rejection_constraint']}")
     print(f"  Space low: {task_space_info['low'].tolist()}")
     print(f"  Space high: {task_space_info['high'].tolist()}")
 
