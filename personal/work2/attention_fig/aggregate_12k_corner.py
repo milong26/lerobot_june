@@ -17,97 +17,160 @@ import sys
 import json
 import csv
 from pathlib import Path
+from collections import defaultdict
 
 import numpy as np
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(Path(__file__).parent))
+
+from model_configs_12k_corner import CORNER_12K_MODEL_CONFIGS
 
 RESULT_DIR = PROJECT_ROOT / "personal/work2/attention_fig/result_12k_corner"
 INFERENCE_TRACE_DIR = PROJECT_ROOT / "personal/work2/attention_fig/result_inference_trace_12k_corner"
 OUTPUT_DIR = PROJECT_ROOT / "personal/work2/attention_fig/analysis_12k_corner"
 
-MODEL_NAMES = [
-    "ours_v1_corner_12k",
-    "ours_v2_corner_12k",
-    "ours_v3_corner_12k",
-    "ours_v4_corner_12k",
-    "random_corner_12k",
-    "uniform_corner_12k",
-    "zero_corner_12k",
-]
 
-METHOD_MAP = {
-    "ours_v1_corner_12k": "ours_v1",
-    "ours_v2_corner_12k": "ours_v2",
-    "ours_v3_corner_12k": "ours_v3",
-    "ours_v4_corner_12k": "ours_v4",
-    "random_corner_12k": "random",
-    "uniform_corner_12k": "uniform",
-    "zero_corner_12k": "zero",
-}
+def _build_model_lookup():
+    """Build lookup dicts from CORNER_12K_MODEL_CONFIGS."""
+    lookup = {}
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        lookup[cfg["name"]] = cfg
+    return lookup
 
-PATH_MAP = {
-    "ours_v1_corner_12k": "personal/work2/duibi/ours_112_seed42_corner/dynamicanchor_112_seed42/checkpoints/012000/pretrained_model",
-    "ours_v2_corner_12k": "personal/work2/duibi/ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42/checkpoints/012000/pretrained_model",
-    "ours_v3_corner_12k": "personal/work2/duibi/ours_v3_no_action_112_seed42_corner/dynamicanchor_v3_no_action_112_seed42/checkpoints/012000/pretrained_model",
-    "ours_v4_corner_12k": "personal/work2/duibi/ours_v4_112_seed42_corner/dynamicgrid_v4_112_seed42/checkpoints/012000/pretrained_model",
-    "random_corner_12k": "personal/work2/duibi/random_42_corner/random_112_seed42/checkpoints/012000/pretrained_model",
-    "uniform_corner_12k": "personal/work2/duibi/uniform_42_corner/uniform_112_seed42/checkpoints/012000/pretrained_model",
-    "zero_corner_12k": "personal/work2/duibi/subzerocore_112_seed42_corner/subzerocore_112_seed42/checkpoints/012000/pretrained_model",
-}
 
-PERFORMANCE_MAP = {
-    "ours_v1_corner_12k": {"eval_task_success": 20.0, "eval_grasp_success": 90.0},
-    "ours_v2_corner_12k": {"eval_task_success": 25.5, "eval_grasp_success": 95.5},
-    "ours_v3_corner_12k": {"eval_task_success": 32.0, "eval_grasp_success": 94.5},
-    "ours_v4_corner_12k": {"eval_task_success": 34.5, "eval_grasp_success": 95.0},
-    "random_corner_12k": {"eval_task_success": 32.0, "eval_grasp_success": 94.5},
-    "uniform_corner_12k": {"eval_task_success": 28.2, "eval_grasp_success": 92.5},
-    "zero_corner_12k": {"eval_task_success": 32.0, "eval_grasp_success": 95.0},
-}
+def ensure_output_dir():
+    """Create the analysis output directory."""
+    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"  Output directory: {OUTPUT_DIR}")
 
 
 def load_model_metadata():
-    """Load metadata from each model/seed directory."""
-    metadata_records = []
-    for model_name in MODEL_NAMES:
-        method = METHOD_MAP[model_name]
-        model_dir = RESULT_DIR / model_name
-        if not model_dir.exists():
-            print(f"  WARNING: Model directory not found: {model_dir}")
-            continue
-        for seed_dir in sorted(model_dir.iterdir()):
-            if not seed_dir.is_dir() or not seed_dir.name.startswith("seed_"):
+    """Read CORNER_12K_MODEL_CONFIGS and return model info list.
+
+    eval_task_success and eval_grasp_success are ONLY for metadata tables
+    and final report. They MUST NOT participate in any sorting, filtering,
+    or statistical inference.
+    """
+    lookup = _build_model_lookup()
+    records = []
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        records.append({
+            "name": cfg["name"],
+            "method": cfg["method"],
+            "path": cfg["path"],
+            "eval_task_success": cfg["eval_task_success"],
+            "eval_grasp_success": cfg["eval_grasp_success"],
+        })
+    print(f"  Loaded {len(records)} model metadata entries from model_configs_12k_corner.py")
+    return records
+
+
+def _discover_seed_dirs(model_dir):
+    """Return sorted list of (seed_int, seed_dir) tuples."""
+    seeds = []
+    if not model_dir.exists():
+        return seeds
+    for entry in sorted(model_dir.iterdir()):
+        if entry.is_dir() and entry.name.startswith("seed_"):
+            try:
+                seed_val = int(entry.name.split("_")[1])
+                seeds.append((seed_val, entry))
+            except (IndexError, ValueError):
                 continue
-            seed = int(seed_dir.name.split("_")[1])
-            meta_path = seed_dir / "metadata.json"
-            if meta_path.exists():
-                with open(meta_path, "r") as f:
-                    meta = json.load(f)
-                meta["_model_name"] = model_name
-                meta["_method"] = method
-                meta["_seed"] = seed
-                metadata_records.append(meta)
-    print(f"  Loaded {len(metadata_records)} metadata records")
-    return metadata_records
+    return seeds
 
 
-def aggregate_attention_metrics(metadata_records):
-    """Aggregate attention metrics across seeds by model/phase/layer/source."""
-    csv_path = RESULT_DIR / "attention_summary.csv"
+def _read_csv_rows(csv_path):
+    """Read a CSV file and return list of dicts."""
     if not csv_path.exists():
-        print(f"  WARNING: attention_summary.csv not found at {csv_path}")
         return []
-
     rows = []
     with open(csv_path, "r") as f:
         reader = csv.DictReader(f)
         for row in reader:
             rows.append(row)
+    return rows
+
+
+def _safe_float(val):
+    """Convert to float or return None."""
+    if val is None or val == "":
+        return None
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return None
+
+
+def _safe_int(val):
+    """Convert to int or return None."""
+    if val is None or val == "":
+        return None
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return None
+
+
+def _write_csv(output_path, rows):
+    """Write list of dicts to CSV."""
+    if not rows:
+        print(f"  WARNING: No data to write to {output_path}")
+        return
+    fieldnames = list(rows[0].keys())
+    with open(output_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(rows)
+    print(f"  Saved {output_path} with {len(rows)} rows")
+
+
+def _agg_stats(values):
+    """Return (mean, std, count) for a list of floats."""
+    if not values:
+        return None, None, 0
+    arr = np.array(values, dtype=np.float64)
+    return float(np.mean(arr)), float(np.std(arr)), len(arr)
+
+
+def aggregate_attention_metrics():
+    """Read attention_summary.csv from result_12k_corner and aggregate.
+
+    For each model/seed, plot_attention.py writes attention_summary.csv.
+    We aggregate across all seeds by model_name/method/phase/layer/attention_source,
+    computing mean/std/count for camera1_mass, camera2_mass, visual_total,
+    language_mass, state_mass.
+    """
+    print("  Scanning attention_summary.csv files...")
+
+    all_rows = []
+    lookup = _build_model_lookup()
+
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        model_name = cfg["name"]
+        model_dir = RESULT_DIR / model_name
+        for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+            csv_path = seed_dir / "attention_summary.csv"
+            if csv_path.exists():
+                rows = _read_csv_rows(csv_path)
+                for row in rows:
+                    row["_seed"] = seed_val
+                    all_rows.append(row)
+
+    if not all_rows:
+        print("  WARNING: No attention_summary.csv data found. Trying root-level CSV...")
+        root_csv = RESULT_DIR / "attention_summary.csv"
+        if root_csv.exists():
+            all_rows = _read_csv_rows(root_csv)
+
+    if not all_rows:
+        print("  WARNING: No attention data found at all.")
+        return []
 
     aggregated = {}
-    for row in rows:
+    for row in all_rows:
         model_name = row.get("model_name", "")
         method = row.get("method", "")
         phase = row.get("phase", "")
@@ -120,542 +183,519 @@ def aggregate_attention_metrics(metadata_records):
                 "model_name": model_name,
                 "method": method,
                 "phase": phase,
-                "layer": int(layer) if layer else None,
+                "layer": _safe_int(layer),
                 "attention_source": attention_source,
-                "camera1_mass_values": [],
-                "camera2_mass_values": [],
-                "visual_total_values": [],
-                "language_mass_values": [],
-                "state_mass_values": [],
+                "camera1_mass": [],
+                "camera2_mass": [],
+                "language_mass": [],
+                "state_mass": [],
+                "seed_values": [],
             }
 
-        for field, values_key in [
-            ("camera1_mass", "camera1_mass_values"),
-            ("camera2_mass", "camera2_mass_values"),
-            ("visual_total", "visual_total_values"),
-            ("language_mass", "language_mass_values"),
-            ("state_mass", "state_mass_values"),
-        ]:
-            val = row.get(field)
-            if val is not None and val != "":
-                try:
-                    aggregated[key][values_key].append(float(val))
-                except ValueError:
-                    pass
+        agg = aggregated[key]
+        for field in ["camera1_mass", "camera2_mass", "language_mass", "state_mass"]:
+            val = _safe_float(row.get(field))
+            if val is not None:
+                agg[field].append(val)
+        agg["seed_values"].append(row.get("_seed"))
 
     output_rows = []
     for key, agg in aggregated.items():
-        record = {
+        mean1, std1, _ = _agg_stats(agg["camera1_mass"])
+        mean2, std2, _ = _agg_stats(agg["camera2_mass"])
+        mean_lang, std_lang, _ = _agg_stats(agg["language_mass"])
+        mean_state, std_state, _ = _agg_stats(agg["state_mass"])
+
+        cam1 = agg["camera1_mass"]
+        cam2 = agg["camera2_mass"]
+        visual_total = [a + b for a, b in zip(cam1, cam2) if a is not None and b is not None]
+        mean_vis, std_vis, _ = _agg_stats(visual_total)
+
+        output_rows.append({
             "model_name": agg["model_name"],
             "method": agg["method"],
             "phase": agg["phase"],
             "layer": agg["layer"],
             "attention_source": agg["attention_source"],
-            "count": len(agg["camera1_mass_values"]),
-        }
-        for metric, values_key in [
-            ("camera1_mass", "camera1_mass_values"),
-            ("camera2_mass", "camera2_mass_values"),
-            ("visual_total", "visual_total_values"),
-            ("language_mass", "language_mass_values"),
-            ("state_mass", "state_mass_values"),
-        ]:
-            values = agg[values_key]
-            if values:
-                record[f"{metric}_mean"] = np.mean(values)
-                record[f"{metric}_std"] = np.std(values)
-            else:
-                record[f"{metric}_mean"] = None
-                record[f"{metric}_std"] = None
-        output_rows.append(record)
+            "count": len(agg["seed_values"]),
+            "camera1_mass_mean": mean1,
+            "camera1_mass_std": std1,
+            "camera2_mass_mean": mean2,
+            "camera2_mass_std": std2,
+            "visual_total_mean": mean_vis,
+            "visual_total_std": std_vis,
+            "language_mass_mean": mean_lang,
+            "language_mass_std": std_lang,
+            "state_mass_mean": mean_state,
+            "state_mass_std": std_state,
+        })
 
-    csv_out = OUTPUT_DIR / "attention_aggregate.csv"
-    if output_rows:
-        fieldnames = list(output_rows[0].keys())
-        with open(csv_out, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(output_rows)
-        print(f"  Saved {csv_out} with {len(output_rows)} rows")
-
+    _write_csv(OUTPUT_DIR / "attention_aggregate.csv", output_rows)
     return output_rows
 
 
-def aggregate_phase_reach(metadata_records):
-    """Aggregate phase reach statistics from rollout metadata."""
+def aggregate_phase_reach():
+    """Read rollout metadata.json and compute phase reach ratios.
+
+    This is ONLY behavioral diagnostics. No causal analysis with success metrics.
+    """
+    print("  Scanning rollout metadata for phase reach...")
+
+    all_records = []
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        model_name = cfg["name"]
+        method = cfg["method"]
+        model_dir = RESULT_DIR / model_name
+        for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+            meta_path = seed_dir / "metadata.json"
+            if not meta_path.exists():
+                continue
+            with open(meta_path, "r") as f:
+                meta = json.load(f)
+
+            phases = meta.get("phases", {})
+            for phase_name in ["initial", "pre_grasp", "post_grasp", "pre_place"]:
+                phase_data = phases.get(phase_name, {})
+                reached = phase_data.get("reached", False)
+                all_records.append({
+                    "model_name": model_name,
+                    "method": method,
+                    "seed": seed_val,
+                    "phase": phase_name,
+                    "reached": 1 if reached else 0,
+                })
+
+    if not all_records:
+        print("  WARNING: No rollout phase data found.")
+        return []
+
+    agg = defaultdict(lambda: {"reached": 0, "total": 0})
+    for rec in all_records:
+        key = (rec["model_name"], rec["method"], rec["phase"])
+        agg[key]["total"] += 1
+        agg[key]["reached"] += rec["reached"]
+
     output_rows = []
-    for meta in metadata_records:
-        model_name = meta.get("_model_name", "")
-        method = meta.get("_method", "")
-        seed = meta.get("_seed", "")
-        phases = meta.get("phases", {})
-        for phase_name in ["initial", "pre_grasp", "post_grasp", "pre_place"]:
-            phase_data = phases.get(phase_name, {})
-            reached = phase_data.get("reached", False)
-            output_rows.append({
-                "model_name": model_name,
-                "method": method,
-                "seed": seed,
-                "phase": phase_name,
-                "reached": reached,
-            })
-
-    aggregated = {}
-    for row in output_rows:
-        key = (row["model_name"], row["method"], row["phase"])
-        if key not in aggregated:
-            aggregated[key] = {
-                "model_name": row["model_name"],
-                "method": row["method"],
-                "phase": row["phase"],
-                "reached_count": 0,
-                "total_count": 0,
-            }
-        aggregated[key]["total_count"] += 1
-        if row["reached"]:
-            aggregated[key]["reached_count"] += 1
-
-    final_rows = []
-    for key, agg in aggregated.items():
-        final_rows.append({
-            "model_name": agg["model_name"],
-            "method": agg["method"],
-            "phase": agg["phase"],
-            "reached_count": agg["reached_count"],
-            "total_count": agg["total_count"],
-            "reached_ratio": agg["reached_count"] / agg["total_count"] if agg["total_count"] > 0 else 0.0,
+    for (model_name, method, phase), stats in sorted(agg.items()):
+        output_rows.append({
+            "model_name": model_name,
+            "method": method,
+            "phase": phase,
+            "reached_count": stats["reached"],
+            "total_count": stats["total"],
+            "reached_ratio": stats["reached"] / stats["total"] if stats["total"] > 0 else 0.0,
         })
 
-    csv_out = OUTPUT_DIR / "phase_reach_aggregate.csv"
-    if final_rows:
-        fieldnames = list(final_rows[0].keys())
-        with open(csv_out, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(final_rows)
-        print(f"  Saved {csv_out} with {len(final_rows)} rows")
-
-    return final_rows
+    _write_csv(OUTPUT_DIR / "phase_reach_aggregate.csv", output_rows)
+    return output_rows
 
 
 def aggregate_heatmap_statistics():
-    """Read npz heatmap files and compute spatial statistics."""
-    output_rows = []
+    """Read npz heatmap files and compute spatial statistics.
 
-    for model_name in MODEL_NAMES:
-        method = METHOD_MAP[model_name]
-        heatmaps_dir = INFERENCE_TRACE_DIR / model_name
-        if not heatmaps_dir.exists():
-            heatmaps_dir = RESULT_DIR / model_name
-        if not heatmaps_dir.exists():
-            continue
+    For each model/seed/phase/layer/camera, compute:
+      entropy, max_attention, center_x, center_y, mean_attention, std_attention
+    Then aggregate across seeds.
+    """
+    print("  Scanning heatmap npz files...")
 
-        for seed_dir in sorted(heatmaps_dir.iterdir()):
-            if not seed_dir.is_dir() or not seed_dir.name.startswith("seed_"):
+    all_records = []
+    search_dirs = [RESULT_DIR, INFERENCE_TRACE_DIR]
+
+    for cfg in CORNER_12K_MODEL_CONFIGS:
+        model_name = cfg["name"]
+        method = cfg["method"]
+
+        for search_dir in search_dirs:
+            model_dir = search_dir / model_name
+            if not model_dir.exists():
                 continue
-            seed = int(seed_dir.name.split("_")[1])
 
-            hm_root = seed_dir / "heatmaps"
-            if not hm_root.exists():
-                continue
+            for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+                hm_root = seed_dir / "heatmaps"
+                if not hm_root.exists():
+                    continue
 
-            for npz_file in sorted(hm_root.rglob("*.npz")):
-                try:
-                    data = np.load(str(npz_file), allow_pickle=True)
-                    attention_map = data.get("attention_map")
-                    if attention_map is None:
-                        continue
+                for npz_file in sorted(hm_root.rglob("*.npz")):
+                    try:
+                        data = np.load(str(npz_file), allow_pickle=True)
+                        attention_map = data.get("attention_map")
+                        if attention_map is None:
+                            continue
 
-                    model_name_npz = str(data.get("model_name", model_name))
-                    method_npz = str(data.get("method", method))
-                    seed_npz = int(data.get("seed", seed))
-                    phase_npz = str(data.get("phase", "unknown"))
-                    layer_npz = int(data.get("layer", -1))
-                    attention_source_npz = str(data.get("attention_source", "unknown"))
-                    camera_npz = str(data.get("camera", "unknown"))
+                        npz_model = str(data.get("model_name", model_name))
+                        npz_method = str(data.get("method", method))
+                        npz_seed = int(data.get("seed", seed_val))
+                        npz_phase = str(data.get("phase", "unknown"))
+                        npz_layer = int(data.get("layer", -1))
+                        npz_source = str(data.get("attention_source", "unknown"))
+                        npz_camera = str(data.get("camera", "unknown"))
 
-                    max_attn = float(np.max(attention_map))
-                    total_attn = float(np.sum(attention_map))
+                        max_attn = float(np.max(attention_map))
+                        mean_attn = float(np.mean(attention_map))
+                        std_attn = float(np.std(attention_map))
 
-                    if attention_map.ndim == 2:
-                        h, w = attention_map.shape
-                        y_coords, x_coords = np.mgrid[0:h, 0:w]
-                        norm_attn = attention_map / (total_attn + 1e-10)
-                        center_x = float(np.sum(x_coords * norm_attn))
-                        center_y = float(np.sum(y_coords * norm_attn))
+                        if attention_map.ndim == 2:
+                            h, w = attention_map.shape
+                            y_coords, x_coords = np.mgrid[0:h, 0:w]
+                            total = float(np.sum(attention_map))
+                            norm_attn = attention_map / (total + 1e-10)
+                            center_x = float(np.sum(x_coords * norm_attn))
+                            center_y = float(np.sum(y_coords * norm_attn))
 
-                        entropy = 0.0
-                        flat_norm = norm_attn.flatten()
-                        flat_norm = flat_norm[flat_norm > 0]
-                        if len(flat_norm) > 0:
-                            entropy = float(-np.sum(flat_norm * np.log(flat_norm + 1e-10)))
-                    else:
-                        center_x = None
-                        center_y = None
-                        entropy = None
+                            flat_norm = norm_attn.flatten()
+                            flat_norm = flat_norm[flat_norm > 0]
+                            entropy = float(-np.sum(flat_norm * np.log(flat_norm + 1e-10))) if len(flat_norm) > 0 else 0.0
+                        else:
+                            center_x = None
+                            center_y = None
+                            entropy = None
 
-                    output_rows.append({
-                        "model_name": model_name_npz,
-                        "method": method_npz,
-                        "seed": seed_npz,
-                        "phase": phase_npz,
-                        "layer": layer_npz,
-                        "attention_source": attention_source_npz,
-                        "camera": camera_npz,
-                        "max_attention": max_attn,
-                        "attention_center_x": center_x,
-                        "attention_center_y": center_y,
-                        "attention_entropy": entropy,
-                    })
-                except Exception as e:
-                    print(f"  WARNING: Failed to read {npz_file}: {e}")
+                        all_records.append({
+                            "model_name": npz_model,
+                            "method": npz_method,
+                            "seed": npz_seed,
+                            "phase": npz_phase,
+                            "layer": npz_layer,
+                            "attention_source": npz_source,
+                            "camera": npz_camera,
+                            "max_attention": max_attn,
+                            "mean_attention": mean_attn,
+                            "std_attention": std_attn,
+                            "center_x": center_x,
+                            "center_y": center_y,
+                            "entropy": entropy,
+                        })
+                    except Exception as e:
+                        print(f"  WARNING: Failed to read {npz_file}: {e}")
 
-    aggregated = {}
-    for row in output_rows:
-        key = (row["model_name"], row["method"], row["phase"], row["layer"],
-               row["attention_source"], row["camera"])
-        if key not in aggregated:
-            aggregated[key] = {
-                "model_name": row["model_name"],
-                "method": row["method"],
-                "phase": row["phase"],
-                "layer": row["layer"],
-                "attention_source": row["attention_source"],
-                "camera": row["camera"],
-                "max_attention_values": [],
-                "center_x_values": [],
-                "center_y_values": [],
-                "entropy_values": [],
-                "count": 0,
-            }
-        aggregated[key]["count"] += 1
-        aggregated[key]["max_attention_values"].append(row["max_attention"])
-        if row["attention_center_x"] is not None:
-            aggregated[key]["center_x_values"].append(row["attention_center_x"])
-        if row["attention_center_y"] is not None:
-            aggregated[key]["center_y_values"].append(row["attention_center_y"])
-        if row["attention_entropy"] is not None:
-            aggregated[key]["entropy_values"].append(row["attention_entropy"])
-
-    final_rows = []
-    for key, agg in aggregated.items():
-        record = {
-            "model_name": agg["model_name"],
-            "method": agg["method"],
-            "phase": agg["phase"],
-            "layer": agg["layer"],
-            "attention_source": agg["attention_source"],
-            "camera": agg["camera"],
-            "count": agg["count"],
-            "max_attention_mean": np.mean(agg["max_attention_values"]) if agg["max_attention_values"] else None,
-            "max_attention_std": np.std(agg["max_attention_values"]) if agg["max_attention_values"] else None,
-        }
-        if agg["center_x_values"]:
-            record["attention_center_x_mean"] = np.mean(agg["center_x_values"])
-            record["attention_center_x_std"] = np.std(agg["center_x_values"])
-        else:
-            record["attention_center_x_mean"] = None
-            record["attention_center_x_std"] = None
-        if agg["center_y_values"]:
-            record["attention_center_y_mean"] = np.mean(agg["center_y_values"])
-            record["attention_center_y_std"] = np.std(agg["center_y_values"])
-        else:
-            record["attention_center_y_mean"] = None
-            record["attention_center_y_std"] = None
-        if agg["entropy_values"]:
-            record["attention_entropy_mean"] = np.mean(agg["entropy_values"])
-            record["attention_entropy_std"] = np.std(agg["entropy_values"])
-        else:
-            record["attention_entropy_mean"] = None
-            record["attention_entropy_std"] = None
-        final_rows.append(record)
-
-    csv_out = OUTPUT_DIR / "heatmap_statistics.csv"
-    if final_rows:
-        fieldnames = list(final_rows[0].keys())
-        with open(csv_out, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(final_rows)
-        print(f"  Saved {csv_out} with {len(final_rows)} rows")
-
-    return final_rows
-
-
-def aggregate_inference_trace():
-    """Aggregate inference trace metrics from CSV."""
-    csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
-    if not csv_path.exists():
-        print(f"  WARNING: inference_attention_trace.csv not found at {csv_path}")
+    if not all_records:
+        print("  WARNING: No heatmap npz files found.")
         return []
 
-    rows = []
-    with open(csv_path, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
+    agg = defaultdict(lambda: {
+        "max_attention": [], "mean_attention": [], "std_attention": [],
+        "center_x": [], "center_y": [], "entropy": [],
+    })
 
-    aggregated = {}
-    for row in rows:
-        model_name = row.get("model_name", "")
-        layer = row.get("layer", "")
-        denoise_index = row.get("denoise_index", "")
-        key = (model_name, layer, denoise_index)
-
-        if key not in aggregated:
-            aggregated[key] = {
-                "model_name": model_name,
-                "layer": int(layer) if layer else None,
-                "denoise_index": int(denoise_index) if denoise_index else None,
-                "x_t_norm_values": [],
-                "v_t_norm_values": [],
-                "suffix_hidden_norm_values": [],
-                "count": 0,
-            }
-
-        aggregated[key]["count"] += 1
-        for field, values_key in [
-            ("x_t_norm", "x_t_norm_values"),
-            ("v_t_norm", "v_t_norm_values"),
-            ("suffix_hidden_norm", "suffix_hidden_norm_values"),
-        ]:
-            val = row.get(field)
-            if val is not None and val != "":
-                try:
-                    aggregated[key][values_key].append(float(val))
-                except ValueError:
-                    pass
+    for rec in all_records:
+        key = (rec["model_name"], rec["method"], rec["phase"], rec["layer"],
+               rec["attention_source"], rec["camera"])
+        a = agg[key]
+        a["max_attention"].append(rec["max_attention"])
+        a["mean_attention"].append(rec["mean_attention"])
+        a["std_attention"].append(rec["std_attention"])
+        if rec["center_x"] is not None:
+            a["center_x"].append(rec["center_x"])
+        if rec["center_y"] is not None:
+            a["center_y"].append(rec["center_y"])
+        if rec["entropy"] is not None:
+            a["entropy"].append(rec["entropy"])
 
     output_rows = []
-    for key, agg in aggregated.items():
-        record = {
-            "model_name": agg["model_name"],
-            "layer": agg["layer"],
-            "denoise_index": agg["denoise_index"],
-            "count": agg["count"],
-        }
-        for metric, values_key in [
-            ("x_t_norm", "x_t_norm_values"),
-            ("v_t_norm", "v_t_norm_values"),
-            ("suffix_hidden_norm", "suffix_hidden_norm_values"),
-        ]:
-            values = agg[values_key]
-            if values:
-                record[f"{metric}_mean"] = np.mean(values)
-                record[f"{metric}_std"] = np.std(values)
-            else:
-                record[f"{metric}_mean"] = None
-                record[f"{metric}_std"] = None
-        output_rows.append(record)
+    for (model_name, method, phase, layer, source, camera), a in sorted(agg.items()):
+        count = len(a["max_attention"])
+        mean_max, std_max, _ = _agg_stats(a["max_attention"])
+        mean_mean, std_mean, _ = _agg_stats(a["mean_attention"])
+        mean_std, std_std, _ = _agg_stats(a["std_attention"])
+        mean_cx, std_cx, _ = _agg_stats(a["center_x"])
+        mean_cy, std_cy, _ = _agg_stats(a["center_y"])
+        mean_ent, std_ent, _ = _agg_stats(a["entropy"])
 
-    csv_out = OUTPUT_DIR / "inference_trace_aggregate.csv"
-    if output_rows:
-        fieldnames = list(output_rows[0].keys())
-        with open(csv_out, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(output_rows)
-        print(f"  Saved {csv_out} with {len(output_rows)} rows")
+        output_rows.append({
+            "model_name": model_name,
+            "method": method,
+            "phase": phase,
+            "layer": layer,
+            "attention_source": source,
+            "camera": camera,
+            "count": count,
+            "max_attention_mean": mean_max,
+            "max_attention_std": std_max,
+            "mean_attention_mean": mean_mean,
+            "mean_attention_std": std_mean,
+            "std_attention_mean": mean_std,
+            "std_attention_std": std_std,
+            "center_x_mean": mean_cx,
+            "center_x_std": std_cx,
+            "center_y_mean": mean_cy,
+            "center_y_std": std_cy,
+            "entropy_mean": mean_ent,
+            "entropy_std": std_ent,
+        })
 
+    _write_csv(OUTPUT_DIR / "heatmap_statistics.csv", output_rows)
     return output_rows
 
 
-def aggregate_pairwise_divergence():
-    """Read per-seed pairwise CSVs and aggregate."""
-    all_pairwise_rows = []
-    plots_dir = INFERENCE_TRACE_DIR / "plots"
-    if not plots_dir.exists():
-        print(f"  WARNING: plots directory not found at {plots_dir}")
+def aggregate_inference_trace():
+    """Read inference_attention_trace.csv and aggregate x_t_norm, v_t_norm, suffix_hidden_norm.
+
+    Groups by model_name/layer/denoise_index, computes mean/std/count.
+    """
+    print("  Scanning inference trace CSV...")
+
+    all_rows = []
+    csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
+    if csv_path.exists():
+        all_rows = _read_csv_rows(csv_path)
+
+    if not all_rows:
+        print("  Trying per-model inference trace CSVs...")
+        for cfg in CORNER_12K_MODEL_CONFIGS:
+            model_name = cfg["name"]
+            model_csv = INFERENCE_TRACE_DIR / model_name / "inference_attention_trace.csv"
+            if model_csv.exists():
+                all_rows.extend(_read_csv_rows(model_csv))
+
+    if not all_rows:
+        print("  WARNING: No inference trace data found.")
         return []
 
-    for seed_dir in sorted(plots_dir.iterdir()):
-        if not seed_dir.is_dir() or not seed_dir.name.startswith("seed_"):
-            continue
-        seed = int(seed_dir.name.split("_")[1])
+    agg = defaultdict(lambda: {"x_t_norm": [], "v_t_norm": [], "suffix_hidden_norm": [], "seed_values": []})
 
-        for csv_file in sorted(seed_dir.glob("*pairwise_action_divergence.csv")):
-            with open(csv_file, "r") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    row["_seed"] = seed
-                    all_pairwise_rows.append(row)
-
-    aggregated = {}
-    for row in all_pairwise_rows:
-        model_a = row.get("model_a", "")
-        model_b = row.get("model_b", "")
+    for row in all_rows:
+        model_name = row.get("model_name", "")
+        layer = row.get("layer", "")
         denoise_index = row.get("denoise_index", "")
-        key = (model_a, model_b, denoise_index)
+        key = (model_name, _safe_int(layer), _safe_int(denoise_index))
 
-        if key not in aggregated:
-            aggregated[key] = {
-                "model_a": model_a,
-                "model_b": model_b,
-                "denoise_index": int(denoise_index) if denoise_index else None,
-                "v_t_l2_values": [],
-                "v_t_cosine_values": [],
-                "x_t_l2_values": [],
-                "hidden_cosine_values": [],
-                "count": 0,
-            }
+        a = agg[key]
+        a["seed_values"].append(row.get("seed", ""))
 
-        aggregated[key]["count"] += 1
-        for field, values_key in [
-            ("v_t_l2", "v_t_l2_values"),
-            ("v_t_cosine", "v_t_cosine_values"),
-            ("x_t_l2", "x_t_l2_values"),
-            ("hidden_cosine", "hidden_cosine_values"),
-        ]:
-            val = row.get(field)
-            if val is not None and val != "":
-                try:
-                    aggregated[key][values_key].append(float(val))
-                except ValueError:
-                    pass
+        for field in ["x_t_norm", "v_t_norm", "suffix_hidden_norm"]:
+            val = _safe_float(row.get(field))
+            if val is not None:
+                a[field].append(val)
 
     output_rows = []
-    for key, agg in aggregated.items():
-        record = {
-            "model_a": agg["model_a"],
-            "model_b": agg["model_b"],
-            "denoise_index": agg["denoise_index"],
-            "count": agg["count"],
-        }
-        for metric, values_key in [
-            ("v_t_l2", "v_t_l2_values"),
-            ("v_t_cosine", "v_t_cosine_values"),
-            ("x_t_l2", "x_t_l2_values"),
-            ("hidden_cosine", "hidden_cosine_values"),
-        ]:
-            values = agg[values_key]
-            if values:
-                record[f"{metric}_mean"] = np.mean(values)
-                record[f"{metric}_std"] = np.std(values)
-            else:
-                record[f"{metric}_mean"] = None
-                record[f"{metric}_std"] = None
-        output_rows.append(record)
+    for (model_name, layer, denoise_idx), a in sorted(agg.items()):
+        count = len(a["seed_values"])
+        mean_xt, std_xt, _ = _agg_stats(a["x_t_norm"])
+        mean_vt, std_vt, _ = _agg_stats(a["v_t_norm"])
+        mean_sh, std_sh, _ = _agg_stats(a["suffix_hidden_norm"])
 
-    csv_out = OUTPUT_DIR / "pairwise_action_divergence_aggregate.csv"
-    if output_rows:
-        fieldnames = list(output_rows[0].keys())
-        with open(csv_out, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(output_rows)
-        print(f"  Saved {csv_out} with {len(output_rows)} rows")
+        output_rows.append({
+            "model_name": model_name,
+            "layer": layer,
+            "denoise_index": denoise_idx,
+            "count": count,
+            "x_t_norm_mean": mean_xt,
+            "x_t_norm_std": std_xt,
+            "v_t_norm_mean": mean_vt,
+            "v_t_norm_std": std_vt,
+            "suffix_hidden_norm_mean": mean_sh,
+            "suffix_hidden_norm_std": std_sh,
+        })
 
-    final_step_rows = []
-    for row in output_rows:
-        if row.get("denoise_index") is not None:
-            pass
-    max_denoise = max((r["denoise_index"] for r in output_rows if r["denoise_index"] is not None), default=None)
-    if max_denoise is not None:
-        for row in output_rows:
-            if row["denoise_index"] == max_denoise:
-                final_step_rows.append(row)
+    _write_csv(OUTPUT_DIR / "inference_trace_aggregate.csv", output_rows)
+    return output_rows
 
+
+def aggregate_pairwise_action_divergence():
+    """Read per-seed pairwise_action_divergence.csv and aggregate.
+
+    For each seed, there are 21 model pairs (7 choose 2).
+    Aggregates v_t_l2, v_t_cosine, x_t_l2, hidden_cosine by model_a/model_b/denoise_index.
+    """
+    print("  Scanning pairwise divergence CSVs...")
+
+    all_rows = []
+    plots_dir = INFERENCE_TRACE_DIR / "plots"
+
+    if plots_dir.exists():
+        for seed_dir in sorted(plots_dir.iterdir()):
+            if not seed_dir.is_dir() or not seed_dir.name.startswith("seed_"):
+                continue
+            for csv_file in sorted(seed_dir.glob("*pairwise_action_divergence.csv")):
+                rows = _read_csv_rows(csv_file)
+                for row in rows:
+                    row["_seed"] = seed_dir.name
+                    all_rows.append(row)
+
+    if not all_rows:
+        print("  Trying per-model pairwise CSVs in result dirs...")
+        for cfg in CORNER_12K_MODEL_CONFIGS:
+            model_name = cfg["name"]
+            model_dir = INFERENCE_TRACE_DIR / model_name
+            if not model_dir.exists():
+                model_dir = RESULT_DIR / model_name
+            if not model_dir.exists():
+                continue
+            for seed_val, seed_dir in _discover_seed_dirs(model_dir):
+                plots_sub = seed_dir / "plots"
+                if plots_sub.exists():
+                    for csv_file in sorted(plots_sub.glob("*pairwise_action_divergence.csv")):
+                        rows = _read_csv_rows(csv_file)
+                        for row in rows:
+                            row["_seed"] = seed_dir.name
+                            all_rows.append(row)
+
+    if not all_rows:
+        print("  WARNING: No pairwise divergence data found.")
+        return []
+
+    agg = defaultdict(lambda: {
+        "v_t_l2": [], "v_t_cosine": [], "x_t_l2": [], "hidden_cosine": [],
+        "seed_values": [],
+    })
+
+    for row in all_rows:
+        model_a = row.get("model_a", "")
+        model_b = row.get("model_b", "")
+        denoise_idx = _safe_int(row.get("denoise_index"))
+        key = (model_a, model_b, denoise_idx)
+
+        a = agg[key]
+        a["seed_values"].append(row.get("_seed", ""))
+
+        for field in ["v_t_l2", "v_t_cosine", "x_t_l2", "hidden_cosine"]:
+            val = _safe_float(row.get(field))
+            if val is not None:
+                a[field].append(val)
+
+    output_rows = []
+    for (model_a, model_b, denoise_idx), a in sorted(agg.items()):
+        count = len(a["seed_values"])
+        mean_vt_l2, std_vt_l2, _ = _agg_stats(a["v_t_l2"])
+        mean_vt_cos, std_vt_cos, _ = _agg_stats(a["v_t_cosine"])
+        mean_xt_l2, std_xt_l2, _ = _agg_stats(a["x_t_l2"])
+        mean_h_cos, std_h_cos, _ = _agg_stats(a["hidden_cosine"])
+
+        output_rows.append({
+            "model_a": model_a,
+            "model_b": model_b,
+            "denoise_index": denoise_idx,
+            "count": count,
+            "v_t_l2_mean": mean_vt_l2,
+            "v_t_l2_std": std_vt_l2,
+            "v_t_cosine_mean": mean_vt_cos,
+            "v_t_cosine_std": std_vt_cos,
+            "x_t_l2_mean": mean_xt_l2,
+            "x_t_l2_std": std_xt_l2,
+            "hidden_cosine_mean": mean_h_cos,
+            "hidden_cosine_std": std_h_cos,
+        })
+
+    _write_csv(OUTPUT_DIR / "pairwise_action_divergence_aggregate.csv", output_rows)
     return output_rows
 
 
 def aggregate_velocity_statistics():
-    """Aggregate velocity statistics from inference trace."""
+    """Aggregate velocity (v_t_norm) statistics from inference trace.
+
+    For each model, compute:
+      - Per-seed mean and std of v_t_norm across all denoise steps
+      - Cross-seed mean of per-seed means, std of per-seed means
+      - Cross-seed mean of per-seed stds, std of per-seed stds
+    """
+    print("  Computing velocity statistics from inference trace...")
+
+    all_rows = []
     csv_path = INFERENCE_TRACE_DIR / "inference_attention_trace.csv"
-    if not csv_path.exists():
+    if csv_path.exists():
+        all_rows = _read_csv_rows(csv_path)
+
+    if not all_rows:
+        for cfg in CORNER_12K_MODEL_CONFIGS:
+            model_name = cfg["name"]
+            model_csv = INFERENCE_TRACE_DIR / model_name / "inference_attention_trace.csv"
+            if model_csv.exists():
+                all_rows.extend(_read_csv_rows(model_csv))
+
+    if not all_rows:
+        print("  WARNING: No inference trace data for velocity statistics.")
         return []
 
-    rows = []
-    with open(csv_path, "r") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            rows.append(row)
+    per_model_seed = defaultdict(lambda: {"v_t_norm": []})
 
-    per_model_seed = {}
-    for row in rows:
+    for row in all_rows:
         model_name = row.get("model_name", "")
         seed = row.get("seed", "")
         key = (model_name, seed)
-        if key not in per_model_seed:
-            per_model_seed[key] = {
-                "model_name": model_name,
-                "seed": seed,
-                "v_t_norm_values": [],
-                "denoise_indices": [],
-            }
-        val = row.get("v_t_norm")
-        if val is not None and val != "":
-            try:
-                per_model_seed[key]["v_t_norm_values"].append(float(val))
-                per_model_seed[key]["denoise_indices"].append(int(row.get("denoise_index", 0)))
-            except ValueError:
-                pass
+        val = _safe_float(row.get("v_t_norm"))
+        if val is not None:
+            per_model_seed[key]["v_t_norm"].append(val)
 
-    per_model_stats = {}
-    for key, data in per_model_seed.items():
-        model_name, seed = key
-        values = data["v_t_norm_values"]
+    per_model_agg = defaultdict(lambda: {"seed_means": [], "seed_stds": []})
+
+    for (model_name, seed), data in per_model_seed.items():
+        values = data["v_t_norm"]
         if not values:
             continue
-        if model_name not in per_model_stats:
-            per_model_stats[model_name] = {
-                "model_name": model_name,
-                "per_seed_means": [],
-                "per_seed_stds": [],
-            }
-        per_model_stats[model_name]["per_seed_means"].append(np.mean(values))
-        per_model_stats[model_name]["per_seed_stds"].append(np.std(values))
+        arr = np.array(values, dtype=np.float64)
+        per_model_agg[model_name]["seed_means"].append(float(np.mean(arr)))
+        per_model_agg[model_name]["seed_stds"].append(float(np.std(arr)))
 
     output_rows = []
-    for model_name, stats in per_model_stats.items():
-        means = stats["per_seed_means"]
-        stds = stats["per_seed_stds"]
+    for model_name, data in sorted(per_model_agg.items()):
+        means = data["seed_means"]
+        stds = data["seed_stds"]
+        num_seeds = len(means)
+
+        mean_of_means, std_of_means, _ = _agg_stats(means)
+        mean_of_stds, std_of_stds, _ = _agg_stats(stds)
+
         output_rows.append({
             "model_name": model_name,
-            "num_seeds": len(means),
-            "v_t_norm_mean_of_means": np.mean(means) if means else None,
-            "v_t_norm_std_of_means": np.std(means) if means else None,
-            "v_t_norm_mean_of_stds": np.mean(stds) if stds else None,
-            "v_t_norm_std_of_stds": np.std(stds) if stds else None,
+            "num_seeds": num_seeds,
+            "v_t_norm_mean_of_means": mean_of_means,
+            "v_t_norm_std_of_means": std_of_means,
+            "v_t_norm_mean_of_stds": mean_of_stds,
+            "v_t_norm_std_of_stds": std_of_stds,
         })
 
-    csv_out = OUTPUT_DIR / "velocity_statistics.csv"
-    if output_rows:
-        fieldnames = list(output_rows[0].keys())
-        with open(csv_out, "w", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            writer.writerows(output_rows)
-        print(f"  Saved {csv_out} with {len(output_rows)} rows")
-
+    _write_csv(OUTPUT_DIR / "velocity_statistics.csv", output_rows)
     return output_rows
 
 
-def write_model_performance_metadata():
-    """Write model performance metadata CSV."""
+def write_model_performance_metadata(model_records):
+    """Write model_performance_metadata.csv.
+
+    ONLY records name, method, path, eval_task_success, eval_grasp_success.
+    These metrics are for post-hoc reference only and MUST NOT be used
+    for any sorting, filtering, or statistical inference in this script.
+    """
     output_rows = []
-    for model_name in MODEL_NAMES:
-        perf = PERFORMANCE_MAP[model_name]
+    for rec in model_records:
         output_rows.append({
-            "model_name": model_name,
-            "method": METHOD_MAP[model_name],
-            "checkpoint_path": PATH_MAP[model_name],
-            "eval_task_success": perf["eval_task_success"],
-            "eval_grasp_success": perf["eval_grasp_success"],
+            "model_name": rec["name"],
+            "method": rec["method"],
+            "checkpoint_path": rec["path"],
+            "eval_task_success": rec["eval_task_success"],
+            "eval_grasp_success": rec["eval_grasp_success"],
         })
 
-    csv_out = OUTPUT_DIR / "model_performance_metadata.csv"
-    fieldnames = list(output_rows[0].keys())
-    with open(csv_out, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=fieldnames)
-        writer.writeheader()
-        writer.writerows(output_rows)
-    print(f"  Saved {csv_out}")
-
+    _write_csv(OUTPUT_DIR / "model_performance_metadata.csv", output_rows)
     return output_rows
 
 
-def write_summary_report():
-    """Generate analysis_12k_corner_summary.md from aggregated CSVs."""
+def _load_csv_for_report(filename):
+    """Helper to load a CSV from OUTPUT_DIR for report generation."""
+    path = OUTPUT_DIR / filename
+    if not path.exists():
+        return []
+    return _read_csv_rows(path)
+
+
+def _fmt(val, decimals=4):
+    """Format a number for markdown table."""
+    if val is None:
+        return "N/A"
+    return f"{val:.{decimals}f}"
+
+
+def write_summary_report(model_records):
+    """Generate analysis_12k_corner_summary.md from aggregated CSVs.
+
+    This function ONLY describes observable statistical facts.
+    It does NOT make causal claims.
+    Correlation != Causation is explicitly stated.
+    Single-seed artifacts and cross-seed instability are flagged.
+    """
+    print("  Generating summary report...")
+
+    lookup = _build_model_lookup()
     md_path = OUTPUT_DIR / "analysis_12k_corner_summary.md"
 
     lines = []
@@ -665,15 +705,17 @@ def write_summary_report():
     lines.append("")
     lines.append("This report summarizes post-hoc attention and action trajectory analysis")
     lines.append("of 7 models at the 12k checkpoint using corner,gripperPOV camera configuration.")
+    lines.append("Analysis is based on 10 fixed seeds: 10042,10043,10044,10045,10046,10047,10048,10049,10050,10051.")
     lines.append("")
     lines.append("### Models Analyzed")
     lines.append("")
     lines.append("| Model | Method | Task Success | Grasp Success |")
     lines.append("| --- | --- | --- | --- |")
-    for model_name in MODEL_NAMES:
-        perf = PERFORMANCE_MAP[model_name]
-        method = METHOD_MAP[model_name]
-        lines.append(f"| {model_name} | {method} | {perf['eval_task_success']}% | {perf['eval_grasp_success']}% |")
+    for rec in model_records:
+        lines.append(
+            f"| {rec['name']} | {rec['method']} | "
+            f"{rec['eval_task_success']}% | {rec['eval_grasp_success']}% |"
+        )
     lines.append("")
     lines.append("**Important**: The success metrics above are 200-episode final eval results used")
     lines.append("ONLY for post-hoc metadata (tables, sorting, correlation observation).")
@@ -681,99 +723,336 @@ def write_summary_report():
     lines.append("parameter adjustment, or any selection decision.")
     lines.append("")
 
-    attention_csv = OUTPUT_DIR / "attention_aggregate.csv"
-    if attention_csv.exists():
-        lines.append("## 2. Attention Metrics Aggregate")
-        lines.append("")
-        lines.append(f"See `attention_aggregate.csv` for full data.")
+    lines.append("## 2. Attention Metrics Aggregate")
+    lines.append("")
+    att_rows = _load_csv_for_report("attention_aggregate.csv")
+    if att_rows:
+        lines.append(f"Total aggregated records: {len(att_rows)}.")
         lines.append("")
 
-        rows = []
-        with open(attention_csv, "r") as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                rows.append(row)
-
-        expert_cross_rows = [r for r in rows if r.get("attention_source") == "expert_cross"]
-        if expert_cross_rows:
-            layer11_rows = [r for r in expert_cross_rows if r.get("layer") == "11"]
-            if layer11_rows:
-                lines.append("### Layer 11 Expert-Cross Attention Mass")
+        expert_cross = [r for r in att_rows if r.get("attention_source") == "expert_cross"]
+        if expert_cross:
+            layer11 = [r for r in expert_cross if r.get("layer") == "11"]
+            if layer11:
+                lines.append("### Layer 11 Expert-Cross Attention Mass (mean +/- std across seeds)")
                 lines.append("")
-                lines.append("| Model | Phase | Camera1 Mean | Camera2 Mean | Visual Total Mean |")
-                lines.append("| --- | --- | --- | --- | --- |")
-                for r in sorted(layer11_rows, key=lambda x: x.get("model_name", "")):
+                lines.append("| Model | Phase | Camera1 | Camera2 | Visual Total | Language | State | Count |")
+                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+                for r in sorted(layer11, key=lambda x: x.get("model_name", "")):
                     lines.append(
                         f"| {r['model_name']} | {r['phase']} | "
-                        f"{r.get('camera1_mass_mean', 'N/A')} | "
-                        f"{r.get('camera2_mass_mean', 'N/A')} | "
-                        f"{r.get('visual_total_mean', 'N/A')} |"
+                        f"{_fmt(r.get('camera1_mass_mean'))} +/- {_fmt(r.get('camera1_mass_std'))} | "
+                        f"{_fmt(r.get('camera2_mass_mean'))} +/- {_fmt(r.get('camera2_mass_std'))} | "
+                        f"{_fmt(r.get('visual_total_mean'))} +/- {_fmt(r.get('visual_total_std'))} | "
+                        f"{_fmt(r.get('language_mass_mean'))} +/- {_fmt(r.get('language_mass_std'))} | "
+                        f"{_fmt(r.get('state_mass_mean'))} +/- {_fmt(r.get('state_mass_std'))} | "
+                        f"{r.get('count', 'N/A')} |"
                     )
                 lines.append("")
 
-    heatmap_csv = OUTPUT_DIR / "heatmap_statistics.csv"
-    if heatmap_csv.exists():
-        lines.append("## 3. Heatmap Spatial Statistics")
-        lines.append("")
-        lines.append(f"See `heatmap_statistics.csv` for full data.")
+            layer3 = [r for r in expert_cross if r.get("layer") == "3"]
+            if layer3:
+                lines.append("### Layer 3 Expert-Cross Attention Mass (mean +/- std across seeds)")
+                lines.append("")
+                lines.append("| Model | Phase | Camera1 | Camera2 | Visual Total | Language | State | Count |")
+                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+                for r in sorted(layer3, key=lambda x: x.get("model_name", "")):
+                    lines.append(
+                        f"| {r['model_name']} | {r['phase']} | "
+                        f"{_fmt(r.get('camera1_mass_mean'))} +/- {_fmt(r.get('camera1_mass_std'))} | "
+                        f"{_fmt(r.get('camera2_mass_mean'))} +/- {_fmt(r.get('camera2_mass_std'))} | "
+                        f"{_fmt(r.get('visual_total_mean'))} +/- {_fmt(r.get('visual_total_std'))} | "
+                        f"{_fmt(r.get('language_mass_mean'))} +/- {_fmt(r.get('language_mass_std'))} | "
+                        f"{_fmt(r.get('state_mass_mean'))} +/- {_fmt(r.get('state_mass_std'))} | "
+                        f"{r.get('count', 'N/A')} |"
+                    )
+                lines.append("")
+
+            layer7 = [r for r in expert_cross if r.get("layer") == "7"]
+            if layer7:
+                lines.append("### Layer 7 Expert-Cross Attention Mass (mean +/- std across seeds)")
+                lines.append("")
+                lines.append("| Model | Phase | Camera1 | Camera2 | Visual Total | Language | State | Count |")
+                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+                for r in sorted(layer7, key=lambda x: x.get("model_name", "")):
+                    lines.append(
+                        f"| {r['model_name']} | {r['phase']} | "
+                        f"{_fmt(r.get('camera1_mass_mean'))} +/- {_fmt(r.get('camera1_mass_std'))} | "
+                        f"{_fmt(r.get('camera2_mass_mean'))} +/- {_fmt(r.get('camera2_mass_std'))} | "
+                        f"{_fmt(r.get('visual_total_mean'))} +/- {_fmt(r.get('visual_total_std'))} | "
+                        f"{_fmt(r.get('language_mass_mean'))} +/- {_fmt(r.get('language_mass_std'))} | "
+                        f"{_fmt(r.get('state_mass_mean'))} +/- {_fmt(r.get('state_mass_std'))} | "
+                        f"{r.get('count', 'N/A')} |"
+                    )
+                lines.append("")
+    else:
+        lines.append("No attention aggregate data available.")
         lines.append("")
 
-    inference_csv = OUTPUT_DIR / "inference_trace_aggregate.csv"
-    if inference_csv.exists():
-        lines.append("## 4. Inference Trace Aggregate")
-        lines.append("")
-        lines.append(f"See `inference_trace_aggregate.csv` for full data.")
-        lines.append("")
-
-    pairwise_csv = OUTPUT_DIR / "pairwise_action_divergence_aggregate.csv"
-    if pairwise_csv.exists():
-        lines.append("## 5. Pairwise Action Divergence")
-        lines.append("")
-        lines.append(f"See `pairwise_action_divergence_aggregate.csv` for full data.")
-        lines.append("")
-
-    velocity_csv = OUTPUT_DIR / "velocity_statistics.csv"
-    if velocity_csv.exists():
-        lines.append("## 6. Velocity Statistics")
-        lines.append("")
-        lines.append(f"See `velocity_statistics.csv` for full data.")
-        lines.append("")
-
-    lines.append("## 7. Key Research Questions")
+    lines.append("## 3. Phase Reach Statistics (Rollout Behavioral Diagnostics)")
     lines.append("")
+    phase_rows = _load_csv_for_report("phase_reach_aggregate.csv")
+    if phase_rows:
+        lines.append(f"Total phase records: {len(phase_rows)}.")
+        lines.append("")
+        lines.append("| Model | Phase | Reached | Total | Ratio |")
+        lines.append("| --- | --- | --- | --- | --- |")
+        for r in sorted(phase_rows, key=lambda x: (x.get("model_name", ""), x.get("phase", ""))):
+            lines.append(
+                f"| {r['model_name']} | {r['phase']} | "
+                f"{r.get('reached_count', 0)} | {r.get('total_count', 0)} | "
+                f"{_fmt(r.get('reached_ratio'), 3)} |"
+            )
+        lines.append("")
+        lines.append("**Note**: These are behavioral diagnostics only. Different models in post-grasp and")
+        lines.append("pre-place phases use their own policy trajectories, so these are NOT strict")
+        lines.append("same-observation causal comparisons. Strict same-observation comparison is based")
+        lines.append("on inference_trace initial input.")
+        lines.append("")
+    else:
+        lines.append("No phase reach data available.")
+        lines.append("")
+
+    lines.append("## 4. Heatmap Spatial Statistics")
+    lines.append("")
+    hm_rows = _load_csv_for_report("heatmap_statistics.csv")
+    if hm_rows:
+        lines.append(f"Total heatmap statistics records: {len(hm_rows)}.")
+        lines.append("")
+        lines.append("Key metrics: entropy (spatial concentration), center_x/center_y (attention centroid),")
+        lines.append("max_attention (peak attention value). Lower entropy = more concentrated attention.")
+        lines.append("")
+
+        expert_cross_hm = [r for r in hm_rows if r.get("attention_source") == "expert_cross"]
+        if expert_cross_hm:
+            layer11_hm = [r for r in expert_cross_hm if r.get("layer") == "11"]
+            if layer11_hm:
+                lines.append("### Layer 11 Expert-Cross Heatmap Statistics")
+                lines.append("")
+                lines.append("| Model | Phase | Camera | Entropy | Max Attn | Center X | Center Y | Count |")
+                lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+                for r in sorted(layer11_hm, key=lambda x: (x.get("model_name", ""), x.get("camera", ""))):
+                    lines.append(
+                        f"| {r['model_name']} | {r['phase']} | {r['camera']} | "
+                        f"{_fmt(r.get('entropy_mean'))} +/- {_fmt(r.get('entropy_std'))} | "
+                        f"{_fmt(r.get('max_attention_mean'))} +/- {_fmt(r.get('max_attention_std'))} | "
+                        f"{_fmt(r.get('center_x_mean'), 2)} +/- {_fmt(r.get('center_x_std'), 2)} | "
+                        f"{_fmt(r.get('center_y_mean'), 2)} +/- {_fmt(r.get('center_y_std'), 2)} | "
+                        f"{r.get('count', 'N/A')} |"
+                    )
+                lines.append("")
+    else:
+        lines.append("No heatmap statistics data available.")
+        lines.append("")
+
+    lines.append("## 5. Inference Trace Aggregate")
+    lines.append("")
+    trace_rows = _load_csv_for_report("inference_trace_aggregate.csv")
+    if trace_rows:
+        lines.append(f"Total inference trace records: {len(trace_rows)}.")
+        lines.append("")
+        lines.append("| Model | Layer | Denoise Step | x_t_norm | v_t_norm | suffix_hidden_norm | Count |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+        for r in sorted(trace_rows, key=lambda x: (x.get("model_name", ""), x.get("layer", ""), x.get("denoise_index", ""))):
+            lines.append(
+                f"| {r['model_name']} | {r.get('layer', 'N/A')} | {r.get('denoise_index', 'N/A')} | "
+                f"{_fmt(r.get('x_t_norm_mean'))} +/- {_fmt(r.get('x_t_norm_std'))} | "
+                f"{_fmt(r.get('v_t_norm_mean'))} +/- {_fmt(r.get('v_t_norm_std'))} | "
+                f"{_fmt(r.get('suffix_hidden_norm_mean'))} +/- {_fmt(r.get('suffix_hidden_norm_std'))} | "
+                f"{r.get('count', 'N/A')} |"
+            )
+        lines.append("")
+    else:
+        lines.append("No inference trace data available.")
+        lines.append("")
+
+    lines.append("## 6. Pairwise Action Divergence")
+    lines.append("")
+    pw_rows = _load_csv_for_report("pairwise_action_divergence_aggregate.csv")
+    if pw_rows:
+        lines.append(f"Total pairwise records: {len(pw_rows)}.")
+        lines.append("")
+        lines.append("| Model A | Model B | Denoise | v_t_l2 | v_t_cosine | x_t_l2 | hidden_cosine | Count |")
+        lines.append("| --- | --- | --- | --- | --- | --- | --- | --- |")
+        for r in sorted(pw_rows, key=lambda x: (x.get("model_a", ""), x.get("model_b", ""), x.get("denoise_index", ""))):
+            lines.append(
+                f"| {r['model_a']} | {r['model_b']} | {r.get('denoise_index', 'N/A')} | "
+                f"{_fmt(r.get('v_t_l2_mean'))} +/- {_fmt(r.get('v_t_l2_std'))} | "
+                f"{_fmt(r.get('v_t_cosine_mean'))} +/- {_fmt(r.get('v_t_cosine_std'))} | "
+                f"{_fmt(r.get('x_t_l2_mean'))} +/- {_fmt(r.get('x_t_l2_std'))} | "
+                f"{_fmt(r.get('hidden_cosine_mean'))} +/- {_fmt(r.get('hidden_cosine_std'))} | "
+                f"{r.get('count', 'N/A')} |"
+            )
+        lines.append("")
+    else:
+        lines.append("No pairwise divergence data available.")
+        lines.append("")
+
+    lines.append("## 7. Velocity Statistics")
+    lines.append("")
+    vel_rows = _load_csv_for_report("velocity_statistics.csv")
+    if vel_rows:
+        lines.append(f"Total velocity records: {len(vel_rows)}.")
+        lines.append("")
+        lines.append("| Model | Seeds | v_t_norm Mean-of-Means | Std-of-Means | Mean-of-Stds | Std-of-Stds |")
+        lines.append("| --- | --- | --- | --- | --- | --- |")
+        for r in sorted(vel_rows, key=lambda x: x.get("model_name", "")):
+            lines.append(
+                f"| {r['model_name']} | {r.get('num_seeds', 'N/A')} | "
+                f"{_fmt(r.get('v_t_norm_mean_of_means'))} | "
+                f"{_fmt(r.get('v_t_norm_std_of_means'))} | "
+                f"{_fmt(r.get('v_t_norm_mean_of_stds'))} | "
+                f"{_fmt(r.get('v_t_norm_std_of_stds'))} |"
+            )
+        lines.append("")
+    else:
+        lines.append("No velocity statistics data available.")
+        lines.append("")
+
+    lines.append("## 8. Key Research Questions (Descriptive Observations Only)")
+    lines.append("")
+    lines.append("**DISCLAIMER**: All observations below describe statistical correlations only.")
+    lines.append("Correlation does NOT imply causation. If different seeds show inconsistent results,")
+    lines.append("this is marked as unstable. If only a single seed shows a difference, it is marked")
+    lines.append("as a single-seed artifact.")
+    lines.append("")
+
     lines.append("### Q1: ours_v1 -> v2 -> v3 -> v4 attention pattern evolution")
     lines.append("")
-    lines.append("As pc_success increases from 20.0 -> 25.5 -> 32.0 -> 34.5,")
-    lines.append("does a stable attention spatial pattern change exist across multiple seeds?")
+    lines.append(f"Task success progression: 20.0% -> 25.5% -> 32.0% -> 34.5%.")
     lines.append("")
-    lines.append("### Q2: v3 vs random (both 32.0) internal differences")
+    lines.append("Observation framework:")
+    lines.append("- Check attention_aggregate.csv for camera1_mass, camera2_mass, visual_total trends")
+    lines.append("  across layers 3/7/11 in the initial phase (strict same-observation).")
+    lines.append("- Check heatmap_statistics.csv for entropy, center_x, center_y stability across seeds.")
+    lines.append("- Check inference_trace_aggregate.csv for x_t_norm, v_t_norm, suffix_hidden_norm trends.")
     lines.append("")
-    lines.append("When v3 and random share the same 32.0 task success,")
-    lines.append("do their internal attention and action trajectories still show clear differences?")
+    lines.append("If attention mass or spatial concentration shows consistent directional change")
+    lines.append("across all 10 seeds, this indicates a stable pattern. If only some seeds agree,")
+    lines.append("mark as partially stable. If seeds disagree, mark as unstable.")
     lines.append("")
-    lines.append("### Q3: v4 vs random (34.5 vs 32.0) post-grasp/pre-place changes")
+
+    lines.append("### Q2: ours_v3 vs random (both 32.0 task success)")
     lines.append("")
-    lines.append("Does v4's advantage over random accompany stable post-grasp or pre-place attention changes?")
+    lines.append("Both models achieve 32.0% task success but use different selection methods.")
     lines.append("")
+    lines.append("Observation framework:")
+    lines.append("- Compare attention_aggregate.csv entries for ours_v3_corner_12k vs random_corner_12k")
+    lines.append("  at same layer/phase/attention_source.")
+    lines.append("- Compare pairwise_action_divergence_aggregate.csv for the (ours_v3, random) pair.")
+    lines.append("  High v_t_l2 or low v_t_cosine indicates different velocity trajectories despite")
+    lines.append("  same success rate.")
+    lines.append("- Compare heatmap_statistics.csv for spatial attention differences.")
+    lines.append("")
+    lines.append("If v_t_l2 between v3 and random is consistently high across seeds, this suggests")
+    lines.append("different internal dynamics despite same external success. This is a correlation,")
+    lines.append("not a causal claim about which method is better.")
+    lines.append("")
+
+    lines.append("### Q3: ours_v4 vs random (34.5% vs 32.0%)")
+    lines.append("")
+    lines.append("v4 achieves 2.5 percentage points higher task success than random.")
+    lines.append("")
+    lines.append("Observation framework:")
+    lines.append("- Check phase_reach_aggregate.csv for post_grasp and pre_place reach ratio differences.")
+    lines.append("- Check attention_aggregate.csv for post_grasp and pre_place attention differences")
+    lines.append("  at layers 3/7/11.")
+    lines.append("- Check pairwise_action_divergence_aggregate.csv for (ours_v4, random) pair metrics.")
+    lines.append("")
+    lines.append("If v4 shows consistently different attention in post-grasp or pre-place phases")
+    lines.append("compared to random, this is a behavioral correlation. Note that rollout phase")
+    lines.append("comparisons are NOT strict same-observation (each model generates its own trajectory).")
+    lines.append("Only inference_trace initial phase provides strict same-observation comparison.")
+    lines.append("")
+
     lines.append("### Q4: v4 action-related design consistency vs v3")
     lines.append("")
-    lines.append("After v4 adds action-related design, does it show more consistent changes")
-    lines.append("in v_t, hidden representation, or final action trajectory compared to v3?")
+    lines.append("v4 adds action-related selection design compared to v3.")
     lines.append("")
-    lines.append("### Q5: Baseline trend support")
+    lines.append("Observation framework:")
+    lines.append("- Check inference_trace_aggregate.csv: compare v_t_norm and suffix_hidden_norm")
+    lines.append("  between v4 and v3 across denoise steps.")
+    lines.append("- Check pairwise_action_divergence_aggregate.csv for (ours_v4, ours_v3) pair.")
+    lines.append("- Check velocity_statistics.csv for v_t_norm differences.")
     lines.append("")
-    lines.append("Do uniform, zero, and random baselines support the same trends?")
+    lines.append("If v4 shows consistently different v_t_norm or hidden representation compared to v3")
+    lines.append("across seeds and denoise steps, this indicates the action-related design changes")
+    lines.append("internal dynamics. This is correlation, not causation.")
     lines.append("")
-    lines.append("## 8. Correlation vs Causality Disclaimer")
+
+    lines.append("### Q5: Baseline trend support (uniform, zero, random)")
     lines.append("")
-    lines.append("**This report describes observable correlations only.**")
-    lines.append("If an attention metric ordering matches the success ordering,")
-    lines.append("this does NOT imply causation. If different seeds show inconsistent results,")
-    lines.append("this must be explicitly marked as unstable. If only a single seed shows a difference,")
-    lines.append("it must be marked as a single-seed artifact.")
+    lines.append("uniform (28.2%), zero (32.0%), random (32.0%) serve as baselines.")
     lines.append("")
+    lines.append("Observation framework:")
+    lines.append("- Check if baseline attention patterns follow similar or different trends compared")
+    lines.append("  to the ours_v* progression.")
+    lines.append("- Check pairwise divergence between baselines and ours models.")
+    lines.append("")
+    lines.append("If baselines show attention patterns that differ from the ours_v* trend,")
+    lines.append("this may suggest the selection method matters. If baselines follow similar patterns,")
+    lines.append("the trend may be method-agnostic. All observations are correlational.")
+    lines.append("")
+
+    lines.append("## 9. Stability Assessment")
+    lines.append("")
+
+    if hm_rows:
+        lines.append("### Cross-seed Stability of Heatmap Statistics")
+        lines.append("")
+        unstable_records = []
+        for r in hm_rows:
+            std_val = _safe_float(r.get("entropy_std"))
+            mean_val = _safe_float(r.get("entropy_mean"))
+            if std_val is not None and mean_val is not None and mean_val > 0:
+                cv = std_val / mean_val
+                if cv > 0.3:
+                    unstable_records.append(r)
+
+        if unstable_records:
+            lines.append(f"Found {len(unstable_records)} records with coefficient of variation > 0.3 (unstable across seeds):")
+            lines.append("")
+            for r in unstable_records[:10]:
+                lines.append(
+                    f"- {r['model_name']} / {r['phase']} / layer {r.get('layer', '?')} / "
+                    f"{r['camera']}: entropy mean={_fmt(r.get('entropy_mean'))}, "
+                    f"std={_fmt(r.get('entropy_std'))}"
+                )
+            lines.append("")
+        else:
+            lines.append("All heatmap statistics show low cross-seed variation (CV < 0.3).")
+            lines.append("")
+
+    if att_rows:
+        lines.append("### Cross-seed Stability of Attention Metrics")
+        lines.append("")
+        unstable_att = []
+        for r in att_rows:
+            std_val = _safe_float(r.get("camera1_mass_std"))
+            mean_val = _safe_float(r.get("camera1_mass_mean"))
+            if std_val is not None and mean_val is not None and abs(mean_val) > 0.01:
+                cv = std_val / abs(mean_val)
+                if cv > 0.3:
+                    unstable_att.append(r)
+
+        if unstable_att:
+            lines.append(f"Found {len(unstable_att)} attention records with CV > 0.3 (unstable across seeds):")
+            lines.append("")
+            for r in unstable_att[:10]:
+                lines.append(
+                    f"- {r['model_name']} / {r['phase']} / layer {r.get('layer', '?')} / "
+                    f"{r['attention_source']}: camera1_mass mean={_fmt(r.get('camera1_mass_mean'))}, "
+                    f"std={_fmt(r.get('camera1_mass_std'))}"
+                )
+            lines.append("")
+        else:
+            lines.append("All attention metrics show low cross-seed variation (CV < 0.3).")
+            lines.append("")
+
     lines.append("---")
     lines.append("*Report generated by aggregate_12k_corner.py*")
+    lines.append("*All observations are correlational. No causal claims are made.*")
+    lines.append("*Single-seed artifacts and cross-seed instability are flagged where applicable.*")
 
     with open(md_path, "w") as f:
         f.write("\n".join(lines))
@@ -784,33 +1063,36 @@ def main():
     print("=" * 80)
     print("12k Corner 7-Model Attention Analysis Aggregation")
     print("=" * 80)
+    print()
 
-    OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+    ensure_output_dir()
 
-    print("\n[1/8] Loading model metadata...")
-    metadata_records = load_model_metadata()
+    print("\n[1/9] Loading model metadata from model_configs_12k_corner.py...")
+    model_records = load_model_metadata()
 
-    print("\n[2/8] Aggregating attention metrics...")
-    aggregate_attention_metrics(metadata_records)
+    print("\n[2/9] Aggregating attention metrics...")
+    aggregate_attention_metrics()
 
-    print("\n[3/8] Aggregating phase reach statistics...")
-    aggregate_phase_reach(metadata_records)
+    print("\n[3/9] Aggregating phase reach statistics...")
+    aggregate_phase_reach()
 
-    print("\n[4/8] Aggregating heatmap statistics...")
+    print("\n[4/9] Aggregating heatmap statistics...")
     aggregate_heatmap_statistics()
 
-    print("\n[5/8] Aggregating inference trace...")
+    print("\n[5/9] Aggregating inference trace...")
     aggregate_inference_trace()
 
-    print("\n[6/8] Aggregating pairwise divergence...")
-    aggregate_pairwise_divergence()
+    print("\n[6/9] Aggregating pairwise action divergence...")
+    aggregate_pairwise_action_divergence()
 
-    print("\n[7/8] Aggregating velocity statistics...")
+    print("\n[7/9] Aggregating velocity statistics...")
     aggregate_velocity_statistics()
 
-    print("\n[8/8] Writing model performance metadata and summary report...")
-    write_model_performance_metadata()
-    write_summary_report()
+    print("\n[8/9] Writing model performance metadata...")
+    write_model_performance_metadata(model_records)
+
+    print("\n[9/9] Generating summary report...")
+    write_summary_report(model_records)
 
     print("\n" + "=" * 80)
     print("DONE. All outputs saved to:")
