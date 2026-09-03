@@ -1,0 +1,108 @@
+"""
+SmolVLA Training Wrapper for DifferentVLM
+
+Calls the existing lerobot-train entry point with the selected dataset.
+Does NOT modify training code.
+"""
+
+import sys
+import json
+import subprocess
+import os
+from pathlib import Path
+
+sys.stdout.reconfigure(line_buffering=True)
+
+from differentvlm.configs.vlm_config import VLMExperimentConfig
+
+
+def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
+    """
+    Run SmolVLA training with the selected dataset.
+    Reuses existing lerobot-train entry point.
+    Returns the checkpoint directory path.
+    """
+    print(f"\n{'='*60}")
+    print(f"Running SmolVLA Training")
+    print(f"{'='*60}")
+    print(f"Subset file: {subset_file}")
+    print(f"Output dir: {cfg.checkpoints_dir}")
+    print(f"Steps: {cfg.train_steps}")
+    print(f"Batch size: {cfg.train_batch_size}")
+    print(f"GPU: {cfg.gpu_id}")
+    print(f"{'='*60}")
+
+    with open(subset_file, "r") as f:
+        subset_data = json.load(f)
+
+    episode_indices = subset_data["selected_episode_indices"]
+    episodes_str = "[" + ",".join(str(x) for x in episode_indices) + "]"
+
+    print(f"Training with {len(episode_indices)} episodes")
+    print(f"Episode indices: {episodes_str}")
+    sys.stdout.flush()
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu_id)
+    os.environ["MUJOCO_GL"] = "egl"
+    os.environ["PYOPENGL_PLATFORM"] = "egl"
+
+    exp_name = f"smolvla_{cfg.vlm_name}_{cfg.selection_num_episodes}_seed{cfg.selection_seed}_{cfg.camera}"
+    output_dir = Path(cfg.checkpoints_dir) / exp_name
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    train_log = Path(cfg.logs_dir) / f"{exp_name}.log"
+
+    cmd = [
+        "lerobot-train",
+        "--policy.path=lerobot/smolvla_base",
+        "--policy.device=cuda",
+        "--policy.push_to_hub=false",
+        "--dataset.repo_id=lerobot/metaworld_pick_place",
+        f"--dataset.root={cfg.dataset_root}",
+        f"--dataset.episodes={episodes_str}",
+        "--dataset.eval_split=0.0",
+        f"--rename_map={cfg.rename_map}",
+        "--env.type=metaworld",
+        "--env.task=pick-place-v3",
+        f"--env.camera_name={cfg.camera_names}",
+        f"--policy.vlm_model_name={cfg.vlm_model_name}",
+        "--policy.freeze_vision_encoder=true",
+        "--policy.train_expert_only=true",
+        "--policy.train_state_proj=false",
+        f"--policy.optimizer_lr={cfg.train_lr}",
+        f"--save_freq={cfg.train_save_freq}",
+        f"--steps={cfg.train_steps}",
+        f"--batch_size={cfg.train_batch_size}",
+        f"--num_workers={cfg.train_num_workers}",
+        f"--eval.n_episodes={cfg.eval_n_episodes}",
+        f"--eval.batch_size={cfg.eval_batch_size}",
+        f"--env_eval_freq={cfg.train_steps}",
+        f"--seed={cfg.selection_seed}",
+        f"--job_name={exp_name}",
+        f"--output_dir={output_dir}",
+        '--remove_features=["observation.environment_state"]',
+        "--wandb.enable=true",
+    ]
+
+    print(f"Running: lerobot-train ...")
+    print(f"Output dir: {output_dir}")
+    print(f"Log file: {train_log}")
+    sys.stdout.flush()
+
+    with open(train_log, "w") as log_f:
+        result = subprocess.run(
+            cmd,
+            stdout=log_f,
+            stderr=subprocess.STDOUT,
+            cwd=str(Path(__file__).resolve().parents[4]),
+        )
+
+    if result.returncode != 0:
+        print(f"WARNING: Training exited with code {result.returncode}")
+        print(f"Check log: {train_log}")
+        sys.stdout.flush()
+
+    checkpoint_dir = output_dir / "checkpoints"
+    print(f"Training complete. Checkpoint dir: {checkpoint_dir}")
+    sys.stdout.flush()
+    return str(checkpoint_dir)
