@@ -1,7 +1,11 @@
+import logging
+import warnings
 from dataclasses import dataclass, field
 
 from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature, PreTrainedConfig
 from lerobot.optim import AdamWConfig
+
+logger = logging.getLogger(__name__)
 
 
 @PreTrainedConfig.register_subclass("minivla")
@@ -9,22 +13,28 @@ from lerobot.optim import AdamWConfig
 class MiniVLAConfig(PreTrainedConfig):
     n_obs_steps: int = 1
     d_model: int = 128
-    d_word: int = 64
-    diffusion_T: int = 16
-    beta_start: float = 1e-4
-    beta_end: float = 1e-2
-    time_emb_dim: int = 32
-    diffusion_hidden_dim: int = 128
-    image_size: int = 64
-    image_key: str = "observation.images.top"
-    text_key: str = "task"
-    max_text_length: int = 32
+
+    vision_encoder_path: str = ""
+    language_model_path: str = ""
+    tokenizer_path: str = ""
+
+    image_size: int = 224
+    main_image_key: str = "observation.images.top"
+    wrist_image_keys: list = field(default_factory=list)
+    history_image_keys: list = field(default_factory=list)
+    num_image_history: int = 2
+
+    action_chunk_size: int = 8
+    action_vocab_size: int = 256
+    vq_codebook_size: int = 256
+
     state_dim: int = 0
     action_dim: int = 0
-    vocab: dict = field(default_factory=lambda: {"<pad>": 0, "<unk>": 1})
-    task_texts: list = field(default_factory=list)
-    default_instruction: str = ""
-    optimizer_lr: float = 1e-4
+
+    freeze_vision_encoder: bool = True
+    freeze_language_model: bool = False
+    use_state_projection: bool = True
+    use_residual_vq: bool = True
 
     normalization_mapping: dict[str, NormalizationMode] = field(
         default_factory=lambda: {
@@ -36,17 +46,28 @@ class MiniVLAConfig(PreTrainedConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.d_model <= 0:
-            raise ValueError(f"d_model must be positive, got {self.d_model}")
-        if self.diffusion_T <= 0:
-            raise ValueError(f"diffusion_T must be positive, got {self.diffusion_T}")
         if self.image_size <= 0:
             raise ValueError(f"image_size must be positive, got {self.image_size}")
-        if self.max_text_length <= 0:
-            raise ValueError(f"max_text_length must be positive, got {self.max_text_length}")
+        if self.action_chunk_size <= 0:
+            raise ValueError(f"action_chunk_size must be positive, got {self.action_chunk_size}")
+        if self.vq_codebook_size <= 0:
+            raise ValueError(f"vq_codebook_size must be positive, got {self.vq_codebook_size}")
+
+    def get_image_keys(self) -> list:
+        keys = []
+        if self.main_image_key:
+            keys.append(self.main_image_key)
+        for k in self.history_image_keys:
+            if k and k not in keys:
+                keys.append(k)
+        for k in self.wrist_image_keys:
+            if k and k not in keys:
+                keys.append(k)
+        return keys
 
     def validate_features(self) -> None:
-        if not self.image_features:
+        image_features = self.image_features
+        if not image_features:
             raise ValueError("At least one visual input is required for MiniVLA.")
         if not self.robot_state_feature:
             raise ValueError("observation.state is required for MiniVLA.")
@@ -56,17 +77,46 @@ class MiniVLAConfig(PreTrainedConfig):
         self.action_dim = self.action_feature.shape[0]
         self.state_dim = self.robot_state_feature.shape[0]
 
-        image_features = self.image_features
-        if self.image_key not in image_features:
-            if "observation.images.top" in image_features:
-                self.image_key = "observation.images.top"
+        if self.main_image_key not in image_features:
+            available = [k for k in image_features if k.startswith("observation.images")]
+            if available:
+                self.main_image_key = sorted(available)[0]
+                logger.warning(
+                    f"main_image_key '{self.main_image_key}' not in config, "
+                    f"selected from available: {self.main_image_key}"
+                )
             else:
-                keys = sorted(image_features.keys())
-                self.image_key = keys[0]
+                raise ValueError("No observation.images.* features found in dataset.")
+
+        actual_history = []
+        for k in self.history_image_keys:
+            if k in image_features:
+                actual_history.append(k)
+        self.history_image_keys = actual_history
+
+        actual_wrist = []
+        for k in self.wrist_image_keys:
+            if k in image_features:
+                actual_wrist.append(k)
+        self.wrist_image_keys = actual_wrist
+
+    def validate_vla_config(self) -> None:
+        if not self.language_model_path:
+            warnings.warn(
+                "language_model_path is empty. A dummy backbone will be used. "
+                "Set this path to load a real language model.",
+                UserWarning,
+            )
+        if not self.vision_encoder_path:
+            warnings.warn(
+                "vision_encoder_path is empty. A dummy vision encoder will be used. "
+                "Set this path to load a real vision encoder.",
+                UserWarning,
+            )
 
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(
-            lr=self.optimizer_lr,
+            lr=1e-4,
             weight_decay=0,
             betas=(0.9, 0.999),
             eps=1e-8,
@@ -78,11 +128,13 @@ class MiniVLAConfig(PreTrainedConfig):
 
     @property
     def observation_delta_indices(self) -> list:
+        if self.num_image_history > 0:
+            return list(range(-self.num_image_history, 1))
         return [0]
 
     @property
     def action_delta_indices(self) -> list:
-        return [0]
+        return list(range(self.action_chunk_size))
 
     @property
     def reward_delta_indices(self) -> None:

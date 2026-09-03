@@ -1,8 +1,79 @@
+import logging
+import warnings
+
 import torch
+
+logger = logging.getLogger(__name__)
+
+
+class VLATokenizerWrapper:
+    def __init__(self, tokenizer_path: str = ""):
+        self.tokenizer = None
+        if tokenizer_path:
+            try:
+                from transformers import AutoTokenizer
+                self.tokenizer = AutoTokenizer.from_pretrained(
+                    tokenizer_path, local_files_only=True
+                )
+                logger.info(f"Loaded VLA tokenizer from {tokenizer_path}")
+            except Exception as e:
+                warnings.warn(
+                    f"Failed to load tokenizer from {tokenizer_path}: {e}. "
+                    "Falling back to dummy tokenizer."
+                )
+                self.tokenizer = None
+
+    def encode(self, texts: str | list[str], max_length: int = 64,
+               device: torch.device | None = None) -> dict:
+        if self.tokenizer is not None:
+            if isinstance(texts, str):
+                texts = [texts]
+            result = self.tokenizer(
+                texts,
+                max_length=max_length,
+                padding="max_length",
+                truncation=True,
+                return_tensors="pt",
+            )
+            input_ids = result["input_ids"]
+            attention_mask = result["attention_mask"]
+            if device is not None:
+                input_ids = input_ids.to(device)
+                attention_mask = attention_mask.to(device)
+            return {"input_ids": input_ids, "attention_mask": attention_mask}
+        else:
+            return self._dummy_encode(texts, max_length, device)
+
+    def batch_encode(self, texts: list[str], max_length: int = 64,
+                     device: torch.device | None = None) -> dict:
+        return self.encode(texts, max_length=max_length, device=device)
+
+    def _dummy_encode(self, texts: str | list[str], max_length: int = 64,
+                      device: torch.device | None = None) -> dict:
+        if isinstance(texts, str):
+            texts = [texts]
+        batch_size = len(texts)
+        input_ids = torch.zeros(batch_size, max_length, dtype=torch.long)
+        attention_mask = torch.zeros(batch_size, max_length, dtype=torch.long)
+        for i, text in enumerate(texts):
+            tokens = str(text).lower().split()[:max_length]
+            for j, t in enumerate(tokens):
+                input_ids[i, j] = hash(t) % 1000
+            attention_mask[i, :len(tokens)] = 1
+        if device is not None:
+            input_ids = input_ids.to(device)
+            attention_mask = attention_mask.to(device)
+        return {"input_ids": input_ids, "attention_mask": attention_mask}
 
 
 class SimpleTokenizer:
+    """Legacy tokenizer kept for backward compatibility. Not used by MiniVLAPolicy."""
+
     def __init__(self, vocab=None):
+        warnings.warn(
+            "SimpleTokenizer is legacy and not used by MiniVLAPolicy.",
+            DeprecationWarning,
+        )
         self.pad_token = "<pad>"
         self.unk_token = "<unk>"
         if vocab is None:

@@ -25,8 +25,13 @@ def make_minivla_pre_post_processors(
     PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
     PolicyProcessorPipeline[PolicyAction, PolicyAction],
 ]:
+    rename_map = {}
+    for key in config.get_image_keys():
+        if key not in rename_map:
+            rename_map[key] = key
+
     input_steps = [
-        RenameObservationsProcessorStep(rename_map={}),
+        RenameObservationsProcessorStep(rename_map=rename_map),
         AddBatchDimensionProcessorStep(),
         DeviceProcessorStep(device=config.device),
         NormalizerProcessorStep(
