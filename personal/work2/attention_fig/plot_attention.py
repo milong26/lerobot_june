@@ -36,6 +36,7 @@ os.environ["EGL_DEVICE_ID"] = "0"
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(Path(__file__).parent))
 
 from lerobot.policies.smolvla.modeling_smolvla import SmolVLAPolicy
 from lerobot.envs.metaworld import MetaworldEnv
@@ -54,6 +55,8 @@ DEFAULT_INFERENCE_TRACE_OUTPUT_DIR = PROJECT_ROOT / "personal/work2/attention_fi
 GRIPPER_OBJECT_DIST_PRE_GRASP = 0.15
 OBJECT_HEIGHT_POST_GRASP = 0.02
 OBJECT_GOAL_DIST_PRE_PLACE = 0.12
+from model_configs_12k_corner import CORNER_12K_MODEL_CONFIGS
+
 MODEL_CONFIGS = [
     {
         "name": "random_corner_16k",
@@ -114,6 +117,11 @@ MODEL_CONFIGS = [
         "eval_task_success": 35.0,
     },
 ]
+
+MODEL_SETS = {
+    "default": MODEL_CONFIGS,
+    "corner_12k": CORNER_12K_MODEL_CONFIGS,
+}
 
 PHASES = ["initial", "pre_grasp", "post_grasp", "pre_place"]
 
@@ -1638,6 +1646,7 @@ def extract_inference_trace_from_model(
     heatmap_step_specs,
     output_dir,
     model_cfg,
+    seed=None,
 ):
     """Extract full inference trace from a SmolVLA model.
 
@@ -1653,7 +1662,8 @@ def extract_inference_trace_from_model(
         query_mode: Query aggregation mode ("mean_suffix", "last", "mean_all").
         heatmap_step_specs: List of step specs for heatmap generation.
         output_dir: Path to save results for this model.
-        model_cfg: Model configuration dict with name, method, camera_name, eval_task_success.
+        model_cfg: Model configuration dict with name, method, camera_name, eval_task_success, eval_grasp_success.
+        seed: Evaluation seed for this run.
 
     Returns:
         Dict with:
@@ -1667,6 +1677,7 @@ def extract_inference_trace_from_model(
     method = model_cfg["method"]
     camera_name = model_cfg["camera_name"]
     eval_task_success = model_cfg.get("eval_task_success", None)
+    eval_grasp_success = model_cfg.get("eval_grasp_success", None)
 
     vlm_with_expert = policy.model.vlm_with_expert
     extractor = AttentionExtractor(vlm_with_expert)
@@ -1780,7 +1791,9 @@ def extract_inference_trace_from_model(
                         "model_name": model_name,
                         "method": method,
                         "camera": camera_name,
+                        "seed": seed,
                         "eval_task_success": eval_task_success,
+                        "eval_grasp_success": eval_grasp_success,
                         "denoise_index": idx,
                         "timestep": timestep_val,
                         "layer": layer_idx,
@@ -1852,7 +1865,7 @@ def extract_inference_trace_from_model(
                         orig_img = (orig_img * 255).clip(0, 255).astype(np.uint8)
 
                         try:
-                            overlay, _ = create_heatmap_from_attention(img_attn, orig_img, grid_h, grid_w)
+                            overlay, attn_2d = create_heatmap_from_attention(img_attn, orig_img, grid_h, grid_w)
                             step_label = f"step{idx}"
                             fig, ax = plt.subplots(1, 1, figsize=(6, 6))
                             ax.imshow(overlay)
@@ -1866,6 +1879,21 @@ def extract_inference_trace_from_model(
                             heatmap_path = heatmaps_dir / f"{img_key}_layer{layer_idx}_{step_label}.png"
                             plt.savefig(heatmap_path, dpi=120, bbox_inches="tight")
                             plt.close()
+
+                            npz_dir = heatmaps_dir / img_key / f"layer_{layer_idx}"
+                            npz_dir.mkdir(parents=True, exist_ok=True)
+                            npz_path = npz_dir / f"{step_label}.npz"
+                            np.savez(
+                                str(npz_path),
+                                attention_map=attn_2d,
+                                model_name=model_name,
+                                method=method,
+                                seed=seed if seed is not None else -1,
+                                phase="inference_trace",
+                                layer=layer_idx,
+                                attention_source=source,
+                                camera=camera_name,
+                            )
                         except Exception as e:
                             print(f"  WARNING: Heatmap generation failed for {img_key} layer {layer_idx}: {e}")
 
@@ -1917,7 +1945,8 @@ def extract_inference_trace_from_model(
         "camera": camera_name,
         "model_path": model_cfg["path"],
         "eval_task_success": eval_task_success,
-        "seed": None,
+        "eval_grasp_success": eval_grasp_success,
+        "seed": seed,
         "noise_seed": None,
         "policy_config": {
             "chunk_size": chunk_size,
@@ -2040,6 +2069,7 @@ def generate_inference_trace_summary_plots(
     all_model_traces,
     camera_groups,
     output_dir,
+    seed=None,
 ):
     """Generate summary comparison plots for inference trace analysis.
 
@@ -2048,8 +2078,12 @@ def generate_inference_trace_summary_plots(
         all_model_traces: Dict mapping model_name -> trace result dict.
         camera_groups: Dict mapping camera_group_name -> list of model_names.
         output_dir: Directory to save plots.
+        seed: Optional seed identifier for per-seed output organization.
     """
-    plots_dir = output_dir / "plots"
+    if seed is not None:
+        plots_dir = output_dir / "plots" / f"seed_{seed}"
+    else:
+        plots_dir = output_dir / "plots"
     plots_dir.mkdir(parents=True, exist_ok=True)
 
     for group_name, model_names in camera_groups.items():
@@ -2064,7 +2098,7 @@ def generate_inference_trace_summary_plots(
             available_names, all_model_traces, plots_dir, group_name
         )
         _plot_pairwise_action_divergence(
-            available_names, all_model_traces, plots_dir, group_name
+            available_names, all_model_traces, plots_dir, group_name, seed=seed
         )
 
 
@@ -2149,7 +2183,7 @@ def _plot_action_trajectory_statistics(model_names, all_model_traces, plots_dir,
     plt.close()
 
 
-def _plot_pairwise_action_divergence(model_names, all_model_traces, plots_dir, group_name):
+def _plot_pairwise_action_divergence(model_names, all_model_traces, plots_dir, group_name, seed=None):
     """Plot pairwise action divergence between models."""
     if len(model_names) < 2:
         return
@@ -2241,7 +2275,10 @@ def _plot_pairwise_action_divergence(model_names, all_model_traces, plots_dir, g
     plt.close()
 
     if pairwise_rows:
-        pairwise_csv = plots_dir / "pairwise_action_divergence.csv"
+        if seed is not None:
+            pairwise_csv = plots_dir / f"seed_{seed}_pairwise_action_divergence.csv"
+        else:
+            pairwise_csv = plots_dir / "pairwise_action_divergence.csv"
         fieldnames = [
             "camera", "model_a", "model_b", "denoise_index", "timestep",
             "v_t_l2", "v_t_cosine", "x_t_l2", "hidden_cosine",
@@ -2303,6 +2340,8 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
         "method": method,
         "camera_name": camera_name,
         "seed": seed,
+        "eval_task_success": model_cfg.get("eval_task_success", None),
+        "eval_grasp_success": model_cfg.get("eval_grasp_success", None),
         "mode": mode,
         "query_mode": query_mode,
         "layer_indices": layer_indices,
@@ -2397,6 +2436,7 @@ def process_single_model(model_cfg, device, seed, mode, query_mode, output_dir,
                 heatmap_step_specs=heatmap_specs,
                 output_dir=model_dir,
                 model_cfg=model_cfg,
+                seed=seed,
             )
 
             metadata["noise_seed"] = noise_seed if noise_seed is not None else seed
@@ -2574,6 +2614,8 @@ def main():
     )
     parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED)
+    parser.add_argument("--seeds", type=str, default=None,
+                        help="Comma-separated seed integers, e.g. 10042,10043,10044. Overrides --seed when provided.")
     parser.add_argument("--mode", type=str, default="probe", choices=["probe", "rollout", "inference_trace"])
     parser.add_argument("--query-mode", type=str, default="mean_suffix",
                         choices=["last", "mean_suffix", "mean_all"])
@@ -2599,6 +2641,9 @@ def main():
                         help="Run sanity check comparing sample_actions vs sample_actions_with_trace.")
     parser.add_argument("--load-from-cache", action="store_true",
                         help="Load trace.pt and metadata.json from cache instead of re-running inference (inference_trace mode only).")
+    parser.add_argument("--model-set", type=str, default="default", choices=list(MODEL_SETS.keys()),
+                        help="Model set to use. 'default' uses MODEL_CONFIGS (original 16k models), "
+                             "'corner_12k' uses CORNER_12K_MODEL_CONFIGS (7 models at 12k checkpoint).")
 
     args = parser.parse_args()
 
@@ -2607,18 +2652,10 @@ def main():
         print("WARNING: CUDA not available, falling back to CPU")
         device = "cpu"
 
-    if args.mode == "inference_trace":
-        output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_INFERENCE_TRACE_OUTPUT_DIR
+    if args.seeds:
+        seeds = [int(s.strip()) for s in args.seeds.split(",") if s.strip()]
     else:
-        output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_DIR
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    if args.layers:
-        layer_indices = [int(x) for x in args.layers.split(",")]
-    else:
-        layer_indices = DEFAULT_LAYERS
-
-    average_heads = args.average_heads and not args.no_average_heads
+        seeds = [args.seed]
 
     if args.model_path:
         model_cfg = {
@@ -2629,236 +2666,298 @@ def main():
         }
         models_to_process = [model_cfg]
     else:
-        models_to_process = MODEL_CONFIGS
+        models_to_process = MODEL_SETS.get(args.model_set, MODEL_CONFIGS)
+
+    if args.model_set == "corner_12k":
+        if args.mode == "inference_trace":
+            base_output_dir = PROJECT_ROOT / "personal/work2/attention_fig/result_inference_trace_12k_corner"
+        else:
+            base_output_dir = PROJECT_ROOT / "personal/work2/attention_fig/result_12k_corner"
+    else:
+        if args.mode == "inference_trace":
+            base_output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_INFERENCE_TRACE_OUTPUT_DIR
+        else:
+            base_output_dir = Path(args.output_dir) if args.output_dir else DEFAULT_OUTPUT_DIR
+
+    if args.layers:
+        layer_indices = [int(x) for x in args.layers.split(",")]
+    else:
+        layer_indices = DEFAULT_LAYERS
+
+    average_heads = args.average_heads and not args.no_average_heads
+
+    camera_groups = {}
+    for mc in models_to_process:
+        cam = mc["camera_name"]
+        if cam not in camera_groups:
+            camera_groups[cam] = []
+        camera_groups[cam].append(mc["name"])
 
     all_rows = []
     all_model_traces = {}
 
     if args.mode == "inference_trace":
-        noise_seed = args.noise_seed if args.noise_seed is not None else args.seed
+        noise_seed = args.noise_seed if args.noise_seed is not None else None
 
         if args.load_from_cache:
             print(f"{'='*80}")
             print("Loading from cache (skip inference)")
             print(f"{'='*80}")
 
-            inference_json = output_dir / "inference_attention_trace.json"
-            if inference_json.exists():
-                with open(inference_json, "r") as f:
-                    all_rows = json.load(f)
-                print(f"  Loaded {len(all_rows)} attention rows from {inference_json}")
-            else:
-                inference_csv = output_dir / "inference_attention_trace.csv"
-                if inference_csv.exists():
-                    import csv
-                    all_rows = []
-                    with open(inference_csv, "r") as f:
-                        reader = csv.DictReader(f)
-                        for row in reader:
-                            for key in ["denoise_index", "timestep", "layer", "query_length",
-                                        "key_length", "query_count", "camera1_mass", "camera2_mass",
-                                        "visual_total", "language_mass", "state_mass", "suffix_mass",
-                                        "other_mass", "x_t_norm", "v_t_norm", "suffix_hidden_norm"]:
-                                if key in row and row[key] != "":
-                                    try:
-                                        row[key] = float(row[key])
-                                    except ValueError:
-                                        pass
-                            all_rows.append(row)
-                    print(f"  Loaded {len(all_rows)} attention rows from {inference_csv}")
+            for current_seed in seeds:
+                output_dir = base_output_dir
+                inference_json = output_dir / "inference_attention_trace.json"
+                if inference_json.exists():
+                    with open(inference_json, "r") as f:
+                        seed_rows = json.load(f)
+                    seed_rows = [r for r in seed_rows if r.get("seed") == current_seed or r.get("seed") == str(current_seed)]
+                    all_rows.extend(seed_rows)
+                    print(f"  Loaded {len(seed_rows)} attention rows for seed {current_seed} from {inference_json}")
                 else:
-                    print("  WARNING: no cached attention rows found, using empty list")
-                    all_rows = []
+                    inference_csv = output_dir / "inference_attention_trace.csv"
+                    if inference_csv.exists():
+                        seed_rows = []
+                        with open(inference_csv, "r") as f:
+                            reader = csv.DictReader(f)
+                            for row in reader:
+                                row_seed = row.get("seed")
+                                if row_seed is not None and int(row_seed) != current_seed:
+                                    continue
+                                for key in ["denoise_index", "timestep", "layer", "query_length",
+                                            "key_length", "query_count", "camera1_mass", "camera2_mass",
+                                            "visual_total", "language_mass", "state_mass", "suffix_mass",
+                                            "other_mass", "x_t_norm", "v_t_norm", "suffix_hidden_norm"]:
+                                    if key in row and row[key] != "":
+                                        try:
+                                            row[key] = float(row[key])
+                                        except ValueError:
+                                            pass
+                                seed_rows.append(row)
+                        all_rows.extend(seed_rows)
+                        print(f"  Loaded {len(seed_rows)} attention rows for seed {current_seed} from {inference_csv}")
+                    else:
+                        print(f"  WARNING: no cached attention rows found for seed {current_seed}")
 
-            camera_groups = {}
-            for mc in models_to_process:
-                cam = mc["camera_name"]
-                if cam not in camera_groups:
-                    camera_groups[cam] = []
-                camera_groups[cam].append(mc["name"])
+                for mc in models_to_process:
+                    model_name = mc["name"]
+                    model_dir = output_dir / model_name / f"seed_{current_seed}"
+                    trace_pt_path = model_dir / "trace.pt"
+                    metadata_path = model_dir / "metadata.json"
 
-            all_model_traces = {}
-            for mc in models_to_process:
-                model_name = mc["name"]
-                model_dir = output_dir / model_name / f"seed_{args.seed}"
-                trace_pt_path = model_dir / "trace.pt"
-                metadata_path = model_dir / "metadata.json"
+                    if not trace_pt_path.exists():
+                        print(f"  WARNING: trace.pt not found for {model_name} seed {current_seed} at {trace_pt_path}")
+                        continue
 
-                if not trace_pt_path.exists():
-                    print(f"  WARNING: trace.pt not found for {model_name} at {trace_pt_path}")
-                    continue
+                    trace_pt = torch.load(trace_pt_path, map_location="cpu")
+                    print(f"  Loaded trace.pt for {model_name} seed {current_seed} ({trace_pt_path})")
 
-                trace_pt = torch.load(trace_pt_path, map_location="cpu")
-                print(f"  Loaded trace.pt for {model_name} ({trace_pt_path})")
+                    if metadata_path.exists():
+                        with open(metadata_path, "r") as f:
+                            metadata = json.load(f)
+                    else:
+                        metadata = {"model_name": model_name, "method": mc["method"]}
 
-                if metadata_path.exists():
-                    with open(metadata_path, "r") as f:
-                        metadata = json.load(f)
-                else:
-                    metadata = {"model_name": model_name, "method": mc["method"]}
+                    trace_result = {
+                        "attention_rows": [],
+                        "step_traces": [],
+                        "final_action": trace_pt.get("final_action"),
+                        "metadata": metadata,
+                        "initial_noise": trace_pt.get("initial_noise"),
+                        "x_t_tensor": trace_pt.get("x_t", torch.empty(0)),
+                        "v_t_tensor": trace_pt.get("v_t", torch.empty(0)),
+                        "suffix_hidden_tensor": trace_pt.get("suffix_hidden", torch.empty(0)),
+                        "timesteps_tensor": trace_pt.get("timesteps", torch.empty(0)),
+                    }
+                    all_model_traces[f"{model_name}_seed{current_seed}"] = trace_result
 
-                trace_result = {
-                    "attention_rows": [],
-                    "step_traces": [],
-                    "final_action": trace_pt.get("final_action"),
-                    "metadata": metadata,
-                    "initial_noise": trace_pt.get("initial_noise"),
-                    "x_t_tensor": trace_pt.get("x_t", torch.empty(0)),
-                    "v_t_tensor": trace_pt.get("v_t", torch.empty(0)),
-                    "suffix_hidden_tensor": trace_pt.get("suffix_hidden", torch.empty(0)),
-                    "timesteps_tensor": trace_pt.get("timesteps", torch.empty(0)),
-                }
-                all_model_traces[model_name] = trace_result
+            print(f"\n  Loaded traces for {len(all_model_traces)} model-seed combinations from cache")
 
-            print(f"\n  Loaded traces for {len(all_model_traces)} models from cache")
+            generate_inference_trace_summary_plots(
+                all_rows, all_model_traces, camera_groups, base_output_dir, seed=None
+            )
+
+            inference_csv = base_output_dir / "inference_attention_trace.csv"
+            if all_rows:
+                fieldnames = [
+                    "model_name", "method", "camera", "seed", "eval_task_success", "eval_grasp_success",
+                    "denoise_index", "timestep", "layer", "attention_source",
+                    "query_length", "key_length", "query_count",
+                    "camera1_mass", "camera2_mass", "visual_total",
+                    "language_mass", "state_mass", "suffix_mass", "other_mass",
+                    "x_t_norm", "v_t_norm", "suffix_hidden_norm",
+                ]
+                with open(inference_csv, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(all_rows)
+                print(f"\nSaved inference trace CSV to {inference_csv}")
+
+                inference_json = base_output_dir / "inference_attention_trace.json"
+                with open(inference_json, "w") as f:
+                    json.dump(all_rows, f, indent=2)
+                print(f"Saved inference trace JSON to {inference_json}")
 
         else:
-            camera_groups = {}
-            for mc in models_to_process:
-                cam = mc["camera_name"]
-                if cam not in camera_groups:
-                    camera_groups[cam] = []
-                camera_groups[cam].append(mc["name"])
+            for current_seed in seeds:
+                effective_noise_seed = args.noise_seed if args.noise_seed is not None else current_seed
+                output_dir = base_output_dir
 
-            for cam_group, model_names_in_group in camera_groups.items():
-                print(f"# Processing camera group: {cam_group}")
-                print(f"# Models: {model_names_in_group}")
+                print(f"\n{'='*80}")
+                print(f"SEED {current_seed} (noise_seed={effective_noise_seed})")
+                print(f"{'='*80}")
 
-                first_model_cfg = None
-                for mc in models_to_process:
-                    if mc["name"] in model_names_in_group:
-                        first_model_cfg = mc
-                        break
+                seed_rows = []
+                seed_model_traces = {}
 
-                shared_noise = None
-                shared_model_data = None
-                reference_input_signature = None
-                shared_env = None
-                first_policy = None
+                for cam_group, model_names_in_group in camera_groups.items():
+                    print(f"# Processing camera group: {cam_group}")
+                    print(f"# Models: {model_names_in_group}")
 
-                if first_model_cfg is not None:
-                    p = Path(first_model_cfg["path"])
-                    if not p.is_absolute():
-                        p = PROJECT_ROOT / p
-                    if p.exists():
-                        first_policy = SmolVLAPolicy.from_pretrained(str(p))
-                        first_policy = first_policy.to(device)
-                        first_policy.eval()
+                    first_model_cfg = None
+                    for mc in models_to_process:
+                        if mc["name"] in model_names_in_group:
+                            first_model_cfg = mc
+                            break
 
-                        shared_model_data = create_metaworld_input(TASK, args.seed, cam_group, device)
-                        shared_env = shared_model_data["env"]
-                        shared_batch = prepare_batch_for_model(shared_model_data, first_policy, device)
+                    shared_noise = None
+                    shared_model_data = None
+                    reference_input_signature = None
+                    shared_env = None
+                    first_policy = None
 
-                        shared_noise = create_shared_initial_noise(
-                            first_policy.config.chunk_size,
-                            first_policy.config.max_action_dim,
-                            noise_seed,
-                            device,
-                        )
+                    if first_model_cfg is not None:
+                        p = Path(first_model_cfg["path"])
+                        if not p.is_absolute():
+                            p = PROJECT_ROOT / p
+                        if p.exists():
+                            first_policy = SmolVLAPolicy.from_pretrained(str(p))
+                            first_policy = first_policy.to(device)
+                            first_policy.eval()
 
-                        reference_input_signature = build_input_signature(
-                            shared_model_data, shared_batch, first_policy, shared_noise
-                        )
+                            shared_model_data = create_metaworld_input(TASK, current_seed, cam_group, device)
+                            shared_env = shared_model_data["env"]
+                            shared_batch = prepare_batch_for_model(shared_model_data, first_policy, device)
 
-                        print(f"\n  Camera group '{cam_group}' reference input signature:")
-                        for key in ["camera1_raw_sha256", "camera2_raw_sha256", "state_sha256",
-                                    "language_tokens_sha256", "noise_sha256"]:
-                            val = reference_input_signature.get(key, "N/A")
-                            if isinstance(val, str) and len(val) > 16:
-                                val = val[:16] + "..."
-                            print(f"    {key}: {val}")
+                            shared_noise = create_shared_initial_noise(
+                                first_policy.config.chunk_size,
+                                first_policy.config.max_action_dim,
+                                effective_noise_seed,
+                                device,
+                            )
 
-                        del first_policy
-                        first_policy = None
-                        torch.cuda.empty_cache()
+                            reference_input_signature = build_input_signature(
+                                shared_model_data, shared_batch, first_policy, shared_noise
+                            )
 
-                try:
-                    for model_cfg in models_to_process:
-                        if model_cfg["name"] not in model_names_in_group:
-                            continue
+                            print(f"\n  Camera group '{cam_group}' reference input signature:")
+                            for key in ["camera1_raw_sha256", "camera2_raw_sha256", "state_sha256",
+                                        "language_tokens_sha256", "noise_sha256"]:
+                                val = reference_input_signature.get(key, "N/A")
+                                if isinstance(val, str) and len(val) > 16:
+                                    val = val[:16] + "..."
+                                print(f"    {key}: {val}")
 
-                        result = process_single_model(
-                            model_cfg, device, args.seed, args.mode, args.query_mode,
-                            output_dir, layer_indices, average_heads, args.max_steps,
-                            noise_seed=noise_seed,
-                            heatmap_steps_str=args.trace_heatmap_steps,
-                            shared_noise=shared_noise,
-                            shared_model_data=shared_model_data,
-                            reference_input_signature=reference_input_signature,
-                            reference_model_name=first_model_cfg["name"] if first_model_cfg else None,
-                            do_sanity_check=args.sanity_check,
-                        )
+                            del first_policy
+                            first_policy = None
+                            torch.cuda.empty_cache()
 
-                        if result is not None:
-                            rows, trace_result = result
-                            if rows:
-                                all_rows.extend(rows)
-                            if trace_result is not None:
-                                all_model_traces[model_cfg["name"]] = trace_result
+                    try:
+                        for model_cfg in models_to_process:
+                            if model_cfg["name"] not in model_names_in_group:
+                                continue
 
-                        torch.cuda.empty_cache()
-                finally:
-                    if shared_env is not None:
-                        try:
-                            shared_env.close()
-                        except Exception:
-                            pass
-                        shared_env = None
+                            result = process_single_model(
+                                model_cfg, device, current_seed, args.mode, args.query_mode,
+                                output_dir, layer_indices, average_heads, args.max_steps,
+                                noise_seed=effective_noise_seed,
+                                heatmap_steps_str=args.trace_heatmap_steps,
+                                shared_noise=shared_noise,
+                                shared_model_data=shared_model_data,
+                                reference_input_signature=reference_input_signature,
+                                reference_model_name=first_model_cfg["name"] if first_model_cfg else None,
+                                do_sanity_check=args.sanity_check,
+                            )
 
-        if all_model_traces:
-            generate_inference_trace_summary_plots(
-                all_rows, all_model_traces, camera_groups, output_dir
-            )
+                            if result is not None:
+                                rows, trace_result = result
+                                if rows:
+                                    seed_rows.extend(rows)
+                                    all_rows.extend(rows)
+                                if trace_result is not None:
+                                    seed_model_traces[model_cfg["name"]] = trace_result
+                                    all_model_traces[model_cfg["name"]] = trace_result
 
-        inference_csv = output_dir / "inference_attention_trace.csv"
-        if all_rows:
-            fieldnames = [
-                "model_name", "method", "camera", "eval_task_success",
-                "denoise_index", "timestep", "layer", "attention_source",
-                "query_length", "key_length", "query_count",
-                "camera1_mass", "camera2_mass", "visual_total",
-                "language_mass", "state_mass", "suffix_mass", "other_mass",
-                "x_t_norm", "v_t_norm", "suffix_hidden_norm",
-            ]
-            with open(inference_csv, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(all_rows)
-            print(f"\nSaved inference trace CSV to {inference_csv}")
+                            torch.cuda.empty_cache()
+                    finally:
+                        if shared_env is not None:
+                            try:
+                                shared_env.close()
+                            except Exception:
+                                pass
+                            shared_env = None
 
-            inference_json = output_dir / "inference_attention_trace.json"
-            with open(inference_json, "w") as f:
-                json.dump(all_rows, f, indent=2)
-            print(f"Saved inference trace JSON to {inference_json}")
+                if seed_model_traces:
+                    generate_inference_trace_summary_plots(
+                        seed_rows, seed_model_traces, camera_groups, output_dir, seed=current_seed
+                    )
+
+            inference_csv = base_output_dir / "inference_attention_trace.csv"
+            if all_rows:
+                fieldnames = [
+                    "model_name", "method", "camera", "seed", "eval_task_success", "eval_grasp_success",
+                    "denoise_index", "timestep", "layer", "attention_source",
+                    "query_length", "key_length", "query_count",
+                    "camera1_mass", "camera2_mass", "visual_total",
+                    "language_mass", "state_mass", "suffix_mass", "other_mass",
+                    "x_t_norm", "v_t_norm", "suffix_hidden_norm",
+                ]
+                with open(inference_csv, "w", newline="") as f:
+                    writer = csv.DictWriter(f, fieldnames=fieldnames)
+                    writer.writeheader()
+                    writer.writerows(all_rows)
+                print(f"\nSaved inference trace CSV to {inference_csv}")
+
+                inference_json = base_output_dir / "inference_attention_trace.json"
+                with open(inference_json, "w") as f:
+                    json.dump(all_rows, f, indent=2)
+                print(f"Saved inference trace JSON to {inference_json}")
 
     else:
-        for model_cfg in models_to_process:
-            rows = process_single_model(
-                model_cfg, device, args.seed, args.mode, args.query_mode,
-                output_dir, layer_indices, average_heads, args.max_steps
-            )
-            if rows:
-                all_rows.extend(rows)
+        for current_seed in seeds:
+            output_dir = base_output_dir
 
-        if all_rows:
-            summary_csv = output_dir / "attention_summary.csv"
-            fieldnames = [
-                "model_name", "method", "camera", "seed", "phase",
-                "success", "grasp_reached", "layer",
-                "attention_source", "query_length", "key_length", "query_count",
-                "camera1_mass", "camera2_mass", "language_mass", "state_mass",
-                "suffix_mass", "other_mass"
-            ]
-            with open(summary_csv, "w", newline="") as f:
-                writer = csv.DictWriter(f, fieldnames=fieldnames)
-                writer.writeheader()
-                writer.writerows(all_rows)
-            print(f"\nSaved summary to {summary_csv}")
+            if len(seeds) > 1:
+                print(f"\n{'='*80}")
+                print(f"SEED {current_seed}")
+                print(f"{'='*80}")
 
-            summary_json = output_dir / "attention_metrics.json"
-            with open(summary_json, "w") as f:
-                json.dump(all_rows, f, indent=2)
-            print(f"Saved metrics JSON to {summary_json}")
+            for model_cfg in models_to_process:
+                rows = process_single_model(
+                    model_cfg, device, current_seed, args.mode, args.query_mode,
+                    output_dir, layer_indices, average_heads, args.max_steps
+                )
+                if rows:
+                    all_rows.extend(rows)
+
+    if all_rows and args.mode != "inference_trace":
+        summary_csv = base_output_dir / "attention_summary.csv"
+        fieldnames = [
+            "model_name", "method", "camera", "seed", "phase",
+            "success", "grasp_reached", "layer",
+            "attention_source", "query_length", "key_length", "query_count",
+            "camera1_mass", "camera2_mass", "language_mass", "state_mass",
+            "suffix_mass", "other_mass"
+        ]
+        with open(summary_csv, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(all_rows)
+        print(f"\nSaved summary to {summary_csv}")
+
+        summary_json = base_output_dir / "attention_metrics.json"
+        with open(summary_json, "w") as f:
+            json.dump(all_rows, f, indent=2)
+        print(f"Saved metrics JSON to {summary_json}")
 
     print(f"\n{'='*80}")
     print("DONE")
