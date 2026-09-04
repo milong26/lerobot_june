@@ -376,103 +376,141 @@ def iterative_select_episodes(
     }
 
 
+def compute_action_distribution_distance(
+    selected_action_vecs: List[np.ndarray],
+    full_action_vecs: List[np.ndarray],
+) -> float:
+    """
+    Compute action distribution distance between selected subset and full dataset.
+    
+    Uses average pairwise cosine distance between selected action_descriptors
+    and all action_descriptors to measure distribution shift.
+    
+    Args:
+        selected_action_vecs: list of action_descriptor vectors for selected episodes
+        full_action_vecs: list of action_descriptor vectors for all episodes
+    
+    Returns:
+        float: mean cosine distance (higher = more distribution shift)
+    """
+    if not selected_action_vecs or not full_action_vecs:
+        return 0.0
+    
+    sel_arr = np.array(selected_action_vecs)
+    full_arr = np.array(full_action_vecs)
+    
+    cosine_dists = []
+    for sv in sel_arr:
+        sv_norm = np.linalg.norm(sv)
+        if sv_norm < 1e-10:
+            continue
+        full_norms = np.linalg.norm(full_arr, axis=1)
+        mask = full_norms > 1e-10
+        if not mask.any():
+            continue
+        sims = np.dot(full_arr[mask], sv) / (full_norms[mask] * sv_norm)
+        sims = np.clip(sims, -1.0, 1.0)
+        cosine_dists.append(float(np.mean(1.0 - sims)))
+    
+    return float(np.mean(cosine_dists)) if cosine_dists else 0.0
+
+
 def compute_diagnostic(
     result: Dict,
     embeddings: Dict[int, Dict],
     output_dir: Path,
 ) -> Dict:
-    """Compute lightweight diagnostic statistics after selection."""
+    """
+    Compute comprehensive diagnostic statistics after selection.
+    
+    Produces episode-level scores, dataset-level statistics, action distribution
+    coverage analysis, and selection bias analysis.
+    """
     selected_ids = result["selected_episodes"]
     all_ids = sorted(embeddings.keys())
-    full_ids = [ep for ep in all_ids if ep not in selected_ids]
-
-    per_episode = []
+    
+    # Part 1: Episode-level selection info
+    episode_scores = []
     for entry in result["selection_log"]:
         for ep in entry.get("added_episodes", []):
-            vs = ep["visual_score"]
-            acs = ep["action_score"]
-            total = vs + acs if (vs + acs) > 1e-10 else 1.0
-            per_episode.append({
-                "episode_id": ep["episode_index"],
+            vs = float(ep["visual_score"])
+            acs = float(ep["action_score"])
+            js = float(ep["joint_score"])
+            score_ratio_action = acs / (vs + acs + 1e-8)
+            score_ratio_visual = vs / (vs + acs + 1e-8)
+            episode_scores.append({
+                "episode_index": ep["episode_index"],
                 "visual_score": vs,
                 "action_score": acs,
-                "joint_score": ep["joint_score"],
-                "score_ratio_action": acs / total,
-                "score_ratio_visual": vs / total,
+                "joint_score": js,
+                "score_ratio_action": score_ratio_action,
+                "score_ratio_visual": score_ratio_visual,
             })
-
-    def _stats(scores):
-        if not scores:
-            return {"mean": 0.0, "std": 0.0}
-        arr = np.array(scores)
-        return {"mean": float(np.mean(arr)), "std": float(np.std(arr))}
-
-    sel_visual = [embeddings[ep]["phi_global"].mean() for ep in selected_ids if ep in embeddings]
-    full_visual = [embeddings[ep]["phi_global"].mean() for ep in full_ids if ep in embeddings]
-    sel_action = [embeddings[ep]["action_descriptor"].mean() for ep in selected_ids if ep in embeddings]
-    full_action = [embeddings[ep]["action_descriptor"].mean() for ep in full_ids if ep in embeddings]
-
-    sel_action_vecs = [embeddings[ep]["action_descriptor"] for ep in selected_ids if ep in embeddings]
+    
+    # Part 2: Selected subset vs full dataset embedding statistics
+    selected_global_vecs = [embeddings[ep]["phi_global"] for ep in selected_ids if ep in embeddings]
+    full_global_vecs = [embeddings[ep]["phi_global"] for ep in all_ids if ep in embeddings]
+    selected_action_vecs = [embeddings[ep]["action_descriptor"] for ep in selected_ids if ep in embeddings]
     full_action_vecs = [embeddings[ep]["action_descriptor"] for ep in all_ids if ep in embeddings]
-
-    l2_dists = []
-    cosine_dists = []
-    if sel_action_vecs and full_action_vecs:
-        sel_arr = np.array(sel_action_vecs)
-        full_arr = np.array(full_action_vecs)
-        for sv in sel_arr:
-            diffs = full_arr - sv
-            l2_dists.append(float(np.mean(np.linalg.norm(diffs, axis=1))))
-            norms_s = np.linalg.norm(sv)
-            norms_f = np.linalg.norm(full_arr, axis=1)
-            mask = (norms_s > 1e-10) & (norms_f > 1e-10)
-            if mask.any():
-                sims = np.dot(full_arr[mask], sv) / (norms_f[mask] * norms_s)
-                sims = np.clip(sims, -1.0, 1.0)
-                cosine_dists.append(float(np.mean(1.0 - sims)))
-
-    action_gt_visual = 0
-    visual_gt_action = 0
-    close = 0
-    for ep in per_episode:
-        diff = abs(ep["action_score"] - ep["visual_score"])
-        if ep["action_score"] > ep["visual_score"]:
-            action_gt_visual += 1
-        elif ep["visual_score"] > ep["action_score"]:
-            visual_gt_action += 1
-        if diff < 0.05:
-            close += 1
-
+    
+    def _compute_vec_stats(vecs: List[np.ndarray]) -> Dict[str, float]:
+        if not vecs:
+            return {"mean": 0.0, "std": 0.0}
+        arr = np.array(vecs)
+        return {
+            "mean": float(np.mean(arr)),
+            "std": float(np.std(arr)),
+        }
+    
+    selected_visual_stats = _compute_vec_stats(selected_global_vecs)
+    full_visual_stats = _compute_vec_stats(full_global_vecs)
+    selected_action_stats = _compute_vec_stats(selected_action_vecs)
+    full_action_stats = _compute_vec_stats(full_action_vecs)
+    
+    # Part 3: Action distribution coverage analysis
+    action_distribution_distance = compute_action_distribution_distance(
+        selected_action_vecs, full_action_vecs
+    )
+    
+    # Part 4: Selection bias analysis
+    visual_dominant_count = 0
+    action_dominant_count = 0
+    balanced_count = 0
+    for ep_info in episode_scores:
+        vs = ep_info["visual_score"]
+        acs = ep_info["action_score"]
+        ratio = abs(vs - acs) / (vs + acs + 1e-8)
+        if vs > acs:
+            visual_dominant_count += 1
+        elif acs > vs:
+            action_dominant_count += 1
+        if ratio < 0.1:
+            balanced_count += 1
+    
+    # Part 5: Build and save diagnostic result
     diagnostic = {
-        "per_episode_diagnostic": per_episode,
-        "dataset_statistics": {
-            "selected_count": len(selected_ids),
-            "total_count": len(all_ids),
-            "full_count": len(full_ids),
-            "selected_visual_score": _stats([e["visual_score"] for e in per_episode]),
-            "full_visual_score": _stats([embeddings[ep]["phi_global"].mean() for ep in full_ids if ep in embeddings]),
-            "selected_action_score": _stats([e["action_score"] for e in per_episode]),
-            "full_action_score": _stats([embeddings[ep]["action_descriptor"].mean() for ep in full_ids if ep in embeddings]),
-        },
-        "action_coverage_analysis": {
-            "selected_action_distribution_distance": {
-                "mean_l2_distance": float(np.mean(l2_dists)) if l2_dists else 0.0,
-                "mean_cosine_distance": float(np.mean(cosine_dists)) if cosine_dists else 0.0,
-            },
-            "n_comparisons": len(l2_dists),
-        },
-        "selection_composition": {
-            "action_score_greater": action_gt_visual,
-            "visual_score_greater": visual_gt_action,
-            "scores_close": close,
-        },
+        "episode_scores": episode_scores,
+        "selected_count": len(selected_ids),
+        "total_count": len(all_ids),
+        "selected_visual_mean": selected_visual_stats["mean"],
+        "full_visual_mean": full_visual_stats["mean"],
+        "selected_visual_std": selected_visual_stats["std"],
+        "full_visual_std": full_visual_stats["std"],
+        "selected_action_mean": selected_action_stats["mean"],
+        "full_action_mean": full_action_stats["mean"],
+        "selected_action_std": selected_action_stats["std"],
+        "full_action_std": full_action_stats["std"],
+        "selected_action_distribution_distance": action_distribution_distance,
+        "visual_dominant_count": visual_dominant_count,
+        "action_dominant_count": action_dominant_count,
+        "balanced_count": balanced_count,
     }
-
-    diag_file = output_dir / "diagnostic_v5.json"
+    
+    diag_file = output_dir / "selection_diagnostics.json"
     with open(diag_file, "w") as f:
         json.dump(diagnostic, f, indent=2)
     print(f"Diagnostic saved to: {diag_file}")
-
+    
     return diagnostic
 
 
