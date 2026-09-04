@@ -75,15 +75,20 @@ def check_embedding_cache(embedding_dir: str, expected_model_name: str, expected
     if cached_camera != expected_camera:
         return False, f"Camera mismatch: cached={cached_camera}, expected={expected_camera}", 0
 
-    pca_dir = cache_dir / "pca_models"
-    pca_g = pca_dir / f"pca_global_32.joblib"
-    pca_w = pca_dir / f"pca_wrist_32.joblib"
-    if not (pca_g.exists() and pca_w.exists()):
-        return False, f"PCA models not found (need pca_global_32.joblib and pca_wrist_32.joblib)", 0
-
     count = 0
     for ep_file in cache_dir.glob("episode_*.json"):
         count += 1
+
+    if count == 0:
+        return False, f"No episode_*.json files found in {embedding_dir}", 0
+
+    pca_dir = cache_dir / "pca_models"
+    pca_g = pca_dir / f"pca_global_32.joblib"
+    pca_w = pca_dir / f"pca_wrist_32.joblib"
+    pca_missing = not (pca_g.exists() and pca_w.exists())
+
+    if pca_missing:
+        return True, f"Cache valid (embeddings exist, PCA will be regenerated): model={cached_model}, camera={cached_camera}, episodes={count}", count
 
     return True, f"Cache valid: model={cached_model}, camera={cached_camera}, episodes={count}", count
 

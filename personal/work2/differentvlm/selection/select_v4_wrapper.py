@@ -16,11 +16,47 @@ Output:
 import sys
 import json
 import subprocess
+import numpy as np
 from pathlib import Path
 
 sys.stdout.reconfigure(line_buffering=True)
 
 from differentvlm.configs.vlm_config import VLMExperimentConfig
+
+
+def convert_embeddings_to_npy(embedding_dir: str, output_dir: str) -> str:
+    """
+    Convert differentvlm unified JSON embeddings to our_v4 .npy format.
+    
+    Input:  episode_{idx}.json with {episode_id, global_embedding, wrist_embedding, ...}
+    Output: ({idx}).npy with {phi_global, phi_wrist}
+    
+    Returns the output directory path.
+    """
+    emb_dir = Path(embedding_dir)
+    npy_dir = Path(output_dir)
+    npy_dir.mkdir(parents=True, exist_ok=True)
+    
+    converted_count = 0
+    for json_file in sorted(emb_dir.glob("episode_*.json")):
+        with open(json_file, "r") as f:
+            data = json.load(f)
+        
+        ep_idx = data["episode_id"]
+        phi_global = np.array(data["global_embedding"], dtype=np.float32)
+        phi_wrist = np.array(data["wrist_embedding"], dtype=np.float32)
+        
+        npy_data = {"phi_global": phi_global, "phi_wrist": phi_wrist}
+        npy_file = npy_dir / f"({ep_idx}).npy"
+        np.save(npy_file, npy_data)
+        converted_count += 1
+    
+    print(f"Converted {converted_count} embeddings from JSON to .npy format")
+    print(f"  Source: {emb_dir}")
+    print(f"  Target: {npy_dir}")
+    sys.stdout.flush()
+    
+    return str(npy_dir)
 
 
 def validate_embedding_format(embedding_dir: str, expected_vlm_name: str, expected_camera: str) -> dict:
@@ -83,6 +119,17 @@ def run_v4_selection(cfg: VLMExperimentConfig) -> str:
     Flow: VLM embedding read -> visual coverage calculation -> v4 episode selection -> save selected_episode.json
     Returns the subset file path.
     """
+    output_dir = Path(cfg.results_dir)
+    subset_file = output_dir / "subsets" / f"dynamicgrid_v4_{cfg.selection_num_episodes}_seed{cfg.selection_seed}.json"
+
+    if subset_file.exists():
+        print(f"\n{'='*60}")
+        print(f"V4 Episode Selection (CACHED)")
+        print(f"{'='*60}")
+        print(f"Subset file already exists, skipping selection: {subset_file}")
+        sys.stdout.flush()
+        return str(subset_file)
+
     print(f"\n{'='*60}")
     print(f"Running V4 Episode Selection")
     print(f"{'='*60}")
@@ -101,7 +148,20 @@ def run_v4_selection(cfg: VLMExperimentConfig) -> str:
         cfg.camera,
     )
 
-    output_dir = Path(cfg.results_dir)
+    # Convert JSON embeddings to .npy format for our_v4 compatibility
+    npy_embedding_dir = Path(cfg.embedding_cache_dir) / "npy_format"
+    if not npy_embedding_dir.exists() or len(list(npy_embedding_dir.glob("(*).npy"))) == 0:
+        print(f"\nConverting embeddings to .npy format for our_v4...")
+        sys.stdout.flush()
+        npy_embedding_dir_str = convert_embeddings_to_npy(
+            cfg.embedding_cache_dir,
+            str(npy_embedding_dir),
+        )
+    else:
+        print(f"\n.npy format already exists, reusing: {npy_embedding_dir}")
+        sys.stdout.flush()
+        npy_embedding_dir_str = str(npy_embedding_dir)
+
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "subsets").mkdir(parents=True, exist_ok=True)
     (output_dir / "results").mkdir(parents=True, exist_ok=True)
@@ -116,7 +176,7 @@ def run_v4_selection(cfg: VLMExperimentConfig) -> str:
     cmd = [
         sys.executable, str(select_script),
         "--dataset-root", cfg.dataset_root,
-        "--embedding-dir", cfg.embedding_cache_dir,
+        "--embedding-dir", npy_embedding_dir_str,
         "--output-dir", str(cfg.results_dir),
         "--num-selected", str(cfg.selection_num_episodes),
         "--seed", str(cfg.selection_seed),

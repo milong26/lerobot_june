@@ -112,11 +112,16 @@ DEFAULT_VISUAL_CONFIG = {
 class LlavaPythiaConfig(GPTNeoXConfig):
     model_type = "llava_pythia"
 
-    def __init__(self, vision_config=None, **kwargs):
+    def __init__(self, vision_config=None, action_head_type="fc", action_dim=10, concat="None", chunk_size=50, state_dim=10, act=None, **kwargs):
         if vision_config is None:
             self.vision_config = DEFAULT_VISUAL_CONFIG
         else:
             self.vision_config = vision_config
 
-        self.concat = "None"
+        self.action_head_type = action_head_type
+        self.action_dim = action_dim
+        self.concat = concat
+        self.chunk_size = chunk_size
+        self.state_dim = state_dim
+        self.act = act if act is not None else {}
         super().__init__(**kwargs)

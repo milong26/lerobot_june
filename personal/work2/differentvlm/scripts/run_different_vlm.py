@@ -28,8 +28,9 @@ from pathlib import Path
 sys.stdout.reconfigure(line_buffering=True)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+WORK2_ROOT = Path(__file__).resolve().parents[2]
+if str(WORK2_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORK2_ROOT))
 
 from differentvlm.configs.vlm_config import get_config
 from differentvlm.vlm_extract.auto_extract_embedding import auto_extract_embedding

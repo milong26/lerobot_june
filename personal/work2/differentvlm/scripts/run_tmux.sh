@@ -101,7 +101,7 @@ tmux new-session -d -s "$SESSION_NAME" \
          --vlm $VLM_NAME \
          --gpu $GPU_ID \
          --camera $CAMERA \
-         2>&1 | tee $LOG_FILE"
+         2>&1 | tee -a $LOG_FILE"
 
 echo "Experiment started successfully!"
 echo "Monitor with: tmux attach -t $SESSION_NAME"

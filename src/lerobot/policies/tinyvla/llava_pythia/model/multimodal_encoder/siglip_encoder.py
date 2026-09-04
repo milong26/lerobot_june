@@ -5,7 +5,10 @@ import torch.nn as nn
 
 from transformers import PreTrainedModel
 from transformers.models.siglip.configuration_siglip import SiglipVisionConfig
-from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
+try:
+    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
+except ImportError:
+    from transformers.models.siglip.modeling_siglip import SiglipVisionModel as SiglipVisionTransformer
 from lerobot.policies.tinyvla.llava_pythia.model.language_model.pythia.configuration_llava_pythia import LlavaPythiaVisionConfig
 
 

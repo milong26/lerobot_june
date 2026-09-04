@@ -71,7 +71,7 @@ class RandVecExhaustedError(RuntimeError):
 
 # ─── 环境 & 任务解析 ────────────────────────────────────────────────
 
-def create_metaworld_env(task_name, seed=None, camera_name="corner3"):
+def create_metaworld_env(task_name, seed=None, camera_name="corner"):
     mt1 = metaworld.MT1(task_name, seed=seed)
     env = mt1.train_classes[task_name](render_mode="rgb_array", camera_name=camera_name)
     task = mt1.train_tasks[0]
@@ -360,7 +360,7 @@ def phase_random(args, dataset, expert_policy, task_space_info, start_ep_idx=0):
     while ep_idx < args.num_random_episodes:
         ep_start = time.time()
         seed = seed_start + ep_idx
-        env_top = create_metaworld_env(args.task, seed=seed, camera_name="corner3")
+        env_top = create_metaworld_env(args.task, seed=seed, camera_name="corner")
         env_wrist = create_metaworld_env(args.task, seed=seed, camera_name="gripperPOV")
         frames, ep_info = run_episode(
             env_top, env_wrist, expert_policy, args.task,
@@ -435,7 +435,7 @@ def phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=0)
         collected = False
         for retry in range(5):
             try:
-                env_top = create_metaworld_env(args.task, seed=42, camera_name="corner3")
+                env_top = create_metaworld_env(args.task, seed=42, camera_name="corner")
                 env_wrist = create_metaworld_env(args.task, seed=42, camera_name="gripperPOV")
                 current_vec = rand_vec if retry == 0 else perturb_rand_vec(
                     rand_vec, task_space_info["low"], task_space_info["high"], rng=perturbation_rng

@@ -4,7 +4,10 @@ import torch
 import torch.nn as nn
 
 from transformers import CLIPPreTrainedModel, CLIPVisionConfig
-from transformers.models.clip.modeling_clip import CLIPVisionTransformer
+try:
+    from transformers.models.clip.modeling_clip import CLIPVisionTransformer
+except ImportError:
+    from transformers.models.clip.modeling_clip import CLIPVisionModel as CLIPVisionTransformer
 from lerobot.policies.tinyvla.llava_pythia.model.language_model.pythia.configuration_llava_pythia import LlavaPythiaVisionConfig
 
 

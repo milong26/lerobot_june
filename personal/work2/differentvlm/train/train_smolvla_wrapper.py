@@ -16,7 +16,9 @@ import sys
 import json
 import subprocess
 import os
+import shutil
 from pathlib import Path
+from datetime import datetime
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -41,7 +43,13 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
 
     exp_name = f"smolvla_{cfg.vlm_name}_{cfg.camera}"
     output_dir = Path(cfg.checkpoints_dir) / exp_name
-    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Clean existing output dir to avoid lerobot-train resume conflict
+    # Do NOT create the directory - lerobot-train will create it itself
+    if output_dir.exists():
+        print(f"Cleaning existing output directory: {output_dir}")
+        shutil.rmtree(output_dir)
+        sys.stdout.flush()
 
     train_log = Path(cfg.logs_dir) / f"{exp_name}_training.log"
 
@@ -62,6 +70,8 @@ def run_smolvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
     os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu_id)
     os.environ["MUJOCO_GL"] = "egl"
     os.environ["PYOPENGL_PLATFORM"] = "egl"
+    os.environ["LD_LIBRARY_PATH"] = f"{os.environ.get('CONDA_PREFIX', '')}/lib:{os.environ.get('LD_LIBRARY_PATH', '')}"
+    os.environ["LD_PRELOAD"] = f"{os.environ.get('CONDA_PREFIX', '')}/lib/libstdc++.so.6"
 
     cmd = [
         "lerobot-train",
