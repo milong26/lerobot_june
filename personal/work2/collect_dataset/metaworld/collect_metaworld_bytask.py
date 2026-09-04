@@ -393,11 +393,12 @@ def phase_random(args, dataset, expert_policy, task_space_info, start_ep_idx=0):
     seed_start = args.seed_start
     episode_infos = []
     success_count = 0
-    ep_idx = 0
+    seed = seed_start
+    consecutive_failures = 0
+    max_consecutive_failures = 50
 
-    while ep_idx < args.num_random_episodes:
+    while success_count < args.num_random_episodes:
         ep_start = time.time()
-        seed = seed_start + ep_idx
         env_top = create_metaworld_env(args.task, seed=seed, camera_name="corner")
         env_wrist = create_metaworld_env(args.task, seed=seed, camera_name="gripperPOV")
         frames, ep_info = run_episode(
@@ -413,18 +414,24 @@ def phase_random(args, dataset, expert_policy, task_space_info, start_ep_idx=0):
             dataset.save_episode()
             episode_infos.append(ep_info)
             success_count += 1
+            consecutive_failures = 0
             elapsed = time.time() - ep_start
             obj_str = ""
             if ep_info.get("obj_init_pos") is not None:
                 p = ep_info["obj_init_pos"]
                 obj_str = f" | obj: [{p[0]:.3f}, {p[1]:.3f}, {p[2]:.3f}]"
-            print(f"  [R] Episode {start_ep_idx + ep_idx + 1:4d} | Frames: {ep_info['num_frames']:4d} | Success{obj_str} | {elapsed:.1f}s")
-            ep_idx += 1
+            print(f"  [R] Episode {start_ep_idx + success_count:4d} | Frames: {ep_info['num_frames']:4d} | Success{obj_str} | {elapsed:.1f}s")
+            seed += 1
         else:
+            consecutive_failures += 1
             elapsed = time.time() - ep_start
             print(f"  [R] FAILED (seed={seed}) | Frames: {ep_info['num_frames']:4d} | {elapsed:.1f}s")
+            seed += 1
+            if consecutive_failures >= max_consecutive_failures:
+                print(f"\n警告: seed={seed - max_consecutive_failures}~{seed - 1} 连续失败 {max_consecutive_failures} 次，跳过这些 seed，继续下一个...")
+                consecutive_failures = 0
 
-    print(f"阶段1 完成: 成功 {success_count}/{args.num_random_episodes}")
+    print(f"阶段1 完成: 成功 {success_count}/{args.num_random_episodes} (使用 seed 范围: {seed_start} ~ {seed - 1})")
     return episode_infos
 
 
