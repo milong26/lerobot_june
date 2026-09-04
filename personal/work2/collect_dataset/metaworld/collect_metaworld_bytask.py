@@ -166,15 +166,53 @@ def set_task_state_directly(env, rand_vec):
     inject_rand_vec(env, rand_vec)
 
 
-def perturb_rand_vec(rand_vec, low, high, scale=0.05, rng=None):
+def perturb_rand_vec(rand_vec, low, high, scale=0.05, rng=None,
+                     existing_rand_vecs=None, invalid_rand_vecs=None,
+                     num_candidates=20):
     if rng is None:
         rng = np.random.RandomState()
     vec = rand_vec.copy()
-    for i in range(len(vec)):
-        range_size = high[i] - low[i]
-        delta = rng.uniform(-scale * range_size, scale * range_size)
-        vec[i] = np.clip(vec[i] + delta, low[i], high[i])
-    return vec
+    dim = len(vec)
+    range_sizes = high - low
+
+    if existing_rand_vecs is None or len(existing_rand_vecs) == 0:
+        for i in range(dim):
+            delta = rng.uniform(-scale * range_sizes[i], scale * range_sizes[i])
+            vec[i] = np.clip(vec[i] + delta, low[i], high[i])
+        return vec
+
+    existing_arr = np.array(existing_rand_vecs)
+    invalid_arr = np.array(invalid_rand_vecs) if invalid_rand_vecs and len(invalid_rand_vecs) > 0 else None
+
+    candidates = []
+    for _ in range(num_candidates):
+        cand = vec.copy()
+        for i in range(dim):
+            delta = rng.uniform(-scale * range_sizes[i], scale * range_sizes[i])
+            cand[i] = np.clip(cand[i] + delta, low[i], high[i])
+        candidates.append(cand)
+
+    def normalized_min_dist(cand, ref_arr):
+        if ref_arr is None or len(ref_arr) == 0:
+            return 0.0
+        diff = (ref_arr - cand) / range_sizes
+        dists = np.sqrt(np.sum(diff ** 2, axis=1))
+        return np.min(dists)
+
+    best_score = -1.0
+    best_cand = vec.copy()
+
+    for cand in candidates:
+        dist_valid = normalized_min_dist(cand, existing_arr)
+        dist_invalid = normalized_min_dist(cand, invalid_arr)
+        score = dist_valid
+        if invalid_arr is not None and len(invalid_arr) > 0:
+            score += 0.5 * min(dist_invalid, 1.0)
+        if score > best_score:
+            best_score = score
+            best_cand = cand.copy()
+
+    return best_cand
 
 
 def try_collect_episode(env_top, env_wrist, expert_policy, task_name, rand_vec,
@@ -414,6 +452,9 @@ def phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=0)
 
     perturbation_rng = np.random.RandomState(123)
 
+    invalid_rand_vecs = []
+    invalid_failure_threshold = 3
+
     while success_count < args.num_uniform_episodes:
         if sample_idx >= len(grid_centers):
             if not use_seed_fallback:
@@ -433,13 +474,23 @@ def phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=0)
         total_attempts += 1
 
         collected = False
+        consecutive_failures = 0
+        current_vec = rand_vec
+
         for retry in range(5):
             try:
                 env_top = create_metaworld_env(args.task, seed=42, camera_name="corner")
                 env_wrist = create_metaworld_env(args.task, seed=42, camera_name="gripperPOV")
-                current_vec = rand_vec if retry == 0 else perturb_rand_vec(
-                    rand_vec, task_space_info["low"], task_space_info["high"], rng=perturbation_rng
-                )
+                if retry == 0:
+                    current_vec = rand_vec
+                else:
+                    current_vec = perturb_rand_vec(
+                        current_vec, task_space_info["low"], task_space_info["high"],
+                        rng=perturbation_rng,
+                        existing_rand_vecs=existing_rand_vecs,
+                        invalid_rand_vecs=invalid_rand_vecs,
+                        num_candidates=20,
+                    )
                 frames, ep_info = try_collect_episode(
                     env_top, env_wrist, expert_policy, args.task, current_vec,
                     args.max_steps, args.image_size, args.extra_frames_after_success,
@@ -447,20 +498,23 @@ def phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=0)
                 env_top.close()
                 env_wrist.close()
             except RandVecExhaustedError:
+                consecutive_failures += 1
                 if retry < 4:
-                    print(f"  [U] 采样点被拒绝，尝试偏移 ({retry+1}/4)...")
+                    print(f"  [U] 采样点被拒绝，尝试自适应扰动 ({retry+1}/4)...")
                     continue
                 else:
-                    print(f"  [U] SKIPPED: 偏移5次后仍不合法，跳过")
+                    print(f"  [U] SKIPPED: 自适应扰动4次后仍不合法，跳过")
+                    invalid_rand_vecs.append(rand_vec.copy())
                     break
 
             if ep_info["success"]:
                 for frame in frames:
                     dataset.add_frame(frame)
                 dataset.save_episode()
+                ep_info["_sampling_method"] = "fallback_random" if use_seed_fallback else "latin_hypercube"
                 episode_infos.append(ep_info)
                 success_count += 1
-                existing_rand_vecs.append(current_vec)
+                existing_rand_vecs.append(current_vec.copy())
                 obj_str = ""
                 if ep_info.get("obj_init_pos") is not None:
                     p = ep_info["obj_init_pos"]
@@ -469,7 +523,10 @@ def phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=0)
                 collected = True
                 break
             else:
+                consecutive_failures += 1
                 print(f"  [U] Episode FAILED (no success), skipping...")
+                if consecutive_failures >= invalid_failure_threshold:
+                    invalid_rand_vecs.append(rand_vec.copy())
                 break
 
         if not collected and use_seed_fallback:
@@ -480,7 +537,12 @@ def phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=0)
             grid_centers.append(new_vec)
 
     print(f"阶段2 完成: 成功 {success_count}/{args.num_uniform_episodes} (总尝试 {total_attempts})")
-    return episode_infos
+    fallback_count = sum(1 for info in episode_infos if info.get("_sampling_method") == "fallback_random")
+    lhc_count = success_count - fallback_count
+    print(f"  - LHC 采样成功: {lhc_count} 个")
+    print(f"  - Fallback 随机采样成功: {fallback_count} 个")
+    print(f"  - 标记为非法的采样点: {len(invalid_rand_vecs)} 个")
+    return episode_infos, fallback_count
 
 
 # ─── Main ────────────────────────────────────────────────────────────
@@ -592,8 +654,9 @@ def main():
         existing_episodes += len(random_infos)
 
     # 阶段2: Uniform 采集
+    fallback_count = 0
     if args.num_uniform_episodes > 0:
-        uniform_infos = phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=existing_episodes)
+        uniform_infos, fallback_count = phase_uniform(args, dataset, expert_policy, task_space_info, start_ep_idx=existing_episodes)
         all_episode_infos.extend(uniform_infos)
 
     # 完成数据集
@@ -611,6 +674,8 @@ def main():
     print("=" * 80)
     print(f"阶段1 成功: {len([i for i in all_episode_infos if i.get('_phase') == 'random']) if any('_phase' in i for i in all_episode_infos) else args.num_random_episodes}")
     print(f"阶段2 成功: {len([i for i in all_episode_infos if i.get('_phase') == 'uniform']) if any('_phase' in i for i in all_episode_infos) else args.num_uniform_episodes}")
+    if fallback_count > 0:
+        print(f"  └─ 其中 Fallback 随机采样: {fallback_count} 个 (LHC 采样点耗尽后回退)")
     print(f"本次新增总Episode: {total_success}")
     print(f"数据集总Episode: {dataset.num_episodes}")
     print(f"总用时: {total_time:.1f}s")
