@@ -362,6 +362,84 @@ def save_selected_episodes(selected_episode_ids: List[int], output_path: Path, m
     print(f"Selected episodes saved to: {output_path}")
 
 
+def compute_diagnostic(
+    result: Dict,
+    visual_embeddings: Dict[int, np.ndarray],
+    action_descriptors: Dict[int, np.ndarray],
+    output_dir: Path,
+) -> Dict:
+    """Compute lightweight diagnostic statistics after selection."""
+    selected_ids = result["selected_episode_indices"]
+    all_ids = sorted(set(list(visual_embeddings.keys()) | set(list(action_descriptors.keys()))))
+    full_ids = [ep for ep in all_ids if ep not in selected_ids]
+
+    per_episode = []
+    for entry in result.get("selection_log", []):
+        for ep in entry.get("added_episodes", []):
+            score = ep.get("selection_score", 0.0)
+            per_episode.append({
+                "episode_id": ep["episode_index"],
+                "selection_score": score,
+            })
+
+    def _stats(scores):
+        if not scores:
+            return {"mean": 0.0, "std": 0.0}
+        arr = np.array(scores)
+        return {"mean": float(np.mean(arr)), "std": float(np.std(arr))}
+
+    sel_visual = [np.mean(visual_embeddings[ep]) for ep in selected_ids if ep in visual_embeddings]
+    full_visual = [np.mean(visual_embeddings[ep]) for ep in full_ids if ep in visual_embeddings]
+    sel_action = [np.mean(action_descriptors[ep]) for ep in selected_ids if ep in action_descriptors]
+    full_action = [np.mean(action_descriptors[ep]) for ep in full_ids if ep in action_descriptors]
+
+    sel_action_vecs = [action_descriptors[ep] for ep in selected_ids if ep in action_descriptors]
+    full_action_vecs = [action_descriptors[ep] for ep in all_ids if ep in action_descriptors]
+
+    l2_dists = []
+    cosine_dists = []
+    if sel_action_vecs and full_action_vecs:
+        sel_arr = np.array(sel_action_vecs)
+        full_arr = np.array(full_action_vecs)
+        for sv in sel_arr:
+            diffs = full_arr - sv
+            l2_dists.append(float(np.mean(np.linalg.norm(diffs, axis=1))))
+            norms_s = np.linalg.norm(sv)
+            norms_f = np.linalg.norm(full_arr, axis=1)
+            mask = (norms_s > 1e-10) & (norms_f > 1e-10)
+            if mask.any():
+                sims = np.dot(full_arr[mask], sv) / (norms_f[mask] * norms_s)
+                sims = np.clip(sims, -1.0, 1.0)
+                cosine_dists.append(float(np.mean(1.0 - sims)))
+
+    diagnostic = {
+        "per_episode_diagnostic": per_episode,
+        "dataset_statistics": {
+            "selected_count": len(selected_ids),
+            "total_count": len(all_ids),
+            "full_count": len(full_ids),
+            "selected_visual_score": _stats(sel_visual),
+            "full_visual_score": _stats(full_visual),
+            "selected_action_score": _stats(sel_action),
+            "full_action_score": _stats(full_action),
+        },
+        "action_coverage_analysis": {
+            "selected_action_distribution_distance": {
+                "mean_l2_distance": float(np.mean(l2_dists)) if l2_dists else 0.0,
+                "mean_cosine_distance": float(np.mean(cosine_dists)) if cosine_dists else 0.0,
+            },
+            "n_comparisons": len(l2_dists),
+        },
+    }
+
+    diag_file = output_dir / "diagnostic_v5.json"
+    with open(diag_file, "w") as f:
+        json.dump(diagnostic, f, indent=2)
+    print(f"Diagnostic saved to: {diag_file}")
+
+    return diagnostic
+
+
 def main():
     parser = argparse.ArgumentParser(description="V5 Episode Selection - Visual Coverage + Action Diversity")
     parser.add_argument("--visual-embedding-dir", type=str, required=True,
@@ -438,6 +516,11 @@ def main():
     with open(log_file, "w") as f:
         json.dump(result, f, indent=2)
     print(f"Selection log saved to: {log_file}")
+
+    # Run diagnostic analysis
+    print(f"\n{'='*60}")
+    print(f"Running diagnostic analysis...")
+    compute_diagnostic(result, visual_embeddings, action_descriptors, output_dir)
 
 
 if __name__ == "__main__":
