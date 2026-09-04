@@ -6,12 +6,15 @@ set -e
 
 SEED=$1
 GPU_ID=${2:-0}
-DATASET_NAME=${3:-corner3}
+DATASET_NAME=${3:-disassemble-v3_corner}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_${SEED}_${DATASET_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
 EXP_NAME="random_112_seed${SEED}"
 TMUX_SESSION="random_112_s${SEED}_${DATASET_NAME}"
+
+# Auto-construct dataset root path from dataset name
+DATASET_ROOT="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}"
 
 mkdir -p "$LOG_DIR"
 
@@ -39,6 +42,8 @@ LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
 TRAIN_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/duibi/train_and_eval_scripts/train_and_eval.sh"
+SELECT_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/duibi/train_and_eval_scripts/select_random_episodes.py"
+DATASET_ROOT="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/\${DATASET_NAME}"
 
 mkdir -p "\$LOG_DIR"
 
@@ -51,11 +56,27 @@ echo "Experiment: \$EXP_NAME"
 echo "GPU: \$GPU_ID"
 echo "Seed: \$SEED_VAL"
 echo "Dataset: \$DATASET_NAME"
+echo "Dataset Root: \$DATASET_ROOT"
 echo "PID: \$\$"
 echo "Started: \$(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
 echo ""
 
+# Step 1: Select random episodes
+echo "=== Step 1: Selecting random episodes ==="
+python "\$SELECT_SCRIPT" \
+    --num-episodes 112 \
+    --seed \${SEED_VAL} \
+    --dataset-root "\$DATASET_ROOT" \
+    --output-dir "\$OUTPUT_BASE_DIR/subsets"
+
+if [ \$? -ne 0 ]; then
+    echo "ERROR: select_random_episodes.py failed"
+    exit 1
+fi
+
+echo ""
+echo "=== Step 2: Training and evaluation ==="
 bash "\$TRAIN_SCRIPT" random 112 \${SEED_VAL} \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo "" >> "\$TIME_FILE"
@@ -80,6 +101,7 @@ echo "Launched experiment: $EXP_NAME"
 echo "tmux session: $TMUX_SESSION"
 echo "Output dir: $OUTPUT_BASE_DIR"
 echo "Dataset: $DATASET_NAME"
+echo "Dataset root: $DATASET_ROOT"
 echo ""
 echo "Monitor with: tmux attach -t $TMUX_SESSION"
 echo "Check logs: tail -f $LOG_DIR/$EXP_NAME.log"

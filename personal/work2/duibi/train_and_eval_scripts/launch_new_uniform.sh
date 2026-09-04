@@ -7,8 +7,8 @@
 set -e
 
 GPU_ID=${1:-0}
-DATASET_NAME=${2:-corner3}
-DATASET_PATH=${3:-/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_${DATASET_NAME}}
+DATASET_NAME=${2:-disassemble-v3_corner}
+DATASET_PATH=${3:-/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

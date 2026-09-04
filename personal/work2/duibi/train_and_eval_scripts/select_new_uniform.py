@@ -260,7 +260,7 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        subset_file = output_path / f"new_uniform_{num_episodes}_seed{seed}.json"
+        subset_file = output_path / f"state_uniform_{num_episodes}_seed{seed}.json"
         subset_data = {
             "method": "new_uniform_full_state_space",
             "num_episodes": num_episodes,

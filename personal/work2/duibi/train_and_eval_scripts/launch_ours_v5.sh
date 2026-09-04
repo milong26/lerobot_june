@@ -8,7 +8,7 @@ set -e
 NUM_EPISODES=${1:-112}
 GPU_ID=${2:-0}
 SEED=${3:-42}
-DATASET_NAME=${4:-corner}
+DATASET_NAME=${4:-disassemble-v3_corner}
 MODE=${5:-full}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -74,7 +74,7 @@ echo "Started: \$(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
 echo ""
 
-DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_\${DATASET_NAME}"
+DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/\${DATASET_NAME}"
 RESULTS_DIR="\$OUTPUT_BASE_DIR/results"
 SUBSET_DIR="\$OUTPUT_BASE_DIR/subsets"
 
@@ -171,6 +171,22 @@ else
     CAMERA_NAMES="corner,gripperPOV"
 fi
 
+# Extract task name from dataset name
+# e.g., "disassemble-v3_corner" -> "disassemble-v3"
+# e.g., "pick_place_corner3" -> "pick-place-v3"
+# Remove common view suffixes: _corner, _top, _corner3, _gripper, etc.
+DATASET_BASE=\$(echo "\$DATASET_NAME" | sed -E 's/_(corner|top|gripper|left|right|front|back|view)[0-9]*$//')
+# Convert underscores to hyphens
+TASK_BASE=\$(echo "\$DATASET_BASE" | tr '_' '-')
+# Add -v3 if not already present
+if [[ "\$TASK_BASE" != *"v3"* ]] && [[ "\$TASK_BASE" != *"v2"* ]]; then
+    TASK_NAME="\${TASK_BASE}-v3"
+else
+    TASK_NAME="\$TASK_BASE"
+fi
+
+echo "Dataset name: \$DATASET_NAME"
+echo "Extracted task name: \$TASK_NAME"
 echo "Camera names: \$CAMERA_NAMES"
 
 lerobot-train \\
@@ -183,7 +199,7 @@ lerobot-train \\
     --dataset.eval_split=0.0 \\
     --rename_map='{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \\
     --env.type=metaworld \\
-    --env.task=pick-place-v3 \\
+    --env.task=\$TASK_NAME \\
     --env.camera_name="\$CAMERA_NAMES" \\
     --policy.vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct \\
     --policy.freeze_vision_encoder=true \\

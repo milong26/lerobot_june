@@ -14,7 +14,7 @@ DATASET_NAME=${6:-corner3}
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_${DATASET_NAME}"
+DATASET_DIR="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}"
 OUR_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our"
 SUBSET_DIR="$OUTPUT_BASE_DIR/subsets"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
@@ -269,6 +269,38 @@ export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 
+# Extract task name from dataset name
+# e.g., "disassemble-v3_corner" -> "disassemble-v3"
+# e.g., "pick_place_corner3" -> "pick-place-v3"
+# Remove common view suffixes: _corner, _top, _corner3, _gripper, etc.
+DATASET_BASE=$(echo "$DATASET_NAME" | sed -E 's/_(corner|top|gripper|left|right|front|back|view)[0-9]*$//')
+# Convert underscores to hyphens
+TASK_BASE=$(echo "$DATASET_BASE" | tr '_' '-')
+# Add -v3 if not already present
+if [[ "$TASK_BASE" != *"v3"* ]] && [[ "$TASK_BASE" != *"v2"* ]]; then
+    TASK_NAME="${TASK_BASE}-v3"
+else
+    TASK_NAME="$TASK_BASE"
+fi
+
+echo "Dataset name: $DATASET_NAME"
+echo "Extracted task name: $TASK_NAME"
+
+# Set camera names based on dataset name
+if [[ "$DATASET_NAME" == *"corner"* ]]; then
+    CAMERA_NAMES="corner,gripperPOV"
+elif [[ "$DATASET_NAME" == *"top"* ]]; then
+    CAMERA_NAMES="top,gripperPOV"
+elif [[ "$DATASET_NAME" == *"left"* ]]; then
+    CAMERA_NAMES="left,gripperPOV"
+elif [[ "$DATASET_NAME" == *"right"* ]]; then
+    CAMERA_NAMES="right,gripperPOV"
+else
+    CAMERA_NAMES="corner,gripperPOV"
+fi
+
+echo "Camera names: $CAMERA_NAMES"
+
 lerobot-train \
     --policy.path=lerobot/smolvla_base \
     --policy.device=cuda \
@@ -279,8 +311,8 @@ lerobot-train \
     --dataset.eval_split=0.0 \
     --rename_map='{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \
     --env.type=metaworld \
-    --env.task=pick-place-v3 \
-    --env.camera_name="corner,gripperPOV" \
+    --env.task=$TASK_NAME \
+    --env.camera_name="$CAMERA_NAMES" \
     --policy.vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct \
     --policy.freeze_vision_encoder=true \
     --policy.train_expert_only=true \

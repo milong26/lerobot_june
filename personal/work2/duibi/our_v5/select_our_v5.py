@@ -1,34 +1,38 @@
 #!/usr/bin/env python
 """
-Our V5 Episode Selection - Adaptive Latent Coverage Selection
+Our V5 Episode Selection - Rand Vec Aware Adaptive Coverage Selection
 
-Selects episodes based on adaptive latent coverage using:
-- Visual embeddings (global+wrist concatenated)
-- Action descriptors
+Selects episodes based on adaptive coverage of the rand_vec (reset randomization vector) space,
+with visual and action information as auxiliary scoring.
 
 Core idea:
-- Build latent clusters using KMeans on concatenated visual+action features
-- Initialize B0 by uniformly sampling from different clusters
-- Iteratively select episodes based on cluster priority:
-  - coverage_need: fewer selected episodes in cluster -> higher priority
+- Read rand_vec for each episode from episode_initial_states.json or metadata
+- Partition rand_vec space into regions (dynamic number based on episode count)
+- Initialize B0 by uniformly sampling from different rand_vec regions
+- Iteratively select episodes based on region priority:
+  - coverage_gap: fewer selected episodes in region -> higher priority
   - visual_uncertainty: higher visual embedding variance -> higher priority
   - action_uncertainty: higher action descriptor variance -> higher priority
-- Within selected cluster, choose episode with highest gain
+- Within selected region, choose episode with highest visual+action score
 
-Does NOT use: success, grasp_success, eval results, attention results, test results,
-obj_init_pos, goal_pose, environment_state, or any simulation state information.
+Does NOT use: obj_init_pos, goal_pose, environment_state, success, grasp_success,
+eval results, attention results, or test results.
 
 Usage:
     python select_our_v5.py \
         --visual-embedding-dir /path/to/visual/embeddings \
         --action-descriptor-dir /path/to/action/descriptors \
+        --dataset-dir /path/to/dataset \
         --output-dir /path/to/output \
         --num-selected 112 \
         --seed 42 \
-        --num-clusters 32 \
+        --region-ratio 0.1 \
+        --min-regions 16 \
+        --max-regions 128 \
+        --b0-region-ratio 0.2 \
         --coverage-weight 0.5 \
-        --cluster-visual-weight 0.3 \
-        --cluster-action-weight 0.2
+        --region-visual-weight 0.3 \
+        --region-action-weight 0.2
 """
 
 import sys
@@ -38,7 +42,7 @@ import time
 import numpy as np
 from pathlib import Path
 from typing import Dict, List, Tuple, Optional
-from sklearn.cluster import MiniBatchKMeans
+from sklearn.cluster import KMeans
 
 sys.stdout.reconfigure(line_buffering=True)
 
@@ -119,6 +123,60 @@ def load_action_descriptors(descriptor_path: Path) -> Dict[int, np.ndarray]:
     return descriptors
 
 
+def load_rand_vecs(dataset_dir: Path, all_episode_ids: List[int]) -> Dict[int, np.ndarray]:
+    """
+    Load rand_vec for each episode from episode_initial_states.json or metadata.
+
+    Tries multiple sources:
+    1. episode_initial_states.json in dataset directory
+    2. Individual episode metadata files
+    3. LeRobot dataset meta/episodes parquet files
+
+    Args:
+        dataset_dir: dataset root directory
+        all_episode_ids: list of all episode indices
+
+    Returns:
+        Dict[episode_index, rand_vec]
+    """
+    rand_vecs = {}
+
+    # Try episode_initial_states.json first
+    metadata_file = dataset_dir / "episode_initial_states.json"
+    if metadata_file.exists():
+        print(f"Loading rand_vecs from: {metadata_file}")
+        try:
+            with open(metadata_file, "r") as f:
+                metadata = json.load(f)
+
+            episodes = metadata.get("episodes", [])
+            for ep_info in episodes:
+                ep_idx = ep_info.get("episode_index")
+                if ep_idx is None:
+                    continue
+
+                rv = ep_info.get("rand_vec")
+                if rv is not None:
+                    rand_vecs[int(ep_idx)] = np.array(rv, dtype=np.float32)
+
+            print(f"Loaded {len(rand_vecs)} rand_vecs from episode_initial_states.json")
+            if len(rand_vecs) > 0:
+                return rand_vecs
+        except Exception as e:
+            print(f"  Failed to load from episode_initial_states.json: {e}")
+
+    # Try loading from individual episode embedding files (if rand_vec is stored there)
+    print("  rand_vec not found in episode_initial_states.json, checking embedding files...")
+
+    # If rand_vec is still not found, we cannot proceed
+    if len(rand_vecs) == 0:
+        print(f"WARNING: No rand_vec found for any episodes!")
+        print(f"  Please ensure episode_initial_states.json exists in dataset directory")
+        print(f"  and contains 'rand_vec' field for each episode.")
+
+    return rand_vecs
+
+
 def normalize_features(features: np.ndarray) -> np.ndarray:
     """
     L2-normalize feature vectors.
@@ -134,103 +192,105 @@ def normalize_features(features: np.ndarray) -> np.ndarray:
     return features / norms
 
 
-def build_latent_space_clusters(
-    visual_embeddings: Dict[int, np.ndarray],
-    action_descriptors: Dict[int, np.ndarray],
-    num_clusters: int = 32,
+def build_rand_vec_regions(
+    episode_data: Dict[int, Dict],
+    region_ratio: float = 0.1,
+    min_regions: int = 16,
+    max_regions: int = 128,
     seed: int = 42,
-) -> Tuple[Dict[int, int], np.ndarray]:
+) -> Tuple[Dict[int, int], int]:
     """
-    Build latent space clusters by clustering episodes in joint visual+action space.
+    Build rand_vec regions by partitioning the rand_vec space.
 
-    Concatenates normalized visual features and action descriptors for each episode,
-    then uses MiniBatchKMeans to partition into latent clusters.
+    Uses KMeans to cluster episodes based on their rand_vec values.
+    Number of regions is dynamically computed based on episode count.
 
     Args:
-        visual_embeddings: Dict[episode_index, visual_feature]
-        action_descriptors: Dict[episode_index, action_descriptor]
-        num_clusters: number of latent clusters to create
+        episode_data: Dict[episode_index, {"rand_vec": ..., "visual_embedding": ..., "action_descriptor": ...}]
+        region_ratio: ratio to compute num_regions from episode count
+        min_regions: minimum number of regions
+        max_regions: maximum number of regions
         seed: random seed for clustering
 
     Returns:
         Tuple of:
-            - Dict[episode_index, cluster_id]: mapping from episode to cluster
-            - np.ndarray: cluster centers for diagnostics
+            - Dict[episode_index, region_id]: mapping from episode to region
+            - int: number of regions created
     """
     print(f"\n{'='*60}")
-    print(f"Building {num_clusters} latent space clusters...")
+    print(f"Building rand_vec regions...")
     print(f"{'='*60}")
 
-    # Get valid episodes (have both visual and action data)
-    valid_episodes = sorted(set(visual_embeddings.keys()) & set(action_descriptors.keys()))
+    valid_episodes = sorted(episode_data.keys())
     n_episodes = len(valid_episodes)
 
     if n_episodes == 0:
-        raise ValueError("No valid episodes with both visual embeddings and action descriptors")
+        raise ValueError("No valid episodes with rand_vec data")
 
-    # Extract and concatenate features
-    feature_list = []
+    # Dynamically compute number of regions
+    num_regions = max(min_regions, min(max_regions, int(n_episodes * region_ratio)))
+    num_regions = min(num_regions, n_episodes)  # Cannot have more regions than episodes
+
+    print(f"  Episodes: {n_episodes}")
+    print(f"  Region ratio: {region_ratio}")
+    print(f"  Computed regions: {num_regions} (min={min_regions}, max={max_regions})")
+
+    # Extract rand_vec features
+    rand_vec_list = []
     for ep_idx in valid_episodes:
-        visual_feat = visual_embeddings[ep_idx]
-        action_feat = action_descriptors[ep_idx]
+        rand_vec_list.append(episode_data[ep_idx]["rand_vec"])
 
-        # Concatenate visual and action features
-        combined = np.concatenate([visual_feat, action_feat])
-        feature_list.append(combined)
+    rand_vecs = np.array(rand_vec_list)
 
-    features = np.array(feature_list)
-
-    # L2 normalize features
-    norms = np.linalg.norm(features, axis=1, keepdims=True)
+    # Normalize rand_vecs
+    norms = np.linalg.norm(rand_vecs, axis=1, keepdims=True)
     norms = np.where(norms < 1e-10, 1.0, norms)
-    features_normalized = features / norms
+    rand_vecs_normalized = rand_vecs / norms
 
-    # Cluster using MiniBatchKMeans
-    kmeans = MiniBatchKMeans(
-        n_clusters=num_clusters,
+    # Cluster using KMeans
+    kmeans = KMeans(
+        n_clusters=num_regions,
         random_state=seed,
-        batch_size=min(256, n_episodes),
         n_init=10,
     )
-    cluster_ids = kmeans.fit_predict(features_normalized)
+    region_ids = kmeans.fit_predict(rand_vecs_normalized)
 
-    # Build episode to cluster mapping
-    episode_to_cluster = {}
+    # Build episode to region mapping
+    episode_to_region = {}
     for i, ep_idx in enumerate(valid_episodes):
-        episode_to_cluster[ep_idx] = int(cluster_ids[i])
+        episode_to_region[ep_idx] = int(region_ids[i])
 
-    # Print cluster statistics
-    cluster_counts = {}
-    for cluster_id in cluster_ids:
-        cluster_id = int(cluster_id)
-        cluster_counts[cluster_id] = cluster_counts.get(cluster_id, 0) + 1
+    # Print region statistics
+    region_counts = {}
+    for region_id in region_ids:
+        region_id = int(region_id)
+        region_counts[region_id] = region_counts.get(region_id, 0) + 1
 
-    print(f"  Episodes clustered: {n_episodes}")
-    print(f"  Clusters created: {num_clusters}")
-    print(f"  Cluster size - min: {min(cluster_counts.values())}, max: {max(cluster_counts.values())}, "
-          f"mean: {np.mean(list(cluster_counts.values())):.1f}")
+    print(f"  Regions created: {num_regions}")
+    print(f"  Region size - min: {min(region_counts.values())}, max: {max(region_counts.values())}, "
+          f"mean: {np.mean(list(region_counts.values())):.1f}")
 
-    return episode_to_cluster, kmeans.cluster_centers_
+    return episode_to_region, num_regions
 
 
-def select_initial_b0_by_clusters(
-    episode_to_cluster: Dict[int, int],
-    valid_episodes: List[int],
-    b0_size: int,
-    num_clusters: int,
+def select_initial_b0_by_rand_vec_regions(
+    episode_to_region: Dict[int, int],
+    episode_data: Dict[int, Dict],
+    num_regions: int,
+    b0_region_ratio: float = 0.2,
     seed: int = 42,
 ) -> List[int]:
     """
-    Select initial B0 episodes using latent cluster coverage strategy.
+    Select initial B0 episodes using rand_vec region coverage strategy.
 
-    Instead of random sampling, uniformly sample from different latent clusters
-    to ensure initial coverage of the latent space.
+    B0 size is dynamically computed based on number of regions.
+    Uniformly sample from different rand_vec regions to ensure initial coverage.
 
     Args:
-        episode_to_cluster: mapping from episode index to cluster id
-        valid_episodes: list of all valid episode indices
-        b0_size: number of initial episodes to select
-        num_clusters: total number of latent clusters
+        episode_to_region: mapping from episode index to region id
+        episode_data: episode data dict
+        num_regions: total number of regions
+        b0_region_ratio: ratio of regions to cover in B0
         seed: random seed
 
     Returns:
@@ -238,101 +298,99 @@ def select_initial_b0_by_clusters(
     """
     rng = np.random.RandomState(seed)
 
-    # Group episodes by cluster
-    cluster_to_episodes = {}
-    for ep_idx in valid_episodes:
-        cluster_id = episode_to_cluster.get(ep_idx)
-        if cluster_id is not None:
-            if cluster_id not in cluster_to_episodes:
-                cluster_to_episodes[cluster_id] = []
-            cluster_to_episodes[cluster_id].append(ep_idx)
+    # Compute B0 size dynamically
+    b0_size = max(1, int(num_regions * b0_region_ratio))
 
-    # Calculate episodes per cluster
-    episodes_per_cluster = b0_size // num_clusters
-    remainder = b0_size % num_clusters
+    # Group episodes by region
+    region_to_episodes = {}
+    for ep_idx, region_id in episode_to_region.items():
+        if region_id not in region_to_episodes:
+            region_to_episodes[region_id] = []
+        region_to_episodes[region_id].append(ep_idx)
 
+    # Select one episode from each region until B0 is filled
     selected = []
+    region_ids = sorted(region_to_episodes.keys())
 
-    # First, select uniformly from each cluster
-    for cluster_id in range(num_clusters):
-        if cluster_id in cluster_to_episodes:
-            cluster_episodes = cluster_to_episodes[cluster_id]
-            n_select = episodes_per_cluster + (1 if cluster_id < remainder else 0)
-            n_select = min(n_select, len(cluster_episodes))
+    # First pass: select one from each region (prioritize coverage)
+    for region_id in region_ids:
+        if len(selected) >= b0_size:
+            break
+        region_episodes = region_to_episodes[region_id]
+        chosen = rng.choice(region_episodes, size=1, replace=False).tolist()[0]
+        selected.append(chosen)
 
-            if n_select > 0:
-                chosen = rng.choice(cluster_episodes, size=n_select, replace=False).tolist()
-                selected.extend(chosen)
-
-    # If we still need more, sample from remaining episodes
+    # If B0 not filled, sample more from larger regions
     if len(selected) < b0_size:
-        remaining = [ep for ep in valid_episodes if ep not in selected]
+        remaining_episodes = [ep for ep in episode_data.keys() if ep not in selected]
         n_needed = b0_size - len(selected)
-        additional = rng.choice(remaining, size=min(n_needed, len(remaining)), replace=False).tolist()
+        additional = rng.choice(remaining_episodes, size=min(n_needed, len(remaining_episodes)), replace=False).tolist()
         selected.extend(additional)
 
     selected.sort()
+    print(f"\n[Step 2] Initial B0 selection: {len(selected)} episodes from {num_regions} regions")
+    print(f"  B0 size: {b0_size} (region_ratio={b0_region_ratio})")
+    print(f"  B0 episodes: {selected}")
+
     return selected
 
 
-def compute_cluster_priority(
-    cluster_id: int,
-    episode_to_cluster: Dict[int, int],
+def compute_region_priority(
+    region_id: int,
+    episode_to_region: Dict[int, int],
     selected_ids: List[int],
-    visual_embeddings: Dict[int, np.ndarray],
-    action_descriptors: Dict[int, np.ndarray],
+    episode_data: Dict[int, Dict],
     coverage_weight: float = 0.5,
     visual_weight: float = 0.3,
     action_weight: float = 0.2,
 ) -> Dict[str, float]:
     """
-    Compute priority for a latent cluster based on three factors:
-    1. Coverage need: fewer selected episodes in this cluster -> higher priority
+    Compute priority for a rand_vec region based on three factors:
+    1. Coverage gap: fewer selected episodes in this region -> higher priority
     2. Visual uncertainty: higher variance in visual embeddings -> higher priority
     3. Action uncertainty: higher variance in action descriptors -> higher priority
 
     Args:
-        cluster_id: the cluster to compute priority for
-        episode_to_cluster: mapping from episode index to cluster id
+        region_id: the region to compute priority for
+        episode_to_region: mapping from episode index to region id
         selected_ids: list of already selected episode indices
-        visual_embeddings: visual embeddings dict
-        action_descriptors: action descriptors dict
-        coverage_weight: weight for coverage need
+        episode_data: episode data dict
+        coverage_weight: weight for coverage gap
         visual_weight: weight for visual uncertainty
         action_weight: weight for action uncertainty
 
     Returns:
-        Dict with keys: "priority", "coverage_need", "visual_uncertainty", "action_uncertainty"
+        Dict with keys: "priority", "coverage_gap", "visual_uncertainty", "action_uncertainty"
     """
-    # Get all episodes in this cluster
-    cluster_episodes = [ep for ep, cid in episode_to_cluster.items() if cid == cluster_id]
-    total_in_cluster = len(cluster_episodes)
+    # Get all episodes in this region
+    region_episodes = [ep for ep, rid in episode_to_region.items() if rid == region_id]
+    total_in_region = len(region_episodes)
 
-    if total_in_cluster == 0:
+    if total_in_region == 0:
         return {
             "priority": 0.0,
-            "coverage_need": 0.0,
+            "coverage_gap": 0.0,
             "visual_uncertainty": 0.0,
             "action_uncertainty": 0.0,
         }
 
-    # 1. Coverage need: inverse of selection ratio
-    selected_in_cluster = [ep for ep in cluster_episodes if ep in selected_ids]
-    n_selected_in_cluster = len(selected_in_cluster)
+    # 1. Coverage gap: inverse of selection ratio
+    selected_in_region = [ep for ep in region_episodes if ep in selected_ids]
+    n_selected_in_region = len(selected_in_region)
 
-    # Coverage need: higher when fewer episodes selected
-    coverage_need = 1.0 - (n_selected_in_cluster / total_in_cluster)
+    # Coverage gap: higher when fewer episodes selected
+    coverage_gap = 1.0 - (n_selected_in_region / total_in_region)
 
-    # 2. Visual uncertainty: average pairwise distance of visual embeddings in cluster
+    # 2. Visual uncertainty: average pairwise distance of visual embeddings in region
     visual_uncertainty = 0.0
-    cluster_visual_embs = []
-    for ep in cluster_episodes:
-        if ep in visual_embeddings:
-            cluster_visual_embs.append(visual_embeddings[ep])
+    region_visual_embs = []
+    for ep in region_episodes:
+        if ep in episode_data and "visual_embedding" in episode_data[ep]:
+            region_visual_embs.append(episode_data[ep]["visual_embedding"])
 
-    if len(cluster_visual_embs) >= 2:
+    if len(region_visual_embs) >= 2:
         # Compute average pairwise distance
-        visual_arr = np.array(cluster_visual_embs)
+        visual_arr = np.array(region_visual_embs)
         n = len(visual_arr)
         total_dist = 0.0
         count = 0
@@ -341,20 +399,20 @@ def compute_cluster_priority(
                 total_dist += np.linalg.norm(visual_arr[i] - visual_arr[j])
                 count += 1
         visual_uncertainty = total_dist / count if count > 0 else 0.0
-    elif len(cluster_visual_embs) == 1:
+    elif len(region_visual_embs) == 1:
         # Single episode: use norm as proxy
-        visual_uncertainty = np.linalg.norm(cluster_visual_embs[0])
+        visual_uncertainty = np.linalg.norm(region_visual_embs[0])
 
-    # 3. Action uncertainty: average pairwise distance of action descriptors in cluster
+    # 3. Action uncertainty: average pairwise distance of action descriptors in region
     action_uncertainty = 0.0
-    cluster_action_embs = []
-    for ep in cluster_episodes:
-        if ep in action_descriptors:
-            cluster_action_embs.append(action_descriptors[ep])
+    region_action_embs = []
+    for ep in region_episodes:
+        if ep in episode_data and "action_descriptor" in episode_data[ep]:
+            region_action_embs.append(episode_data[ep]["action_descriptor"])
 
-    if len(cluster_action_embs) >= 2:
+    if len(region_action_embs) >= 2:
         # Compute average pairwise distance
-        action_arr = np.array(cluster_action_embs)
+        action_arr = np.array(region_action_embs)
         n = len(action_arr)
         total_dist = 0.0
         count = 0
@@ -363,8 +421,8 @@ def compute_cluster_priority(
                 total_dist += np.linalg.norm(action_arr[i] - action_arr[j])
                 count += 1
         action_uncertainty = total_dist / count if count > 0 else 0.0
-    elif len(cluster_action_embs) == 1:
-        action_uncertainty = np.linalg.norm(cluster_action_embs[0])
+    elif len(region_action_embs) == 1:
+        action_uncertainty = np.linalg.norm(region_action_embs[0])
 
     # Normalize uncertainties to [0, 1] range for fair comparison
     # Use soft normalization based on typical ranges
@@ -372,13 +430,13 @@ def compute_cluster_priority(
     action_uncertainty_norm = min(action_uncertainty / 10.0, 1.0)
 
     # Compute final priority
-    priority = (coverage_weight * coverage_need +
+    priority = (coverage_weight * coverage_gap +
                 visual_weight * visual_uncertainty_norm +
                 action_weight * action_uncertainty_norm)
 
     return {
         "priority": priority,
-        "coverage_need": coverage_need,
+        "coverage_gap": coverage_gap,
         "visual_uncertainty": visual_uncertainty_norm,
         "action_uncertainty": action_uncertainty_norm,
     }
@@ -436,70 +494,110 @@ def compute_action_diversity_score(
     return min_distance
 
 
-def select_best_episode_from_cluster(
-    cluster_id: int,
+def select_best_episode_from_region(
+    region_id: int,
+    episode_to_region: Dict[int, int],
     selected_ids: List[int],
-    cluster_episode_ids: List[int],
-    visual_embeddings: Dict[int, np.ndarray],
-    action_descriptors: Dict[int, np.ndarray],
-    visual_weight_episode: float = 0.5,
-    action_weight_episode: float = 0.5,
+    episode_data: Dict[int, Dict],
+    visual_weight: float = 0.5,
+    action_weight: float = 0.5,
 ) -> Optional[Tuple[int, Dict[str, float]]]:
     """
-    Select the best episode from a specific cluster based on visual coverage and action diversity.
+    Select the best episode from a specific region based on visual coverage and action diversity.
+
+    Episode score = visual_weight * normalized_visual_score + action_weight * normalized_action_score.
+    Visual and action scores are normalized before fusion to avoid scale mismatch.
 
     Args:
-        cluster_id: the cluster to select from
+        region_id: the region to select from
+        episode_to_region: mapping from episode index to region id
         selected_ids: list of already selected episode indices
-        cluster_episode_ids: list of episode indices in this cluster
-        visual_embeddings: visual embeddings dict
-        action_descriptors: action descriptors dict
-        visual_weight_episode: weight for visual coverage score
-        action_weight_episode: weight for action diversity score
+        episode_data: episode data dict
+        visual_weight: weight for visual coverage score
+        action_weight: weight for action diversity score
 
     Returns:
         Tuple of (best_episode_index, scores_dict) or None if no candidates
     """
-    # Get candidates from this cluster that are not yet selected
-    candidates = [ep for ep in cluster_episode_ids if ep not in selected_ids]
+    # Get candidates from this region that are not yet selected
+    candidates = [ep for ep, rid in episode_to_region.items() if rid == region_id and ep not in selected_ids]
 
     if not candidates:
         return None
 
     # Prepare selected embeddings for scoring
-    selected_visual = np.array([visual_embeddings[ep] for ep in selected_ids if ep in visual_embeddings])
-    selected_action = np.array([action_descriptors[ep] for ep in selected_ids if ep in action_descriptors])
+    selected_visual = np.array([
+        episode_data[ep]["visual_embedding"]
+        for ep in selected_ids
+        if ep in episode_data and "visual_embedding" in episode_data[ep]
+    ])
+    selected_action = np.array([
+        episode_data[ep]["action_descriptor"]
+        for ep in selected_ids
+        if ep in episode_data and "action_descriptor" in episode_data[ep]
+    ])
 
+    # Compute scores for all candidates
+    candidate_scores = []
+    for candidate_idx in candidates:
+        if candidate_idx not in episode_data:
+            continue
+
+        # Compute visual coverage score
+        if "visual_embedding" in episode_data[candidate_idx]:
+            visual_score = compute_visual_coverage_score(
+                episode_data[candidate_idx]["visual_embedding"],
+                selected_visual
+            )
+        else:
+            visual_score = 0.0
+
+        # Compute action diversity score
+        if "action_descriptor" in episode_data[candidate_idx]:
+            action_score = compute_action_diversity_score(
+                episode_data[candidate_idx]["action_descriptor"],
+                selected_action
+            )
+        else:
+            action_score = 0.0
+
+        candidate_scores.append((candidate_idx, visual_score, action_score))
+
+    if not candidate_scores:
+        return None
+
+    # Normalize scores to [0, 1] range
+    visual_scores = [s[1] for s in candidate_scores]
+    action_scores = [s[2] for s in candidate_scores]
+
+    visual_min, visual_max = min(visual_scores), max(visual_scores)
+    action_min, action_max = min(action_scores), max(action_scores)
+
+    visual_range = visual_max - visual_min if visual_max > visual_min else 1.0
+    action_range = action_max - action_min if action_max > action_min else 1.0
+
+    # Compute normalized combined scores
     best_candidate = None
     best_scores = None
     best_score = -1.0
 
-    for candidate_idx in candidates:
-        if candidate_idx not in visual_embeddings or candidate_idx not in action_descriptors:
-            continue
-
-        # Compute visual coverage score
-        visual_score = compute_visual_coverage_score(
-            visual_embeddings[candidate_idx],
-            selected_visual
-        )
-
-        # Compute action diversity score
-        action_score = compute_action_diversity_score(
-            action_descriptors[candidate_idx],
-            selected_action
-        )
+    for candidate_idx, vs, acs in candidate_scores:
+        # Normalize to [0, 1]
+        norm_vs = (vs - visual_min) / visual_range
+        norm_acs = (acs - action_min) / action_range
 
         # Combined score
-        total_score = visual_weight_episode * visual_score + action_weight_episode * action_score
+        total_score = visual_weight * norm_vs + action_weight * norm_acs
 
         if total_score > best_score:
             best_score = total_score
             best_candidate = candidate_idx
             best_scores = {
-                "visual_score": visual_score,
-                "action_score": action_score,
-                "joint_score": total_score,
+                "visual_score": float(vs),
+                "action_score": float(acs),
+                "normalized_visual_score": float(norm_vs),
+                "normalized_action_score": float(norm_acs),
+                "joint_score": float(total_score),
             }
 
     if best_candidate is not None:
@@ -512,27 +610,30 @@ def select_episodes_v5_adaptive(
     all_episode_ids: List[int],
     visual_embeddings: Dict[int, np.ndarray],
     action_descriptors: Dict[int, np.ndarray],
+    rand_vecs: Dict[int, np.ndarray],
     num_select: int,
-    num_clusters: int = 32,
+    region_ratio: float = 0.1,
+    min_regions: int = 16,
+    max_regions: int = 128,
+    b0_region_ratio: float = 0.2,
     coverage_weight: float = 0.5,
-    cluster_visual_weight: float = 0.3,
-    cluster_action_weight: float = 0.2,
+    region_visual_weight: float = 0.3,
+    region_action_weight: float = 0.2,
     episode_visual_weight: float = 0.5,
     episode_action_weight: float = 0.5,
     seed: int = 42,
-    b0_size: int = 18,
 ) -> Dict:
     """
-    Execute adaptive latent coverage based selection flow.
+    Execute rand_vec-aware adaptive coverage based selection flow.
 
     Flow:
-    1. All episodes -> filter to those with both visual and action data
-    2. Build latent clusters using KMeans on concatenated features
-    3. Initialize B0 by uniformly sampling from different clusters
+    1. All episodes -> filter to those with rand_vec, visual, and action data
+    2. Build rand_vec regions using KMeans
+    3. Initialize B0 by uniformly sampling from different regions
     4. Iteratively:
-       a. Compute cluster priorities for all clusters
-       b. Select highest priority cluster
-       c. Within that cluster, select episode with highest gain
+       a. Compute region priorities for all regions
+       b. Select highest priority region
+       c. Within that region, select episode with highest score
        d. Update selected set and repeat (one episode at a time)
     5. Final selected episode ids
 
@@ -540,96 +641,105 @@ def select_episodes_v5_adaptive(
         all_episode_ids: list of all episode indices
         visual_embeddings: Dict[ep_idx, visual_feature]
         action_descriptors: Dict[ep_idx, action_descriptor]
+        rand_vecs: Dict[ep_idx, rand_vec]
         num_select: target number of episodes to select
-        num_clusters: number of latent clusters
-        coverage_weight: weight for coverage need in cluster priority
-        cluster_visual_weight: weight for visual uncertainty in cluster priority
-        cluster_action_weight: weight for action uncertainty in cluster priority
+        region_ratio: ratio to compute num_regions from episode count
+        min_regions: minimum number of regions
+        max_regions: maximum number of regions
+        b0_region_ratio: ratio of regions to cover in B0
+        coverage_weight: weight for coverage gap in region priority
+        region_visual_weight: weight for visual uncertainty in region priority
+        region_action_weight: weight for action uncertainty in region priority
         episode_visual_weight: weight for visual coverage in episode scoring
         episode_action_weight: weight for action diversity in episode scoring
         seed: random seed
-        b0_size: initial B0 size
 
     Returns:
         Dict with selected_episode_ids and selection metadata
     """
-    valid_ids = sorted([
-        ep_id for ep_id in all_episode_ids
-        if ep_id in visual_embeddings and ep_id in action_descriptors
-    ])
+    # Build episode data dict (only episodes with all required data)
+    episode_data = {}
+    for ep_idx in all_episode_ids:
+        if ep_idx in rand_vecs and ep_idx in visual_embeddings and ep_idx in action_descriptors:
+            episode_data[ep_idx] = {
+                "rand_vec": rand_vecs[ep_idx],
+                "visual_embedding": visual_embeddings[ep_idx],
+                "action_descriptor": action_descriptors[ep_idx],
+            }
+
+    valid_ids = sorted(episode_data.keys())
 
     print(f"\n{'='*60}")
-    print(f"V5 Adaptive Latent Coverage Episode Selection")
+    print(f"V5 Rand Vec Aware Adaptive Coverage Episode Selection")
     print(f"{'='*60}")
     print(f"Total episodes: {len(all_episode_ids)}")
-    print(f"Valid episodes (with both visual+action): {len(valid_ids)}")
+    print(f"Valid episodes (with rand_vec+visual+action): {len(valid_ids)}")
     print(f"Target selection: {num_select}")
-    print(f"Number of clusters: {num_clusters}")
-    print(f"B0 size: {b0_size}")
-    print(f"coverage_weight: {coverage_weight}, cluster_visual_weight: {cluster_visual_weight}, cluster_action_weight: {cluster_action_weight}")
+    print(f"Region ratio: {region_ratio}, min_regions: {min_regions}, max_regions: {max_regions}")
+    print(f"B0 region ratio: {b0_region_ratio}")
+    print(f"coverage_weight: {coverage_weight}, region_visual_weight: {region_visual_weight}, region_action_weight: {region_action_weight}")
     print(f"episode_visual_weight: {episode_visual_weight}, episode_action_weight: {episode_action_weight}")
     print(f"Seed: {seed}")
     print(f"{'='*60}")
 
-    # Step 1: Build latent clusters
-    episode_to_cluster, cluster_centers = build_latent_space_clusters(
-        visual_embeddings, action_descriptors, num_clusters, seed
+    # Step 1: Build rand_vec regions
+    episode_to_region, num_regions = build_rand_vec_regions(
+        episode_data, region_ratio, min_regions, max_regions, seed
     )
 
-    # Step 2: Initialize B0 with cluster coverage
-    print(f"\n[Step 2] Selecting initial B0 with cluster coverage ({b0_size} episodes)...")
-    b0_episodes = select_initial_b0_by_clusters(
-        episode_to_cluster, valid_ids, b0_size, num_clusters, seed
+    # Step 2: Initialize B0 with region coverage
+    b0_episodes = select_initial_b0_by_rand_vec_regions(
+        episode_to_region, episode_data, num_regions, b0_region_ratio, seed
     )
     selected_ids = list(b0_episodes)
-    remaining_ids = [ep for ep in valid_ids if ep not in selected_ids]
-
-    print(f"  B0 episodes: {b0_episodes}")
 
     # Step 3: Adaptive selection
-    print(f"\n[Step 3] Starting adaptive cluster-based selection...")
+    print(f"\n[Step 3] Starting adaptive region-based selection...")
     selection_log = []
     step_num = 0
 
-    while len(selected_ids) < num_select and remaining_ids:
+    while len(selected_ids) < num_select:
         step_num += 1
         step_start = time.time()
 
-        # Compute priorities for all clusters
-        cluster_priorities = {}
-        for cluster_id in range(num_clusters):
-            priority_info = compute_cluster_priority(
-                cluster_id, episode_to_cluster, selected_ids,
-                visual_embeddings, action_descriptors,
-                coverage_weight, cluster_visual_weight, cluster_action_weight
+        # Compute priorities for all regions
+        region_priorities = {}
+        for region_id in range(num_regions):
+            priority_info = compute_region_priority(
+                region_id, episode_to_region, selected_ids,
+                episode_data,
+                coverage_weight, region_visual_weight, region_action_weight
             )
-            cluster_priorities[cluster_id] = priority_info
+            region_priorities[region_id] = priority_info
 
-        # Select highest priority cluster
-        best_cluster_id = max(cluster_priorities.keys(), key=lambda c: cluster_priorities[c]["priority"])
-        best_cluster_priority = cluster_priorities[best_cluster_id]
+        # Select highest priority region
+        best_region_id = max(region_priorities.keys(), key=lambda r: region_priorities[r]["priority"])
+        best_region_priority = region_priorities[best_region_id]
 
-        # Get episodes in this cluster
-        cluster_episodes = [ep for ep, cid in episode_to_cluster.items() if cid == best_cluster_id]
-
-        # Select best episode from this cluster
-        result = select_best_episode_from_cluster(
-            best_cluster_id, selected_ids, cluster_episodes,
-            visual_embeddings, action_descriptors,
+        # Select best episode from this region
+        result = select_best_episode_from_region(
+            best_region_id, episode_to_region, selected_ids,
+            episode_data,
             episode_visual_weight, episode_action_weight
         )
 
         if result is None:
-            # No candidates in this cluster, mark as exhausted and try next
-            print(f"  Step {step_num}: Cluster {best_cluster_id} exhausted, skipping...")
+            # No candidates in this region, mark as exhausted and try next
+            # Remove this region from consideration by setting priority to -1
+            region_priorities[best_region_id]["priority"] = -1.0
+            print(f"  Step {step_num}: Region {best_region_id} exhausted, skipping...")
+
+            # Check if all regions are exhausted
+            max_priority = max(r["priority"] for r in region_priorities.values())
+            if max_priority < 0:
+                print(f"  All regions exhausted. Selected {len(selected_ids)} episodes.")
+                break
             continue
 
         best_candidate, scores = result
 
         # Add to selected
         selected_ids.append(best_candidate)
-        if best_candidate in remaining_ids:
-            remaining_ids.remove(best_candidate)
 
         step_time = time.time() - step_start
 
@@ -637,21 +747,23 @@ def select_episodes_v5_adaptive(
         selection_log.append({
             "step": step_num,
             "n_selected": len(selected_ids),
-            "selected_cluster_id": best_cluster_id,
-            "cluster_priority": best_cluster_priority["priority"],
-            "cluster_coverage_need": best_cluster_priority["coverage_need"],
-            "cluster_visual_uncertainty": best_cluster_priority["visual_uncertainty"],
-            "cluster_action_uncertainty": best_cluster_priority["action_uncertainty"],
+            "selected_region_id": best_region_id,
+            "region_priority": best_region_priority["priority"],
+            "region_coverage_gap": best_region_priority["coverage_gap"],
+            "region_visual_uncertainty": best_region_priority["visual_uncertainty"],
+            "region_action_uncertainty": best_region_priority["action_uncertainty"],
             "episode_index": best_candidate,
             "visual_score": scores["visual_score"],
             "action_score": scores["action_score"],
+            "normalized_visual_score": scores["normalized_visual_score"],
+            "normalized_action_score": scores["normalized_action_score"],
             "joint_score": scores["joint_score"],
             "time_seconds": step_time,
         })
 
         if step_num % 10 == 0 or step_num == 1:
-            print(f"  Step {step_num}: cluster={best_cluster_id}, ep={best_candidate}, "
-                  f"cluster_priority={best_cluster_priority['priority']:.4f}, "
+            print(f"  Step {step_num}: region={best_region_id}, ep={best_candidate}, "
+                  f"region_priority={best_region_priority['priority']:.4f}, "
                   f"joint_score={scores['joint_score']:.4f}, "
                   f"time={step_time:.2f}s")
 
@@ -663,35 +775,38 @@ def select_episodes_v5_adaptive(
     print(f"Selected {len(selected_ids)} episodes")
     print(f"Total steps: {step_num}")
 
-    # Compute cluster selection distribution
-    cluster_selection_counts = {}
-    for cluster_id in range(num_clusters):
-        cluster_episodes = [ep for ep, cid in episode_to_cluster.items() if cid == cluster_id]
-        selected_in_cluster = [ep for ep in cluster_episodes if ep in selected_ids]
-        cluster_selection_counts[cluster_id] = {
-            "total": len(cluster_episodes),
-            "selected": len(selected_in_cluster),
-            "selection_ratio": len(selected_in_cluster) / len(cluster_episodes) if len(cluster_episodes) > 0 else 0.0,
+    # Compute region selection distribution
+    region_selection_counts = {}
+    for region_id in range(num_regions):
+        region_episodes = [ep for ep, rid in episode_to_region.items() if rid == region_id]
+        selected_in_region = [ep for ep in region_episodes if ep in selected_ids]
+        region_selection_counts[region_id] = {
+            "total": len(region_episodes),
+            "selected": len(selected_in_region),
+            "selection_ratio": len(selected_in_region) / len(region_episodes) if len(region_episodes) > 0 else 0.0,
         }
 
     return {
         "selected_episode_indices": selected_ids,
         "b0_episodes": b0_episodes,
-        "episode_to_cluster": episode_to_cluster,
-        "cluster_selection_counts": cluster_selection_counts,
+        "episode_to_region": episode_to_region,
+        "region_selection_counts": region_selection_counts,
         "selection_log": selection_log,
         "total_steps": step_num,
         "num_selected": len(selected_ids),
         "num_valid": len(valid_ids),
         "num_total": len(all_episode_ids),
-        "num_clusters": num_clusters,
+        "num_regions": num_regions,
+        "region_ratio": region_ratio,
+        "min_regions": min_regions,
+        "max_regions": max_regions,
+        "b0_region_ratio": b0_region_ratio,
         "coverage_weight": coverage_weight,
-        "cluster_visual_weight": cluster_visual_weight,
-        "cluster_action_weight": cluster_action_weight,
+        "region_visual_weight": region_visual_weight,
+        "region_action_weight": region_action_weight,
         "episode_visual_weight": episode_visual_weight,
         "episode_action_weight": episode_action_weight,
         "seed": seed,
-        "b0_size": b0_size,
     }
 
 
@@ -708,7 +823,7 @@ def save_selected_episodes(selected_episode_ids: List[int], output_path: Path, m
 
     subset_data = {
         "method": "our_v5",
-        "selection_method": "our_v5_adaptive_latent_coverage",
+        "selection_method": "our_v5_rand_vec_adaptive_coverage",
         "num_episodes": len(selected_episode_ids),
         "selected_episode_indices": selected_episode_ids,
     }
@@ -724,13 +839,12 @@ def save_selected_episodes(selected_episode_ids: List[int], output_path: Path, m
 
 def compute_diagnostic(
     result: Dict,
-    visual_embeddings: Dict[int, np.ndarray],
-    action_descriptors: Dict[int, np.ndarray],
+    episode_data: Dict[int, Dict],
     output_dir: Path,
 ) -> Dict:
-    """Compute diagnostic statistics after selection, including adaptive coverage metrics."""
+    """Compute diagnostic statistics after selection, including rand_vec coverage metrics."""
     selected_ids = result["selected_episode_indices"]
-    all_ids = sorted(set(list(visual_embeddings.keys()) | set(list(action_descriptors.keys()))))
+    all_ids = sorted(episode_data.keys())
     full_ids = [ep for ep in all_ids if ep not in selected_ids]
 
     # Part 1: Per-episode diagnostic
@@ -739,8 +853,8 @@ def compute_diagnostic(
         ep_info = {
             "episode_id": entry["episode_index"],
             "step": entry["step"],
-            "selected_cluster_id": entry["selected_cluster_id"],
-            "cluster_priority": entry["cluster_priority"],
+            "selected_region_id": entry["selected_region_id"],
+            "region_priority": entry["region_priority"],
             "visual_score": entry["visual_score"],
             "action_score": entry["action_score"],
             "joint_score": entry["joint_score"],
@@ -754,14 +868,14 @@ def compute_diagnostic(
         arr = np.array(scores)
         return {"mean": float(np.mean(arr)), "std": float(np.std(arr))}
 
-    sel_visual = [np.mean(visual_embeddings[ep]) for ep in selected_ids if ep in visual_embeddings]
-    full_visual = [np.mean(visual_embeddings[ep]) for ep in full_ids if ep in visual_embeddings]
-    sel_action = [np.mean(action_descriptors[ep]) for ep in selected_ids if ep in action_descriptors]
-    full_action = [np.mean(action_descriptors[ep]) for ep in full_ids if ep in action_descriptors]
+    sel_visual = [np.mean(episode_data[ep]["visual_embedding"]) for ep in selected_ids if ep in episode_data]
+    full_visual = [np.mean(episode_data[ep]["visual_embedding"]) for ep in full_ids if ep in episode_data]
+    sel_action = [np.mean(episode_data[ep]["action_descriptor"]) for ep in selected_ids if ep in episode_data]
+    full_action = [np.mean(episode_data[ep]["action_descriptor"]) for ep in full_ids if ep in episode_data]
 
     # Part 3: Action coverage analysis
-    sel_action_vecs = [action_descriptors[ep] for ep in selected_ids if ep in action_descriptors]
-    full_action_vecs = [action_descriptors[ep] for ep in all_ids if ep in action_descriptors]
+    sel_action_vecs = [episode_data[ep]["action_descriptor"] for ep in selected_ids if ep in episode_data]
+    full_action_vecs = [episode_data[ep]["action_descriptor"] for ep in all_ids if ep in episode_data]
 
     l2_dists = []
     cosine_dists = []
@@ -779,40 +893,51 @@ def compute_diagnostic(
                 sims = np.clip(sims, -1.0, 1.0)
                 cosine_dists.append(float(np.mean(1.0 - sims)))
 
-    # Part 4: Adaptive coverage statistics
-    episode_to_cluster = result.get("episode_to_cluster", {})
-    cluster_selection_counts = result.get("cluster_selection_counts", {})
-    num_clusters = result.get("num_clusters", 0)
+    # Part 4: Rand_vec coverage statistics
+    episode_to_region = result.get("episode_to_region", {})
+    region_selection_counts = result.get("region_selection_counts", {})
+    num_regions = result.get("num_regions", 0)
 
-    selected_cluster_count = sum(1 for cid, info in cluster_selection_counts.items() if info["selected"] > 0)
-    total_cluster_count = len(cluster_selection_counts)
+    selected_region_count = sum(1 for rid, info in region_selection_counts.items() if info["selected"] > 0)
+    total_region_count = len(region_selection_counts)
 
-    cluster_selection_distribution = []
-    for cid in sorted(cluster_selection_counts.keys()):
-        info = cluster_selection_counts[cid]
-        cluster_selection_distribution.append({
-            "cluster_id": cid,
+    region_selection_distribution = []
+    for rid in sorted(region_selection_counts.keys()):
+        info = region_selection_counts[rid]
+        region_selection_distribution.append({
+            "region_id": rid,
             "total_episodes": info["total"],
             "selected_episodes": info["selected"],
             "selection_ratio": info["selection_ratio"],
         })
 
-    # Average cluster priority for selected clusters
-    selected_cluster_priorities = [
-        entry["cluster_priority"] for entry in result["selection_log"]
+    # Average region coverage gap for selected regions
+    selected_region_coverage_gaps = [
+        entry["region_coverage_gap"] for entry in result["selection_log"]
     ]
-    avg_cluster_priority = float(np.mean(selected_cluster_priorities)) if selected_cluster_priorities else 0.0
+    avg_region_coverage_gap = float(np.mean(selected_region_coverage_gaps)) if selected_region_coverage_gaps else 0.0
 
-    # Average uncertainties for selected clusters
-    selected_cluster_visual_uncertainties = [
-        entry["cluster_visual_uncertainty"] for entry in result["selection_log"]
+    # Average uncertainties for selected regions
+    selected_region_visual_uncertainties = [
+        entry["region_visual_uncertainty"] for entry in result["selection_log"]
     ]
-    avg_selected_cluster_visual_uncertainty = float(np.mean(selected_cluster_visual_uncertainties)) if selected_cluster_visual_uncertainties else 0.0
+    avg_selected_region_visual_uncertainty = float(np.mean(selected_region_visual_uncertainties)) if selected_region_visual_uncertainties else 0.0
 
-    selected_cluster_action_uncertainties = [
-        entry["cluster_action_uncertainty"] for entry in result["selection_log"]
+    selected_region_action_uncertainties = [
+        entry["region_action_uncertainty"] for entry in result["selection_log"]
     ]
-    avg_selected_cluster_action_uncertainty = float(np.mean(selected_cluster_action_uncertainties)) if selected_cluster_action_uncertainties else 0.0
+    avg_selected_region_action_uncertainty = float(np.mean(selected_region_action_uncertainties)) if selected_region_action_uncertainties else 0.0
+
+    # Selected rand_vec distribution
+    selected_rand_vecs = []
+    for ep in selected_ids:
+        if ep in episode_data and "rand_vec" in episode_data[ep]:
+            selected_rand_vecs.append(episode_data[ep]["rand_vec"].tolist())
+
+    full_rand_vecs = []
+    for ep in all_ids:
+        if ep in episode_data and "rand_vec" in episode_data[ep]:
+            full_rand_vecs.append(episode_data[ep]["rand_vec"].tolist())
 
     # Build diagnostic result
     diagnostic = {
@@ -833,14 +958,16 @@ def compute_diagnostic(
             },
             "n_comparisons": len(l2_dists),
         },
-        "adaptive_coverage_statistics": {
-            "selected_cluster_count": selected_cluster_count,
-            "total_cluster_count": total_cluster_count,
-            "cluster_coverage_ratio": selected_cluster_count / total_cluster_count if total_cluster_count > 0 else 0.0,
-            "cluster_selection_distribution": cluster_selection_distribution,
-            "average_cluster_priority": avg_cluster_priority,
-            "average_selected_cluster_visual_uncertainty": avg_selected_cluster_visual_uncertainty,
-            "average_selected_cluster_action_uncertainty": avg_selected_cluster_action_uncertainty,
+        "rand_vec_coverage_statistics": {
+            "selected_region_count": selected_region_count,
+            "total_region_count": total_region_count,
+            "region_coverage_ratio": selected_region_count / total_region_count if total_region_count > 0 else 0.0,
+            "region_selection_distribution": region_selection_distribution,
+            "average_region_coverage_gap": avg_region_coverage_gap,
+            "average_region_visual_uncertainty": avg_selected_region_visual_uncertainty,
+            "average_region_action_uncertainty": avg_selected_region_action_uncertainty,
+            "selected_rand_vec_distribution": selected_rand_vecs[:10],  # First 10 for inspection
+            "full_rand_vec_distribution": full_rand_vecs[:10],  # First 10 for comparison
         },
     }
 
@@ -853,11 +980,13 @@ def compute_diagnostic(
 
 
 def main():
-    parser = argparse.ArgumentParser(description="V5 Adaptive Latent Coverage Episode Selection")
+    parser = argparse.ArgumentParser(description="V5 Rand Vec Aware Adaptive Coverage Episode Selection")
     parser.add_argument("--visual-embedding-dir", type=str, required=True,
                        help="Visual embedding cache directory (existing global+wrist)")
     parser.add_argument("--action-descriptor-dir", type=str, required=True,
                        help="Action descriptor cache directory")
+    parser.add_argument("--dataset-dir", type=str, required=True,
+                       help="Dataset root directory (contains episode_initial_states.json)")
     parser.add_argument("--output-dir", type=str, required=True,
                        help="Output directory for results")
     parser.add_argument("--num-selected", type=int, default=112,
@@ -868,21 +997,26 @@ def main():
                        help="Weight for visual coverage score (default: 0.5)")
     parser.add_argument("--action-weight", type=float, default=0.5,
                        help="Weight for action diversity score (default: 0.5)")
-    parser.add_argument("--b0-size", type=int, default=18,
-                       help="Initial B0 size (default: 18)")
-    parser.add_argument("--num-clusters", type=int, default=32,
-                       help="Number of latent clusters (default: 32)")
+    parser.add_argument("--region-ratio", type=float, default=0.1,
+                       help="Ratio to compute num_regions from episode count (default: 0.1)")
+    parser.add_argument("--min-regions", type=int, default=16,
+                       help="Minimum number of regions (default: 16)")
+    parser.add_argument("--max-regions", type=int, default=128,
+                       help="Maximum number of regions (default: 128)")
+    parser.add_argument("--b0-region-ratio", type=float, default=0.2,
+                       help="Ratio of regions to cover in B0 (default: 0.2)")
     parser.add_argument("--coverage-weight", type=float, default=0.5,
-                       help="Weight for coverage need in cluster priority (default: 0.5)")
-    parser.add_argument("--cluster-visual-weight", type=float, default=0.3,
-                       help="Weight for visual uncertainty in cluster priority (default: 0.3)")
-    parser.add_argument("--cluster-action-weight", type=float, default=0.2,
-                       help="Weight for action uncertainty in cluster priority (default: 0.2)")
+                       help="Weight for coverage gap in region priority (default: 0.5)")
+    parser.add_argument("--region-visual-weight", type=float, default=0.3,
+                       help="Weight for visual uncertainty in region priority (default: 0.3)")
+    parser.add_argument("--region-action-weight", type=float, default=0.2,
+                       help="Weight for action uncertainty in region priority (default: 0.2)")
 
     args = parser.parse_args()
 
     visual_dir = Path(args.visual_embedding_dir)
     action_dir = Path(args.action_descriptor_dir)
+    dataset_dir = Path(args.dataset_dir)
     output_dir = Path(args.output_dir)
 
     if not visual_dir.exists():
@@ -891,6 +1025,10 @@ def main():
 
     if not action_dir.exists():
         print(f"Error: Action descriptor directory does not exist: {action_dir}")
+        return
+
+    if not dataset_dir.exists():
+        print(f"Error: Dataset directory does not exist: {dataset_dir}")
         return
 
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -905,34 +1043,63 @@ def main():
 
     all_episode_ids = sorted(set(list(visual_embeddings.keys()) | set(list(action_descriptors.keys()))))
 
+    print(f"\nLoading rand_vecs from: {dataset_dir}")
+    rand_vecs = load_rand_vecs(dataset_dir, all_episode_ids)
+
+    # Filter to episodes with all required data
+    valid_ids = [
+        ep_idx for ep_idx in all_episode_ids
+        if ep_idx in rand_vecs and ep_idx in visual_embeddings and ep_idx in action_descriptors
+    ]
+    print(f"Episodes with all data (rand_vec+visual+action): {len(valid_ids)}")
+
+    if len(valid_ids) == 0:
+        print("Error: No episodes with all required data")
+        return
+
     result = select_episodes_v5_adaptive(
         all_episode_ids=all_episode_ids,
         visual_embeddings=visual_embeddings,
         action_descriptors=action_descriptors,
+        rand_vecs=rand_vecs,
         num_select=args.num_selected,
-        num_clusters=args.num_clusters,
+        region_ratio=args.region_ratio,
+        min_regions=args.min_regions,
+        max_regions=args.max_regions,
+        b0_region_ratio=args.b0_region_ratio,
         coverage_weight=args.coverage_weight,
-        cluster_visual_weight=args.cluster_visual_weight,
-        cluster_action_weight=args.cluster_action_weight,
+        region_visual_weight=args.region_visual_weight,
+        region_action_weight=args.region_action_weight,
         episode_visual_weight=args.visual_weight,
         episode_action_weight=args.action_weight,
         seed=args.seed,
-        b0_size=args.b0_size,
     )
+
+    # Build episode data for diagnostic
+    episode_data = {}
+    for ep_idx in valid_ids:
+        episode_data[ep_idx] = {
+            "rand_vec": rand_vecs[ep_idx],
+            "visual_embedding": visual_embeddings[ep_idx],
+            "action_descriptor": action_descriptors[ep_idx],
+        }
 
     subset_file = output_dir / "subsets" / f"our_v5_{args.num_selected}_seed{args.seed}.json"
     save_selected_episodes(
         selected_episode_ids=result["selected_episode_indices"],
         output_path=subset_file,
         metadata={
-            "selection_method": "our_v5_adaptive_latent_coverage",
-            "num_clusters": args.num_clusters,
+            "selection_method": "our_v5_rand_vec_adaptive_coverage",
+            "num_regions": result["num_regions"],
+            "region_ratio": args.region_ratio,
+            "min_regions": args.min_regions,
+            "max_regions": args.max_regions,
+            "b0_region_ratio": args.b0_region_ratio,
             "coverage_weight": args.coverage_weight,
-            "cluster_visual_weight": args.cluster_visual_weight,
-            "cluster_action_weight": args.cluster_action_weight,
+            "region_visual_weight": args.region_visual_weight,
+            "region_action_weight": args.region_action_weight,
             "episode_visual_weight": args.visual_weight,
             "episode_action_weight": args.action_weight,
-            "b0_size": args.b0_size,
             "dynamic_selection": True,
             "seed": args.seed,
         }
@@ -946,7 +1113,7 @@ def main():
     # Run diagnostic analysis
     print(f"\n{'='*60}")
     print(f"Running diagnostic analysis...")
-    compute_diagnostic(result, visual_embeddings, action_descriptors, output_dir)
+    compute_diagnostic(result, episode_data, output_dir)
 
 
 if __name__ == "__main__":
