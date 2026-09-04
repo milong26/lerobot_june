@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 """
-Select episodes with true uniform distribution in the full state space.
+Select episodes with true uniform distribution in the full state space (rand_vec).
 
 Key improvements over select_uniform_episodes.py:
-1. Uses theoretical space bounds from env_state_structure instead of actual data range
-2. Supports rand_vec-based high-dimensional uniform sampling (optional)
-3. Better handling of empty cells without random fallback
-4. Can use obj_init_pos or rand_vec as the sampling basis
+1. Uses rand_vec (full state space) instead of just obj_init_pos
+2. Uses theoretical space bounds from env_state_structure (reset_space_low/high)
+3. Better handling of empty cells - selects nearest in rand_vec space
+4. Supports any number of objects/tasks by using the full randomization vector
 
 Usage:
     python select_new_uniform.py --num-episodes 100 --seed 42 \
@@ -20,7 +20,7 @@ import numpy as np
 
 
 def load_episode_metadata(json_path: str) -> tuple[list[int], np.ndarray, dict]:
-    """Load episode indices, positions, and env_state_structure from JSON file."""
+    """Load episode indices, rand_vecs, and env_state_structure from JSON file."""
     json_file = Path(json_path)
     if not json_file.exists():
         raise FileNotFoundError(f"找不到 JSON 文件: {json_file}")
@@ -31,90 +31,121 @@ def load_episode_metadata(json_path: str) -> tuple[list[int], np.ndarray, dict]:
     episodes = metadata["episodes"]
     indices = [ep["episode_index"] for ep in episodes]
     
-    has_obj = [ep.get("obj_init_pos") is not None for ep in episodes]
-    if all(has_obj):
-        positions = np.array([ep["obj_init_pos"] for ep in episodes])
+    has_rand_vec = [ep.get("rand_vec") is not None for ep in episodes]
+    if all(has_rand_vec):
+        rand_vecs = np.array([ep["rand_vec"] for ep in episodes])
     else:
-        valid_indices = [i for i, ep in enumerate(episodes) if ep.get("obj_init_pos") is not None]
-        positions = np.array([episodes[i]["obj_init_pos"] for i in valid_indices])
+        valid_indices = [i for i, ep in enumerate(episodes) if ep.get("rand_vec") is not None]
+        rand_vecs = np.array([episodes[i]["rand_vec"] for i in valid_indices])
         indices = [indices[i] for i in valid_indices]
-        print(f"警告: {len(has_obj) - len(valid_indices)} 个 episode 缺少 obj_init_pos，已跳过")
+        print(f"警告: {len(has_rand_vec) - len(valid_indices)} 个 episode 缺少 rand_vec，已跳过")
 
     env_state_structure = metadata.get("env_state_structure", {})
 
-    return indices, positions, env_state_structure
+    return indices, rand_vecs, env_state_structure
 
 
-def get_theoretical_bounds(env_state_structure: dict, positions: np.ndarray) -> tuple[float, float, float, float]:
+def get_theoretical_bounds(env_state_structure: dict) -> tuple[np.ndarray, np.ndarray]:
     """
-    Get theoretical bounds from env_state_structure if available,
-    otherwise fall back to actual data range.
+    Get theoretical bounds from env_state_structure.
     
-    The env_state_structure contains reset_space_low/high which are the 
-    theoretical bounds of the randomization space, not just the observed data.
+    Returns (low, high) arrays representing the full randomization space bounds.
+    Falls back to None if structure is incomplete.
     """
     if not env_state_structure:
-        print("未找到 env_state_structure，使用实际数据范围")
-        return positions[:, 0].min(), positions[:, 0].max(), positions[:, 1].min(), positions[:, 1].max()
+        print("未找到 env_state_structure")
+        return None, None
     
     reset_low = env_state_structure.get("reset_space_low")
     reset_high = env_state_structure.get("reset_space_high")
-    has_obj = env_state_structure.get("has_obj", False)
-    obj_pos_dim = env_state_structure.get("obj_pos_dim", 0)
     
-    if reset_low and reset_high and has_obj and obj_pos_dim >= 2:
-        reset_low = np.array(reset_low)
-        reset_high = np.array(reset_high)
+    if reset_low and reset_high:
+        low = np.array(reset_low)
+        high = np.array(reset_high)
         
-        obj_low_idx = None
-        obj_high_idx = None
+        print(f"使用理论空间范围 (来自 env_state_structure):")
+        print(f"  维度: {len(low)}")
+        print(f"  low: {low[:5].tolist()}... (前5维)")
+        print(f"  high: {high[:5].tolist()}... (前5维)")
         
-        for i in range(len(reset_low)):
-            if reset_low[i] != reset_high[i]:
-                if obj_low_idx is None:
-                    obj_low_idx = i
-                obj_high_idx = i
-        
-        if obj_low_idx is not None and obj_high_idx is not None and obj_high_idx >= obj_low_idx + 1:
-            x_min = reset_low[obj_low_idx]
-            x_max = reset_high[obj_low_idx]
-            y_min = reset_low[obj_low_idx + 1]
-            y_max = reset_high[obj_low_idx + 1]
-            
-            print(f"使用理论空间范围 (来自 env_state_structure):")
-            print(f"  x: [{x_min:.3f}, {x_max:.3f}]")
-            print(f"  y: [{y_min:.3f}, {y_max:.3f}]")
-            
-            data_x_min, data_x_max = positions[:, 0].min(), positions[:, 0].max()
-            data_y_min, data_y_max = positions[:, 1].min(), positions[:, 1].max()
-            
-            coverage_x = (data_x_max - data_x_min) / (x_max - x_min) * 100 if x_max > x_min else 0
-            coverage_y = (data_y_max - data_y_min) / (y_max - y_min) * 100 if y_max > y_min else 0
-            
-            print(f"数据覆盖率: x={coverage_x:.1f}%, y={coverage_y:.1f}%")
-            
-            return x_min, x_max, y_min, y_max
+        return low, high
     
-    print("env_state_structure 不完整，使用实际数据范围")
-    return positions[:, 0].min(), positions[:, 0].max(), positions[:, 1].min(), positions[:, 1].max()
+    print("env_state_structure 不完整，缺少 reset_space_low/high")
+    return None, None
+
+
+def project_to_2d_for_visualization(rand_vecs: np.ndarray, low: np.ndarray, high: np.ndarray) -> np.ndarray:
+    """
+    Project high-dimensional rand_vec to 2D for grid-based selection.
+    
+    Uses the first two varying dimensions (where low != high) as x and y.
+    This works for any task regardless of number of objects.
+    """
+    varying_mask = low != high
+    varying_dims = np.where(varying_mask)[0]
+    
+    if len(varying_dims) >= 2:
+        dim_x = varying_dims[0]
+        dim_y = varying_dims[1]
+        return rand_vecs[:, [dim_x, dim_y]], dim_x, dim_y
+    elif len(varying_dims) == 1:
+        dim_x = varying_dims[0]
+        positions_2d = np.zeros((len(rand_vecs), 2))
+        positions_2d[:, 0] = rand_vecs[:, dim_x]
+        positions_2d[:, 1] = 0
+        return positions_2d, dim_x, None
+    else:
+        positions_2d = np.zeros((len(rand_vecs), 2))
+        return positions_2d, None, None
 
 
 def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=None):
-    """Select episodes with true uniform distribution using theoretical bounds."""
+    """Select episodes with true uniform distribution in full rand_vec space."""
     rng = np.random.RandomState(seed)
     
     json_path = Path(dataset_root) / "episode_initial_states.json"
     print(f"加载 episode 数据: {json_path}")
-    indices, positions, env_state_structure = load_episode_metadata(str(json_path))
+    indices, rand_vecs, env_state_structure = load_episode_metadata(str(json_path))
 
-    print(f"Total episodes: {len(positions)}")
-    print(f"Position range: x[{positions[:, 0].min():.3f}, {positions[:, 0].max():.3f}], "
-          f"y[{positions[:, 1].min():.3f}, {positions[:, 1].max():.3f}], "
-          f"z[{positions[:, 2].min():.3f}, {positions[:, 2].max():.3f}]")
+    print(f"Total episodes: {len(rand_vecs)}")
+    print(f"rand_vec dimension: {rand_vecs.shape[1]}")
+    print(f"rand_vec range (per dimension):")
+    for i in range(min(5, rand_vecs.shape[1])):
+        print(f"  dim {i}: [{rand_vecs[:, i].min():.3f}, {rand_vecs[:, i].max():.3f}]")
 
-    x_min, x_max, y_min, y_max = get_theoretical_bounds(env_state_structure, positions)
+    low, high = get_theoretical_bounds(env_state_structure)
+    
+    if low is None or high is None:
+        print("警告: 无法获取理论空间范围，使用实际数据范围")
+        low = rand_vecs.min(axis=0)
+        high = rand_vecs.max(axis=0)
+        use_theoretical = False
+    else:
+        use_theoretical = True
+        
+        data_coverage = []
+        for i in range(len(low)):
+            if high[i] > low[i]:
+                coverage = (rand_vecs[:, i].max() - rand_vecs[:, i].min()) / (high[i] - low[i]) * 100
+                data_coverage.append(coverage)
+        
+        if data_coverage:
+            avg_coverage = np.mean(data_coverage)
+            print(f"\n平均数据覆盖率: {avg_coverage:.1f}%")
+            print(f"覆盖率 < 50% 的维度数: {sum(1 for c in data_coverage if c < 50)}/{len(data_coverage)}")
 
-    total_episodes = len(positions)
+    positions_2d, dim_x, dim_y = project_to_2d_for_visualization(rand_vecs, low, high)
+    
+    if dim_x is not None:
+        print(f"\n使用 rand_vec 维度 {dim_x} 和 {dim_y} 进行 2D 网格划分")
+        x_min, x_max = low[dim_x], high[dim_x]
+        y_min, y_max = low[dim_y] if dim_y is not None else 0, high[dim_y] if dim_y is not None else 0
+    else:
+        print("\n警告: 没有变化的维度，使用实际数据范围")
+        x_min, x_max = positions_2d[:, 0].min(), positions_2d[:, 0].max()
+        y_min, y_max = positions_2d[:, 1].min(), positions_2d[:, 1].max()
+
+    total_episodes = len(rand_vecs)
     range_x = x_max - x_min
     range_y = y_max - y_min
     aspect_ratio = range_x / range_y if range_y > 0 else 1.0
@@ -156,8 +187,8 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
         if len(selected_set) >= num_episodes:
             break
         
-        x_mask = (positions[:, 0] >= x_bins[i]) & (positions[:, 0] < x_bins[i + 1])
-        y_mask = (positions[:, 1] >= y_bins[j]) & (positions[:, 1] < y_bins[j + 1])
+        x_mask = (positions_2d[:, 0] >= x_bins[i]) & (positions_2d[:, 0] < x_bins[i + 1])
+        y_mask = (positions_2d[:, 1] >= y_bins[j]) & (positions_2d[:, 1] < y_bins[j + 1])
         cell_mask = x_mask & y_mask
         cell_indices = np.where(cell_mask)[0]
         
@@ -167,8 +198,8 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
             best_dist = float("inf")
             best_idx = None
             for idx in available_indices:
-                dx = positions[idx, 0] - cx
-                dy = positions[idx, 1] - cy
+                dx = positions_2d[idx, 0] - cx
+                dy = positions_2d[idx, 1] - cy
                 dist = dx * dx + dy * dy
                 if dist < best_dist:
                     best_dist = dist
@@ -182,7 +213,7 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
     
     if empty_cells:
         print(f"\n有 {len(empty_cells)} 个空单元格（该区域没有数据）")
-        print("尝试从相邻单元格扩展选择...")
+        print("尝试从整个空间中选择最近的 episode...")
         
         for i, j, cx, cy in empty_cells:
             if len(selected_set) >= num_episodes:
@@ -195,8 +226,8 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
                 if idx in used_episodes:
                     continue
                 
-                dx = positions[idx, 0] - cx
-                dy = positions[idx, 1] - cy
+                dx = positions_2d[idx, 0] - cx
+                dy = positions_2d[idx, 1] - cy
                 dist = dx * dx + dy * dy
                 
                 if dist < best_dist:
@@ -219,10 +250,11 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
     
     selected = sorted(list(selected_set))[:num_episodes]
     
-    selected_positions = positions[selected]
+    selected_rand_vecs = rand_vecs[selected]
     print(f"\nSelected {len(selected)} episodes")
-    print(f"Selected position range: x[{selected_positions[:, 0].min():.3f}, {selected_positions[:, 0].max():.3f}], "
-          f"y[{selected_positions[:, 1].min():.3f}, {selected_positions[:, 1].max():.3f}]")
+    print(f"Selected rand_vec range (first 5 dims):")
+    for i in range(min(5, selected_rand_vecs.shape[1])):
+        print(f"  dim {i}: [{selected_rand_vecs[:, i].min():.3f}, {selected_rand_vecs[:, i].max():.3f}]")
 
     if output_dir is not None:
         output_path = Path(output_dir)
@@ -230,17 +262,20 @@ def select_new_uniform_episodes(num_episodes, seed, dataset_root, output_dir=Non
 
         subset_file = output_path / f"new_uniform_{num_episodes}_seed{seed}.json"
         subset_data = {
-            "method": "new_uniform_theoretical_bounds",
+            "method": "new_uniform_full_state_space",
             "num_episodes": num_episodes,
             "seed": seed,
+            "rand_vec_dimension": rand_vecs.shape[1],
             "selected_episode_indices": [indices[i] for i in selected],
-            "theoretical_position_range": {
-                "x": [float(x_min), float(x_max)],
-                "y": [float(y_min), float(y_max)]
+            "theoretical_bounds": {
+                "low": low.tolist() if use_theoretical else None,
+                "high": high.tolist() if use_theoretical else None
             },
-            "actual_position_range": {
-                "x": [float(positions[:, 0].min()), float(positions[:, 0].max())],
-                "y": [float(positions[:, 1].min()), float(positions[:, 1].max())]
+            "grid_dimensions": {
+                "dim_x": int(dim_x) if dim_x is not None else None,
+                "dim_y": int(dim_y) if dim_y is not None else None,
+                "x_range": [float(x_min), float(x_max)],
+                "y_range": [float(y_min), float(y_max)]
             }
         }
         with open(subset_file, "w") as f:

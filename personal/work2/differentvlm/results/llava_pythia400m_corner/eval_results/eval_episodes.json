@@ -1,0 +1,47 @@
+{
+  "success_list": [
+    false,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    false,
+    false,
+    true,
+    true,
+    true
+  ],
+  "grasp_success_list": [
+    true,
+    true,
+    false,
+    true
+  ],
+  "rewards_list": [
+    1.0,
+    1.0,
+    0.0,
+    1.0
+  ],
+  "n_episodes": 30
+}

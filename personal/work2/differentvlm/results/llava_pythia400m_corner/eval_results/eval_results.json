@@ -1,0 +1,8 @@
+{
+  "pc_success": 33.5,
+  "pc_grasp_success": 94.0,
+  "avg_sum_reward": 921.2368754787577,
+  "avg_max_reward": 4.925320308011795,
+  "n_episodes": 200,
+  "parse_status": "ok"
+}

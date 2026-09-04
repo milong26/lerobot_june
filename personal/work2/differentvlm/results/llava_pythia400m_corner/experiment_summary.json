@@ -2,10 +2,10 @@
   "vlm_name": "llava_pythia400m",
   "camera": "corner",
   "gpu_id": 0,
-  "start_time": "2026-09-04 10:02:26",
-  "end_time": "2026-09-04 10:07:34",
-  "current_stage": "evaluation",
-  "failed_stage": "evaluation",
+  "start_time": "2026-09-04 10:09:02",
+  "end_time": "2026-09-04 17:07:46",
+  "current_stage": "completed",
+  "failed_stage": null,
   "selection_vlm_model_id": "lesjie/Llava-Pythia-400M",
   "selection_vlm_description": "LLaVA-Pythia-400M (TinyVLA-S VLM backbone)",
   "smolvla_policy_model": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
@@ -23,8 +23,8 @@
     "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/embeddings/llava_pythia400m_corner",
     "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/llava_pythia400m_corner/subsets/dynamicgrid_v4_112_seed42.json",
     "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/llava_pythia400m_corner/smolvla_llava_pythia400m_corner/checkpoints",
-    "eval_results_file": null,
-    "eval_episodes_file": null,
+    "eval_results_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/llava_pythia400m_corner/eval_results/eval_results.json",
+    "eval_episodes_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/llava_pythia400m_corner/eval_results/eval_episodes.json",
     "results_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/llava_pythia400m_corner",
     "checkpoints_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/llava_pythia400m_corner",
     "logs_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/logs/llava_pythia400m_corner"
@@ -38,15 +38,25 @@
     "episode_selection": {
       "status": "success",
       "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/llava_pythia400m_corner/subsets/dynamicgrid_v4_112_seed42.json",
-      "time_seconds": 54.4
+      "time_seconds": 0.0
     },
     "training": {
       "status": "success",
       "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/llava_pythia400m_corner/smolvla_llava_pythia400m_corner/checkpoints",
-      "time_seconds": 253.2
+      "time_seconds": 23316.4
+    },
+    "evaluation": {
+      "status": "success",
+      "time_seconds": 1807.5
     }
   },
-  "final_metrics": {},
-  "total_time_seconds": 307.5,
-  "error": "No valid checkpoint found in /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/llava_pythia400m_corner/smolvla_llava_pythia400m_corner/checkpoints"
+  "final_metrics": {
+    "pc_success": 33.5,
+    "pc_grasp_success": 94.0,
+    "avg_sum_reward": 921.2368754787577,
+    "avg_max_reward": 4.925320308011795,
+    "n_episodes": 200,
+    "parse_status": "ok"
+  },
+  "total_time_seconds": 25123.9
 }
