@@ -2,10 +2,10 @@
   "vlm_name": "prismatic_qwen25_05b",
   "camera": "corner",
   "gpu_id": 1,
-  "start_time": "2026-09-04 10:02:24",
-  "end_time": "2026-09-04 10:06:52",
-  "current_stage": "evaluation",
-  "failed_stage": "evaluation",
+  "start_time": "2026-09-04 10:09:07",
+  "end_time": "2026-09-04 16:39:09",
+  "current_stage": "completed",
+  "failed_stage": null,
   "selection_vlm_model_id": "lucidrains/prismatic-qwen2.5-0.5b",
   "selection_vlm_description": "Prismatic-Qwen2.5-0.5B (MiniVLA VLM backbone)",
   "smolvla_policy_model": "HuggingFaceTB/SmolVLM2-500M-Video-Instruct",
@@ -23,8 +23,8 @@
     "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/embeddings/prismatic_qwen25_05b_corner",
     "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/prismatic_qwen25_05b_corner/subsets/dynamicgrid_v4_112_seed42.json",
     "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/prismatic_qwen25_05b_corner/smolvla_prismatic_qwen25_05b_corner/checkpoints",
-    "eval_results_file": null,
-    "eval_episodes_file": null,
+    "eval_results_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/prismatic_qwen25_05b_corner/eval_results/eval_results.json",
+    "eval_episodes_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/prismatic_qwen25_05b_corner/eval_results/eval_episodes.json",
     "results_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/prismatic_qwen25_05b_corner",
     "checkpoints_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/prismatic_qwen25_05b_corner",
     "logs_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/logs/prismatic_qwen25_05b_corner"
@@ -38,15 +38,25 @@
     "episode_selection": {
       "status": "success",
       "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/results/prismatic_qwen25_05b_corner/subsets/dynamicgrid_v4_112_seed42.json",
-      "time_seconds": 51.3
+      "time_seconds": 0.0
     },
     "training": {
       "status": "success",
       "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/prismatic_qwen25_05b_corner/smolvla_prismatic_qwen25_05b_corner/checkpoints",
-      "time_seconds": 216.2
+      "time_seconds": 20054.5
+    },
+    "evaluation": {
+      "status": "success",
+      "time_seconds": 3347.4
     }
   },
-  "final_metrics": {},
-  "total_time_seconds": 267.6,
-  "error": "No valid checkpoint found in /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/checkpoints/prismatic_qwen25_05b_corner/smolvla_prismatic_qwen25_05b_corner/checkpoints"
+  "final_metrics": {
+    "pc_success": 32.0,
+    "pc_grasp_success": 94.5,
+    "avg_sum_reward": 951.0912414418442,
+    "avg_max_reward": 4.803148857301328,
+    "n_episodes": 200,
+    "parse_status": "ok"
+  },
+  "total_time_seconds": 23401.8
 }

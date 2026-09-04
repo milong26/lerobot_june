@@ -20,13 +20,25 @@ SUBSET_DIR="$OUTPUT_BASE_DIR/subsets"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
 EVAL_DIR="$OUTPUT_BASE_DIR/eval_results"
 
+# Dataset path configuration file (optional override)
+DATASET_PATH_FILE="$OUTPUT_BASE_DIR/dataset_path.txt"
+
 # Create directories
 mkdir -p "$SUBSET_DIR" "$OUTPUT_BASE_DIR" "$LOG_DIR" "$EVAL_DIR"
+
+# Override DATASET_DIR if path file exists
+if [ -f "$DATASET_PATH_FILE" ]; then
+    DATASET_DIR="$(cat "$DATASET_PATH_FILE")"
+    echo "Using dataset path from config file: $DATASET_DIR"
+fi
 
 # Experiment name
 if [ "$MODE" = "uniform" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT="$SCRIPT_DIR/select_uniform_episodes.py"
+elif [ "$MODE" = "state_uniform" ]; then
+    EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
+    SELECT_SCRIPT="$SCRIPT_DIR/select_new_uniform.py"
 elif [ "$MODE" = "random" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT="$SCRIPT_DIR/select_random_episodes.py"
@@ -43,7 +55,7 @@ elif [ "$MODE" = "our_v5" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT=""
 else
-    echo "Error: mode must be 'uniform', 'random', 'dynamicanchor', 'subzerocore', 'deminf', or 'our_v5'"
+    echo "Error: mode must be 'uniform', 'state_uniform', 'random', 'dynamicanchor', 'subzerocore', 'deminf', or 'our_v5'"
     exit 1
 fi
 
