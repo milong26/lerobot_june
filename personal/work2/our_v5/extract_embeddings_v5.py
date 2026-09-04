@@ -206,9 +206,9 @@ def extract_episode_embedding(
     processor,
     episode_data: Dict,
     device: str = "cuda"
-) -> np.ndarray:
+) -> Dict[str, np.ndarray]:
     """
-    Extract a single episode-level embedding that fuses visual and action features.
+    Extract episode-level embeddings: global visual, wrist visual, and action descriptor.
     
     Visual features:
     - Top camera: sample frames uniformly across the episode
@@ -227,7 +227,10 @@ def extract_episode_embedding(
         device: compute device
     
     Returns:
-        np.ndarray, 1D episode embedding vector (before PCA)
+        Dict with keys:
+            - "global_embedding": np.ndarray, top camera pooled features
+            - "wrist_embedding": np.ndarray, wrist camera pooled features
+            - "action_descriptor": np.ndarray, action feature vector
     """
     top_frames = episode_data["observation.images.top"]
     wrist_frames = episode_data["observation.images.wrist"]
@@ -262,13 +265,16 @@ def extract_episode_embedding(
     sys.stdout.flush()
     action_features = extract_action_features(action_seq)
     
-    episode_embedding = np.concatenate([top_pooled, wrist_pooled, action_features])
-    
-    print(f"  Episode embedding shape: {episode_embedding.shape}")
-    print(f"    Top pooled: {top_pooled.shape}, Wrist pooled: {wrist_pooled.shape}, Action: {action_features.shape}")
+    print(f"  Global embedding shape: {top_pooled.shape}")
+    print(f"  Wrist embedding shape: {wrist_pooled.shape}")
+    print(f"  Action descriptor shape: {action_features.shape}")
     sys.stdout.flush()
     
-    return episode_embedding
+    return {
+        "global_embedding": top_pooled,
+        "wrist_embedding": wrist_pooled,
+        "action_descriptor": action_features,
+    }
 
 
 def fit_v5_pca(
@@ -297,6 +303,48 @@ def fit_v5_pca(
     return pca
 
 
+def fit_separate_pcas(
+    global_embeddings: List[np.ndarray],
+    wrist_embeddings: List[np.ndarray],
+    action_descriptors: List[np.ndarray],
+    n_components: int = V5_PCA_DIM
+) -> Dict[str, PCA]:
+    """
+    Fit separate PCA models for global visual, wrist visual, and action descriptors.
+    
+    Args:
+        global_embeddings: list of global embedding arrays
+        wrist_embeddings: list of wrist embedding arrays
+        action_descriptors: list of action descriptor arrays
+        n_components: target dimensionality for each PCA
+    
+    Returns:
+        Dict with keys: "pca_global", "pca_wrist", "pca_action"
+    """
+    pca_global = PCA(n_components=n_components, random_state=42)
+    pca_global.fit(np.array(global_embeddings))
+    explained_var_global = pca_global.explained_variance_ratio_.sum()
+    print(f"  PCA global fitted: {len(global_embeddings)} -> {n_components}D, explained variance: {explained_var_global:.4f}")
+    
+    pca_wrist = PCA(n_components=n_components, random_state=42)
+    pca_wrist.fit(np.array(wrist_embeddings))
+    explained_var_wrist = pca_wrist.explained_variance_ratio_.sum()
+    print(f"  PCA wrist fitted: {len(wrist_embeddings)} -> {n_components}D, explained variance: {explained_var_wrist:.4f}")
+    
+    pca_action = PCA(n_components=n_components, random_state=42)
+    pca_action.fit(np.array(action_descriptors))
+    explained_var_action = pca_action.explained_variance_ratio_.sum()
+    print(f"  PCA action fitted: {len(action_descriptors)} -> {n_components}D, explained variance: {explained_var_action:.4f}")
+    
+    sys.stdout.flush()
+    
+    return {
+        "pca_global": pca_global,
+        "pca_wrist": pca_wrist,
+        "pca_action": pca_action,
+    }
+
+
 def process_v5_embeddings(
     dataset_dir: Path,
     output_dir: Path,
@@ -307,8 +355,8 @@ def process_v5_embeddings(
     Process entire LeRobotDataset: extract episode embeddings, fit PCA, save cache.
     
     Cache format:
-    - ({episode_index}).npy files with {"episode_embedding": ..., "episode_index": ...}
-    - pca_models/pca_v5_{n_components}.joblib
+    - ({episode_index}).npy files with {"episode_index": ..., "global_embedding": ..., "wrist_embedding": ..., "action_descriptor": ..., "embedding_version": "v5_action_aware"}
+    - pca_models/pca_global_{n_components}.joblib, pca_wrist_{n_components}.joblib, pca_action_{n_components}.joblib
     
     Args:
         dataset_dir: LeRobotDataset root directory
@@ -344,8 +392,10 @@ def process_v5_embeddings(
             existing_count += 1
     
     pca_dir = output_dir / "pca_models"
-    pca_v5_file = pca_dir / f"pca_v5_{n_components}.joblib"
-    pca_complete = pca_v5_file.exists()
+    pca_global_file = pca_dir / f"pca_global_{n_components}.joblib"
+    pca_wrist_file = pca_dir / f"pca_wrist_{n_components}.joblib"
+    pca_action_file = pca_dir / f"pca_action_{n_components}.joblib"
+    pca_complete = pca_global_file.exists() and pca_wrist_file.exists() and pca_action_file.exists()
     
     if existing_count == 0:
         print(f"\nNo cache found, will extract all {num_episodes} episodes")
@@ -372,7 +422,9 @@ def process_v5_embeddings(
     print("Model loaded, starting extraction...\n")
     
     episode_embeddings = {}
-    raw_embeddings_list = []
+    global_embeddings_list = []
+    wrist_embeddings_list = []
+    action_descriptors_list = []
     episode_coords = []
     
     print("\nBuilding episode frame index mapping...")
@@ -435,11 +487,13 @@ def process_v5_embeddings(
         }
         
         extract_start = time.time()
-        ep_embedding = extract_episode_embedding(model, processor, episode_data, device)
+        ep_embeddings = extract_episode_embedding(model, processor, episode_data, device)
         extract_time = time.time() - extract_start
         
-        episode_embeddings[ep_idx] = ep_embedding
-        raw_embeddings_list.append(ep_embedding)
+        episode_embeddings[ep_idx] = ep_embeddings
+        global_embeddings_list.append(ep_embeddings["global_embedding"])
+        wrist_embeddings_list.append(ep_embeddings["wrist_embedding"])
+        action_descriptors_list.append(ep_embeddings["action_descriptor"])
         episode_coords.append(ep_idx)
         
         completed = len(episode_coords)
@@ -449,12 +503,14 @@ def process_v5_embeddings(
         
         ep_total_time = time.time() - ep_start_time
         print(f"  Episode {ep_idx} complete!")
-        print(f"    Embedding dim: {ep_embedding.shape}")
+        print(f"    Global embedding dim: {ep_embeddings['global_embedding'].shape}")
+        print(f"    Wrist embedding dim: {ep_embeddings['wrist_embedding'].shape}")
+        print(f"    Action descriptor dim: {ep_embeddings['action_descriptor'].shape}")
         print(f"    Time: load={load_time:.1f}s, extract={extract_time:.1f}s, total={ep_total_time:.1f}s")
         print(f"    Progress: {completed}/{dataset.num_episodes} ({progress:.1f}%), ETA: {eta/60:.1f}min")
         sys.stdout.flush()
     
-    if not raw_embeddings_list:
+    if not global_embeddings_list:
         print("No valid episode data found")
         return {
             "episode_indices": [],
@@ -465,48 +521,60 @@ def process_v5_embeddings(
     
     print(f"\n{'='*60}")
     print(f"All episode embeddings extracted!")
-    print(f"Processed {len(raw_embeddings_list)} episodes")
+    print(f"Processed {len(global_embeddings_list)} episodes")
     print(f"{'='*60}")
     
     total_extract_time = time.time() - process_start_time
     print(f"Total extraction time: {total_extract_time:.2f}s ({total_extract_time/60:.1f} min)")
-    if len(raw_embeddings_list) > 0:
-        print(f"Average per episode: {total_extract_time/len(raw_embeddings_list):.2f}s")
+    if len(global_embeddings_list) > 0:
+        print(f"Average per episode: {total_extract_time/len(global_embeddings_list):.2f}s")
     sys.stdout.flush()
     
-    print(f"\nFitting PCA ({n_components}D)...")
-    pca_v5 = fit_v5_pca(raw_embeddings_list, n_components)
+    print(f"\nFitting separate PCA models ({n_components}D each)...")
+    pca_models = fit_separate_pcas(
+        global_embeddings_list, wrist_embeddings_list, action_descriptors_list, n_components
+    )
     print("PCA fitting complete")
     
     print(f"\nSaving embeddings to: {output_dir}")
     output_dir.mkdir(parents=True, exist_ok=True)
     
-    raw_array = np.array(raw_embeddings_list)
+    global_array = np.array(global_embeddings_list)
+    wrist_array = np.array(wrist_embeddings_list)
+    action_array = np.array(action_descriptors_list)
+    
     for ep_idx, coord in enumerate(episode_coords):
-        ep_pca = pca_v5.transform(raw_array[ep_idx:ep_idx+1])[0]
+        global_pca = pca_models["pca_global"].transform(global_array[ep_idx:ep_idx+1])[0]
+        wrist_pca = pca_models["pca_wrist"].transform(wrist_array[ep_idx:ep_idx+1])[0]
+        action_pca = pca_models["pca_action"].transform(action_array[ep_idx:ep_idx+1])[0]
         
         coord_key = f"({coord})"
         output_file = output_dir / f"{coord_key}.npy"
         
         np.save(output_file, {
-            "episode_embedding": ep_pca,
             "episode_index": coord,
+            "global_embedding": global_pca,
+            "wrist_embedding": wrist_pca,
+            "action_descriptor": action_pca,
+            "embedding_version": "v5_action_aware",
         }, allow_pickle=True)
         
         if (ep_idx + 1) % 10 == 0 or ep_idx == len(episode_coords) - 1:
             print(f"  Saved {ep_idx + 1}/{len(episode_coords)} embedding files")
     
-    print(f"\nSaving PCA model...")
+    print(f"\nSaving PCA models...")
     pca_output_dir = output_dir / "pca_models"
     pca_output_dir.mkdir(parents=True, exist_ok=True)
     
     import joblib
-    joblib.dump(pca_v5, pca_output_dir / f"pca_v5_{n_components}.joblib")
+    joblib.dump(pca_models["pca_global"], pca_output_dir / f"pca_global_{n_components}.joblib")
+    joblib.dump(pca_models["pca_wrist"], pca_output_dir / f"pca_wrist_{n_components}.joblib")
+    joblib.dump(pca_models["pca_action"], pca_output_dir / f"pca_action_{n_components}.joblib")
     
     print(f"\n{'='*60}")
     print(f"V5 embedding extraction complete!")
     print(f"Embedding files: {output_dir}")
-    print(f"PCA model: {pca_output_dir}")
+    print(f"PCA models: {pca_output_dir}")
     print(f"{'='*60}")
     
     return {
