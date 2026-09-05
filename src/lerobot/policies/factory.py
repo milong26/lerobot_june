@@ -53,6 +53,7 @@ from .minivla.configuration_minivla import MiniVLAConfig
 from .smolvla.configuration_smolvla import SmolVLAConfig
 from .tdmpc.configuration_tdmpc import TDMPCConfig
 from .tinyvla.configuration_tinyvla import TinyVLAConfig
+from .tinyvla.configuration_tinyvla import TinyVLABConfig
 from .utils import validate_visual_features_consistency
 
 if TYPE_CHECKING or _peft_available:
@@ -153,6 +154,10 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
         return VLAJEPAConfig(**kwargs)
     elif policy_type == "tinyvla":
         return TinyVLAConfig(**kwargs)
+    elif policy_type == "tinyvla_s":
+        return TinyVLAConfig(**kwargs)
+    elif policy_type == "tinyvla_b":
+        return TinyVLABConfig(**kwargs)
     elif policy_type == "minivla":
         return MiniVLAConfig(**kwargs)
     else:

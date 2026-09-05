@@ -19,33 +19,36 @@ from lerobot.optim import AdamWConfig, CosineDecayWithWarmupSchedulerConfig
 from lerobot.utils.constants import ACTION, OBS_IMAGES, OBS_STATE
 
 
-@PreTrainedConfig.register_subclass("tinyvla")
+@PreTrainedConfig.register_subclass("tinyvla_s")
 @dataclass
 class TinyVLAConfig(PreTrainedConfig):
     """
-    Configuration for the TinyVLA (Vision-Language-Action) policy.
+    Configuration for the TinyVLA-S (Vision-Language-Action) policy.
 
     TinyVLA uses a LLaVA-Pythia VLM backbone with a DROID UNet Diffusion or DETR VAE action head.
     It supports multi-camera visual input, robot state, and language instructions.
 
+    Default values match official TinyVLA training script (teach_code/TinyVLA/train_tinyvla.py)
+    and train.sh (learning_rate=2e-4, weight_decay=0, warmup_ratio=0.005, cosine scheduler).
+
     Args:
         n_obs_steps: Number of observation steps (currently only 1 is supported).
-        chunk_size: Size of the action prediction chunk.
+        chunk_size: Size of the action prediction chunk (official default: 16).
         n_action_steps: Number of action steps to execute per policy invocation.
         model_name_or_path: Path to the LLaVA-Pythia base model checkpoint.
         action_head_type: Type of action head, either "droid_diffusion" or "act".
         action_dim: Dimension of the action space.
         state_dim: Dimension of the robot state space.
         lora_enable: Whether to use LoRA for efficient fine-tuning.
-        lora_r: LoRA rank.
-        lora_alpha: LoRA alpha scaling factor.
-        freeze_vision_tower: Whether to freeze the vision encoder.
-        freeze_backbone: Whether to freeze the language model backbone.
+        lora_r: LoRA rank (official default: 64).
+        lora_alpha: LoRA alpha scaling factor (official default: 256).
+        freeze_vision_tower: Whether to freeze the vision encoder (official default: True).
+        freeze_backbone: Whether to freeze the language model backbone (official default: True).
         tokenizer_max_length: Maximum tokenizer length for language input.
         num_inference_timesteps: Number of DDIM inference steps for diffusion head.
         pretrain_image_size: Image size for pretrained checkpoint.
-        optimizer_lr: Learning rate.
-        optimizer_weight_decay: Weight decay.
+        optimizer_lr: Learning rate (official default: 2e-4).
+        optimizer_weight_decay: Weight decay (official default: 0).
         scheduler_warmup_steps: Number of warmup steps for scheduler.
         scheduler_decay_steps: Number of decay steps for scheduler.
         scheduler_decay_lr: Final decayed learning rate.
@@ -63,21 +66,24 @@ class TinyVLAConfig(PreTrainedConfig):
         }
     )
 
-    # Model architecture
+    # Model architecture - default matches TinyVLA-S (lesjie/Llava-Pythia-400M)
     model_name_or_path: str = "lesjie/Llava-Pythia-400M"
     action_head_type: str = "droid_diffusion"
     action_dim: int = 10
     state_dim: int = 7
+    concat: str = "token_cat"  # official default: 'token_cat'
 
-    # LoRA settings
+    # LoRA settings - match official train_tinyvla.py defaults
     lora_enable: bool = True
     lora_r: int = 64
     lora_alpha: int = 256
     lora_dropout: float = 0.05
+    lora_module: str = "vit llm"  # official default: 'vit llm'
+    lora_bias: str = "none"
 
-    # Freezing
-    freeze_vision_tower: bool = False
-    freeze_backbone: bool = False
+    # Freezing - match official train.sh defaults (--freeze_vision_tower True --freeze_backbone True)
+    freeze_vision_tower: bool = True
+    freeze_backbone: bool = True
 
     # Tokenizer
     tokenizer_max_length: int = 2048
@@ -88,9 +94,10 @@ class TinyVLAConfig(PreTrainedConfig):
     # Image
     pretrain_image_size: int = 320
 
-    # Training presets
-    optimizer_lr: float = 1e-4
-    optimizer_weight_decay: float = 1e-10
+    # Training presets - match official train.sh
+    # learning_rate 2e-4, weight_decay 0., warmup_ratio 0.005, lr_scheduler_type cosine
+    optimizer_lr: float = 2e-4
+    optimizer_weight_decay: float = 0.0
     optimizer_betas: tuple[float, float] = (0.9, 0.98)
     optimizer_eps: float = 1e-7
     optimizer_grad_clip_norm: float = 10.0
@@ -134,6 +141,125 @@ class TinyVLAConfig(PreTrainedConfig):
             self.state_dim = state_shape[0] if state_shape else self.state_dim
         else:
             # No state input, create a dummy feature with state_dim=0
+            self.state_dim = 0
+
+    def get_optimizer_preset(self) -> AdamWConfig:
+        return AdamWConfig(
+            lr=self.optimizer_lr,
+            betas=self.optimizer_betas,
+            eps=self.optimizer_eps,
+            weight_decay=self.optimizer_weight_decay,
+            grad_clip_norm=self.optimizer_grad_clip_norm,
+        )
+
+    def get_scheduler_preset(self):
+        return CosineDecayWithWarmupSchedulerConfig(
+            peak_lr=self.optimizer_lr,
+            decay_lr=self.scheduler_decay_lr,
+            num_warmup_steps=self.scheduler_warmup_steps,
+            num_decay_steps=self.scheduler_decay_steps,
+        )
+
+    @property
+    def observation_delta_indices(self) -> list:
+        return [0]
+
+    @property
+    def action_delta_indices(self) -> list:
+        return list(range(self.chunk_size))
+
+    @property
+    def reward_delta_indices(self) -> None:
+        return None
+
+
+@PreTrainedConfig.register_subclass("tinyvla_b")
+@dataclass
+class TinyVLABConfig(PreTrainedConfig):
+    """
+    Configuration for the TinyVLA-B (Vision-Language-Action) policy.
+
+    TinyVLA-B uses the larger LLaVA-Pythia-700M backbone (lesjie/Llava-Pythia-700M).
+    All other defaults match TinyVLA-S.
+    """
+
+    n_obs_steps: int = 1
+    chunk_size: int = 16
+    n_action_steps: int = 16
+
+    normalization_mapping: dict[str, NormalizationMode] = field(
+        default_factory=lambda: {
+            "VISUAL": NormalizationMode.IDENTITY,
+            "STATE": NormalizationMode.MEAN_STD,
+            "ACTION": NormalizationMode.MEAN_STD,
+        }
+    )
+
+    # Model architecture - TinyVLA-B uses Llava-Pythia-700M
+    model_name_or_path: str = "lesjie/Llava-Pythia-700M"
+    action_head_type: str = "droid_diffusion"
+    action_dim: int = 10
+    state_dim: int = 7
+    concat: str = "token_cat"
+
+    # LoRA settings
+    lora_enable: bool = True
+    lora_r: int = 64
+    lora_alpha: int = 256
+    lora_dropout: float = 0.05
+    lora_module: str = "vit llm"
+    lora_bias: str = "none"
+
+    # Freezing
+    freeze_vision_tower: bool = True
+    freeze_backbone: bool = True
+
+    # Tokenizer
+    tokenizer_max_length: int = 2048
+
+    # Diffusion inference
+    num_inference_timesteps: int = 10
+
+    # Image
+    pretrain_image_size: int = 320
+
+    # Training presets
+    optimizer_lr: float = 2e-4
+    optimizer_weight_decay: float = 0.0
+    optimizer_betas: tuple[float, float] = (0.9, 0.98)
+    optimizer_eps: float = 1e-7
+    optimizer_grad_clip_norm: float = 10.0
+
+    scheduler_warmup_steps: int = 100
+    scheduler_decay_steps: int = 10000
+    scheduler_decay_lr: float = 2.5e-6
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        if self.n_action_steps > self.chunk_size:
+            raise ValueError(
+                f"The chunk size is the upper bound for the number of action steps per model invocation. "
+                f"Got {self.n_action_steps} for `n_action_steps` and {self.chunk_size} for `chunk_size`."
+            )
+        if self.action_head_type not in ["droid_diffusion", "act"]:
+            raise ValueError(
+                f"`action_head_type` must be 'droid_diffusion' or 'act'. Got '{self.action_head_type}'."
+            )
+
+    def validate_features(self) -> None:
+        if not self.image_features:
+            raise ValueError("At least one image input is required for TinyVLA.")
+        if not self.action_feature:
+            raise ValueError("An action output is required for TinyVLA.")
+
+        action_shape = self.action_feature.shape
+        self.action_dim = action_shape[0] if action_shape else self.action_dim
+
+        if OBS_STATE in self.input_features:
+            state_shape = self.input_features[OBS_STATE].shape
+            self.state_dim = state_shape[0] if state_shape else self.state_dim
+        else:
             self.state_dim = 0
 
     def get_optimizer_preset(self) -> AdamWConfig:

@@ -65,20 +65,23 @@ class TinyVLAPolicy(PreTrainedPolicy):
         self.reset()
 
     def _build_model(self):
-        """Build the LLaVA-Pythia model with action head."""
+        """Build the LLaVA-Pythia model with action head.
+        
+        Reference: teach_code/TinyVLA/llava-pythia/llava_pythia/llava_pythia_utils.py::load_llava_pythia
+        """
         llava_config = LlavaPythiaConfig.from_pretrained(
             self.config.model_name_or_path,
             trust_remote_code=True,
         )
 
-        # Set action head parameters
+        # Set action head parameters - match official train_tinyvla.py
         llava_config.action_head_type = self.config.action_head_type
         llava_config.action_dim = self.config.action_dim
         llava_config.state_dim = self.config.state_dim
         llava_config.chunk_size = self.config.chunk_size
-        llava_config.concat = "token_cat"
+        llava_config.concat = self.config.concat if hasattr(self.config, 'concat') else "token_cat"
 
-        # Build the model
+        # Build the model - match official from_pretrained call
         self.model = LlavaPythiaForCausalLM.from_pretrained(
             self.config.model_name_or_path,
             config=llava_config,
@@ -88,41 +91,40 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         self.model.config.use_cache = False
 
-        # Apply freezing
+        # Apply freezing - match official llava_pythia_utils.py logic
+        # Official: model.get_model().requires_grad_(False/True) based on freeze_backbone
         if self.config.freeze_backbone:
             self.model.get_model().requires_grad_(False)
         else:
             self.model.get_model().requires_grad_(True)
 
+        # Official: vision_tower set to True first, then conditionally frozen
+        self.model.get_model().vision_tower.requires_grad_(True)
         if self.config.freeze_vision_tower:
+            for n, p in self.model.get_model().vision_tower.named_parameters():
+                if 'lora' not in n.lower():
+                    p.requires_grad = False
+        else:
             for p in self.model.get_model().vision_tower.parameters():
-                p.requires_grad = False
+                p.requires_grad = True
 
-        # Always train action head
-        self.model.proj_to_action.requires_grad_(True)
-        
-        # For diffusion head, initialize it now so we can set requires_grad
-        if self.config.action_head_type == 'droid_diffusion':
-            self.model._init_diffusion_head()
-        
-        if self.model.embed_out is not None:
-            self.model.embed_out.requires_grad_(True)
-
-        # Apply LoRA if enabled
+        # Apply LoRA if enabled - MUST be before setting action head requires_grad
+        # Reference: official llava_pythia_utils.py line ~207-221
         if self.config.lora_enable:
             self._apply_lora()
 
-        self.model.to(self.config.device)
-        
-        # Move diffusion head to device and match model dtype
-        if self.config.action_head_type == 'droid_diffusion' and hasattr(self.model, 'embed_out') and self.model.embed_out is not None:
-            self.model.embed_out.to(self.config.device)
-            # Match the dtype of the LLM backbone to avoid dtype mismatch in diffusion head
-            model_dtype = self.model.get_model().mm_projector[0].weight.dtype
-            self.model.embed_out.to(dtype=model_dtype)
+        # Always train action head - AFTER LoRA application (official order)
+        # Reference: official llava_pythia_utils.py: model.embed_out.requires_grad_(True)
+        self.model.embed_out.requires_grad_(True)
+        self.model.proj_to_action.requires_grad_(True)
 
     def _apply_lora(self):
-        """Apply LoRA to the model."""
+        """Apply LoRA to the model.
+        
+        Reference: teach_code/TinyVLA/llava-pythia/llava_pythia/llava_pythia_utils.py::load_llava_pythia
+        Official LoRA config: lora_r=64, lora_alpha=256, lora_dropout=0.05, 
+                               lora_module='vit llm', bias='none', task_type='CAUSAL_LM'
+        """
         try:
             from peft import LoraConfig, get_peft_model
         except ImportError:
@@ -135,16 +137,22 @@ class TinyVLAPolicy(PreTrainedPolicy):
         def rank0_print(*args):
             print(*args)
 
+        # Match official lora_module='vit llm' passed to find_all_linear_names
+        lora_module = self.config.lora_module if hasattr(self.config, 'lora_module') else "vit llm"
+        
         lora_config = LoraConfig(
             r=self.config.lora_r,
             lora_alpha=self.config.lora_alpha,
             target_modules=find_all_linear_names(
-                self.model, rank0_print, "vit llm"
+                self.model, rank0_print, lora_module
             ),
             lora_dropout=self.config.lora_dropout,
-            bias="none",
+            bias=self.config.lora_bias if hasattr(self.config, 'lora_bias') else "none",
             task_type="CAUSAL_LM",
         )
+        
+        rank0_print("##" * 20)
+        rank0_print("Adding LoRA adapters...")
         self.model = get_peft_model(self.model, lora_config)
         self.model.print_trainable_parameters()
 
@@ -259,8 +267,41 @@ class TinyVLAPolicy(PreTrainedPolicy):
         ]
 
     def _save_pretrained(self, save_directory: Path, state_dict: dict[str, Tensor] | None = None) -> None:
-        """Save the policy model and configuration to a directory."""
-        super()._save_pretrained(save_directory, state_dict=state_dict)  
+        """Save the policy model and configuration to a directory.
+        
+        Reference: teach_code/TinyVLA/train_tinyvla.py checkpoint saving logic
+        Official saves: config, LoRA adapter weights, non_lora_trainables.bin
+        
+        For LeRobot compatibility, we save:
+        1. Full state dict as safetensors (LeRobot default)
+        2. PEFT adapter config and weights (for official TinyVLA compatibility)
+        3. TinyVLA config.json
+        """
+        # Save LeRobot config
+        self.config._save_pretrained(save_directory)
+        
+        # If LoRA is enabled, save PEFT adapter separately for compatibility
+        if self.config.lora_enable and hasattr(self.model, 'peft_config'):
+            try:
+                from peft import PeftModel
+                if isinstance(self.model, PeftModel):
+                    # Save PEFT adapter config and weights
+                    adapter_dir = save_directory / "adapter"
+                    adapter_dir.mkdir(exist_ok=True)
+                    self.model.peft_config["default"].save_pretrained(adapter_dir)
+                    self.model.save_pretrained(save_directory / "adapter")
+                    logger.info(f"Saved PEFT adapter to {save_directory / 'adapter'}")
+            except Exception as e:
+                logger.warning(f"Failed to save PEFT adapter: {e}")
+        
+        # Save full model state dict as safetensors (LeRobot default)
+        if state_dict is None:
+            state_dict = self.state_dict()
+        
+        if state_dict is not None:
+            from safetensors.torch import save_file as safetensors_save
+            safetensors_save(state_dict, str(save_directory / "model.safetensors"))
+        
         logger.info(f"Saved TinyVLA policy to {save_directory}")
 
     @classmethod
@@ -271,12 +312,64 @@ class TinyVLAPolicy(PreTrainedPolicy):
         config: TinyVLAConfig | None = None,
         **kwargs,
     ) -> "TinyVLAPolicy":
-        """Load a TinyVLA policy from a pretrained checkpoint."""
-        policy = super().from_pretrained(
-            pretrained_name_or_path,
-            config=config,
-            **kwargs,
-        )
+        """Load a TinyVLA policy from a pretrained checkpoint.
+        
+        Reference: teach_code/TinyVLA/llava-pythia/llava_pythia/llava_pythia_utils.py::load_llava_pythia
+        Loading order: base LLaVA-Pythia -> LoRA adapter -> action head -> LeRobot policy
+        """
+        import os
+        
+        # Load config if not provided
+        if config is None:
+            config = PreTrainedConfig.from_pretrained(pretrained_name_or_path)
+        
+        # Create policy instance (builds model from scratch)
+        policy = cls(config, **kwargs)
+        
+        model_id = str(pretrained_name_or_path)
+        
+        if os.path.isdir(model_id):
+            # Try loading PEFT adapter first if it exists
+            adapter_dir = os.path.join(model_id, "adapter")
+            if os.path.exists(adapter_dir) and config.lora_enable:
+                try:
+                    from peft import PeftModel, LoraConfig
+                    # Load adapter config
+                    adapter_config = LoraConfig.from_pretrained(adapter_dir)
+                    # Apply LoRA to the model
+                    policy.model = get_peft_model(policy.model, adapter_config)
+                    # Load adapter weights
+                    policy.model.load_peft_weights(adapter_dir)
+                    logger.info(f"Loaded PEFT adapter from {adapter_dir}")
+                except Exception as e:
+                    logger.warning(f"Failed to load PEFT adapter: {e}")
+            
+            # Load full model state dict
+            model_file = os.path.join(model_id, "model.safetensors")
+            if os.path.exists(model_file):
+                from safetensors.torch import load_file
+                state_dict = load_file(model_file)
+                policy.load_state_dict(state_dict, strict=False)
+                logger.info(f"Loaded model weights from {model_file}")
+        else:
+            # Load from HuggingFace Hub
+            from huggingface_hub import hf_hub_download
+            from safetensors.torch import load_file
+            
+            try:
+                model_file = hf_hub_download(
+                    repo_id=model_id,
+                    filename="model.safetensors",
+                    **kwargs
+                )
+                state_dict = load_file(model_file)
+                policy.load_state_dict(state_dict, strict=False)
+                logger.info(f"Loaded model weights from Hub: {model_id}")
+            except Exception as e:
+                logger.warning(f"Failed to load from Hub: {e}")
+        
+        policy.to(config.device)
+        policy.eval()
         return policy
 
     def reset(self):
