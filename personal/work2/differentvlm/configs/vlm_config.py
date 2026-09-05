@@ -35,10 +35,20 @@ EVAL_SEED = 42
 EVAL_BATCH_SIZE = 16
 
 SmolVLA_POLICY_MODEL = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
+TINYVLA_S_POLICY_MODEL = "tinyvla_s"
+TINYVLA_B_POLICY_MODEL = "tinyvla_b"
 CAMERA_NAMES = "corner,gripperPOV"
 RENAME_MAP = '{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}'
 
 PCA_DIM = 32
+
+TINYVLA_TRAIN_STEPS = 12000
+TINYVLA_SAVE_FREQ = 2000
+TINYVLA_BATCH_SIZE = 32
+TINYVLA_NUM_WORKERS = 8
+TINYVLA_LR = 2e-4
+TINYVLA_WEIGHT_DECAY = 0.0
+TINYVLA_WARMUP_RATIO = 0.005
 
 
 @dataclass
@@ -99,6 +109,7 @@ class VLMExperimentConfig:
     eval_seed: int = EVAL_SEED
     eval_batch_size: int = EVAL_BATCH_SIZE
     smolvla_policy_model: str = SmolVLA_POLICY_MODEL
+    tinyvla_policy_type: str = ""
     camera_names: str = CAMERA_NAMES
     rename_map: str = RENAME_MAP
     pca_dim: int = PCA_DIM
@@ -171,9 +182,69 @@ def get_prismatic_qwen25_05b_config(gpu_id: int = 0, camera: str = "corner") -> 
     )
 
 
+def get_tinyvla_s_config(gpu_id: int = 0, camera: str = "corner", num_episodes: int = 112) -> VLMExperimentConfig:
+    """
+    TinyVLA-S configuration for fine-tuning.
+
+    Model: lesjie/Llava-Pythia-400M as backbone with diffusion action head
+    - Policy type: tinyvla_s (registered in LeRobot)
+    - Action head: droid_diffusion (UNet-based diffusion policy)
+    - LoRA: enabled with r=64, alpha=256, targeting 'vit llm' modules
+    - Training: lr=2e-4, weight_decay=0, warmup_ratio=0.005, cosine scheduler
+    - Freezing: vision_tower and backbone frozen, only LoRA and action head trained
+    - Chunk size: 16, n_action_steps: 16
+    """
+    return VLMExperimentConfig(
+        vlm_name="tinyvla_s",
+        selection_vlm_model_id="lesjie/Llava-Pythia-400M",
+        selection_vlm_description="TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
+        camera=camera,
+        gpu_id=gpu_id,
+        is_prismatic=False,
+        selection_num_episodes=num_episodes,
+        train_steps=TINYVLA_TRAIN_STEPS,
+        train_save_freq=TINYVLA_SAVE_FREQ,
+        train_batch_size=TINYVLA_BATCH_SIZE,
+        train_num_workers=TINYVLA_NUM_WORKERS,
+        train_lr=TINYVLA_LR,
+        tinyvla_policy_type="tinyvla_s",
+    )
+
+
+def get_tinyvla_b_config(gpu_id: int = 0, camera: str = "corner", num_episodes: int = 112) -> VLMExperimentConfig:
+    """
+    TinyVLA-B configuration for fine-tuning.
+
+    Model: lesjie/Llava-Pythia-700M as backbone with diffusion action head
+    - Policy type: tinyvla_b (registered in LeRobot)
+    - Action head: droid_diffusion (UNet-based diffusion policy)
+    - LoRA: enabled with r=64, alpha=256, targeting 'vit llm' modules
+    - Training: lr=2e-4, weight_decay=0, warmup_ratio=0.005, cosine scheduler
+    - Freezing: vision_tower and backbone frozen, only LoRA and action head trained
+    - Chunk size: 16, n_action_steps: 16
+    """
+    return VLMExperimentConfig(
+        vlm_name="tinyvla_b",
+        selection_vlm_model_id="lesjie/Llava-Pythia-700M",
+        selection_vlm_description="TinyVLA-B (LLaVA-Pythia-700M + Diffusion Action Head)",
+        camera=camera,
+        gpu_id=gpu_id,
+        is_prismatic=False,
+        selection_num_episodes=num_episodes,
+        train_steps=TINYVLA_TRAIN_STEPS,
+        train_save_freq=TINYVLA_SAVE_FREQ,
+        train_batch_size=TINYVLA_BATCH_SIZE,
+        train_num_workers=TINYVLA_NUM_WORKERS,
+        train_lr=TINYVLA_LR,
+        tinyvla_policy_type="tinyvla_b",
+    )
+
+
 VLM_CONFIGS: Dict[str, callable] = {
     "llava_pythia400m": get_llava_pythia400m_config,
     "prismatic_qwen25_05b": get_prismatic_qwen25_05b_config,
+    "tinyvla_s": get_tinyvla_s_config,
+    "tinyvla_b": get_tinyvla_b_config,
 }
 
 

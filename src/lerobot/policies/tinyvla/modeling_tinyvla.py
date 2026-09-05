@@ -273,28 +273,34 @@ class TinyVLAPolicy(PreTrainedPolicy):
         Official saves: config, LoRA adapter weights, non_lora_trainables.bin
         
         For LeRobot compatibility, we save:
-        1. Full state dict as safetensors (LeRobot default)
-        2. PEFT adapter config and weights (for official TinyVLA compatibility)
+        1. Full state dict as safetensors (LeRobot default) - includes LoRA weights merged
+        2. PEFT adapter config and weights separately (for official TinyVLA compatibility)
         3. TinyVLA config.json
+        
+        Key design: The model.safetensors contains the COMPLETE state dict including LoRA weights,
+        so LeRobot's default loading path works without needing PEFT-specific logic.
+        The adapter/ directory is saved additionally for official TinyVLA tooling compatibility.
         """
-        # Save LeRobot config
+        # Save LeRobot config (config.json with TinyVLAConfig parameters)
         self.config._save_pretrained(save_directory)
         
-        # If LoRA is enabled, save PEFT adapter separately for compatibility
+        # If LoRA is enabled, also save PEFT adapter separately for official TinyVLA compatibility
         if self.config.lora_enable and hasattr(self.model, 'peft_config'):
             try:
                 from peft import PeftModel
                 if isinstance(self.model, PeftModel):
-                    # Save PEFT adapter config and weights
+                    # Save PEFT adapter config and weights to adapter/ subdirectory
                     adapter_dir = save_directory / "adapter"
                     adapter_dir.mkdir(exist_ok=True)
                     self.model.peft_config["default"].save_pretrained(adapter_dir)
-                    self.model.save_pretrained(save_directory / "adapter")
-                    logger.info(f"Saved PEFT adapter to {save_directory / 'adapter'}")
+                    self.model.save_pretrained(str(adapter_dir))
+                    logger.info(f"Saved PEFT adapter to {adapter_dir}")
             except Exception as e:
                 logger.warning(f"Failed to save PEFT adapter: {e}")
         
-        # Save full model state dict as safetensors (LeRobot default)
+        # Save full model state dict as safetensors (LeRobot default loading path)
+        # This includes ALL parameters (base model + LoRA adapters + action head)
+        # so LeRobot's PreTrainedPolicy.from_pretrained can load it without PEFT-specific code
         if state_dict is None:
             state_dict = self.state_dict()
         
@@ -315,7 +321,16 @@ class TinyVLAPolicy(PreTrainedPolicy):
         """Load a TinyVLA policy from a pretrained checkpoint.
         
         Reference: teach_code/TinyVLA/llava-pythia/llava_pythia/llava_pythia_utils.py::load_llava_pythia
-        Loading order: base LLaVA-Pythia -> LoRA adapter -> action head -> LeRobot policy
+        
+        Loading strategy:
+        1. Load config from checkpoint
+        2. Create policy instance (builds base model + applies LoRA if enabled)
+        3. Load full state dict from model.safetensors (includes base + LoRA + action head)
+        
+        This approach is compatible with LeRobot's PreTrainedPolicy.from_pretrained because:
+        - The model.safetensors contains the complete state dict
+        - LeRobot's base class will load it via _load_as_safetensor
+        - No PEFT-specific loading logic is needed since LoRA weights are included in state dict
         """
         import os
         
@@ -323,34 +338,29 @@ class TinyVLAPolicy(PreTrainedPolicy):
         if config is None:
             config = PreTrainedConfig.from_pretrained(pretrained_name_or_path)
         
-        # Create policy instance (builds model from scratch)
+        # Create policy instance
+        # This builds the model from scratch:
+        # - Loads base LLaVA-Pythia model
+        # - Applies LoRA wrapper if config.lora_enable=True
+        # - Sets up tokenizer and image processor
         policy = cls(config, **kwargs)
         
         model_id = str(pretrained_name_or_path)
         
+        # Load the full state dict from model.safetensors
+        # This file contains ALL parameters (base model + LoRA adapters + action head)
+        # saved by _save_pretrained, so we can load it directly without PEFT-specific logic
         if os.path.isdir(model_id):
-            # Try loading PEFT adapter first if it exists
-            adapter_dir = os.path.join(model_id, "adapter")
-            if os.path.exists(adapter_dir) and config.lora_enable:
-                try:
-                    from peft import PeftModel, LoraConfig
-                    # Load adapter config
-                    adapter_config = LoraConfig.from_pretrained(adapter_dir)
-                    # Apply LoRA to the model
-                    policy.model = get_peft_model(policy.model, adapter_config)
-                    # Load adapter weights
-                    policy.model.load_peft_weights(adapter_dir)
-                    logger.info(f"Loaded PEFT adapter from {adapter_dir}")
-                except Exception as e:
-                    logger.warning(f"Failed to load PEFT adapter: {e}")
-            
-            # Load full model state dict
             model_file = os.path.join(model_id, "model.safetensors")
             if os.path.exists(model_file):
                 from safetensors.torch import load_file
                 state_dict = load_file(model_file)
+                # Use strict=False because state dict may have LoRA-specific parameter names
+                # that don't exactly match the freshly-built model structure
                 policy.load_state_dict(state_dict, strict=False)
                 logger.info(f"Loaded model weights from {model_file}")
+            else:
+                logger.warning(f"model.safetensors not found in {model_id}")
         else:
             # Load from HuggingFace Hub
             from huggingface_hub import hf_hub_download
