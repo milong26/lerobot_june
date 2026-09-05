@@ -254,19 +254,25 @@ else
 
         # Step 2: Run V5 episode selection
         echo "=== Step 2: Running V5 episode selection ==="
-        V5_SELECT_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/our_v5/select_episodes_v5.py"
+        V5_SELECT_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/our_v5/select_our_v5.py"
+        
+        # Get visual and action embedding directories from the path file
+        VISUAL_EMBEDDINGS_DIR=$(python -c "import json; d=json.load(open('$EMBEDDING_PATH_FILE')); print(d['visual_embedding_dir'])")
+        ACTION_DESCRIPTOR_DIR=$(python -c "import json; d=json.load(open('$EMBEDDING_PATH_FILE')); print(d['action_descriptor_dir'])")
+        
         python "$V5_SELECT_SCRIPT" \
-            --embeddings-dir "$EMBEDDINGS_DIR" \
-            --output-dir "$RESULTS_DIR" \
-            --b0-size 18 \
-            --target-size "$NUM_EPISODES" \
-            --n-add-per-round 9 \
+            --visual-embedding-dir "$VISUAL_EMBEDDINGS_DIR" \
+            --action-descriptor-dir "$ACTION_DESCRIPTOR_DIR" \
+            --dataset-dir "$DATASET_DIR" \
+            --output-dir "$OUTPUT_BASE_DIR" \
+            --num-selected "$NUM_EPISODES" \
             --seed "$SEED" \
-            --alpha 1.0 \
-            --lambda-wrist 1.0
+            --visual-weight 0.5 \
+            --action-weight 0.5
 
         # Copy subset file to expected location
-        cp "$RESULTS_DIR/subset.json" "$SUBSET_FILE"
+        SUBSET_FILE_PATH="$OUTPUT_BASE_DIR/subsets/our_v5_${NUM_EPISODES}_seed${SEED}.json"
+        cp "$SUBSET_FILE_PATH" "$SUBSET_FILE"
         echo "=== V5 selection complete ==="
     else
         # Select episodes using uniform or random
