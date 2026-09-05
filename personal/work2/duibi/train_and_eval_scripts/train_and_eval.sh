@@ -182,15 +182,37 @@ else
         fi
         echo "=== SubZeroCore selection complete ==="
     elif [ "$MODE" = "deminf" ]; then
-        # DemInf: use pre-computed subset from deminf_results
-        echo "=== Using pre-computed DemInf subset ==="
+        # DemInf: run selection first, then train
+        echo "=== Running DemInf pipeline ==="
         
-        DEMINF_SUBSET="/data/zhonglinye/jun/lerobot/personal/work2/deminf_results/${DATASET_NAME}/subsets/deminf_${NUM_EPISODES}_seed${SEED}.json"
+        DEMINF_DIR="/data/zhonglinye/jun/lerobot/personal/work2/deminf"
+        DEMINF_OUTPUT_DIR="/data/zhonglinye/jun/lerobot/personal/work2/deminf_results/${DATASET_NAME}"
+        DEMINF_SUBSET="$DEMINF_OUTPUT_DIR/subsets/deminf_${NUM_EPISODES}_seed${SEED}.json"
         
+        export CUDA_VISIBLE_DEVICES=$GPU_ID
+        
+        # Step 1: Run DemInf selection if subset doesn't exist
         if [ ! -f "$DEMINF_SUBSET" ]; then
-            echo "Error: DemInf subset file not found: $DEMINF_SUBSET"
-            echo "Please run DemInf selection first."
-            exit 1
+            echo "=== Step 1: Running DemInf episode selection ==="
+            python "$DEMINF_DIR/run_deminf.py" \
+                --dataset-path "$DATASET_DIR" \
+                --output-dir "$DEMINF_OUTPUT_DIR" \
+                --target-episodes "$NUM_EPISODES" \
+                --seed "$SEED" \
+                --device "cuda"
+            
+            if [ $? -ne 0 ]; then
+                echo "ERROR: DemInf selection failed"
+                exit 1
+            fi
+            
+            if [ ! -f "$DEMINF_SUBSET" ]; then
+                echo "Error: DemInf subset file not generated: $DEMINF_SUBSET"
+                exit 1
+            fi
+            echo "=== DemInf selection complete ==="
+        else
+            echo "=== Using pre-computed DemInf subset ==="
         fi
         
         cp "$DEMINF_SUBSET" "$SUBSET_FILE"
