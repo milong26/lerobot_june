@@ -223,3 +223,4 @@ personal/work2/dataset_lookin/first_frame/*
 *.pt
 
 personal/work2/dataset/libero/*
+*.npz
