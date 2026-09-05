@@ -1,174 +1,224 @@
-import logging
-import warnings
+"""
+encoders.py
 
+Official DINOv2 + SigLIP dual vision backbone for MiniVLA.
+Mirrors teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py and base_vision.py.
+
+Key design:
+  - timm vit_large_patch14_reg4_dinov2.lvd142m + vit_so400m_patch14_siglip_224
+  - get_intermediate_layers for second-to-last block output
+  - resize-naive: direct resize to 224x224, SigLIP first Resize corrected
+  - compute_sequence_patches for multi-image (T2, wrist)
+  - concatenated DINO + SigLIP patch features on last dimension
+"""
+
+from __future__ import annotations
+
+from functools import partial
+from typing import Dict
+
+import timm
 import torch
 import torch.nn as nn
+from timm.models.vision_transformer import VisionTransformer
+from torchvision.transforms import Compose, Resize
 
-logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# TIMM model identifiers (official MiniVLA)
+# ---------------------------------------------------------------------------
+DINOSIGLIP_TIMM_IDS = {
+    "dinosiglip-vit-so-224px": {
+        "dino": "vit_large_patch14_reg4_dinov2.lvd142m",
+        "siglip": "vit_so400m_patch14_siglip_224",
+    },
+    "dinosiglip-vit-so-384px": {
+        "dino": "vit_large_patch14_reg4_dinov2.lvd142m",
+        "siglip": "vit_so400m_patch14_siglip_384",
+    },
+}
 
 
-class VisionEncoderWrapper(nn.Module):
-    def __init__(self, vision_encoder_path: str = "", image_size: int = 224,
-                 hidden_dim: int = 1024, freeze: bool = True):
+# ---------------------------------------------------------------------------
+# Helper: unpack tuple from get_intermediate_layers
+# ---------------------------------------------------------------------------
+def _unpack_tuple(fn):
+    def wrapper(*args, **kwargs):
+        result = fn(*args, **kwargs)
+        return result[0] if isinstance(result, tuple) else result
+    return wrapper
+
+
+# ---------------------------------------------------------------------------
+# Multi-image patch computation (official compute_sequence_patches)
+# ---------------------------------------------------------------------------
+def _merge_two_dims(tensor: torch.Tensor, start_dim: int = 1) -> torch.Tensor:
+    """Merge two consecutive dimensions, e.g. (B, T, C, H, W) -> (B*T, C, H, W)."""
+    shape = tensor.shape
+    new_shape = shape[:start_dim] + (shape[start_dim] * shape[start_dim + 1],) + shape[start_dim + 2:]
+    return tensor.reshape(new_shape)
+
+
+def compute_sequence_patches(
+    pixel_values: Dict[str, torch.Tensor],
+    featurizers: Dict[str, nn.Module],
+    seq_len: int,
+) -> Dict[str, torch.Tensor]:
+    """
+    Official compute_sequence_patches semantics.
+    pixel_values[k] shape: (B, T, C, H, W) with T >= seq_len.
+    Returns patches[k] shape: (B, T*num_patches, embed_dim).
+    """
+    patches = {}
+    for k in pixel_values:
+        assert len(pixel_values[k].shape) == 5, f"Pixel values must be (B, T, C, H, W), got {pixel_values[k].shape}"
+        assert pixel_values[k].shape[1] >= seq_len, f"Sequence length too short: {pixel_values[k].shape[1]} < {seq_len}"
+        trunc = pixel_values[k][:, :seq_len]  # (B, T, C, H, W)
+        # (B*T, C, H, W) -> (B*T, num_patches, embed_dim)
+        bt = _merge_two_dims(trunc, start_dim=0)
+        out = featurizers[k](bt)
+        # (B*T, num_patches, embed_dim) -> (B, T*num_patches, embed_dim)
+        b, t = trunc.shape[0], trunc.shape[1]
+        n_tokens = out.shape[1]
+        out = out.view(b, t * n_tokens, -1)
+        patches[k] = out
+    return patches
+
+
+# ---------------------------------------------------------------------------
+# Image transform dataclass (mirrors DinoSigLIPImageTransform)
+# ---------------------------------------------------------------------------
+class DinoSigLIPImageTransform:
+    """Holds both DINO and SigLIP transforms; returns a dict."""
+
+    def __init__(self, dino_transform: Compose, siglip_transform: Compose):
+        self.dino_transform = dino_transform
+        self.siglip_transform = siglip_transform
+
+    def __call__(self, img) -> Dict[str, torch.Tensor]:
+        return {
+            "dino": self.dino_transform(img),
+            "siglip": self.siglip_transform(img),
+        }
+
+
+# ---------------------------------------------------------------------------
+# DINO-SigLIP ViT Backbone
+# ---------------------------------------------------------------------------
+class DINOSigLIPViTBackbone(nn.Module):
+    """
+    Official DINO-SigLIP dual ViT backbone.
+    Returns concatenated patch features: torch.cat([dino_patches, siglip_patches], dim=-1).
+    """
+
+    def __init__(
+        self,
+        vision_backbone_id: str = "dinosiglip-vit-so-224px",
+        image_resize_strategy: str = "resize-naive",
+        default_image_size: int = 224,
+        image_sequence_len: int = 1,
+    ):
         super().__init__()
-        self.image_size = image_size
-        self.hidden_dim = hidden_dim
-        self.freeze = freeze
+        self.vision_backbone_id = vision_backbone_id
+        self.image_resize_strategy = image_resize_strategy
+        self.default_image_size = default_image_size
+        self.image_sequence_len = image_sequence_len
 
-        if vision_encoder_path:
-            try:
-                from transformers import AutoModel
-                self.encoder = AutoModel.from_pretrained(
-                    vision_encoder_path, local_files_only=True
-                )
-                if hasattr(self.encoder, "vision_model"):
-                    self.encoder = self.encoder.vision_model
-                if hasattr(self.encoder, "encoder"):
-                    self.encoder = self.encoder.encoder
-                logger.info(f"Loaded vision encoder from {vision_encoder_path}")
-            except Exception as e:
-                warnings.warn(
-                    f"Failed to load vision encoder from {vision_encoder_path}: {e}. "
-                    "Falling back to dummy encoder."
-                )
-                self.encoder = None
+        backbone_cfg = DINOSIGLIP_TIMM_IDS[vision_backbone_id]
+        dino_timm_id = backbone_cfg["dino"]
+        siglip_timm_id = backbone_cfg["siglip"]
+
+        # --- DINOv2 featurizer ---
+        self.dino_featurizer: VisionTransformer = timm.create_model(
+            dino_timm_id, pretrained=True, num_classes=0, img_size=default_image_size
+        )
+        self.dino_featurizer.eval()
+        # Monkey-patch forward to use second-to-last block
+        self.dino_featurizer.forward = _unpack_tuple(
+            partial(
+                self.dino_featurizer.get_intermediate_layers,
+                n={len(self.dino_featurizer.blocks) - 2},
+            )
+        )
+
+        # --- SigLIP featurizer ---
+        self.siglip_featurizer: VisionTransformer = timm.create_model(
+            siglip_timm_id, pretrained=True, num_classes=0, img_size=default_image_size
+        )
+        self.siglip_featurizer.eval()
+        self.siglip_featurizer.forward = _unpack_tuple(
+            partial(
+                self.siglip_featurizer.get_intermediate_layers,
+                n={len(self.siglip_featurizer.blocks) - 2},
+            )
+        )
+
+        # --- Data configs ---
+        self.dino_data_cfg = timm.data.resolve_model_data_config(self.dino_featurizer)
+        self.dino_data_cfg["input_size"] = (3, default_image_size, default_image_size)
+
+        self.siglip_data_cfg = timm.data.resolve_model_data_config(self.siglip_featurizer)
+        self.siglip_data_cfg["input_size"] = (3, default_image_size, default_image_size)
+
+        # --- Default transforms ---
+        default_dino_transform = timm.data.create_transform(**self.dino_data_cfg, is_training=False)
+        default_siglip_transform = timm.data.create_transform(**self.siglip_data_cfg, is_training=False)
+
+        # Fix SigLIP first Resize to use default_image_size (official fix)
+        assert isinstance(default_siglip_transform, Compose), "Unexpected default_siglip_transform"
+        assert isinstance(default_siglip_transform.transforms[0], Resize)
+        default_siglip_transform = Compose(
+            [
+                Resize(default_image_size, interpolation=default_siglip_transform.transforms[0].interpolation),
+                *default_siglip_transform.transforms[1:],
+            ]
+        )
+
+        # --- Apply resize-naive strategy ---
+        if image_resize_strategy == "resize-naive":
+            assert isinstance(default_dino_transform, Compose)
+            assert isinstance(default_siglip_transform, Compose)
+            assert isinstance(default_dino_transform.transforms[0], Resize)
+            assert isinstance(default_siglip_transform.transforms[0], Resize)
+
+            target_size = (default_image_size, default_image_size)
+            dino_transform = Compose(
+                [
+                    Resize(target_size, interpolation=default_dino_transform.transforms[0].interpolation),
+                    *default_dino_transform.transforms[1:],
+                ]
+            )
+            siglip_transform = Compose(
+                [
+                    Resize(target_size, interpolation=default_siglip_transform.transforms[0].interpolation),
+                    *default_siglip_transform.transforms[1:],
+                ]
+            )
+            self.image_transform = DinoSigLIPImageTransform(dino_transform, siglip_transform)
         else:
-            self.encoder = None
+            raise ValueError(f"image_resize_strategy '{image_resize_strategy}' is not supported!")
 
-        if self.encoder is None:
-            self._build_dummy_encoder()
+    @property
+    def embed_dim(self) -> int:
+        return self.dino_featurizer.embed_dim + self.siglip_featurizer.embed_dim
 
-        if self.freeze:
-            for param in self.encoder.parameters():
-                param.requires_grad = False
+    @property
+    def num_patches(self) -> int:
+        return self.dino_featurizer.patch_embed.num_patches * self.image_sequence_len
 
-    def _build_dummy_encoder(self):
-        self.dummy_conv = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=7, stride=4, padding=3),
-            nn.LayerNorm([64, self.image_size // 4, self.image_size // 4]),
-            nn.GELU(),
-            nn.Conv2d(64, self.hidden_dim, kernel_size=3, stride=2, padding=1),
-        )
-        self.encoder = self.dummy_conv
-        self._is_dummy = True
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        if getattr(self, "_is_dummy", False) or self.encoder is self.dummy_conv:
-            x = self.dummy_conv(x)
-            b, c, h, w = x.shape
-            x = x.permute(0, 2, 3, 1).reshape(b, h * w, c)
-            return x
+    def forward(self, pixel_values: Dict[str, torch.Tensor]) -> torch.Tensor:
+        """
+        pixel_values: {"dino": tensor, "siglip": tensor}
+          Single image: (B, C, H, W)
+          Multi-image:  (B, T, C, H, W)
+        Returns: (B, num_patches, dino_dim + siglip_dim)
+        """
+        if self.image_sequence_len == 1:
+            dino_patches = self.dino_featurizer(pixel_values["dino"])
+            siglip_patches = self.siglip_featurizer(pixel_values["siglip"])
         else:
-            outputs = self.encoder(x)
-            if hasattr(outputs, "last_hidden_state"):
-                return outputs.last_hidden_state
-            if isinstance(outputs, torch.Tensor):
-                if outputs.dim() == 3:
-                    return outputs
-                b, c, h, w = outputs.shape
-                return outputs.permute(0, 2, 3, 1).reshape(b, h * w, c)
-            if isinstance(outputs, (list, tuple)):
-                last = outputs[-1]
-                if last.dim() == 3:
-                    return last
-                b, c, h, w = last.shape
-                return last.permute(0, 2, 3, 1).reshape(b, h * w, c)
-            raise ValueError(f"Unexpected encoder output type: {type(outputs)}")
-
-
-class MultiImageVisionEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.encoder = VisionEncoderWrapper(
-            vision_encoder_path=config.vision_encoder_path,
-            image_size=config.image_size,
-            hidden_dim=config.vision_hidden_dim,
-            freeze=config.freeze_vision_encoder,
-        )
-        self.config = config
-
-    def forward(self, images: list[torch.Tensor]) -> torch.Tensor:
-        all_tokens = []
-        for img in images:
-            if img.dim() == 5:
-                b, t, c, h, w = img.shape
-                img = img.view(b * t, c, h, w)
-            tokens = self.encoder(img)
-            if img.dim() == 5:
-                b, t, c, h, w = img.shape
-                n_tokens = tokens.shape[1]
-                tokens = tokens.view(b, t * n_tokens, -1)
-            all_tokens.append(tokens)
-
-        if len(all_tokens) == 1:
-            return all_tokens[0]
-
-        return torch.cat(all_tokens, dim=1)
-
-
-class ImageEncoderTinyCNN(nn.Module):
-    """Legacy encoder kept for backward compatibility. Not used by MiniVLAPolicy."""
-
-    def __init__(self, d_model=128):
-        super().__init__()
-        warnings.warn(
-            "ImageEncoderTinyCNN is legacy and not used by MiniVLAPolicy.",
-            DeprecationWarning,
-        )
-        self.conv1 = nn.Conv2d(3, 32, kernel_size=5, stride=2, padding=2)
-        self.conv2 = nn.Conv2d(32, 64, kernel_size=3, stride=2, padding=1)
-        self.conv3 = nn.Conv2d(64, 128, kernel_size=3, stride=2, padding=1)
-        self.proj = nn.Linear(128, d_model)
-        self.ln = nn.LayerNorm(d_model)
-
-    def forward(self, x):
-        x = nn.functional.relu(self.conv1(x))
-        x = nn.functional.relu(self.conv2(x))
-        x = nn.functional.relu(self.conv3(x))
-        x = x.mean(dim=[2, 3])
-        x = self.proj(x)
-        x = self.ln(x)
-        return x
-
-
-class TextEncoderTinyGRU(nn.Module):
-    """Legacy encoder kept for backward compatibility. Not used by MiniVLAPolicy."""
-
-    def __init__(self, vocab_size, d_word=64, d_model=128):
-        super().__init__()
-        warnings.warn(
-            "TextEncoderTinyGRU is legacy and not used by MiniVLAPolicy.",
-            DeprecationWarning,
-        )
-        self.embedding = nn.Embedding(vocab_size, d_word)
-        self.gru = nn.GRU(d_word, d_model, batch_first=True)
-        self.ln = nn.LayerNorm(d_model)
-
-    def forward(self, token_ids):
-        x = self.embedding(token_ids)
-        _, h_last = self.gru(x)
-        x = h_last[0]
-        x = self.ln(x)
-        return x
-
-
-class StateEncoderMLP(nn.Module):
-    """Legacy encoder kept for backward compatibility. Not used by MiniVLAPolicy."""
-
-    def __init__(self, state_dim, d_model=128):
-        super().__init__()
-        warnings.warn(
-            "StateEncoderMLP is legacy and not used by MiniVLAPolicy.",
-            DeprecationWarning,
-        )
-        self.fc1 = nn.Linear(state_dim, 64)
-        self.relu = nn.ReLU()
-        self.fc2 = nn.Linear(64, d_model)
-        self.ln = nn.LayerNorm(d_model)
-
-    def forward(self, s):
-        x = self.fc1(s)
-        x = self.relu(x)
-        x = self.fc2(x)
-        x = self.ln(x)
-        return x
+            featurizers = {"dino": self.dino_featurizer, "siglip": self.siglip_featurizer}
+            patches = compute_sequence_patches(pixel_values, featurizers, self.image_sequence_len)
+            dino_patches = patches["dino"]
+            siglip_patches = patches["siglip"]
+        return torch.cat([dino_patches, siglip_patches], dim=-1)

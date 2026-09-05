@@ -47,13 +47,13 @@ OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/our_v5_\${NUM
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
-OUR_V5_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/our_v5"
+OUR_V5_DIR="/data/zhonglinye/jun/lerobot/personal/work2/our_v5"
 
 mkdir -p "\$LOG_DIR"
 
-# Initialize log file at the very beginning
+# Append to log file (don't overwrite)
 LOG_FILE="\$LOG_DIR/\$EXP_NAME.log"
-> "\$LOG_FILE"
+touch "\$LOG_FILE"
 
 # Redirect all stdout and stderr to log file from this point forward
 exec > >(tee -a "\$LOG_FILE") 2>&1
@@ -121,6 +121,7 @@ echo "=== Step 2: Running V5 visual coverage + action diversity episode selectio
 python "\$OUR_V5_DIR/select_our_v5.py" \\
     --visual-embedding-dir "\$VISUAL_EMBEDDINGS_DIR" \\
     --action-descriptor-dir "\$ACTION_DESCRIPTOR_DIR" \\
+    --dataset-dir "\$DATASET_DIR" \\
     --output-dir "\$OUTPUT_BASE_DIR" \\
     --num-selected "\$NUM_EPISODES" \\
     --seed "\$SEED" \\

@@ -1,0 +1,15 @@
+{
+  "experiment": "our_v5_112_seed42",
+  "num_episodes": 112,
+  "seed": 42,
+  "gpu_id": 0,
+  "dataset": "pick_place-v3_corner",
+  "success_rates": [],
+  "grasp_success_rates": [],
+  "final_success_rate": null,
+  "final_grasp_success_rate": null,
+  "max_success_rate": null,
+  "avg_success_rate": null,
+  "eval_details": [],
+  "n_eval_runs": 0
+}

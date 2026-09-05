@@ -1,133 +1,131 @@
-import logging
-import warnings
+"""
+tokenizer.py
 
-import torch
+Official Qwen2.5 tokenizer wrapper for MiniVLA.
+Mirrors teach_code/MiniVLA/prismatic/models/backbones/llm/qwen25.py and
+prismatic/models/backbones/llm/prompting/qwen_prompter.py.
 
-logger = logging.getLogger(__name__)
+Key design:
+  - Load Qwen/Qwen2.5-0.5B tokenizer
+  - Add 256 extra tokens: "<|extra_0|>" .. "<|extra_255|>"
+  - resize_token_embeddings(len(tokenizer), pad_to_multiple_of=64)
+  - padding_side="right", sync pad_token_id
+  - QwenPromptBuilder: system/user/assistant wrapping with <|im_start|>, <|im_end|>, <|endoftext|>
+"""
+
+from __future__ import annotations
+
+from typing import Optional
+
+from transformers import AutoTokenizer
 
 
+# ---------------------------------------------------------------------------
+# Official system prompts
+# ---------------------------------------------------------------------------
+SYS_PROMPTS = {
+    "prismatic": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
+    "openvla": "You are Qwen, created by Alibaba Cloud. You are a helpful assistant.",
+}
+
+
+# ---------------------------------------------------------------------------
+# QwenPromptBuilder (character-for-character match with official)
+# ---------------------------------------------------------------------------
+class QwenPromptBuilder:
+    """
+    Official Qwen prompt builder for MiniVLA.
+    Wraps messages in <|im_start|>system/user/assistant<|im_end|> format.
+    """
+
+    def __init__(self, model_family: str = "openvla", system_prompt: Optional[str] = None):
+        self.model_family = model_family
+        self.system_prompt = (
+            SYS_PROMPTS[model_family] if system_prompt is None else system_prompt
+        ).strip()
+
+        self.bos = self.start = "<|im_start|>"
+        self.eos = "<|endoftext|>"
+        self.end = "<|im_end|>"
+
+        self.wrap_system = lambda msg: f"{self.start}system\n{msg}{self.end}\n"
+        self.wrap_human = lambda msg: f"{self.start}user\n{msg}{self.end}\n{self.start}assistant\n"
+        self.wrap_gpt = lambda msg: f"{msg if msg != '' else ' '}{self.end}\n"
+
+        self.prompt = ""
+        self.turn_count = 0
+
+    def add_turn(self, role: str, message: str) -> str:
+        assert (role == "human") if (self.turn_count % 2 == 0) else (role == "gpt")
+        message = message.replace("<image>", "").strip()
+
+        if self.turn_count == 0 and self.system_prompt is not None:
+            self.prompt += self.wrap_system(self.system_prompt)
+
+        if self.turn_count % 2 == 0:
+            wrapped = self.wrap_human(message)
+        else:
+            wrapped = self.wrap_gpt(message)
+
+        self.prompt += wrapped
+        self.turn_count += 1
+        return wrapped
+
+    def get_prompt(self) -> str:
+        if self.turn_count % 2 == 0:
+            assert self.prompt[-1] == "\n", f"malformed prompt missing newline before EOS: {self.prompt!r}"
+            return self.prompt[:-1] + self.eos
+        return self.prompt
+
+
+# ---------------------------------------------------------------------------
+# VLATokenizerWrapper: loads Qwen tokenizer + adds extra tokens
+# ---------------------------------------------------------------------------
 class VLATokenizerWrapper:
-    def __init__(self, tokenizer_path: str = ""):
-        self.tokenizer = None
-        if tokenizer_path:
-            try:
-                from transformers import AutoTokenizer
-                self.tokenizer = AutoTokenizer.from_pretrained(
-                    tokenizer_path, local_files_only=True
-                )
-                logger.info(f"Loaded VLA tokenizer from {tokenizer_path}")
-            except Exception as e:
-                warnings.warn(
-                    f"Failed to load tokenizer from {tokenizer_path}: {e}. "
-                    "Falling back to dummy tokenizer."
-                )
-                self.tokenizer = None
+    """
+    Wraps the Qwen2.5 tokenizer and adds 256 extra action tokens.
+    """
 
-    def encode(self, texts: str | list[str], max_length: int = 64,
-               device: torch.device | None = None) -> dict:
-        if self.tokenizer is not None:
-            if isinstance(texts, str):
-                texts = [texts]
-            result = self.tokenizer(
-                texts,
-                max_length=max_length,
-                padding="max_length",
-                truncation=True,
-                return_tensors="pt",
-            )
-            input_ids = result["input_ids"]
-            attention_mask = result["attention_mask"]
-            if device is not None:
-                input_ids = input_ids.to(device)
-                attention_mask = attention_mask.to(device)
-            return {"input_ids": input_ids, "attention_mask": attention_mask}
-        else:
-            return self._dummy_encode(texts, max_length, device)
+    def __init__(self, base_vlm_checkpoint: str = "Qwen/Qwen2.5-0.5B", num_extra_tokens: int = 256):
+        self.base_vlm_checkpoint = base_vlm_checkpoint
+        self.num_extra_tokens = num_extra_tokens
 
-    def batch_encode(self, texts: list[str], max_length: int = 64,
-                     device: torch.device | None = None) -> dict:
-        return self.encode(texts, max_length=max_length, device=device)
-
-    def _dummy_encode(self, texts: str | list[str], max_length: int = 64,
-                      device: torch.device | None = None) -> dict:
-        if isinstance(texts, str):
-            texts = [texts]
-        batch_size = len(texts)
-        input_ids = torch.zeros(batch_size, max_length, dtype=torch.long)
-        attention_mask = torch.zeros(batch_size, max_length, dtype=torch.long)
-        for i, text in enumerate(texts):
-            tokens = str(text).lower().split()[:max_length]
-            for j, t in enumerate(tokens):
-                input_ids[i, j] = hash(t) % 1000
-            attention_mask[i, :len(tokens)] = 1
-        if device is not None:
-            input_ids = input_ids.to(device)
-            attention_mask = attention_mask.to(device)
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-
-class SimpleTokenizer:
-    """Legacy tokenizer kept for backward compatibility. Not used by MiniVLAPolicy."""
-
-    def __init__(self, vocab=None):
-        warnings.warn(
-            "SimpleTokenizer is legacy and not used by MiniVLAPolicy.",
-            DeprecationWarning,
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            base_vlm_checkpoint,
+            trust_remote_code=True,
+            padding_side="right",
         )
-        self.pad_token = "<pad>"
-        self.unk_token = "<unk>"
-        if vocab is None:
-            self.vocab = {self.pad_token: 0, self.unk_token: 1}
-        else:
-            self.vocab = dict(vocab)
-            if self.pad_token not in self.vocab or self.unk_token not in self.vocab:
-                raise ValueError("vocab must contain '<pad>' and '<unk>' tokens")
-        self.id2token = {v: k for k, v in self.vocab.items()}
+        self.tokenizer.pad_token = self.tokenizer.eos_token
+
+        if num_extra_tokens > 0:
+            extra_tokens = [f"<|extra_{i}|>" for i in range(num_extra_tokens)]
+            added = self.tokenizer.add_tokens(extra_tokens)
+            assert added == num_extra_tokens, (
+                f"Added {added} of {num_extra_tokens} extra tokens to tokenizer!"
+            )
+
+        self.tokenizer_len = len(self.tokenizer)
+        self.tokenizer.resize_token_embeddings(self.tokenizer_len, pad_to_multiple_of=64)
+        self.tokenizer.model_max_length = 32768
 
     @property
-    def pad_id(self):
-        return self.vocab[self.pad_token]
+    def pad_token_id(self):
+        return self.tokenizer.pad_token_id
 
-    @property
-    def unk_id(self):
-        return self.vocab[self.unk_token]
+    def build_prompt(self, instruction: str, action_text: Optional[str] = None) -> str:
+        """
+        Build the official MiniVLA prompt.
+        Training: includes human turn + assistant response with action tokens.
+        Inference: only the human turn, ending at assistant start.
+        """
+        builder = QwenPromptBuilder("openvla")
+        builder.add_turn("human", f"What action should the robot take to {instruction.lower()}?")
+        if action_text is not None:
+            builder.add_turn("gpt", action_text)
+        return builder.get_prompt()
 
-    @property
-    def vocab_size(self):
-        return len(self.vocab)
-
-    def build_from_texts(self, texts):
-        for text in texts:
-            tokens = str(text).lower().split()
-            for token in tokens:
-                if token not in self.vocab:
-                    new_id = len(self.vocab)
-                    self.vocab[token] = new_id
-                    self.id2token[new_id] = token
-
-    def encode(self, text, max_length=None):
-        tokens = str(text).lower().split()
-        if not tokens:
-            ids = [self.unk_id]
-        else:
-            ids = [self.vocab.get(t, self.unk_id) for t in tokens]
-        if max_length is not None and len(ids) > max_length:
-            ids = ids[:max_length]
-        return ids
-
-    def batch_encode(self, texts, max_length, device=None):
-        all_ids = [self.encode(t, max_length=max_length) for t in texts]
-        max_len = max(len(ids) for ids in all_ids)
-        if max_length is not None:
-            max_len = min(max_len, max_length)
-        padded = []
-        for ids in all_ids:
-            if len(ids) < max_len:
-                ids = ids + [self.pad_id] * (max_len - len(ids))
-            else:
-                ids = ids[:max_len]
-            padded.append(ids)
-        result = torch.tensor(padded, dtype=torch.long)
-        if device is not None:
-            result = result.to(device)
-        return result
+    def build_inference_prompt(self, instruction: str) -> str:
+        """Build prompt for inference (no assistant response)."""
+        builder = QwenPromptBuilder("openvla")
+        builder.add_turn("human", f"What action should the robot take to {instruction.lower()}?")
+        return builder.get_prompt()

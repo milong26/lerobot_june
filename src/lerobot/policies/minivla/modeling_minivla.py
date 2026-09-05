@@ -1,257 +1,386 @@
-import logging
-from collections import deque
+"""
+modeling_minivla.py
+
+Official MiniVLA policy for LeRobot.
+Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py,
+prismatic/models/vlms/prismatic.py, prismatic/vla/datasets/datasets.py,
+and vla-scripts/train.py.
+
+Key design:
+  - MiniVLACore: vision_backbone + projector + Qwen CausalLM + frozen VQ tokenizer
+  - No independent action_logits_head
+  - Training: VQActionTokenizer -> 7 action tokens -> Qwen input_ids/labels -> CausalLM loss
+  - Inference: autoregressive generate -> decode to [B,8,A]
+  - predict_action_chunk: returns [B, chunk_size, action_dim]
+  - select_action: returns [B, action_dim] (chunk[:, 0])
+  - get_optim_params: only trainable vision, projector, Qwen params
+"""
+
+from __future__ import annotations
+
+from typing import Optional, Unpack
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from lerobot.utils.constants import ACTION, OBS_STATE
+from lerobot.policies.pretrained import ActionSelectKwargs, PreTrainedPolicy
 
-from ..pretrained import PreTrainedPolicy
 from .configuration_minivla import MiniVLAConfig
-from .encoders import MultiImageVisionEncoder
 from .tokenizer import VLATokenizerWrapper
-from .vla_backbone import MiniVLABackbone
-from .vq_action import ResidualVQActionHead
-
-logger = logging.getLogger(__name__)
+from .vq_action import VQActionTokenizer
+from .vla_backbone import MiniVLAVLBackbone, IGNORE_INDEX
 
 
 class MiniVLACore(nn.Module):
+    """
+    Official MiniVLA core model.
+    vision_backbone + FusedMLPProjector + Qwen2.5 CausalLM + frozen VQ tokenizer.
+    """
+
     def __init__(self, config: MiniVLAConfig):
         super().__init__()
         self.config = config
 
-        self.vision_encoder = MultiImageVisionEncoder(config)
-        self.tokenizer = VLATokenizerWrapper(config.tokenizer_path)
-        self.vla_backbone = MiniVLABackbone(config)
-        self.action_decoder = ResidualVQActionHead(config)
-
-    def encode_observation(self, images: list[torch.Tensor],
-                           texts: list[str],
-                           state: torch.Tensor) -> torch.Tensor:
-        image_tokens = self.vision_encoder(images)
-
-        text_dict = self.tokenizer.batch_encode(
-            texts, max_length=64, device=self.config.device
+        # === VLM Backbone ===
+        self.vlm = MiniVLAVLBackbone(
+            vision_backbone_id=config.vision_backbone_id,
+            llm_backbone_id=config.llm_backbone_id,
+            base_vlm_checkpoint=config.base_vlm_checkpoint,
+            image_size=config.image_size,
+            image_resize_strategy=config.image_resize_strategy,
+            arch_specifier=config.arch_specifier,
+            image_sequence_len=config.image_sequence_len,
+            num_extra_tokens=config.num_extra_tokens,
+            enable_gradient_checkpointing=config.enable_gradient_checkpointing,
+            freeze_vision_backbone=config.freeze_vision_backbone,
+            freeze_llm_backbone=config.freeze_llm_backbone,
+            unfreeze_last_llm_layer=config.unfreeze_last_llm_layer,
         )
-        input_ids = text_dict["input_ids"]
-        attention_mask = text_dict.get("attention_mask", None)
 
-        hidden_states = self.vla_backbone(
+        # === Tokenizer ===
+        self.tokenizer = VLATokenizerWrapper(
+            base_vlm_checkpoint=config.base_vlm_checkpoint,
+            num_extra_tokens=config.num_extra_tokens,
+        )
+
+        # === VQ Action Tokenizer ===
+        self.vq_tokenizer = VQActionTokenizer(
+            vq_model_path=config.vq_model_path if config.vq_model_path else None,
+            input_dim_h=config.chunk_size,
+            input_dim_w=config.vq_action_dim,
+            n_latent_dims=config.n_latent_dims,
+            vqvae_n_embed=config.vqvae_n_embed,
+            vqvae_groups=config.vqvae_groups,
+            encoder_loss_multiplier=1.0,
+            act_scale=1.0,
+            tokenizer_len=self.tokenizer.tokenizer_len,
+        )
+
+    def forward(
+        self,
+        pixel_values: dict[str, torch.Tensor],
+        instruction: list[str],
+        action: Optional[torch.Tensor] = None,
+    ):
+        """
+        Training forward pass.
+        pixel_values: {"dino": tensor, "siglip": tensor}
+        instruction: list of task strings
+        action: [B, chunk_size, action_dim] normalized actions
+        Returns: CausalLM loss
+        """
+        batch_size = len(instruction)
+
+        if action is not None:
+            # === Encode actions to VQ token IDs ===
+            action_token_ids = self.vq_tokenizer.encode_token_ids(action)  # (B, vqvae_groups)
+
+            # === Build prompts ===
+            input_ids_list = []
+            labels_list = []
+            attention_mask_list = []
+
+            for i in range(batch_size):
+                # Build full prompt with action tokens
+                action_text = ""
+                for j in range(self.config.vqvae_groups):
+                    token_id = action_token_ids[i, j].item()
+                    action_text += self.tokenizer.tokenizer.decode([token_id])
+
+                prompt = self.tokenizer.build_prompt(instruction[i], action_text)
+                encoded = self.tokenizer.tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    padding=False,
+                    truncation=False,
+                )
+                input_ids = encoded["input_ids"].squeeze(0)  # (seq_len,)
+                seq_len = len(input_ids)
+
+                # === Build labels ===
+                # Only action tokens + <|im_end|> + <|endoftext|> are kept
+                # Rest is IGNORE_INDEX
+                labels = torch.full_like(input_ids, IGNORE_INDEX)
+
+                # Find action token positions (last vqvae_groups + 2 tokens)
+                # The action tokens are at the end of the assistant response
+                # We keep the last vqvae_groups + 2 tokens as labels
+                num_keep = self.config.vqvae_groups + 2  # action tokens + im_end + endoftext
+                labels[-num_keep:] = input_ids[-num_keep:]
+
+                input_ids_list.append(input_ids)
+                labels_list.append(labels)
+                attention_mask_list.append(torch.ones(seq_len, dtype=torch.long))
+
+            # === Pad sequences ===
+            input_ids = nn.utils.rnn.pad_sequence(
+                input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
+            )
+            labels = nn.utils.rnn.pad_sequence(
+                labels_list, batch_first=True, padding_value=IGNORE_INDEX
+            )
+            attention_mask = nn.utils.rnn.pad_sequence(
+                attention_mask_list, batch_first=True, padding_value=0
+            )
+        else:
+            # Inference: build prompt without action
+            input_ids_list = []
+            attention_mask_list = []
+            for i in range(batch_size):
+                prompt = self.tokenizer.build_inference_prompt(instruction[i])
+                encoded = self.tokenizer.tokenizer(
+                    prompt,
+                    return_tensors="pt",
+                    padding=False,
+                    truncation=False,
+                )
+                input_ids = encoded["input_ids"].squeeze(0)
+                input_ids_list.append(input_ids)
+                attention_mask_list.append(torch.ones(len(input_ids), dtype=torch.long))
+
+            input_ids = nn.utils.rnn.pad_sequence(
+                input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
+            )
+            attention_mask = nn.utils.rnn.pad_sequence(
+                attention_mask_list, batch_first=True, padding_value=0
+            )
+            labels = None
+
+        input_ids = input_ids.to(pixel_values["dino"].device)
+        attention_mask = attention_mask.to(pixel_values["dino"].device)
+        if labels is not None:
+            labels = labels.to(pixel_values["dino"].device)
+
+        # === Forward through VLM ===
+        outputs = self.vlm(
+            pixel_values=pixel_values,
             input_ids=input_ids,
             attention_mask=attention_mask,
-            image_tokens=image_tokens,
-            state_embedding=state,
+            labels=labels,
         )
-        return hidden_states
 
-    def forward(self, images: list[torch.Tensor],
-                texts: list[str],
-                state: torch.Tensor,
-                actions: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.encode_observation(images, texts, state)
+        return outputs
 
-        b = hidden_states.shape[0]
-        if actions.dim() == 2:
-            actions = actions.unsqueeze(1)
+    @torch.no_grad()
+    def predict_action_chunk(
+        self,
+        pixel_values: dict[str, torch.Tensor],
+        instruction: list[str],
+        do_sample: bool = False,
+        temperature: float = 0.0,
+        max_new_tokens: Optional[int] = None,
+    ) -> torch.Tensor:
+        """
+        Official autoregressive action prediction.
+        Returns: [B, chunk_size, action_dim]
+        """
+        batch_size = len(instruction)
+        if max_new_tokens is None:
+            max_new_tokens = self.config.vqvae_groups
 
-        if actions.shape[1] < self.config.action_chunk_size:
-            pad_size = self.config.action_chunk_size - actions.shape[1]
-            pad = actions[:, -1:].repeat(1, pad_size, 1)
-            actions = torch.cat([actions, pad], dim=1)
+        # === Build inference prompt ===
+        input_ids_list = []
+        for i in range(batch_size):
+            prompt = self.tokenizer.build_inference_prompt(instruction[i])
+            encoded = self.tokenizer.tokenizer(
+                prompt,
+                return_tensors="pt",
+                padding=False,
+                truncation=False,
+            )
+            input_ids_list.append(encoded["input_ids"].squeeze(0))
 
-        actions = actions[:, :self.config.action_chunk_size]
+        input_ids = nn.utils.rnn.pad_sequence(
+            input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
+        ).to(pixel_values["dino"].device)
 
-        loss, logits = self.action_decoder(hidden_states, actions)
-        return loss
+        # === Run VLM forward to get initial outputs ===
+        outputs = self.vlm(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=torch.ones_like(input_ids),
+            use_cache=True,
+        )
 
-    def predict_action_chunk(self, images: list[torch.Tensor],
-                             texts: list[str],
-                             state: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.encode_observation(images, texts, state)
+        # === Autoregressive generation ===
+        generated = self.vlm.llm.generate(
+            inputs_embeds=None,
+            input_ids=input_ids,
+            max_new_tokens=max_new_tokens,
+            do_sample=do_sample,
+            temperature=temperature if do_sample else 1.0,
+            use_cache=True,
+            pad_token_id=self.tokenizer.pad_token_id,
+        )
 
-        _, logits = self.action_decoder(hidden_states)
+        # === Extract action token IDs ===
+        # The generated tokens after the prompt are the action tokens
+        prompt_len = input_ids.shape[1]
+        action_token_ids = generated[:, prompt_len:prompt_len + self.config.vqvae_groups]
 
-        actions = self.action_decoder.decode_action(logits)
+        # === Validate token IDs are in VQ range ===
+        vq_token_start = self.tokenizer.tokenizer_len - self.config.vqvae_n_embed
+        vq_token_end = self.tokenizer.tokenizer_len - 1
+        assert (action_token_ids >= vq_token_start).all() and (action_token_ids <= vq_token_end).all(), (
+            f"Generated action tokens out of VQ range [{vq_token_start}, {vq_token_end}]"
+        )
 
-        b = actions.shape[0]
-        actions = actions.view(b, self.config.action_chunk_size, self.config.action_dim)
+        # === Decode to actions ===
+        actions = self.vq_tokenizer.decode_token_ids_to_actions(action_token_ids)
         return actions
+
+    def get_optim_params(self) -> dict:
+        """
+        Returns only trainable parameters (vision, projector, Qwen).
+        VQ-VAE is excluded.
+        """
+        params = []
+        # Vision backbone
+        if self.config.freeze_vision_backbone:
+            pass
+        else:
+            params.extend(self.vlm.vision_backbone.parameters())
+
+        # Projector
+        params.extend(self.vlm.projector.parameters())
+
+        # LLM
+        if self.config.freeze_llm_backbone:
+            if self.config.unfreeze_last_llm_layer:
+                params.extend(self.vlm.llm.layers[-1].parameters())
+        else:
+            params.extend(self.vlm.llm.parameters())
+
+        return {"params": [p for p in params if p.requires_grad]}
 
 
 class MiniVLAPolicy(PreTrainedPolicy):
+    """
+    LeRobot-compatible MiniVLA policy.
+    """
+
     config_class = MiniVLAConfig
     name = "minivla"
 
-    def __init__(self, config, dataset_stats=None, dataset_meta=None, **kwargs):
+    def __init__(self, config: MiniVLAConfig):
         super().__init__(config)
-        self.config = config
-        config.validate_features()
-        config.validate_vla_config()
-
         self.model = MiniVLACore(config)
+        self._action_queue: Optional[torch.Tensor] = None
 
-        self._action_queue: dict[int, torch.Tensor] = {}
+    def forward(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict | None]:
+        """
+        Training forward.
+        batch contains:
+          - observation.images.*: image tensors
+          - task: list of instruction strings
+          - action: [B, chunk_size, action_dim] normalized actions
+        """
+        # === Extract pixel values ===
+        pixel_values = self._extract_pixel_values(batch)
 
-    def _get_batch_size(self, batch):
-        for key in [OBS_STATE, ACTION]:
-            if key in batch:
-                v = batch[key]
-                if isinstance(v, torch.Tensor):
-                    return v.shape[0]
-        for k, v in batch.items():
-            if isinstance(v, torch.Tensor):
-                return v.shape[0]
-        return 1
+        # === Extract instruction ===
+        instruction = batch.get("task", [""] * batch["action"].shape[0])
+        if isinstance(instruction, torch.Tensor):
+            instruction = ["" for _ in range(len(instruction))]
 
-    def _prepare_images(self, batch) -> list[torch.Tensor]:
-        image_keys = self.config.get_image_keys()
-        images = []
-        for key in image_keys:
-            if key in batch:
-                img = batch[key]
-                if img.dim() == 5:
-                    b, t, c, h, w = img.shape
-                    img = img.view(b, t, c, h, w)
-                elif img.dim() == 4:
-                    img = img.unsqueeze(1)
-                else:
-                    raise ValueError(
-                        f"Expected image with 4 or 5 dimensions, got {img.dim()}."
-                    )
+        # === Forward ===
+        outputs = self.model(
+            pixel_values=pixel_values,
+            instruction=instruction,
+            action=batch["action"],
+        )
 
-                if img.dtype == torch.uint8:
-                    img = img.float() / 255.0
+        return outputs.loss, None
 
-                if img.shape[-2:] != (self.config.image_size, self.config.image_size):
-                    img = F.interpolate(
-                        img,
-                        size=(self.config.image_size, self.config.image_size),
-                        mode="bilinear",
-                        align_corners=False,
-                    )
+    def predict_action_chunk(
+        self, batch: dict[str, torch.Tensor], **kwargs: Unpack[ActionSelectKwargs]
+    ) -> torch.Tensor:
+        """
+        Returns [B, chunk_size, action_dim].
+        """
+        pixel_values = self._extract_pixel_values(batch)
+        instruction = batch.get("task", [""] * batch["action"].shape[0] if "action" in batch else 1)
+        if isinstance(instruction, torch.Tensor):
+            instruction = ["" for _ in range(len(instruction))]
 
-                images.append(img.to(self.config.device))
+        return self.model.predict_action_chunk(
+            pixel_values=pixel_values,
+            instruction=instruction,
+            **kwargs,
+        )
 
-        if not images:
-            raise ValueError("No image data found in batch.")
+    def select_action(
+        self, batch: dict[str, torch.Tensor], **kwargs: Unpack[ActionSelectKwargs]
+    ) -> torch.Tensor:
+        """
+        Returns [B, action_dim] (chunk[:, 0]).
+        Only executes the first step of the chunk.
+        """
+        if self._action_queue is None or self._action_queue.shape[1] == 0:
+            # Predict new chunk
+            chunk = self.predict_action_chunk(batch, **kwargs)
+            self._action_queue = chunk
 
-        return images
+        action = self._action_queue[:, 0]
+        # Remove first step from queue
+        self._action_queue = self._action_queue[:, 1:]
+        return action
 
-    def _prepare_text(self, batch) -> list[str]:
-        batch_size = self._get_batch_size(batch)
-        return self._extract_texts(batch, batch_size)
+    def reset(self):
+        """Clear action queue and generation cache."""
+        self._action_queue = None
+        if hasattr(self.model.vlm.llm, "generation_config"):
+            pass  # Cache is handled by transformers
 
-    def _prepare_state(self, batch) -> torch.Tensor:
-        state = batch[OBS_STATE]
-        if state.dim() == 3:
-            if state.shape[1] != 1:
-                state = state[:, -1:]
-            state = state.squeeze(1)
-        if state.dim() != 2:
-            raise ValueError(
-                f"Expected state with shape (B, state_dim), got {tuple(state.shape)}."
-            )
-        return state.float().to(self.config.device)
+    def get_optim_params(self) -> dict:
+        return self.model.get_optim_params()
 
-    def _extract_texts(self, batch, batch_size):
-        text_key = "task"
-        if text_key in batch:
-            val = batch[text_key]
-            if isinstance(val, str):
-                return [val] * batch_size
-            if isinstance(val, (list, tuple)) and len(val) == batch_size:
-                return [str(v) for v in val]
+    def _extract_pixel_values(self, batch: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+        """
+        Extract DINO and SigLIP pixel values from LeRobot batch.
+        Expects batch to already contain "dino" and "siglip" keys from processor.
+        """
+        if "dino" in batch and "siglip" in batch:
+            return {"dino": batch["dino"], "siglip": batch["siglip"]}
 
-        task_index_key = "task_index"
-        if task_index_key in batch:
-            idx = batch[task_index_key]
-            if isinstance(idx, torch.Tensor):
-                if idx.dim() == 2 and idx.shape[1] == 1:
-                    idx = idx.squeeze(1)
-                idx_list = idx.tolist()
-            elif isinstance(idx, (list, tuple)):
-                idx_list = [int(i) for i in idx]
-            else:
-                idx_list = [int(idx)] * batch_size
+        # Fallback: look for observation.images.* keys
+        pixel_values = {}
+        for key in batch:
+            if key.startswith("observation.images"):
+                pixel_values[key] = batch[key]
+        return pixel_values
 
-            if self.config.task_texts:
-                texts = []
-                for i in idx_list:
-                    if 0 <= i < len(self.config.task_texts):
-                        texts.append(self.config.task_texts[i])
-                    else:
-                        texts.append(self.config.default_instruction)
-                return texts
 
-        if self.config.default_instruction:
-            return [self.config.default_instruction] * batch_size
+# ---------------------------------------------------------------------------
+# Policy aliases for LeRobot config -> policy class name resolution
+# ---------------------------------------------------------------------------
+class MiniVLAT2Policy(MiniVLAPolicy):
+    """Alias for minivla_t2 variant."""
+    config_class = MiniVLAConfig  # Will be overridden by config type
+    name = "minivla_t2"
 
-        return [""] * batch_size
 
-    def get_optim_params(self):
-        return self.model.parameters()
-
-    def reset(self, batch_idx: int = 0):
-        if batch_idx in self._action_queue:
-            del self._action_queue[batch_idx]
-
-    def forward(self, batch):
-        images = self._prepare_images(batch)
-        state = self._prepare_state(batch)
-        texts = self._prepare_text(batch)
-
-        action = batch[ACTION]
-        if action.dim() == 3:
-            if action.shape[1] != 1:
-                action = action[:, :self.config.action_chunk_size]
-            else:
-                pad_size = self.config.action_chunk_size - 1
-                pad = action.repeat(1, pad_size, 1)
-                action = torch.cat([action, pad], dim=1)
-        elif action.dim() == 2:
-            action = action.unsqueeze(1)
-            pad_size = self.config.action_chunk_size - 1
-            pad = action.repeat(1, pad_size, 1)
-            action = torch.cat([action, pad], dim=1)
-
-        action = action.float().to(self.config.device)
-
-        loss = self.model(images, texts, state, action)
-        return loss, None
-
-    def predict_action_chunk(self, batch, **kwargs):
-        images = self._prepare_images(batch)
-        state = self._prepare_state(batch)
-        texts = self._prepare_text(batch)
-
-        actions = self.model.predict_action_chunk(images, texts, state)
-        return actions
-
-    def select_action(self, batch, **kwargs):
-        batch_size = self._get_batch_size(batch)
-
-        actions_list = []
-        for i in range(batch_size):
-            if i in self._action_queue and len(self._action_queue[i]) > 0:
-                action = self._action_queue[i].popleft()
-                actions_list.append(action)
-            else:
-                images = self._prepare_images(batch)
-                state = self._prepare_state(batch)
-                texts = self._prepare_text(batch)
-
-                chunk = self.model.predict_action_chunk(images, texts, state)
-                chunk_i = chunk[i]
-
-                queue = deque()
-                for step in range(self.config.action_chunk_size):
-                    queue.append(chunk_i[step])
-                self._action_queue[i] = queue
-
-                action = queue.popleft()
-                actions_list.append(action)
-
-        actions = torch.stack(actions_list, dim=0)
-        return actions
+class MiniVLAWristPolicy(MiniVLAPolicy):
+    """Alias for minivla_wrist variant."""
+    config_class = MiniVLAConfig  # Will be overridden by config type
+    name = "minivla_wrist"

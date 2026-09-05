@@ -276,7 +276,7 @@ class BaseVLMExtractor(ABC):
 
         # Chunked batch processing: process episodes in chunks to avoid OOM
         # Each chunk collects frames, batch encodes, then frees memory
-        chunk_size = 25  # episodes per chunk
+        chunk_size = 5  # episodes per chunk
         num_chunks = (total_episodes + chunk_size - 1) // chunk_size
         print(f"\nChunked batch processing: {total_episodes} episodes in {num_chunks} chunks of {chunk_size}")
         sys.stdout.flush()

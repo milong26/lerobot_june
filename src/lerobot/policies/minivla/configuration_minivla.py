@@ -1,127 +1,132 @@
+"""
+configuration_minivla.py
+
+MiniVLA configuration classes mirroring the official MiniVLA (PrismaticVLM + OpenVLA) setup.
+Three variants are registered:
+  - minivla:      single primary image, official base config
+  - minivla_t2:   two primary images (temporal: old -> current), official T2 config
+  - minivla_wrist: primary + wrist images, official wrist config
+
+Reference files in teach_code/MiniVLA:
+  - prismatic/conf/models.py  (Prism_Qwen25_0_5B_Extra_DINOSigLIP_224px)
+  - prismatic/conf/vla.py     (Exp_Qwen25_DinoSigLIP_224px_0_5B_LIBERO_90, T2, wrist variants)
+  - vq/pretrain_vq+mx-libero_90+.../config.json
+"""
+
 import logging
-import warnings
 from dataclasses import dataclass, field
 
-from lerobot.configs import FeatureType, NormalizationMode, PolicyFeature, PreTrainedConfig
+from lerobot.configs import NormalizationMode, PreTrainedConfig
 from lerobot.optim import AdamWConfig
 
 logger = logging.getLogger(__name__)
 
+_OFFICIAL_QWEN_BASE = "Qwen/Qwen2.5-0.5B"
+_OFFICIAL_VISION_BACKBONE = "dinosiglip-vit-so-224px"
+_OFFICIAL_LLM_BACKBONE = "qwen25-0_5b-extra"
+_OFFICIAL_IMAGE_SIZE = 224
+_OFFICIAL_IMAGE_RESIZE = "resize-naive"
+_OFFICIAL_ARCH_SPECIFIER = "no-align+fused-gelu-mlp"
+_OFFICIAL_NUM_EXTRA_TOKENS = 256
+_OFFICIAL_CHUNK_SIZE = 8
+_OFFICIAL_N_ACTION_STEPS = 1
+_OFFICIAL_VQVAE_N_EMBED = 128
+_OFFICIAL_VQVAE_GROUPS = 7
+_OFFICIAL_N_LATENT_DIMS = 512
+_OFFICIAL_VQ_ACTION_DIM = 7
+_OFFICIAL_LR = 2e-5
+_OFFICIAL_WEIGHT_DECAY = 0.0
+_OFFICIAL_GRAD_CLIP_NORM = 1.0
 
-@PreTrainedConfig.register_subclass("minivla")
+
+def _default_normalization_mapping() -> dict[str, NormalizationMode]:
+    return {
+        "VISUAL": NormalizationMode.IDENTITY,
+        "ACTION": NormalizationMode.QUANTILES,
+    }
+
+
 @dataclass
-class MiniVLAConfig(PreTrainedConfig):
-    n_obs_steps: int = 1
-    d_model: int = 128
+class _MiniVLAConfigBase(PreTrainedConfig):
+    """Shared base for all MiniVLA variants. Subclasses set variant-specific deltas."""
 
-    vision_encoder_path: str = ""
-    language_model_path: str = ""
-    tokenizer_path: str = ""
-    vision_hidden_dim: int = 768
-    language_hidden_dim: int = 768
+    # === Official backbone identifiers ===
+    vision_backbone_id: str = _OFFICIAL_VISION_BACKBONE
+    llm_backbone_id: str = _OFFICIAL_LLM_BACKBONE
+    official_vla_checkpoint: str = ""
 
-    image_size: int = 224
-    main_image_key: str = "observation.images.top"
-    wrist_image_keys: list = field(default_factory=list)
-    history_image_keys: list = field(default_factory=list)
-    num_image_history: int = 2
+    # === Qwen / Tokenizer ===
+    base_vlm_checkpoint: str = _OFFICIAL_QWEN_BASE
+    num_extra_tokens: int = _OFFICIAL_NUM_EXTRA_TOKENS
 
-    action_chunk_size: int = 8
-    action_vocab_size: int = 256
-    vq_codebook_size: int = 256
-    vq_num_layers: int = 2
+    # === Vision ===
+    image_size: int = _OFFICIAL_IMAGE_SIZE
+    image_resize_strategy: str = _OFFICIAL_IMAGE_RESIZE
+    arch_specifier: str = _OFFICIAL_ARCH_SPECIFIER
+    image_sequence_len: int = 1
+    use_wrist_image: bool = False
 
-    state_dim: int = 0
-    action_dim: int = 0
+    # === Action / VQ ===
+    chunk_size: int = _OFFICIAL_CHUNK_SIZE
+    n_action_steps: int = _OFFICIAL_N_ACTION_STEPS
+    vqvae_n_embed: int = _OFFICIAL_VQVAE_N_EMBED
+    vqvae_groups: int = _OFFICIAL_VQVAE_GROUPS
+    n_latent_dims: int = _OFFICIAL_N_LATENT_DIMS
+    vq_action_dim: int = _OFFICIAL_VQ_ACTION_DIM
+    vq_model_path: str = ""
 
-    freeze_vision_encoder: bool = True
-    freeze_language_model: bool = False
+    # === Training defaults (vla-full-train) ===
+    enable_gradient_checkpointing: bool = True
+    enable_mixed_precision_training: bool = True
+    reduce_in_full_precision: bool = True
+    freeze_vision_backbone: bool = False
+    freeze_llm_backbone: bool = False
+    unfreeze_last_llm_layer: bool = False
 
+    # === Optimizer (AdamW defaults) ===
+    optimizer_lr: float = _OFFICIAL_LR
+    optimizer_weight_decay: float = _OFFICIAL_WEIGHT_DECAY
+    optimizer_grad_clip_norm: float = _OFFICIAL_GRAD_CLIP_NORM
+    optimizer_betas: tuple[float, float] = field(default_factory=lambda: (0.9, 0.999))
+    optimizer_eps: float = 1e-8
+
+    # === Scheduler ===
+    scheduler_type: str = "constant"
+    scheduler_warmup_ratio: float = 0.0
+
+    # === Normalization ===
     normalization_mapping: dict[str, NormalizationMode] = field(
-        default_factory=lambda: {
-            "VISUAL": NormalizationMode.IDENTITY,
-            "STATE": NormalizationMode.IDENTITY,
-            "ACTION": NormalizationMode.IDENTITY,
-        }
+        default_factory=_default_normalization_mapping
     )
 
     def __post_init__(self):
         super().__post_init__()
-        if self.image_size <= 0:
-            raise ValueError(f"image_size must be positive, got {self.image_size}")
-        if self.action_chunk_size <= 0:
-            raise ValueError(f"action_chunk_size must be positive, got {self.action_chunk_size}")
-        if self.vq_codebook_size <= 0:
-            raise ValueError(f"vq_codebook_size must be positive, got {self.vq_codebook_size}")
-
-    def get_image_keys(self) -> list:
-        keys = []
-        if self.main_image_key:
-            keys.append(self.main_image_key)
-        for k in self.history_image_keys:
-            if k and k not in keys:
-                keys.append(k)
-        for k in self.wrist_image_keys:
-            if k and k not in keys:
-                keys.append(k)
-        return keys
 
     def validate_features(self) -> None:
         image_features = self.image_features
         if not image_features:
             raise ValueError("At least one visual input is required for MiniVLA.")
-        if not self.robot_state_feature:
-            raise ValueError("observation.state is required for MiniVLA.")
         if not self.action_feature:
             raise ValueError("action output is required for MiniVLA.")
 
-        self.action_dim = self.action_feature.shape[0]
-        self.state_dim = self.robot_state_feature.shape[0]
-
-        if self.main_image_key not in image_features:
-            available = [k for k in image_features if k.startswith("observation.images")]
-            if available:
-                self.main_image_key = sorted(available)[0]
-                logger.warning(
-                    f"main_image_key '{self.main_image_key}' not in config, "
-                    f"selected from available: {self.main_image_key}"
-                )
-            else:
-                raise ValueError("No observation.images.* features found in dataset.")
-
-        actual_history = []
-        for k in self.history_image_keys:
-            if k in image_features:
-                actual_history.append(k)
-        self.history_image_keys = actual_history
-
-        actual_wrist = []
-        for k in self.wrist_image_keys:
-            if k in image_features:
-                actual_wrist.append(k)
-        self.wrist_image_keys = actual_wrist
+        action_dim = self.action_feature.shape[0]
+        if action_dim != self.vq_action_dim:
+            raise ValueError(
+                f"LeRobot action dimension ({action_dim}) does not match the VQ configuration "
+                f"input_dim_w ({self.vq_action_dim}). You must pre-train a VQ model for this "
+                f"dataset's action dimension. Set vq_model_path to a compatible VQ checkpoint."
+            )
 
     def validate_vla_config(self) -> None:
-        if not self.language_model_path:
-            warnings.warn(
-                "language_model_path is empty. A dummy backbone will be used. "
-                "Set this path to load a real language model.",
-                UserWarning,
-            )
-        if not self.vision_encoder_path:
-            warnings.warn(
-                "vision_encoder_path is empty. A dummy vision encoder will be used. "
-                "Set this path to load a real vision encoder.",
-                UserWarning,
-            )
+        pass
 
     def get_optimizer_preset(self) -> AdamWConfig:
         return AdamWConfig(
-            lr=1e-4,
-            weight_decay=0,
-            betas=(0.9, 0.999),
-            eps=1e-8,
-            grad_clip_norm=10.0,
+            lr=self.optimizer_lr,
+            weight_decay=self.optimizer_weight_decay,
+            betas=self.optimizer_betas,
+            eps=self.optimizer_eps,
+            grad_clip_norm=self.optimizer_grad_clip_norm,
         )
 
     def get_scheduler_preset(self):
@@ -129,14 +134,60 @@ class MiniVLAConfig(PreTrainedConfig):
 
     @property
     def observation_delta_indices(self) -> list:
-        if self.num_image_history > 0:
-            return list(range(-self.num_image_history, 1))
-        return [0]
+        raise NotImplementedError("Subclasses must define observation_delta_indices.")
 
     @property
     def action_delta_indices(self) -> list:
-        return list(range(self.action_chunk_size))
+        return list(range(self.chunk_size))
 
     @property
     def reward_delta_indices(self) -> None:
         return None
+
+
+# ---------------------------------------------------------------------------
+# minivla (base): single current primary image
+# ---------------------------------------------------------------------------
+@PreTrainedConfig.register_subclass("minivla")
+@dataclass
+class MiniVLAConfig(_MiniVLAConfigBase):
+    """Official base MiniVLA: one primary image at the current timestep."""
+
+    image_sequence_len: int = 1
+    use_wrist_image: bool = False
+
+    @property
+    def observation_delta_indices(self) -> list:
+        return [0]
+
+
+# ---------------------------------------------------------------------------
+# minivla_t2: two primary images, temporal order old -> current
+# ---------------------------------------------------------------------------
+@PreTrainedConfig.register_subclass("minivla_t2")
+@dataclass
+class MiniVLAT2Config(_MiniVLAConfigBase):
+    """Official T2 MiniVLA: two primary images ordered from old to current."""
+
+    image_sequence_len: int = 2
+    use_wrist_image: bool = False
+
+    @property
+    def observation_delta_indices(self) -> list:
+        return [-1, 0]
+
+
+# ---------------------------------------------------------------------------
+# minivla_wrist: primary + wrist, fixed order primary first
+# ---------------------------------------------------------------------------
+@PreTrainedConfig.register_subclass("minivla_wrist")
+@dataclass
+class MiniVLAWristConfig(_MiniVLAConfigBase):
+    """Official wrist MiniVLA: current primary followed by current wrist."""
+
+    image_sequence_len: int = 2
+    use_wrist_image: bool = True
+
+    @property
+    def observation_delta_indices(self) -> list:
+        return [0]

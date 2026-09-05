@@ -1,104 +1,189 @@
-import logging
-import warnings
+"""
+vla_backbone.py
+
+Official MiniVLA backbone: DINO-SigLIP patch -> FusedMLPProjector -> Qwen2.5 CausalLM.
+Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py (PrismaticVLM) and
+prismatic/models/backbones/llm/qwen25.py.
+
+Key design:
+  - Vision patches inserted after first token of each sequence
+  - attention_mask extended with True for vision tokens
+  - labels set to IGNORE_INDEX (-100) for vision tokens
+  - generation cache support (past_key_values)
+  - No state tokens, no dummy layers, no full-zero text embeddings
+"""
+
+from __future__ import annotations
+
+from typing import Optional
 
 import torch
 import torch.nn as nn
+from transformers import AutoModelForCausalLM
 
-logger = logging.getLogger(__name__)
+from .encoders import DINOSigLIPViTBackbone
+from .fusion import FusedMLPProjector
+from .tokenizer import VLATokenizerWrapper
+
+IGNORE_INDEX = -100
 
 
-class MiniVLABackbone(nn.Module):
-    def __init__(self, config):
+class MiniVLAVLBackbone(nn.Module):
+    """
+    Official MiniVLA VLM backbone.
+    Combines DINO-SigLIP vision encoder, FusedMLP projector, and Qwen2.5 CausalLM.
+    """
+
+    def __init__(
+        self,
+        vision_backbone_id: str = "dinosiglip-vit-so-224px",
+        llm_backbone_id: str = "qwen25-0_5b-extra",
+        base_vlm_checkpoint: str = "Qwen/Qwen2.5-0.5B",
+        image_size: int = 224,
+        image_resize_strategy: str = "resize-naive",
+        arch_specifier: str = "no-align+fused-gelu-mlp",
+        image_sequence_len: int = 1,
+        num_extra_tokens: int = 256,
+        enable_gradient_checkpointing: bool = True,
+        freeze_vision_backbone: bool = False,
+        freeze_llm_backbone: bool = False,
+        unfreeze_last_llm_layer: bool = False,
+    ):
         super().__init__()
-        self.config = config
-        self.vision_hidden_dim = config.vision_hidden_dim
-        self.language_hidden_dim = config.language_hidden_dim
-        self.language_model_path = config.language_model_path
-        self.freeze_language_model = config.freeze_language_model
+        self.image_sequence_len = image_sequence_len
+        self.num_extra_tokens = num_extra_tokens
 
-        self.language_model = None
-        if self.language_model_path:
-            try:
-                from transformers import AutoModelForCausalLM
-                self.language_model = AutoModelForCausalLM.from_pretrained(
-                    self.language_model_path, local_files_only=True
-                )
-                if hasattr(self.language_model, "model"):
-                    self.language_model = self.language_model.model
-                if hasattr(self.language_model, "embed_tokens"):
-                    self.language_hidden_dim = self.language_model.embed_tokens.embedding_dim
-                logger.info(f"Loaded language model from {self.language_model_path}")
-            except Exception as e:
-                warnings.warn(
-                    f"Failed to load language model from {self.language_model_path}: {e}. "
-                    "Falling back to dummy backbone."
-                )
-                self.language_model = None
-
-        if self.language_model is None:
-            self._build_dummy_backbone()
-
-        if self.freeze_language_model and self.language_model is not None:
-            for param in self.language_model.parameters():
+        # === Vision backbone ===
+        self.vision_backbone = DINOSigLIPViTBackbone(
+            vision_backbone_id=vision_backbone_id,
+            image_resize_strategy=image_resize_strategy,
+            default_image_size=image_size,
+            image_sequence_len=image_sequence_len,
+        )
+        if freeze_vision_backbone:
+            for param in self.vision_backbone.parameters():
                 param.requires_grad = False
 
-        self.vision_projector = nn.Linear(self.vision_hidden_dim, self.language_hidden_dim)
-        self.state_projector = nn.Linear(config.state_dim, self.language_hidden_dim)
+        # === Projector ===
+        fused_vision_dim = self.vision_backbone.embed_dim
+        # Get LLM hidden size from config
+        self._llm_config = AutoModelForCausalLM.from_pretrained(
+            base_vlm_checkpoint, trust_remote_code=True
+        ).config
+        llm_dim = self._llm_config.hidden_size
 
-    def _build_dummy_backbone(self):
-        self.dummy_layers = nn.Sequential(
-            nn.Linear(self.language_hidden_dim, self.language_hidden_dim),
-            nn.GELU(),
-            nn.LayerNorm(self.language_hidden_dim),
-            nn.Linear(self.language_hidden_dim, self.language_hidden_dim),
-            nn.GELU(),
-            nn.LayerNorm(self.language_hidden_dim),
+        self.projector = FusedMLPProjector(
+            fused_vision_dim=fused_vision_dim,
+            llm_dim=llm_dim,
+            mlp_type="fused-gelu-mlp",
         )
-        self._is_dummy = True
 
-    def prepare_inputs_embeds(self, image_tokens: torch.Tensor,
-                              input_ids: torch.Tensor,
-                              state_embedding: torch.Tensor = None):
-        b = image_tokens.shape[0]
+        # === LLM ===
+        self.llm = AutoModelForCausalLM.from_pretrained(
+            base_vlm_checkpoint, trust_remote_code=True
+        )
+        # Resize embeddings for extra tokens
+        self.llm.resize_token_embeddings(
+            self.llm.config.vocab_size + num_extra_tokens,
+            pad_to_multiple_of=64,
+        )
+        self.llm.config.pad_token_id = self.llm.config.eos_token_id
 
-        image_embeds = self.vision_projector(image_tokens)
+        if freeze_llm_backbone:
+            for param in self.llm.parameters():
+                param.requires_grad = False
 
-        text_embeds = self.language_model.embed_tokens(input_ids) if not getattr(self, "_is_dummy", False) \
-            else torch.zeros(b, input_ids.shape[1], self.language_hidden_dim, device=image_tokens.device)
+        if unfreeze_last_llm_layer:
+            for param in self.llm.layers[-1].parameters():
+                param.requires_grad = True
 
-        inputs_embeds = torch.cat([image_embeds, text_embeds], dim=1)
+        # === Gradient checkpointing ===
+        if enable_gradient_checkpointing:
+            self.llm.gradient_checkpointing_enable()
 
-        if state_embedding is not None:
-            state_token = self.state_projector(state_embedding).unsqueeze(1)
-            inputs_embeds = torch.cat([inputs_embeds, state_token], dim=1)
+    @property
+    def num_patches(self) -> int:
+        return self.vision_backbone.num_patches
 
-        return inputs_embeds
-
-    def forward(self, input_ids: torch.Tensor,
-                attention_mask: torch.Tensor = None,
-                image_tokens: torch.Tensor = None,
-                state_embedding: torch.Tensor = None,
-                action_labels: torch.Tensor = None):
-
-        inputs_embeds = self.prepare_inputs_embeds(image_tokens, input_ids, state_embedding)
-
-        b, seq_len, d = inputs_embeds.shape
-        if attention_mask is None:
-            attention_mask = torch.ones(b, seq_len, device=inputs_embeds.device)
-
-        if getattr(self, "_is_dummy", False):
-            hidden_states = self.dummy_layers(inputs_embeds)
-        else:
-            outputs = self.language_model(
-                inputs_embeds=inputs_embeds,
+    def forward(
+        self,
+        pixel_values: dict[str, torch.Tensor],
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        labels: Optional[torch.Tensor] = None,
+        past_key_values: Optional[list] = None,
+        use_cache: bool = False,
+    ):
+        """
+        Training forward: inserts vision patches into LLM embeddings.
+        Generation forward: uses past_key_values cache to skip vision backbone.
+        """
+        if past_key_values is not None:
+            # Generation mode: only process the last token
+            return self.llm(
+                input_ids=input_ids,
                 attention_mask=attention_mask,
-                output_hidden_states=True,
+                labels=labels,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
             )
-            if hasattr(outputs, "hidden_states") and outputs.hidden_states:
-                hidden_states = outputs.hidden_states[-1]
-            elif hasattr(outputs, "last_hidden_state"):
-                hidden_states = outputs.last_hidden_state
-            else:
-                hidden_states = outputs[0]
 
-        return hidden_states
+        # === Get vision patches ===
+        patch_embeddings = self.vision_backbone(pixel_values)  # (B, num_patches, fused_dim)
+        projected_patches = self.projector(patch_embeddings)  # (B, num_patches, llm_dim)
+
+        # === Get LLM embeddings ===
+        inputs_embeds = self.llm.get_input_embeddings()(input_ids)  # (B, seq_len, llm_dim)
+
+        # === Insert vision patches after first token ===
+        # inputs_embeds: (B, seq_len, llm_dim)
+        # projected_patches: (B, num_patches, llm_dim)
+        # Result: (B, 1 + num_patches + seq_len - 1, llm_dim)
+        before = inputs_embeds[:, :1, :]  # (B, 1, llm_dim)
+        after = inputs_embeds[:, 1:, :]   # (B, seq_len - 1, llm_dim)
+        inputs_embeds = torch.cat([before, projected_patches, after], dim=1)
+
+        # === Extend attention_mask ===
+        # Original: (B, seq_len)
+        # Vision mask: (B, num_patches) all True
+        vision_mask = torch.ones(
+            inputs_embeds.shape[0], self.num_patches,
+            dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        attention_mask = torch.cat(
+            [attention_mask[:, :1], vision_mask, attention_mask[:, 1:]], dim=1
+        )
+
+        # === Set labels for vision tokens to IGNORE_INDEX ===
+        if labels is not None:
+            vision_labels = torch.full(
+                (labels.shape[0], self.num_patches),
+                IGNORE_INDEX,
+                dtype=labels.dtype,
+                device=labels.device,
+            )
+            labels = torch.cat([labels[:, :1], vision_labels, labels[:, 1:]], dim=1)
+
+        return self.llm(
+            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            labels=labels,
+            use_cache=use_cache,
+        )
+
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.Tensor,
+        past_key_values: Optional[list] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ):
+        """Official prepare_inputs_for_generation matching PrismaticVLM."""
+        if past_key_values is not None:
+            input_ids = input_ids[:, -1:]
+        return {
+            "input_ids": input_ids,
+            "past_key_values": past_key_values,
+            "use_cache": kwargs.get("use_cache", True),
+            "attention_mask": attention_mask,
+        }

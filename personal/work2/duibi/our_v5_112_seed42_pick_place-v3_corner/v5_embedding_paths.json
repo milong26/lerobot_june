@@ -1,0 +1,4 @@
+{
+  "visual_embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/shared_embeddings/pick_place_pick_place-v3_corner/smolvlm2-500m_last-hidden-tokenmean_global-first5_wrist-20to70_temporal-mean_pca32_v1",
+  "action_descriptor_dir": "/data/zhonglinye/jun/lerobot/personal/work2/action_descriptors/pick_place_pick_place-v3_corner/action_descriptor_v1_steps16_full_stats"
+}

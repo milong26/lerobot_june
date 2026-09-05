@@ -1,0 +1,40 @@
+{
+  "policy_type": "tinyvla_s",
+  "dataset_name": "disassemble-v3_corner",
+  "camera": "corner",
+  "env_task": "disassemble-v3",
+  "gpu_id": 0,
+  "num_episodes": 112,
+  "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+  "start_time": "2026-09-05 21:42:35",
+  "end_time": "2026-09-05 21:53:56",
+  "current_stage": "failed",
+  "failed_stage": "embedding_extraction",
+  "selection_vlm_model_id": "lesjie/Llava-Pythia-400M",
+  "selection_vlm_description": "TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
+  "config": {
+    "pca_dim": 32,
+    "selection_num_episodes": 112,
+    "selection_seed": 42,
+    "train_steps": 12000,
+    "train_batch_size": 32,
+    "train_lr": 0.0002,
+    "eval_n_episodes": 200,
+    "eval_seed": 42
+  },
+  "paths": {
+    "experiment_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner",
+    "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/embeddings",
+    "subset_file": null,
+    "checkpoint_dir": null,
+    "eval_results_file": null,
+    "eval_episodes_file": null,
+    "results_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results",
+    "checkpoints_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints",
+    "logs_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs"
+  },
+  "stages": {},
+  "final_metrics": {},
+  "total_time_seconds": 680.8,
+  "error": "backend='inductor' raised:\nOutOfMemoryError: CUDA out of memory. Tried to allocate 15.74 GiB. GPU 0 has a total capacity of 23.56 GiB of which 11.67 GiB is free. Process 2870785 has 8.61 GiB memory in use. Including non-PyTorch memory, this process has 3.26 GiB memory in use. Of the allocated memory 2.91 GiB is allocated by PyTorch, and 60.79 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)\n\nSet TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS=\"+dynamo\"\n"
+}

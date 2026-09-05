@@ -1041,7 +1041,7 @@ def main():
     print(f"\nLoading action descriptors from: {action_dir}")
     action_descriptors = load_action_descriptors(action_dir)
 
-    all_episode_ids = sorted(set(list(visual_embeddings.keys()) | set(list(action_descriptors.keys()))))
+    all_episode_ids = sorted(set(visual_embeddings.keys()) | set(action_descriptors.keys()))
 
     print(f"\nLoading rand_vecs from: {dataset_dir}")
     rand_vecs = load_rand_vecs(dataset_dir, all_episode_ids)
