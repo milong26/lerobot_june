@@ -1,0 +1,42 @@
+{
+  "fingerprint": "0dbd2e0e75e17014305c1985675ef56c",
+  "git_commit": "e30c75eaa6305a0067126380e34816e83b9bbc44",
+  "dataset_path": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+  "info_hash": "87cad04f1d91b6d1",
+  "state_source": "observation.environment_state",
+  "state_dim": 39,
+  "action_dim": 4,
+  "state_latent_dim": 12,
+  "action_latent_dim": 6,
+  "normalization_manifest": {
+    "state_dim": 39,
+    "action_dim": 4,
+    "state_gripper_indices": [
+      3,
+      21
+    ],
+    "state_mean_hash": "8ba56c29749aaa23",
+    "state_std_hash": "c4e99413a419f792",
+    "action_mean_hash": "6e46f6ce527afdde",
+    "action_std_hash": "332727306aa2543c",
+    "action_gripper_min": 0.0,
+    "action_gripper_max": 0.800000011920929,
+    "action_gripper_bounds_applied": true
+  },
+  "state_ckpt_path": "state_vae.pt",
+  "state_ckpt_sha256": "7db86b89495398f8",
+  "action_ckpt_path": "action_vae.pt",
+  "action_ckpt_sha256": "b1c95bb453952bfe",
+  "num_transitions": 53667,
+  "z_state_shape": [
+    53667,
+    12
+  ],
+  "z_action_shape": [
+    53667,
+    6
+  ],
+  "episode_ids_hash": "36732d414b2aa66d",
+  "timestep_ids_hash": "05f1973ad8ac56d9",
+  "global_row_ids_hash": "36594eb399b0b75d"
+}

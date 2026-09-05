@@ -359,7 +359,7 @@ lerobot-train \
     --remove_features='["observation.environment_state"]' \
     --wandb.enable=true \
     $RESUME_ARGS \
-    2>&1 | tee -a "$LOG_FILE"
+    2>&1
 
 echo "=== Training complete: $EXP_NAME ==="
 echo "Log saved to: $LOG_FILE"
