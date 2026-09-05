@@ -29,6 +29,7 @@ if str(WORK2_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK2_ROOT))
 
 import torch
+from torchvision.transforms import ToPILImage
 from sklearn.decomposition import PCA
 
 # Import constants from shared config (config.py only)
@@ -78,17 +79,17 @@ def load_vlm_model(device: str = "cuda"):
 def extract_frame_embeddings(
     model,
     processor,
-    frames: torch.Tensor,
+    frames,
     device: str = "cuda",
-    batch_size: int = 256
+    batch_size: int = 8
 ) -> np.ndarray:
     """
-    批量提取帧的嵌入（优化版，使用 tensor 直接输入）
+    批量提取帧的嵌入（优化版，使用真正的批量推理）
     
     参数:
         model: VLM模型
         processor: 处理器
-        frames: torch.Tensor, shape=(n_frames, C, H, W) 或 (n_frames, H, W, C)
+        frames: PIL Image 列表或 torch.Tensor, shape=(n_frames, C, H, W) 或 (n_frames, H, W, C)
         device: 计算设备
         batch_size: 批量处理大小
     
@@ -103,17 +104,22 @@ def extract_frame_embeddings(
         print(f"    → 处理 {n_frames} 帧...")
     sys.stdout.flush()
     
-    # 确保帧格式正确：如果是 numpy 数组，转为 tensor
-    if isinstance(frames, np.ndarray):
-        frames = torch.from_numpy(frames)
+    # 检查是否已经是 PIL Image 列表
+    is_pil_list = isinstance(frames, list) and len(frames) > 0 and hasattr(frames[0], 'mode')
     
-    # 确保是 (N, C, H, W) 格式
-    if frames.ndim == 4 and frames.shape[-1] in [1, 3, 4]:
-        # (N, H, W, C) -> (N, C, H, W)
-        frames = frames.permute(0, 3, 1, 2)
-    
-    # 确保在 CPU 上（processor 需要 CPU tensor）
-    frames = frames.cpu()
+    if not is_pil_list:
+        # 确保帧格式正确：如果是 numpy 数组，转为 tensor
+        if isinstance(frames, np.ndarray):
+            frames = torch.from_numpy(frames)
+        
+        # 确保是 (N, C, H, W) 格式
+        if frames.ndim == 4 and frames.shape[-1] in [1, 3, 4]:
+            # (N, H, W, C) -> (N, C, H, W)
+            frames = frames.permute(0, 3, 1, 2)
+        
+        # 转换为 PIL Image 列表
+        to_pil = ToPILImage()
+        frames = [to_pil(img) for img in frames]
     
     embeddings = []
     
@@ -125,26 +131,29 @@ def extract_frame_embeddings(
             end_idx = min(start_idx + batch_size, n_frames)
             batch_frames = frames[start_idx:end_idx]
             
-            # 逐帧处理，每帧对应一个文本
-            batch_embs_list = []
-            for frame in batch_frames:
-                # 单张图像，添加一个 <image> token
-                inputs = processor(
-                    text=PROMPT_TEXT,
-                    images=frame,
-                    return_tensors="pt"
-                ).to(device)
-                
-                outputs = model(
-                    **inputs,
-                    output_hidden_states=True
-                )
-                
-                # 提取嵌入
-                hidden_states = outputs.hidden_states[-1]
-                batch_embs_list.append(hidden_states.mean(dim=1).cpu().numpy())
+            # 真正的批量处理：一次性处理所有帧
+            # SmolVLM 要求每个样本的文本中 <image> token 数量与图像数量匹配
+            # 对于批量处理，我们需要为每个图像创建单独的样本
+            # 使用 PIL Image 格式，processor 可以正确处理并自动转到 GPU
+            batch_texts = [PROMPT_TEXT] * len(batch_frames)
+            batch_images = [[img] for img in batch_frames]  # PIL Image 列表的列表
             
-            embeddings.append(np.concatenate(batch_embs_list, axis=0))
+            inputs = processor(
+                text=batch_texts,
+                images=batch_images,
+                return_tensors="pt",
+                padding=True
+            ).to(device)
+            
+            outputs = model(
+                **inputs,
+                output_hidden_states=True
+            )
+            
+            # 提取嵌入
+            hidden_states = outputs.hidden_states[-1]
+            batch_embeddings = hidden_states.mean(dim=1).cpu().numpy()
+            embeddings.append(batch_embeddings)
             
             batch_time = time.time() - batch_start
             batch_times.append(batch_time)
@@ -353,19 +362,20 @@ def process_dataset(
         print(f"  找到 {len(episode_indices)} 帧 (索引 {episode_indices[0]}-{episode_indices[-1]})，正在从数据集加载...")
         sys.stdout.flush()
         
-        # 批量加载帧（保持 tensor 格式）
+        # 批量加载帧（转换为 PIL Image 格式，避免 processor 处理 GPU tensor 时报错）
+        to_pil = ToPILImage()
         episode_frames_top = []
         episode_frames_wrist = []
         for idx in episode_indices:
             frame = dataset[idx]
-            episode_frames_top.append(frame["observation.images.top"])
-            episode_frames_wrist.append(frame["observation.images.wrist"])
-        
-        episode_frames_top = torch.stack(episode_frames_top)
-        episode_frames_wrist = torch.stack(episode_frames_wrist)
+            # 转换为 PIL Image，processor 可以正确处理
+            top_img = to_pil(frame["observation.images.top"])
+            wrist_img = to_pil(frame["observation.images.wrist"])
+            episode_frames_top.append(top_img)
+            episode_frames_wrist.append(wrist_img)
         
         load_time = time.time() - ep_load_start
-        print(f"  ✓ 帧加载完成: top={episode_frames_top.shape}, wrist={episode_frames_wrist.shape}, 耗时: {load_time:.2f}s")
+        print(f"  ✓ 帧加载完成: {len(episode_frames_top)} 帧 (PIL Image 格式), 耗时: {load_time:.2f}s")
         sys.stdout.flush()
         
         # 计算帧范围
@@ -375,11 +385,6 @@ def process_dataset(
         wrist_start = int(n_frames * WRIST_START_RATIO)
         wrist_end = int(n_frames * WRIST_END_RATIO)
         wrist_frames_selected = episode_frames_wrist[wrist_start:wrist_end]
-        
-        episode_data = {
-            "observation.images.top": episode_frames_top,
-            "observation.images.wrist": episode_frames_wrist
-        }
         
         print(f"  [2/3] 开始提取 VLM 嵌入...")
         sys.stdout.flush()

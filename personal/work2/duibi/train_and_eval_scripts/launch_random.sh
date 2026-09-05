@@ -77,7 +77,7 @@ fi
 
 echo ""
 echo "=== Step 2: Training and evaluation ==="
-bash "\$TRAIN_SCRIPT" random 112 \${SEED_VAL} \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
+bash "\$TRAIN_SCRIPT" random 112 \${SEED_VAL} \$GPU_ID "" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo "" >> "\$TIME_FILE"
 echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"

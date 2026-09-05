@@ -9,8 +9,13 @@ MODE=$1
 NUM_EPISODES=${2:-112}
 SEED=$3
 GPU_ID=$4
-OUTPUT_BASE_DIR=$5
+OUTPUT_BASE_DIR=${5:-}
 DATASET_NAME=${6:-corner3}
+
+# Auto-generate OUTPUT_BASE_DIR if not provided
+if [ -z "$OUTPUT_BASE_DIR" ]; then
+    OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/${MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
+fi
 
 # Paths
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -23,8 +28,9 @@ EVAL_DIR="$OUTPUT_BASE_DIR/eval_results"
 # Dataset path configuration file (optional override)
 DATASET_PATH_FILE="$OUTPUT_BASE_DIR/dataset_path.txt"
 
-# Create directories
-mkdir -p "$SUBSET_DIR" "$OUTPUT_BASE_DIR" "$LOG_DIR" "$EVAL_DIR"
+# Create directories (only for logs, subsets, and eval results - not EXP_OUTPUT_DIR)
+# lerobot-train will automatically create EXP_OUTPUT_DIR for model checkpoints
+mkdir -p "$SUBSET_DIR" "$LOG_DIR" "$EVAL_DIR"
 
 # Override DATASET_DIR if path file exists
 if [ -f "$DATASET_PATH_FILE" ]; then
@@ -179,7 +185,7 @@ else
         # DemInf: use pre-computed subset from deminf_results
         echo "=== Using pre-computed DemInf subset ==="
         
-        DEMINF_SUBSET="/data/zhonglinye/jun/lerobot/personal/work2/deminf_results/pick_place_${DATASET_NAME}/subsets/deminf_${NUM_EPISODES}_seed${SEED}.json"
+        DEMINF_SUBSET="/data/zhonglinye/jun/lerobot/personal/work2/deminf_results/${DATASET_NAME}/subsets/deminf_${NUM_EPISODES}_seed${SEED}.json"
         
         if [ ! -f "$DEMINF_SUBSET" ]; then
             echo "Error: DemInf subset file not found: $DEMINF_SUBSET"

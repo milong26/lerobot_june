@@ -24,6 +24,12 @@ import argparse
 import time
 from pathlib import Path
 
+# Set GPU before any other imports that might use CUDA
+if "--gpu-id" in sys.argv:
+    idx = sys.argv.index("--gpu-id")
+    if idx + 1 < len(sys.argv):
+        os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[idx + 1]
+
 WORK2_ROOT = Path(__file__).resolve().parent.parent
 if str(WORK2_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK2_ROOT))
@@ -255,9 +261,6 @@ def ensure_shared_embeddings(
 
 def main():
     args = parse_args()
-    
-    # Set GPU before any torch import
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     
     shared_dir = ensure_shared_embeddings(
         dataset_root=args.dataset_root,

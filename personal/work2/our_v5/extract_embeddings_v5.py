@@ -34,6 +34,7 @@ if str(WORK2_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK2_ROOT))
 
 import torch
+from torchvision.transforms import ToPILImage
 from sklearn.decomposition import PCA
 
 from embedding_utils.config_v5 import (
@@ -81,19 +82,19 @@ def load_v5_encoder(device: str = "cuda"):
 def extract_frame_features(
     model,
     processor,
-    frames: torch.Tensor,
+    frames,
     device: str = "cuda",
-    batch_size: int = 256
+    batch_size: int = 8
 ) -> np.ndarray:
     """
-    Extract visual features from a sequence of frames.
+    Extract visual features from a sequence of frames using true batch processing.
     
     Args:
         model: VLM model (frozen)
         processor: VLM processor
-        frames: torch.Tensor, shape=(n_frames, C, H, W)
+        frames: PIL Image list or torch.Tensor, shape=(n_frames, C, H, W)
         device: compute device
-        batch_size: batch size for processing
+        batch_size: batch size for processing (number of frames per batch)
     
     Returns:
         np.ndarray, shape=(n_frames, embedding_dim)
@@ -101,13 +102,21 @@ def extract_frame_features(
     n_frames = len(frames)
     n_batches = (n_frames + batch_size - 1) // batch_size
     
-    if isinstance(frames, np.ndarray):
-        frames = torch.from_numpy(frames)
+    # Check if frames is already a list of PIL Images
+    is_pil_list = isinstance(frames, list) and len(frames) > 0 and hasattr(frames[0], 'mode')
     
-    if frames.ndim == 4 and frames.shape[-1] in [1, 3, 4]:
-        frames = frames.permute(0, 3, 1, 2)
-    
-    frames = frames.cpu()
+    if not is_pil_list:
+        # Convert tensor to PIL Images
+        from torchvision.transforms import ToPILImage
+        to_pil = ToPILImage()
+        
+        if isinstance(frames, np.ndarray):
+            frames = torch.from_numpy(frames)
+        
+        if frames.ndim == 4 and frames.shape[-1] in [1, 3, 4]:
+            frames = frames.permute(0, 3, 1, 2)
+        
+        frames = [to_pil(img) for img in frames]
     
     embeddings = []
     
@@ -117,23 +126,27 @@ def extract_frame_features(
             end_idx = min(start_idx + batch_size, n_frames)
             batch_frames = frames[start_idx:end_idx]
             
-            batch_embs_list = []
-            for frame in batch_frames:
-                inputs = processor(
-                    text=V5_PROMPT_TEXT,
-                    images=frame,
-                    return_tensors="pt"
-                ).to(device)
-                
-                outputs = model(
-                    **inputs,
-                    output_hidden_states=True
-                )
-                
-                hidden_states = outputs.hidden_states[-1]
-                batch_embs_list.append(hidden_states.mean(dim=1).cpu().numpy())
+            # SmolVLM requires each sample to have matching <image> tokens and images
+            # Pass images as list of lists: [[img1], [img2], ...] for batch processing
+            # PIL Image format works directly with processor
+            batch_texts = [V5_PROMPT_TEXT] * len(batch_frames)
+            batch_images = [[img] for img in batch_frames]
             
-            embeddings.append(np.concatenate(batch_embs_list, axis=0))
+            inputs = processor(
+                text=batch_texts,
+                images=batch_images,
+                return_tensors="pt",
+                padding=True
+            ).to(device)
+            
+            outputs = model(
+                **inputs,
+                output_hidden_states=True
+            )
+            
+            hidden_states = outputs.hidden_states[-1]
+            batch_embeddings = hidden_states.mean(dim=1).cpu().numpy()
+            embeddings.append(batch_embeddings)
             
             if (batch_idx + 1) % 10 == 0 or batch_idx == n_batches - 1:
                 processed = end_idx
@@ -247,8 +260,13 @@ def extract_episode_embedding(
     print(f"  Sampling {n_sample}/{n_frames} frames for visual features")
     sys.stdout.flush()
     
-    top_sampled = top_frames[sample_indices]
-    wrist_sampled = wrist_frames[sample_indices]
+    # 支持 PIL Image 列表和 tensor 两种格式
+    if isinstance(top_frames, list):
+        top_sampled = [top_frames[i] for i in sample_indices]
+        wrist_sampled = [wrist_frames[i] for i in sample_indices]
+    else:
+        top_sampled = top_frames[sample_indices]
+        wrist_sampled = wrist_frames[sample_indices]
     
     print(f"  Extracting top camera features...")
     sys.stdout.flush()
@@ -466,23 +484,25 @@ def process_v5_embeddings(
         episode_frames_top = []
         episode_frames_wrist = []
         episode_actions = []
+        to_pil = ToPILImage()
         for idx in episode_indices:
             frame = dataset[idx]
-            episode_frames_top.append(frame["observation.images.top"])
-            episode_frames_wrist.append(frame["observation.images.wrist"])
+            # 转换为 PIL Image，processor 可以正确处理
+            top_img = to_pil(frame["observation.images.top"])
+            wrist_img = to_pil(frame["observation.images.wrist"])
+            episode_frames_top.append(top_img)
+            episode_frames_wrist.append(wrist_img)
             episode_actions.append(frame[action_key])
         
-        top_tensor = torch.stack(episode_frames_top)
-        wrist_tensor = torch.stack(episode_frames_wrist)
         action_array = np.array(episode_actions)
         
         load_time = time.time() - ep_start_time
-        print(f"  Frame load: top={top_tensor.shape}, wrist={wrist_tensor.shape}, action={action_array.shape}, time={load_time:.2f}s")
+        print(f"  Frame load: {len(episode_frames_top)} frames (PIL Image), action={action_array.shape}, time={load_time:.2f}s")
         sys.stdout.flush()
         
         episode_data = {
-            "observation.images.top": top_tensor,
-            "observation.images.wrist": wrist_tensor,
+            "observation.images.top": episode_frames_top,
+            "observation.images.wrist": episode_frames_wrist,
             "action": action_array,
         }
         

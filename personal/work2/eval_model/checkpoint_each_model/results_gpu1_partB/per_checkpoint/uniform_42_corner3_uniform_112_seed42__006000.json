@@ -1,0 +1,16 @@
+{
+  "model": "uniform_42_corner3/uniform_112_seed42",
+  "checkpoint": "006000",
+  "checkpoint_path": "personal/work2/duibi/uniform_42_corner3/uniform_112_seed42/checkpoints/006000//pretrained_model",
+  "gpu": "1",
+  "n_episodes": 0,
+  "success_count": 0,
+  "grasp_success_count": 0,
+  "success_rate": 0.0,
+  "grasp_success_rate": 0.0,
+  "pc_success": 0.0,
+  "pc_grasp_success": 0.0,
+  "status": "ok",
+  "result_file": "personal/work2/eval_model/checkpoint_each_model/results_gpu1_partB/eval_results/uniform_42_corner3_uniform_112_seed42__006000/eval_results/eval_episode_results.json",
+  "log_file": "personal/work2/eval_model/checkpoint_each_model/results_gpu1_partB/logs/eval_uniform_42_corner3_uniform_112_seed42__006000.log"
+}

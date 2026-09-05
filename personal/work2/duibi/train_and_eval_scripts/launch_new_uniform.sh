@@ -81,7 +81,7 @@ echo ""
 # -> adaptive perturbation
 # -> episode collection
 
-bash "\$TRAIN_SCRIPT" state_uniform 112 42 \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
+bash "\$TRAIN_SCRIPT" state_uniform 112 42 \$GPU_ID "" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 
 echo "" >> "\$TIME_FILE"

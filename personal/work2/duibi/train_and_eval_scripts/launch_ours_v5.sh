@@ -222,6 +222,72 @@ lerobot-train \\
 echo ""
 echo "Training steps: 12000"
 
+# Extract eval results from log
+echo ""
+echo "=== Extracting evaluation results ==="
+EVAL_DIR="\$OUTPUT_BASE_DIR/\$EXP_NAME/eval"
+EVAL_RESULTS_FILE="\$OUTPUT_BASE_DIR/eval_results/\$EXP_NAME\_eval.json"
+mkdir -p "\$OUTPUT_BASE_DIR/eval_results"
+
+python -c "
+import json
+import re
+import glob
+import os
+
+log_file = '\$LOG_FILE'
+eval_results_file = '\$EVAL_RESULTS_FILE'
+
+success_rates = []
+grasp_rates = []
+eval_details = []
+
+with open(log_file, 'r') as f:
+    for line in f:
+        if 'Suite overall aggregated' in line:
+            match = re.search(r'\{.*\}', line)
+            if match:
+                try:
+                    data = json.loads(match.group())
+                    eval_details.append(data)
+                    if 'pc_success' in data:
+                        success_rates.append(data['pc_success'])
+                    if 'pc_grasp_success' in data:
+                        grasp_rates.append(data['pc_grasp_success'])
+                except json.JSONDecodeError:
+                    pass
+
+result = {
+    'experiment': '\$EXP_NAME',
+    'num_episodes': \$NUM_EPISODES,
+    'seed': \$SEED,
+    'gpu_id': \$GPU_ID,
+    'dataset': '\$DATASET_NAME',
+    'success_rates': success_rates,
+    'grasp_success_rates': grasp_rates,
+    'final_success_rate': success_rates[-1] if success_rates else None,
+    'final_grasp_success_rate': grasp_rates[-1] if grasp_rates else None,
+    'max_success_rate': max(success_rates) if success_rates else None,
+    'avg_success_rate': sum(success_rates) / len(success_rates) if success_rates else None,
+    'eval_details': eval_details,
+    'n_eval_runs': len(success_rates)
+}
+
+os.makedirs(os.path.dirname(eval_results_file), exist_ok=True)
+with open(eval_results_file, 'w') as f:
+    json.dump(result, f, indent=2)
+
+print(f'Evaluation results saved to: {eval_results_file}')
+if success_rates:
+    print(f'Final success rate: {success_rates[-1]:.2f}%')
+    print(f'Max success rate: {max(success_rates):.2f}%')
+    print(f'Avg success rate: {sum(success_rates)/len(success_rates):.2f}%')
+else:
+    print('No eval results found in log')
+"
+
+echo "=== Evaluation results extraction complete ==="
+
 echo "" >> "\$TIME_FILE"
 echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"
 echo "Status: completed" >> "\$TIME_FILE"
@@ -231,6 +297,11 @@ echo "========================================"
 echo "Experiment completed: \$EXP_NAME"
 echo "Finished: \$(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
+echo ""
+echo "Results:"
+echo "  - Log: \$LOG_FILE"
+echo "  - Eval results: \$EVAL_RESULTS_FILE"
+echo "  - Output dir: \$OUTPUT_BASE_DIR"
 
 exec bash
 RUNNER_EOF

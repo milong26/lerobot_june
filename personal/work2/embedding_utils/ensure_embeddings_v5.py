@@ -23,6 +23,12 @@ import time
 import numpy as np
 from pathlib import Path
 
+# Set GPU before any other imports that might use CUDA
+if "--gpu-id" in sys.argv:
+    idx = sys.argv.index("--gpu-id")
+    if idx + 1 < len(sys.argv):
+        os.environ["CUDA_VISIBLE_DEVICES"] = sys.argv[idx + 1]
+
 WORK2_ROOT = Path(__file__).resolve().parent.parent
 if str(WORK2_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK2_ROOT))
@@ -455,8 +461,6 @@ def ensure_v5_embeddings_exist(
 
 def main():
     args = parse_args()
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
 
     visual_dir, action_descriptor_dir = ensure_v5_embeddings_exist(
         dataset_root=args.dataset_root,
