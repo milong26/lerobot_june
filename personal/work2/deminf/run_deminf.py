@@ -170,7 +170,7 @@ def parse_args() -> argparse.Namespace:
                         help="Number of quality repeat iterations (official: 4)")
     parser.add_argument("--quality-cache", action="store_true", default=True,
                         help="Use quality cache (forces effective_discard_fraction=0)")
-    parser.add_argument("--no-quality-cache", action="store_true",
+    parser.add_argument("--no-quality-cache", action="store_false", dest="quality_cache",
                         help="Disable quality cache")
     parser.add_argument("--quality-discard-fraction", type=float, default=0.5,
                         help="Discard fraction per episode (overridden to 0 if quality_cache=True)")
@@ -246,7 +246,7 @@ def main() -> None:
         ks=tuple(args.ks),
         quality_batch_size=args.quality_batch_size,
         quality_repeat=args.quality_repeat,
-        quality_cache=not args.no_quality_cache,
+        quality_cache=args.quality_cache,
         quality_discard_fraction=args.quality_discard_fraction,
         score_clip_low=args.score_clip_low,
         score_clip_high=args.score_clip_high,
@@ -327,8 +327,10 @@ def main() -> None:
     logger.info(f"action_dim={action_dim}")
     logger.info(f"Total timesteps: {len(states)}")
 
-    assert state_dim == 39, f"Expected state_dim=39, got {state_dim}"
-    assert action_dim == 4, f"Expected action_dim=4, got {action_dim}"
+    if state_dim != 39:
+        logger.warning(f"state_dim={state_dim} differs from expected 39; proceeding with actual dimension")
+    if action_dim != 4:
+        logger.warning(f"action_dim={action_dim} differs from expected 4; proceeding with actual dimension")
 
     # =========================================================================
     # Step 5: Check relative action

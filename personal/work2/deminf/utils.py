@@ -336,8 +336,8 @@ def validate_latent_cache_metadata(
     Validate that latent cache metadata matches the current experiment.
 
     Checks:
-    - state latent dimension must equal 12
-    - action latent dimension must equal 6
+    - state latent dimension must equal current_config.state_latent_dim
+    - action latent dimension must equal current_config.action_latent_dim
     - state source must be observation.environment_state
     - representation_type must be state_action
     - dataset episode count matches
@@ -353,18 +353,20 @@ def validate_latent_cache_metadata(
     Returns:
         Tuple of (is_valid, error_reason_string). If valid, error_reason is empty.
     """
-    if metadata.get("state_latent_dim") != 12:
+    if metadata.get("state_latent_dim") != current_config.state_latent_dim:
         return False, (
-            f"state_latent_dim mismatch: cache={metadata.get('state_latent_dim')}, expected=12"
+            f"state_latent_dim mismatch: cache={metadata.get('state_latent_dim')}, "
+            f"expected={current_config.state_latent_dim}"
         )
-    if metadata.get("action_latent_dim") != 6:
+    if metadata.get("action_latent_dim") != current_config.action_latent_dim:
         return False, (
-            f"action_latent_dim mismatch: cache={metadata.get('action_latent_dim')}, expected=6"
+            f"action_latent_dim mismatch: cache={metadata.get('action_latent_dim')}, "
+            f"expected={current_config.action_latent_dim}"
         )
-    if metadata.get("state_source") != "observation.environment_state":
+    if metadata.get("state_source") != current_config.state_source:
         return False, (
             f"state_source mismatch: cache={metadata.get('state_source')}, "
-            f"expected=observation.environment_state"
+            f"expected={current_config.state_source}"
         )
     if current_config.representation_type != "state_action":
         return False, (
@@ -373,12 +375,14 @@ def validate_latent_cache_metadata(
         )
 
     cache_fingerprint = metadata.get("fingerprint", "")
+    cached_state_dim = metadata.get("state_dim", 39)
+    cached_action_dim = metadata.get("action_dim", 4)
     current_fingerprint = build_cache_fingerprint(
         dataset_path=current_config.dataset_path,
         state_source=current_config.state_source,
         action_key=current_config.action_key,
-        state_dim=39,
-        action_dim=4,
+        state_dim=cached_state_dim,
+        action_dim=cached_action_dim,
         state_latent_dim=current_config.state_latent_dim,
         action_latent_dim=current_config.action_latent_dim,
         hidden_dims=current_config.hidden_dims,

@@ -334,7 +334,9 @@ class DemInfNormalizer:
     ):
         self.state_dim = state_dim
         self.action_dim = action_dim
-        self.state_gripper_indices = state_gripper_indices or [3, 21]
+        # Only use gripper indices that are within the actual state dimension
+        all_gripper = state_gripper_indices or [3, 21]
+        self.state_gripper_indices = [i for i in all_gripper if i < state_dim]
 
         self.state_mean = None
         self.state_std = None
@@ -508,11 +510,28 @@ def get_deminf_data_manifest(
     episode_count = len(episode_map)
     transition_count = sum(len(rows) for rows in episode_map.values())
 
+    state_dim = 39
+    action_dim = 4
+    info_path = Path(dataset_root) / "meta" / "info.json"
+    if info_path.exists():
+        with open(info_path, "r") as f:
+            info = json.load(f)
+        features = info.get("features", {})
+        if "observation.environment_state" in features:
+            env_shape = features["observation.environment_state"].get("shape", [39])
+            state_dim = env_shape[0] if env_shape else 39
+        elif "observation.state" in features:
+            state_shape = features["observation.state"].get("shape", [4])
+            state_dim = state_shape[0] if state_shape else 4
+        if "action" in features:
+            action_shape = features["action"].get("shape", [4])
+            action_dim = action_shape[0] if action_shape else 4
+
     return {
         "state_key": state_source,
         "action_key": action_key,
-        "state_dim": 39,
-        "action_dim": 4,
+        "state_dim": state_dim,
+        "action_dim": action_dim,
         "episode_count": episode_count,
         "transition_count": transition_count,
         "normalization_type": "gaussian_state_bounds_action",
