@@ -143,3 +143,39 @@ class LlavaPythiaExtractor(BaseVLMExtractor):
                 embedding = image_features.cpu().numpy().squeeze()
 
         return embedding
+
+    def encode_images_batch(self, images: torch.Tensor) -> np.ndarray:
+        """
+        Encode a batch of images to visual embeddings using LLaVA-Pythia-400M.
+
+        This processes all images in a single GPU batch for maximum speedup.
+        Flow: images -> vision_tower -> mm_projector -> visual features -> mean pool
+        """
+        if len(images) == 0:
+            return np.array([])
+
+        # images shape: (N, C, H, W) or (N, H, W, C)
+        if images.dim() == 4 and images.shape[-1] in [1, 3, 4]:
+            images = images.permute(0, 3, 1, 2)
+
+        # Force float32 for image processor, then convert to model dtype (float16) for GPU
+        images_cpu = images.cpu().float()
+
+        processed = self.image_processor(
+            images=images_cpu,
+            return_tensors="pt",
+        )
+        pixel_values = processed["pixel_values"].to(self.device, dtype=torch.float16)
+
+        with torch.inference_mode():
+            with torch.autocast(device_type="cuda", dtype=torch.float16):
+                image_features = self.model.encode_images(pixel_values, proj=True)
+
+            if image_features.dim() == 3:
+                embeddings = image_features.mean(dim=1).cpu().numpy()
+            elif image_features.dim() == 2:
+                embeddings = image_features.cpu().numpy()
+            else:
+                embeddings = image_features.cpu().numpy()
+
+        return embeddings

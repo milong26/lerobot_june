@@ -41,7 +41,7 @@ def run_tinyvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
     episode_indices = subset_data["selected_episode_indices"]
     episodes_str = "[" + ",".join(str(x) for x in episode_indices) + "]"
 
-    exp_name = f"tinyvla_{cfg.tinyvla_policy_type}_{cfg.camera}"
+    exp_name = f"tinyvla_{cfg.tinyvla_policy_type}_{cfg.dataset_name}"
     output_dir = Path(cfg.checkpoints_dir) / exp_name
 
     # Clean existing output dir to avoid lerobot-train resume conflict
@@ -78,13 +78,13 @@ def run_tinyvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
         f"--policy.type={cfg.tinyvla_policy_type}",
         "--policy.device=cuda",
         "--policy.push_to_hub=false",
-        "--dataset.repo_id=lerobot/metaworld_pick_place",
+        f"--dataset.repo_id={cfg.lerobot_repo_id}",
         f"--dataset.root={cfg.dataset_root}",
         f"--dataset.episodes={episodes_str}",
         "--dataset.eval_split=0.0",
         f"--rename_map={cfg.rename_map}",
         "--env.type=metaworld",
-        "--env.task=pick-place-v3",
+        f"--env.task={cfg.env_task}",
         f"--env.camera_name={cfg.camera_names}",
         f"--policy.optimizer_lr={cfg.train_lr}",
         f"--policy.optimizer_weight_decay={0.0}",

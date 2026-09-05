@@ -71,13 +71,13 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str) -> Dict:
     eval_output_dir = Path(cfg.results_dir) / "eval_results"
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
-    eval_log = Path(cfg.logs_dir) / f"{cfg.vlm_name}_{cfg.camera}_eval.log"
+    eval_log = Path(cfg.logs_dir) / f"{cfg.vlm_name}_{cfg.dataset_name}_eval.log"
 
     cmd = [
         "lerobot-eval",
         f"--policy.path={checkpoint_path}",
         "--env.type=metaworld",
-        "--env.task=pick-place-v3",
+        f"--env.task={cfg.env_task}",
         f"--env.camera_name={cfg.camera_names}",
         "--env.use_self_mw=true",
         f"--eval.batch_size={cfg.eval_batch_size}",

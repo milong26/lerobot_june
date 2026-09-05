@@ -3,15 +3,15 @@ TinyVLA Experiment Main Entry Point
 
 Orchestrates the complete TinyVLA experiment pipeline:
 1. VLM embedding extraction (using our_v5 method with LLaVA-Pythia backbone)
-2. V4 episode selection (using our_v5 selection algorithm)
+2. V5 episode selection (using our_v5 selection algorithm)
 3. TinyVLA fine-tuning (with LoRA + diffusion action head)
 4. Evaluation
 
 Usage:
-    python run_tinyvla.py --policy_type tinyvla_s --gpu 0 --camera corner --num_episodes 112
-    python run_tinyvla.py --policy_type tinyvla_b --gpu 1 --camera corner --num_episodes 112
+    python run_tinyvla.py --policy_type tinyvla_s --dataset_name pick_place-v3_corner --gpu 0 --num_episodes 112
+    python run_tinyvla.py --policy_type tinyvla_b --dataset_name pick_place-v3_corner --gpu 1 --num_episodes 112
 
-All intermediate results are saved in differentvlm/tinyvla{s|b}/ directory.
+All intermediate results are saved in differentvlm/experiments/{policy_type}_{dataset_name}/ directory.
 """
 
 import sys
@@ -30,36 +30,34 @@ if str(WORK2_ROOT) not in sys.path:
 
 from differentvlm.configs.vlm_config import get_config
 from differentvlm.vlm_extract.auto_extract_embedding import auto_extract_embedding
-from differentvlm.selection.select_v4_wrapper import run_v4_selection
+from differentvlm.selection.select_v5_wrapper import run_v5_selection
 from differentvlm.train.train_tinyvla_wrapper import run_tinyvla_training
 from differentvlm.eval.eval_tinyvla_wrapper import run_tinyvla_eval
 
 
-def run_experiment(policy_type: str, gpu_id: int, camera: str = "corner", num_episodes: int = 112, dataset_root: str = None):
+def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_episodes: int = 112):
     """Run the complete TinyVLA experiment pipeline."""
     start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     overall_start = time.time()
 
     print(f"\n{'#'*60}")
     print(f"# TinyVLA Experiment: {policy_type}")
-    print(f"# Camera: {camera}")
+    print(f"# Dataset: {dataset_name}")
     print(f"# GPU: {gpu_id}")
     print(f"# Num Episodes: {num_episodes}")
     print(f"# Start time: {start_time}")
     print(f"{'#'*60}")
 
-    cfg = get_config(vlm_name=policy_type, gpu_id=gpu_id, camera=camera)
+    cfg = get_config(vlm_name=policy_type, gpu_id=gpu_id, dataset_name=dataset_name)
     cfg.selection_num_episodes = num_episodes
-    
-    if dataset_root is not None:
-        cfg.dataset_root = dataset_root
-        cfg.ensure_dirs()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
     experiment_state = {
         "policy_type": policy_type,
-        "camera": camera,
+        "dataset_name": dataset_name,
+        "camera": cfg.camera,
+        "env_task": cfg.env_task,
         "gpu_id": gpu_id,
         "num_episodes": num_episodes,
         "dataset_root": cfg.dataset_root,
@@ -80,6 +78,7 @@ def run_experiment(policy_type: str, gpu_id: int, camera: str = "corner", num_ep
             "eval_seed": cfg.eval_seed,
         },
         "paths": {
+            "experiment_dir": cfg.experiment_dir,
             "embedding_dir": cfg.embedding_cache_dir,
             "subset_file": None,
             "checkpoint_dir": None,
@@ -127,17 +126,17 @@ def run_experiment(policy_type: str, gpu_id: int, camera: str = "corner", num_ep
         print(f"Embedding dir: {embedding_dir}")
         sys.stdout.flush()
 
-        # Stage 2: Episode Selection (V4)
+        # Stage 2: Episode Selection (V5)
         experiment_state["current_stage"] = "episode_selection"
         print(f"\n{'='*60}")
-        print(f"Stage 2: Episode Selection (V4)")
+        print(f"Stage 2: Episode Selection (V5 - Rand Vec Aware Adaptive Coverage)")
         print(f"{'='*60}")
         print(f"Selecting {cfg.selection_num_episodes} episodes")
         print(f"Seed: {cfg.selection_seed}")
         sys.stdout.flush()
 
         stage_start = time.time()
-        subset_file = run_v4_selection(cfg, embedding_dir)
+        subset_file = run_v5_selection(cfg, embedding_dir)
         stage_time = round(time.time() - stage_start, 1)
 
         experiment_state["stages"]["episode_selection"] = {
@@ -231,16 +230,16 @@ def main():
         help="TinyVLA policy type: tinyvla_s (400M) or tinyvla_b (700M)",
     )
     parser.add_argument(
+        "--dataset_name",
+        type=str,
+        required=True,
+        help="Dataset name (e.g. pick_place-v3_corner). Auto-resolves dataset_root, env_task, camera.",
+    )
+    parser.add_argument(
         "--gpu",
         type=int,
         default=0,
         help="GPU device ID (default: 0)",
-    )
-    parser.add_argument(
-        "--camera",
-        type=str,
-        default="corner",
-        help="Camera configuration (default: corner)",
     )
     parser.add_argument(
         "--num_episodes",
@@ -248,21 +247,14 @@ def main():
         default=112,
         help="Number of episodes to select for training (default: 112)",
     )
-    parser.add_argument(
-        "--dataset_root",
-        type=str,
-        default=None,
-        help="Path to dataset root directory (default: use config default)",
-    )
 
     args = parser.parse_args()
 
     run_experiment(
         policy_type=args.policy_type,
+        dataset_name=args.dataset_name,
         gpu_id=args.gpu,
-        camera=args.camera,
         num_episodes=args.num_episodes,
-        dataset_root=args.dataset_root,
     )
 
 

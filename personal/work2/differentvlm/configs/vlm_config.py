@@ -18,8 +18,23 @@ from typing import Dict, Optional
 PROJECT_ROOT = Path(__file__).resolve().parents[4]
 WORK2_ROOT = Path(__file__).resolve().parents[2]
 
-DATASET_ROOT = "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_corner"
-LEROBOT_REPO_ID = "work2/metaworld_pick_place"
+# Dataset configurations: dataset_name -> (dataset_root, env_task, camera)
+DATASET_CONFIGS = {
+    "pick_place-v3_corner": {
+        "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_corner",
+        "env_task": "pick-place-v3",
+        "camera": "corner",
+        "camera_names": "corner,gripperPOV",
+    },
+    "disassemble-v3_corner": {
+        "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+        "env_task": "disassemble-v3",
+        "camera": "corner",
+        "camera_names": "corner,gripperPOV",
+    },
+}
+
+LEROBOT_REPO_ID = "1/2"
 
 SELECTION_NUM_EPISODES = 112
 SELECTION_SEED = 42
@@ -56,47 +71,58 @@ class VLMExperimentConfig:
     """
     Configuration for a single differentvlm experiment.
 
+    Directory structure: differentvlm/experiments/{vlm_name}_{dataset_name}/
+    ├── embeddings/          # VLM-extracted episode embeddings
+    ├── results/             # Selection results, experiment summary
+    ├── checkpoints/         # Training checkpoints
+    ├── logs/                # Training and eval logs
+    └── selected_dataset/    # Selected episode dataset
+
     Fields:
-        vlm_name: short name for this VLM (e.g. "llava_pythia400m")
+        vlm_name: short name for this VLM (e.g. "tinyvla_s")
+        dataset_name: short name for dataset (e.g. "pick_place-v3_corner")
         selection_vlm_model_id: HuggingFace model id of the VLM used for SELECTION embedding extraction
         selection_vlm_description: human-readable description of the selection VLM
-        is_prismatic: whether this VLM uses Prismatic architecture (vision_encoder + projector + LLM)
-        prismatic_base_model_id: base LLM model id for Prismatic construction (only if is_prismatic=True)
+        is_prismatic: whether this VLM uses Prismatic architecture
+        prismatic_base_model_id: base LLM model id for Prismatic construction
         prismatic_vision_model_id: vision encoder model id for Prismatic construction
-        embedding_cache_dir: directory to store VLM-extracted episode embeddings
         dataset_root: path to the dataset directory
-        lerobot_repo_id: LeRobot dataset repo id
+        env_task: environment task name (e.g. "pick-place-v3")
         camera: camera configuration name (e.g. "corner")
+        camera_names: camera names for training/eval
         gpu_id: GPU device id
         selection_num_episodes: number of episodes to select
         selection_seed: random seed for selection
-        train_steps: training steps for SmolVLA
+        train_steps: training steps
         train_save_freq: checkpoint save frequency
         train_batch_size: training batch size
         train_num_workers: training num workers
         train_lr: training learning rate
-        eval_n_episodes: number of evaluation episodes (fixed to 200)
-        eval_seed: evaluation seed (fixed to 42)
+        eval_n_episodes: number of evaluation episodes
+        eval_seed: evaluation seed
         eval_batch_size: evaluation batch size
-        smolvla_policy_model: SmolVLA policy model (FIXED, not experiment variable)
-        camera_names: camera names for training/eval
+        smolvla_policy_model: SmolVLA policy model
+        tinyvla_policy_type: TinyVLA policy type (tinyvla_s or tinyvla_b)
         rename_map: feature rename map for training
         pca_dim: PCA dimensionality for embeddings
+        experiment_dir: base directory for all experiment outputs
         results_dir: output directory for results
         checkpoints_dir: output directory for training checkpoints
         logs_dir: output directory for logs
         selected_dataset_dir: output directory for selected dataset
+        embedding_cache_dir: directory to store VLM-extracted episode embeddings
     """
     vlm_name: str
+    dataset_name: str
     selection_vlm_model_id: str
     selection_vlm_description: str = ""
     is_prismatic: bool = False
     prismatic_base_model_id: Optional[str] = None
     prismatic_vision_model_id: Optional[str] = None
-    embedding_cache_dir: Optional[str] = None
-    dataset_root: str = DATASET_ROOT
-    lerobot_repo_id: str = LEROBOT_REPO_ID
+    dataset_root: str = ""
+    env_task: str = ""
     camera: str = "corner"
+    camera_names: str = CAMERA_NAMES
     gpu_id: int = 0
     selection_num_episodes: int = SELECTION_NUM_EPISODES
     selection_seed: int = SELECTION_SEED
@@ -110,33 +136,40 @@ class VLMExperimentConfig:
     eval_batch_size: int = EVAL_BATCH_SIZE
     smolvla_policy_model: str = SmolVLA_POLICY_MODEL
     tinyvla_policy_type: str = ""
-    camera_names: str = CAMERA_NAMES
+    lerobot_repo_id: str = LEROBOT_REPO_ID
     rename_map: str = RENAME_MAP
     pca_dim: int = PCA_DIM
+    experiment_dir: Optional[str] = None
     results_dir: Optional[str] = None
     checkpoints_dir: Optional[str] = None
     logs_dir: Optional[str] = None
     selected_dataset_dir: Optional[str] = None
+    embedding_cache_dir: Optional[str] = None
 
     def __post_init__(self):
-        if self.results_dir is None:
-            self.results_dir = str(WORK2_ROOT / "differentvlm" / "results" / f"{self.vlm_name}_{self.camera}")
-        if self.checkpoints_dir is None:
-            self.checkpoints_dir = str(WORK2_ROOT / "differentvlm" / "checkpoints" / f"{self.vlm_name}_{self.camera}")
-        if self.logs_dir is None:
-            self.logs_dir = str(WORK2_ROOT / "differentvlm" / "logs" / f"{self.vlm_name}_{self.camera}")
-        if self.selected_dataset_dir is None:
-            self.selected_dataset_dir = str(WORK2_ROOT / "differentvlm" / "selected_dataset" / f"{self.vlm_name}_{self.camera}")
+        # Base experiment directory: differentvlm/experiments/{vlm_name}_{dataset_name}
+        if self.experiment_dir is None:
+            self.experiment_dir = str(WORK2_ROOT / "differentvlm" / "experiments" / f"{self.vlm_name}_{self.dataset_name}")
+        
+        # All subdirectories under experiment_dir
         if self.embedding_cache_dir is None:
-            self.embedding_cache_dir = str(WORK2_ROOT / "differentvlm" / "embeddings" / f"{self.vlm_name}_{self.camera}")
+            self.embedding_cache_dir = str(Path(self.experiment_dir) / "embeddings")
+        if self.results_dir is None:
+            self.results_dir = str(Path(self.experiment_dir) / "results")
+        if self.checkpoints_dir is None:
+            self.checkpoints_dir = str(Path(self.experiment_dir) / "checkpoints")
+        if self.logs_dir is None:
+            self.logs_dir = str(Path(self.experiment_dir) / "logs")
+        if self.selected_dataset_dir is None:
+            self.selected_dataset_dir = str(Path(self.experiment_dir) / "selected_dataset")
 
     def ensure_dirs(self):
-        for d in [self.results_dir, self.checkpoints_dir, self.logs_dir,
-                  self.selected_dataset_dir, self.embedding_cache_dir]:
+        for d in [self.experiment_dir, self.results_dir, self.checkpoints_dir, 
+                  self.logs_dir, self.selected_dataset_dir, self.embedding_cache_dir]:
             Path(d).mkdir(parents=True, exist_ok=True)
 
 
-def get_llava_pythia400m_config(gpu_id: int = 0, camera: str = "corner") -> VLMExperimentConfig:
+def get_llava_pythia400m_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner") -> VLMExperimentConfig:
     """
     LLaVA-Pythia-400M configuration for selection embedding extraction.
 
@@ -147,17 +180,22 @@ def get_llava_pythia400m_config(gpu_id: int = 0, camera: str = "corner") -> VLME
     - Visual embedding extracted from the vision encoder's last hidden state
     - Only visual features are used, no text generation
     """
+    ds_config = DATASET_CONFIGS.get(dataset_name, {})
     return VLMExperimentConfig(
         vlm_name="llava_pythia400m",
+        dataset_name=dataset_name,
         selection_vlm_model_id="lesjie/Llava-Pythia-400M",
         selection_vlm_description="LLaVA-Pythia-400M (TinyVLA-S VLM backbone)",
-        camera=camera,
-        gpu_id=gpu_id,
         is_prismatic=False,
+        dataset_root=ds_config.get("dataset_root", ""),
+        env_task=ds_config.get("env_task", ""),
+        camera=ds_config.get("camera", "corner"),
+        camera_names=ds_config.get("camera_names", CAMERA_NAMES),
+        gpu_id=gpu_id,
     )
 
 
-def get_prismatic_qwen25_05b_config(gpu_id: int = 0, camera: str = "corner") -> VLMExperimentConfig:
+def get_prismatic_qwen25_05b_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner") -> VLMExperimentConfig:
     """
     Prismatic-Qwen2.5-0.5B configuration for selection embedding extraction.
 
@@ -170,19 +208,24 @@ def get_prismatic_qwen25_05b_config(gpu_id: int = 0, camera: str = "corner") -> 
         2. Projector: linear layer mapping vision_dim -> LLM_dim
         3. Language backbone: Qwen/Qwen2.5-0.5B
     """
+    ds_config = DATASET_CONFIGS.get(dataset_name, {})
     return VLMExperimentConfig(
         vlm_name="prismatic_qwen25_05b",
+        dataset_name=dataset_name,
         selection_vlm_model_id="lucidrains/prismatic-qwen2.5-0.5b",
         selection_vlm_description="Prismatic-Qwen2.5-0.5B (MiniVLA VLM backbone)",
-        camera=camera,
-        gpu_id=gpu_id,
         is_prismatic=True,
         prismatic_base_model_id="Qwen/Qwen2.5-0.5B",
         prismatic_vision_model_id="google/siglip-so400m-patch14-384",
+        dataset_root=ds_config.get("dataset_root", ""),
+        env_task=ds_config.get("env_task", ""),
+        camera=ds_config.get("camera", "corner"),
+        camera_names=ds_config.get("camera_names", CAMERA_NAMES),
+        gpu_id=gpu_id,
     )
 
 
-def get_tinyvla_s_config(gpu_id: int = 0, camera: str = "corner", num_episodes: int = 112) -> VLMExperimentConfig:
+def get_tinyvla_s_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", num_episodes: int = 112) -> VLMExperimentConfig:
     """
     TinyVLA-S configuration for fine-tuning.
 
@@ -194,13 +237,18 @@ def get_tinyvla_s_config(gpu_id: int = 0, camera: str = "corner", num_episodes: 
     - Freezing: vision_tower and backbone frozen, only LoRA and action head trained
     - Chunk size: 16, n_action_steps: 16
     """
+    ds_config = DATASET_CONFIGS.get(dataset_name, {})
     return VLMExperimentConfig(
         vlm_name="tinyvla_s",
+        dataset_name=dataset_name,
         selection_vlm_model_id="lesjie/Llava-Pythia-400M",
         selection_vlm_description="TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
-        camera=camera,
-        gpu_id=gpu_id,
         is_prismatic=False,
+        dataset_root=ds_config.get("dataset_root", ""),
+        env_task=ds_config.get("env_task", ""),
+        camera=ds_config.get("camera", "corner"),
+        camera_names=ds_config.get("camera_names", CAMERA_NAMES),
+        gpu_id=gpu_id,
         selection_num_episodes=num_episodes,
         train_steps=TINYVLA_TRAIN_STEPS,
         train_save_freq=TINYVLA_SAVE_FREQ,
@@ -211,7 +259,7 @@ def get_tinyvla_s_config(gpu_id: int = 0, camera: str = "corner", num_episodes: 
     )
 
 
-def get_tinyvla_b_config(gpu_id: int = 0, camera: str = "corner", num_episodes: int = 112) -> VLMExperimentConfig:
+def get_tinyvla_b_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", num_episodes: int = 112) -> VLMExperimentConfig:
     """
     TinyVLA-B configuration for fine-tuning.
 
@@ -223,13 +271,18 @@ def get_tinyvla_b_config(gpu_id: int = 0, camera: str = "corner", num_episodes: 
     - Freezing: vision_tower and backbone frozen, only LoRA and action head trained
     - Chunk size: 16, n_action_steps: 16
     """
+    ds_config = DATASET_CONFIGS.get(dataset_name, {})
     return VLMExperimentConfig(
         vlm_name="tinyvla_b",
+        dataset_name=dataset_name,
         selection_vlm_model_id="lesjie/Llava-Pythia-700M",
         selection_vlm_description="TinyVLA-B (LLaVA-Pythia-700M + Diffusion Action Head)",
-        camera=camera,
-        gpu_id=gpu_id,
         is_prismatic=False,
+        dataset_root=ds_config.get("dataset_root", ""),
+        env_task=ds_config.get("env_task", ""),
+        camera=ds_config.get("camera", "corner"),
+        camera_names=ds_config.get("camera_names", CAMERA_NAMES),
+        gpu_id=gpu_id,
         selection_num_episodes=num_episodes,
         train_steps=TINYVLA_TRAIN_STEPS,
         train_save_freq=TINYVLA_SAVE_FREQ,
@@ -248,9 +301,11 @@ VLM_CONFIGS: Dict[str, callable] = {
 }
 
 
-def get_config(vlm_name: str, gpu_id: int = 0, camera: str = "corner") -> VLMExperimentConfig:
+def get_config(vlm_name: str, gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner") -> VLMExperimentConfig:
     if vlm_name not in VLM_CONFIGS:
         raise ValueError(f"Unknown VLM: {vlm_name}. Available: {list(VLM_CONFIGS.keys())}")
-    cfg = VLM_CONFIGS[vlm_name](gpu_id=gpu_id, camera=camera)
+    if dataset_name not in DATASET_CONFIGS:
+        raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(DATASET_CONFIGS.keys())}")
+    cfg = VLM_CONFIGS[vlm_name](gpu_id=gpu_id, dataset_name=dataset_name)
     cfg.ensure_dirs()
     return cfg

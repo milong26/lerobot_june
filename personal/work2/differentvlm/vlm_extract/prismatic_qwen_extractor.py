@@ -306,3 +306,95 @@ class PrismaticQwenExtractor(BaseVLMExtractor):
                         embedding = projected.cpu().numpy().squeeze()
 
         return embedding
+
+    def encode_images_batch(self, images: torch.Tensor) -> np.ndarray:
+        """
+        Encode a batch of images to visual embeddings using Prismatic VLM.
+
+        This processes all images in a single GPU batch for maximum speedup.
+        """
+        if len(images) == 0:
+            return np.array([])
+
+        if images.dim() == 4 and images.shape[-1] in [1, 3, 4]:
+            images = images.permute(0, 3, 1, 2)
+
+        images_cpu = images.cpu().float()
+
+        if self.load_strategy == "AutoModelForImageTextToText":
+            inputs = self.processor(
+                text="",
+                images=images_cpu,
+                return_tensors="pt",
+            ).to(self.device, dtype=torch.float16)
+
+            with torch.inference_mode():
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    outputs = self.model(**inputs, output_hidden_states=True)
+                    hidden_states = outputs.hidden_states
+                    last_hidden = hidden_states[-1]
+                    embeddings = last_hidden.mean(dim=1).cpu().numpy()
+
+        elif self.load_strategy == "prismatic_library":
+            with torch.inference_mode():
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    if hasattr(self.model, "vision_backbone"):
+                        features = self.model.vision_backbone(images_cpu.to(self.device, dtype=torch.float16))
+                        if hasattr(features, "last_hidden_state"):
+                            pooled = features.last_hidden_state.mean(dim=1)
+                        elif isinstance(features, torch.Tensor):
+                            pooled = features.mean(dim=1)
+                        else:
+                            pooled = features[0].mean(dim=1)
+                    else:
+                        inputs = self.processor(images=images_cpu, return_tensors="pt")
+                        pixel_values = inputs["pixel_values"].to(self.device, dtype=torch.float16)
+                        vision_out = self.model.vision_encoder(pixel_values=pixel_values)
+                        if hasattr(vision_out, "last_hidden_state"):
+                            pooled = vision_out.last_hidden_state.mean(dim=1)
+                        else:
+                            pooled = vision_out[0].mean(dim=1)
+
+                    if hasattr(self.model, "projector"):
+                        projected = self.model.projector(pooled)
+                    else:
+                        projected = pooled
+
+                    embeddings = projected.cpu().numpy()
+
+        else:
+            with torch.inference_mode():
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    inputs = self.processor(
+                        text=self.task_prompt,
+                        images=images_cpu,
+                        return_tensors="pt",
+                    )
+                    if "input_ids" in inputs:
+                        input_ids = inputs["input_ids"].to(self.device)
+                    else:
+                        input_ids = None
+
+                    if "pixel_values" in inputs:
+                        pixel_values = inputs["pixel_values"].to(self.device, dtype=torch.float16)
+                    else:
+                        pixel_values = images_cpu.to(self.device, dtype=torch.float16)
+
+                    if input_ids is not None:
+                        outputs = self.model(
+                            input_ids=input_ids,
+                            pixel_values=pixel_values,
+                            output_hidden_states=True,
+                        )
+                        last_hidden = outputs.hidden_states[-1]
+                        embeddings = last_hidden.mean(dim=1).cpu().numpy()
+                    else:
+                        image_features = self.model.vision_encoder.get_image_features(pixel_values)
+                        if image_features.dim() == 3:
+                            pooled = image_features.mean(dim=1)
+                        else:
+                            pooled = image_features
+                        projected = self.model.projector(pooled)
+                        embeddings = projected.cpu().numpy()
+
+        return embeddings

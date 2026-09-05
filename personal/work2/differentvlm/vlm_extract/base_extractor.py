@@ -82,6 +82,23 @@ class BaseVLMExtractor(ABC):
         """
         pass
 
+    def encode_images_batch(self, images: torch.Tensor) -> np.ndarray:
+        """
+        Encode a batch of image tensors to embedding vectors.
+        Default implementation loops over single images (slow).
+        Subclasses should override for true batch processing (fast).
+
+        Args:
+            images: torch.Tensor of shape (N, C, H, W)
+        Returns:
+            np.ndarray of shape (N, embedding_dim)
+        """
+        embs = []
+        for i in range(len(images)):
+            emb = self.encode_image(images[i])
+            embs.append(emb)
+        return np.stack(embs, axis=0)
+
     def extract_episode_embedding(
         self,
         global_frames: torch.Tensor,
@@ -111,18 +128,12 @@ class BaseVLMExtractor(ABC):
 
         print(f"  Encoding {len(global_selected)} global frames (from {n_global} total)...")
         sys.stdout.flush()
-        global_embs = []
-        for i in range(len(global_selected)):
-            emb = self.encode_image(global_selected[i])
-            global_embs.append(emb)
+        global_embs = self.encode_images_batch(global_selected)
         phi_global = np.mean(global_embs, axis=0)
 
         print(f"  Encoding {len(wrist_selected)} wrist frames (from {n_wrist} total)...")
         sys.stdout.flush()
-        wrist_embs = []
-        for i in range(len(wrist_selected)):
-            emb = self.encode_image(wrist_selected[i])
-            wrist_embs.append(emb)
+        wrist_embs = self.encode_images_batch(wrist_selected)
         phi_wrist = np.mean(wrist_embs, axis=0)
 
         return {
@@ -263,16 +274,30 @@ class BaseVLMExtractor(ABC):
         success_count = 0
         fail_count = 0
 
-        for ep_idx in range(total_episodes):
-            ep_start = time.time()
-            print(f"\nEpisode {ep_idx + 1}/{total_episodes} (index {ep_idx})")
+        # Chunked batch processing: process episodes in chunks to avoid OOM
+        # Each chunk collects frames, batch encodes, then frees memory
+        chunk_size = 25  # episodes per chunk
+        num_chunks = (total_episodes + chunk_size - 1) // chunk_size
+        print(f"\nChunked batch processing: {total_episodes} episodes in {num_chunks} chunks of {chunk_size}")
+        sys.stdout.flush()
+
+        for chunk_idx in range(num_chunks):
+            chunk_start_ep = chunk_idx * chunk_size
+            chunk_end_ep = min(chunk_start_ep + chunk_size, total_episodes)
+            print(f"\n{'='*40}")
+            print(f"Chunk {chunk_idx + 1}/{num_chunks}: episodes {chunk_start_ep}-{chunk_end_ep - 1}")
+            print(f"{'='*40}")
             sys.stdout.flush()
 
-            try:
+            # Collect frames for this chunk
+            all_global_frames = []
+            all_wrist_frames = []
+            ep_frame_counts = []  # Track (n_global, n_wrist) per episode
+
+            for ep_idx in range(chunk_start_ep, chunk_end_ep):
                 episode_indices = ep_indices_map.get(ep_idx, [])
                 if not episode_indices:
-                    print(f"  SKIP: no frames for episode {ep_idx}")
-                    fail_count += 1
+                    ep_frame_counts.append((0, 0))
                     continue
 
                 episode_frames_global = []
@@ -284,32 +309,106 @@ class BaseVLMExtractor(ABC):
 
                 global_frames = torch.stack(episode_frames_global)
                 wrist_frames = torch.stack(episode_frames_wrist)
+                all_global_frames.append(global_frames)
+                all_wrist_frames.append(wrist_frames)
+                ep_frame_counts.append((len(global_frames), len(wrist_frames)))
 
-                emb = self.extract_episode_embedding(global_frames, wrist_frames)
+            total_global = sum(f[0] for f in ep_frame_counts)
+            total_wrist = sum(f[1] for f in ep_frame_counts)
+            print(f"  Chunk frames: {total_global} global, {total_wrist} wrist")
+            print(f"  Batch encoding chunk frames...")
+            sys.stdout.flush()
 
-                self.save_embedding(
-                    ep_idx,
-                    emb["phi_global"],
-                    emb["phi_wrist"],
-                    emb.get("n_global_frames", 0),
-                    emb.get("n_wrist_frames", 0),
-                    out_dir,
-                )
+            # Batch encode chunk's global frames
+            if total_global > 0:
+                all_global_stacked = torch.cat([f for f in all_global_frames if len(f) > 0], dim=0)
+                all_global_embs = self.encode_images_batch(all_global_stacked)
+                del all_global_stacked
+            else:
+                all_global_embs = np.array([])
 
-                global_embs_list.append(emb["phi_global"])
-                wrist_embs_list.append(emb["phi_wrist"])
-                episode_coords.append(ep_idx)
-                success_count += 1
+            # Batch encode chunk's wrist frames
+            if total_wrist > 0:
+                all_wrist_stacked = torch.cat([f for f in all_wrist_frames if len(f) > 0], dim=0)
+                all_wrist_embs = self.encode_images_batch(all_wrist_stacked)
+                del all_wrist_stacked
+            else:
+                all_wrist_embs = np.array([])
 
-                ep_time = time.time() - ep_start
-                progress = success_count / total_episodes * 100
-                print(f"  DONE: ep={ep_idx}, time={ep_time:.1f}s, progress={progress:.1f}%")
+            # Free collected frames memory
+            del all_global_frames
+            del all_wrist_frames
+
+            print(f"  Chunk encoding complete. Computing per-episode embeddings...")
+            sys.stdout.flush()
+
+            # Split results per episode and save
+            global_offset = 0
+            wrist_offset = 0
+
+            for i, ep_idx in enumerate(range(chunk_start_ep, chunk_end_ep)):
+                ep_start = time.time()
+                print(f"\nEpisode {ep_idx + 1}/{total_episodes} (index {ep_idx})")
                 sys.stdout.flush()
 
-            except Exception as e:
-                print(f"  FAIL: ep={ep_idx}, error={e}")
-                sys.stdout.flush()
-                fail_count += 1
+                n_global, n_wrist = ep_frame_counts[i]
+                if n_global == 0 and n_wrist == 0:
+                    print(f"  SKIP: no frames for episode {ep_idx}")
+                    fail_count += 1
+                    continue
+
+                try:
+                    # Get embeddings for this episode from the batch results
+                    if n_global > 0:
+                        ep_global_embs = all_global_embs[global_offset:global_offset + n_global]
+                        phi_global = np.mean(ep_global_embs, axis=0)
+                    else:
+                        phi_global = np.zeros(all_global_embs.shape[1] if len(all_global_embs) > 0 else 0)
+
+                    if n_wrist > 0:
+                        ep_wrist_embs = all_wrist_embs[wrist_offset:wrist_offset + n_wrist]
+                        phi_wrist = np.mean(ep_wrist_embs, axis=0)
+                    else:
+                        phi_wrist = np.zeros(all_wrist_embs.shape[1] if len(all_wrist_embs) > 0 else 0)
+
+                    self.save_embedding(
+                        ep_idx,
+                        phi_global,
+                        phi_wrist,
+                        n_global,
+                        n_wrist,
+                        out_dir,
+                    )
+
+                    global_embs_list.append(phi_global)
+                    wrist_embs_list.append(phi_wrist)
+                    episode_coords.append(ep_idx)
+                    success_count += 1
+
+                    global_offset += n_global
+                    wrist_offset += n_wrist
+
+                    ep_time = time.time() - ep_start
+                    progress = success_count / total_episodes * 100
+                    print(f"  DONE: ep={ep_idx}, time={ep_time:.1f}s, progress={progress:.1f}%")
+                    sys.stdout.flush()
+
+                except Exception as e:
+                    print(f"  FAIL: ep={ep_idx}, error={e}")
+                    sys.stdout.flush()
+                    fail_count += 1
+
+            # Free chunk encoding results
+            del all_global_embs
+            del all_wrist_embs
+
+            # Force garbage collection
+            import gc
+            gc.collect()
+            torch.cuda.empty_cache()
+
+            print(f"\nChunk {chunk_idx + 1} complete. Memory freed.")
+            sys.stdout.flush()
 
         print(f"\nExtraction complete: {success_count} succeeded, {fail_count} failed")
         sys.stdout.flush()
