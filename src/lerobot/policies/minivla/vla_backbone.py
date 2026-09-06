@@ -2,8 +2,8 @@
 vla_backbone.py
 
 Official MiniVLA backbone: DINO-SigLIP patch -> FusedMLPProjector -> Qwen2.5 CausalLM.
-Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py (PrismaticVLM) and
-prismatic/models/backbones/llm/qwen25.py.
+Mirrors teach_code/MiniVLA/prismatic/models/vlms/base_vlm.py and
+prismatic/models/vlms/prismatic.py (PrismaticVLM).
 
 Key design:
   - Vision patches inserted after first token of each sequence
@@ -14,11 +14,13 @@ Key design:
   - device property for GenerationMixin
   - torch.manual_seed(vision_backbone.embed_dim) before projector creation
   - num_patches from projected_patches.shape[1]
+  - Proper attention_mask handling: preserves real prompt and padding info
+  - cache_position, position_ids, pad_token_id, return_dict compatibility
 """
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -36,6 +38,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
     Official MiniVLA VLM backbone.
     Combines DINO-SigLIP vision encoder, FusedMLP projector, and Qwen2.5 CausalLM.
     Inherits GenerationMixin for proper multi-modal generation support.
+    Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::PrismaticVLM.
     """
 
     def __init__(
@@ -75,6 +78,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         llm_dim = llm_config.hidden_size
 
         # Official: torch.manual_seed(vision_backbone.embed_dim) before projector creation
+        # Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::__init__
         torch.manual_seed(fused_vision_dim)
 
         self.projector = FusedMLPProjector(
@@ -103,6 +107,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
             self.llm.gradient_checkpointing_enable()
 
         # === GenerationMixin required attributes ===
+        # Mirrors teach_code/MiniVLA/prismatic/models/vlms/base_vlm.py::VLM.__init__
         self.generation_config = self.llm.generation_config
         self.main_input_name = "input_ids"
 
@@ -146,10 +151,11 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
     ):
         """
         Training forward: inserts vision patches into LLM embeddings.
-        Generation forward: uses past_key_values cache to skip vision backbone.
-        Mirrors PrismaticVLM.forward().
+        Generation forward: uses past_key_values cache to skip vision encoder.
+        Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::PrismaticVLM.forward.
         """
         # Handle Inference: leverage cache, short-circuit on just LLM forward
+        # Mirrors official: if input_ids.shape[1] == 1 and past_key_values is not None
         if input_ids.shape[1] == 1 and past_key_values is not None:
             return self.llm(
                 input_ids=input_ids,
@@ -177,6 +183,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
 
         # === Insert vision patches after first token ===
         # Use projected_patches.shape[1] for num_patches (not static attribute)
+        # Mirrors official: multimodal_embeddings = cat([input_embeddings[:1], projected_patches, input_embeddings[1:]])
         num_patches = projected_patches.shape[1]
 
         before = inputs_embeds[:, :1, :]
@@ -184,6 +191,8 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         inputs_embeds = torch.cat([before, projected_patches, after], dim=1)
 
         # === Extend attention_mask ===
+        # Vision tokens should have True attention (not masked)
+        # Mirrors official: projected_patch_attention_mask = torch.full(..., True, ...)
         vision_mask = torch.ones(
             inputs_embeds.shape[0], num_patches,
             dtype=attention_mask.dtype, device=attention_mask.device
@@ -193,6 +202,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         )
 
         # === Set labels for vision tokens to IGNORE_INDEX ===
+        # Mirrors official: projected_patch_labels = torch.full(..., IGNORE_INDEX, ...)
         if labels is not None:
             vision_labels = torch.full(
                 (labels.shape[0], num_patches),
@@ -214,7 +224,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
 
     def prepare_inputs_for_generation(
         self,
-        input_ids: torch.Tensor,
+        input_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -225,6 +235,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         """
         Official prepare_inputs_for_generation matching PrismaticVLM.
         Ensures pixel_values are preserved in model_inputs for the first generation step.
+        Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::prepare_inputs_for_generation.
         """
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]

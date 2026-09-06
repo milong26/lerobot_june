@@ -10,16 +10,18 @@ Key design:
   - resize-naive: direct resize to 224x224, SigLIP first Resize corrected
   - compute_sequence_patches for multi-image (T2, wrist)
   - concatenated DINO + SigLIP patch features on last dimension
+  - get_image_transform() returns official DinoSigLIPImageTransform for processor use
 """
 
 from __future__ import annotations
 
 from functools import partial
-from typing import Dict
+from typing import Dict, Union
 
 import timm
 import torch
 import torch.nn as nn
+from PIL import Image
 from timm.models.vision_transformer import VisionTransformer
 from torchvision.transforms import Compose, Resize
 
@@ -86,16 +88,22 @@ def compute_sequence_patches(
 
 
 # ---------------------------------------------------------------------------
-# Image transform dataclass (mirrors DinoSigLIPImageTransform)
+# Image transform dataclass (mirrors DinoSigLIPImageTransform from official code)
 # ---------------------------------------------------------------------------
 class DinoSigLIPImageTransform:
-    """Holds both DINO and SigLIP transforms; returns a dict."""
+    """
+    Holds both DINO and SigLIP transforms; returns a dict.
+    Mirrors teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py::DinoSigLIPImageTransform.
+    Accepts PIL Image or torch.Tensor input.
+    """
 
     def __init__(self, dino_transform: Compose, siglip_transform: Compose):
         self.dino_transform = dino_transform
         self.siglip_transform = siglip_transform
 
-    def __call__(self, img) -> Dict[str, torch.Tensor]:
+    def __call__(
+        self, img: Union[Image.Image, torch.Tensor], **kwargs: str
+    ) -> Dict[str, torch.Tensor]:
         return {
             "dino": self.dino_transform(img),
             "siglip": self.siglip_transform(img),
@@ -109,6 +117,7 @@ class DINOSigLIPViTBackbone(nn.Module):
     """
     Official DINO-SigLIP dual ViT backbone.
     Returns concatenated patch features: torch.cat([dino_patches, siglip_patches], dim=-1).
+    Mirrors teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py::DinoSigLIPViTBackbone.
     """
 
     def __init__(
@@ -164,8 +173,9 @@ class DINOSigLIPViTBackbone(nn.Module):
         default_dino_transform = timm.data.create_transform(**self.dino_data_cfg, is_training=False)
         default_siglip_transform = timm.data.create_transform(**self.siglip_data_cfg, is_training=False)
 
-        # Fix SigLIP first Resize to use default_image_size (official fix)
-        assert isinstance(default_siglip_transform, Compose), "Unexpected default_siglip_transform"
+        # Fix =>> SigLIP default transform resizes to *larger* than `self.default_image_size` (crops image)!
+        # Official fix from teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py
+        assert isinstance(default_siglip_transform, Compose), "Unexpected `default_siglip_transform`!"
         assert isinstance(default_siglip_transform.transforms[0], Resize)
         default_siglip_transform = Compose(
             [
@@ -176,8 +186,8 @@ class DINOSigLIPViTBackbone(nn.Module):
 
         # --- Apply resize-naive strategy ---
         if image_resize_strategy == "resize-naive":
-            assert isinstance(default_dino_transform, Compose)
-            assert isinstance(default_siglip_transform, Compose)
+            assert isinstance(default_dino_transform, Compose), "Unexpected `default_dino_transform`!"
+            assert isinstance(default_siglip_transform, Compose), "Unexpected `default_siglip_transform`!"
             assert isinstance(default_dino_transform.transforms[0], Resize)
             assert isinstance(default_siglip_transform.transforms[0], Resize)
 
@@ -206,8 +216,12 @@ class DINOSigLIPViTBackbone(nn.Module):
     def num_patches(self) -> int:
         return self.dino_featurizer.patch_embed.num_patches * self.image_sequence_len
 
-    def get_image_transform(self):
-        """Standard get_image_transform() interface."""
+    def get_image_transform(self) -> DinoSigLIPImageTransform:
+        """
+        Standard get_image_transform() interface.
+        Returns the official DinoSigLIPImageTransform for use by processor or direct inference.
+        Mirrors teach_code/MiniVLA/prismatic/models/backbones/vision/base_vision.py::VisionBackbone.get_image_transform.
+        """
         return self.image_transform
 
     def forward(self, pixel_values: Dict[str, torch.Tensor]) -> torch.Tensor:

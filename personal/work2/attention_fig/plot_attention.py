@@ -828,11 +828,12 @@ def detect_phase_from_env(env, step, max_steps):
         if gripper_object_dist < GRIPPER_OBJECT_DIST_PRE_GRASP and object_z < OBJECT_HEIGHT_POST_GRASP:
             return "pre_grasp"
 
-        if object_z > OBJECT_HEIGHT_POST_GRASP:
-            return "post_grasp"
-
+        # pre_place must be checked BEFORE post_grasp (more specific condition)
         if object_z > OBJECT_HEIGHT_POST_GRASP and object_goal_dist < OBJECT_GOAL_DIST_PRE_PLACE:
             return "pre_place"
+
+        if object_z > OBJECT_HEIGHT_POST_GRASP:
+            return "post_grasp"
 
         return None
 
