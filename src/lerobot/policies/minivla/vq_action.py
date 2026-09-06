@@ -2,111 +2,47 @@
 vq_action.py
 
 Official VQ-VAE action tokenizer for MiniVLA.
-Mirrors teach_code/MiniVLA/prismatic/vla/action_tokenizer.py (VQActionTokenizer),
-teach_code/MiniVLA/vqvae/vqvae/vqvae.py (EncoderMLP, VqVae), and
-teach_code/MiniVLA/vq/pretrain_vq+mx-libero_90+fach-7+ng-7+nemb-128+nlatent-512/config.json.
+Mirrors teach_code/MiniVLA/vqvae/vqvae/vqvae.py (EncoderMLP, VqVae),
+teach_code/MiniVLA/prismatic/vla/action_tokenizer.py (ActionTokenizer, VQActionTokenizer),
+and teach_code/MiniVLA/vq/pretrain_vq+mx-libero_90+fach-7+ng-7+nemb-128+nlatent-512/config.json.
 
 Key design:
-  - EncoderMLP: Linear -> GELU -> Linear -> GELU -> Linear
-  - VqVae: encoder + decoder + ResidualVQ
-  - VQActionTokenizer: preprocess -> encode -> decode
+  - EncoderMLP: Linear -> ReLU -> (Linear -> ReLU) * layer_num -> Linear -> (optional activation)
+  - hidden_dim=128 (official), ReLU (not GELU)
+  - VqVae: encoder + decoder + ResidualVQ (from vector_quantize_pytorch)
+  - VQActionTokenizer: preprocess -> encode -> decode with official token mapping
   - Frozen VQ-VAE (eval, requires_grad=False)
   - Token mapping: token_id = tokenizer_len - 1 - code
+  - Official checkpoint loading: encoder, decoder, optimizer, vq_embedding keys
+  - [B,T,A] -> [B,T*A] flatten before encoding, [B,T*A] -> [B,T,A] after decoding
+  - action/act_scale processing as in official code
 """
 
 from __future__ import annotations
 
 import json
+from functools import partial
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
 from einops import rearrange
-
-from lerobot.utils.import_utils import require_package
+from transformers import PreTrainedTokenizerBase
+from transformers.models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
 
 
 # ---------------------------------------------------------------------------
-# ResidualVQ (minimal self-contained implementation, MIT license)
+# weights_init_encoder (official initialization)
 # ---------------------------------------------------------------------------
-class ResidualVQ(nn.Module):
-    """
-    Residual Vector Quantizer.
-    Mirrors the official ResidualVQ from vector-quantize-pytorch / MiniVLA.
-    """
-
-    def __init__(
-        self,
-        dim: int,
-        num_quantizers: int,
-        codebook_size: int,
-        **kwargs,
-    ):
-        super().__init__()
-        self.num_quantizers = num_quantizers
-        self.layers = nn.ModuleList([
-            VectorQuantize(dim=dim, codebook_size=codebook_size, **kwargs)
-            for _ in range(num_quantizers)
-        ])
-
-    @property
-    def codebooks(self):
-        return torch.stack([layer.codebook for layer in self.layers])
-
-    def get_code(self, x: torch.Tensor) -> torch.Tensor:
-        """Get codes from all quantizers."""
-        all_codes = []
-        residual = x
-        for layer in self.layers:
-            codes = layer.get_code(residual)
-            all_codes.append(codes)
-            quantized = layer.get_output_from_indices(codes)
-            residual = residual - quantized
-        return torch.stack(all_codes, dim=-1)  # (B, num_quantizers)
-
-    def draw_code_forward(self, codes: torch.Tensor) -> torch.Tensor:
-        """Reconstruct from codes."""
-        out = None
-        for i, layer in enumerate(self.layers):
-            quantized = layer.get_output_from_indices(codes[..., i])
-            out = quantized if out is None else out + quantized
-        return out
-
-
-class VectorQuantize(nn.Module):
-    """
-    Minimal VectorQuantize implementation matching official behavior.
-    """
-
-    def __init__(self, dim: int, codebook_size: int, commitment_weight: float = 1.0):
-        super().__init__()
-        self.codebook_size = codebook_size
-        self.dim = dim
-        self.commitment_weight = commitment_weight
-
-        # Codebook
-        embed = torch.randn(codebook_size, dim)
-        self.register_buffer("codebook", embed)
-
-    @property
-    def codebook(self):
-        return self._codebook
-
-    @codebook.setter
-    def codebook(self, value):
-        self.register_buffer("_codebook", value)
-
-    def get_code(self, x: torch.Tensor) -> torch.Tensor:
-        """Get nearest codebook indices."""
-        # x: (B, dim), codebook: (K, dim)
-        dist = torch.cdist(x, self.codebook)
-        return torch.argmin(dist, dim=-1)
-
-    def get_output_from_indices(self, indices: torch.Tensor) -> torch.Tensor:
-        """Lookup codebook vectors by indices."""
-        return self.codebook[indices]
+def weights_init_encoder(m):
+    """Official weight initialization for VQ-VAE encoder/decoder."""
+    classname = m.__class__.__name__
+    if classname.find("Linear") != -1:
+        nn.init.xavier_uniform_(m.weight)
+        if m.bias is not None:
+            m.bias.data.fill_(0.01)
 
 
 # ---------------------------------------------------------------------------
@@ -115,31 +51,43 @@ class VectorQuantize(nn.Module):
 class EncoderMLP(nn.Module):
     """
     Official EncoderMLP from MiniVLA VQ-VAE.
-    Linear -> GELU -> Linear -> GELU -> Linear
+    Linear -> ReLU -> (Linear -> ReLU) * layer_num -> Linear -> (optional last_activation)
+    Uses hidden_dim=128 and ReLU (NOT GELU).
     """
 
     def __init__(
         self,
         input_dim: int,
         output_dim: int,
-        hidden_dim: int = 256,
-        layer_num: int = 2,
-        last_activation: str = "none",
+        hidden_dim: int = 128,
+        layer_num: int = 1,
+        last_activation=None,
     ):
         super().__init__()
         layers = []
+
         layers.append(nn.Linear(input_dim, hidden_dim))
-        layers.append(nn.GELU())
-        for _ in range(layer_num - 1):
+        layers.append(nn.ReLU())
+        for _ in range(layer_num):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
-            layers.append(nn.GELU())
-        layers.append(nn.Linear(hidden_dim, output_dim))
-        if last_activation == "tanh":
-            layers.append(nn.Tanh())
-        self.network = nn.Sequential(*layers)
+            layers.append(nn.ReLU())
+
+        self.encoder = nn.Sequential(*layers)
+        self.fc = nn.Linear(hidden_dim, output_dim)
+
+        if last_activation is not None:
+            self.last_layer = last_activation
+        else:
+            self.last_layer = None
+
+        self.apply(weights_init_encoder)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.network(x)
+        h = self.encoder(x)
+        state = self.fc(h)
+        if self.last_layer:
+            state = self.last_layer(state)
+        return state
 
 
 # ---------------------------------------------------------------------------
@@ -148,159 +96,308 @@ class EncoderMLP(nn.Module):
 class VqVae(nn.Module):
     """
     Official VQ-VAE from MiniVLA.
-    encoder + decoder + vq_layer (ResidualVQ)
+    encoder + decoder + vq_layer (ResidualVQ from vector_quantize_pytorch)
     """
 
     def __init__(
         self,
-        input_dim_h: int = 8,
-        input_dim_w: int = 7,
+        obs_dim: int = 60,
+        input_dim_h: int = 10,
+        input_dim_w: int = 9,
         n_latent_dims: int = 512,
-        vqvae_n_embed: int = 128,
-        vqvae_groups: int = 7,
+        vqvae_n_embed: int = 32,
+        vqvae_groups: int = 4,
+        eval: bool = True,
+        device: str = "cuda",
+        load_dir: Optional[str] = None,
         encoder_loss_multiplier: float = 1.0,
         act_scale: float = 1.0,
     ):
         super().__init__()
+        self.n_latent_dims = n_latent_dims
         self.input_dim_h = input_dim_h
         self.input_dim_w = input_dim_w
-        self.n_latent_dims = n_latent_dims
+        self.rep_dim = self.n_latent_dims
         self.vqvae_n_embed = vqvae_n_embed
+        self.vqvae_lr = 1e-3
         self.vqvae_groups = vqvae_groups
+        self.device = device
         self.encoder_loss_multiplier = encoder_loss_multiplier
         self.act_scale = act_scale
 
-        # Encoder
-        self.encoder = EncoderMLP(
-            input_dim=input_dim_h * input_dim_w,
-            output_dim=n_latent_dims,
-            hidden_dim=256,
-            layer_num=2,
+        # Import official ResidualVQ
+        try:
+            from vector_quantize_pytorch import ResidualVQ as OfficialResidualVQ
+        except ImportError:
+            raise ImportError(
+                "vector_quantize_pytorch is required for VQ-VAE. "
+                "Install with: pip install vector-quantize-pytorch"
+            )
+
+        self.vq_layer = OfficialResidualVQ(
+            dim=self.n_latent_dims,
+            num_quantizers=self.vqvae_groups,
+            codebook_size=self.vqvae_n_embed,
+        ).to(self.device)
+        self.embedding_dim = self.n_latent_dims
+
+        if self.input_dim_h == 1:
+            self.encoder = EncoderMLP(
+                input_dim=input_dim_w, output_dim=n_latent_dims
+            ).to(self.device)
+            self.decoder = EncoderMLP(
+                input_dim=n_latent_dims, output_dim=input_dim_w
+            ).to(self.device)
+        else:
+            self.encoder = EncoderMLP(
+                input_dim=input_dim_w * self.input_dim_h, output_dim=n_latent_dims
+            ).to(self.device)
+            self.decoder = EncoderMLP(
+                input_dim=n_latent_dims, output_dim=input_dim_w * self.input_dim_h
+            ).to(self.device)
+
+        params = (
+            list(self.encoder.parameters())
+            + list(self.decoder.parameters())
+            + list(self.vq_layer.parameters())
         )
-        # Decoder
-        self.decoder = EncoderMLP(
-            input_dim=n_latent_dims,
-            output_dim=input_dim_h * input_dim_w,
-            hidden_dim=256,
-            layer_num=2,
-        )
-        # Residual VQ
-        self.vq_layer = ResidualVQ(
-            dim=n_latent_dims,
-            num_quantizers=vqvae_groups,
-            codebook_size=vqvae_n_embed,
+        self.vqvae_optimizer = torch.optim.Adam(
+            params, lr=self.vqvae_lr, weight_decay=0.0001
         )
 
-    def preprocess(self, actions: torch.Tensor) -> torch.Tensor:
-        """Official preprocess: scale and flatten."""
-        # actions: (B, H, W) -> (B, H*W)
-        return actions * self.act_scale
+        if load_dir is not None:
+            try:
+                state_dict = torch.load(load_dir, map_location=device)
+            except RuntimeError:
+                state_dict = torch.load(load_dir, map_location=torch.device("cpu"))
+            self.load_state_dict(state_dict)
 
-    def forward_encoder(self, actions: torch.Tensor) -> torch.Tensor:
-        preprocessed = self.preprocess(actions)
-        return self.encoder(preprocessed)
+        if eval:
+            self.vq_layer.eval()
+        else:
+            self.vq_layer.train()
 
-    def get_code(self, actions: torch.Tensor) -> torch.Tensor:
-        """Encode actions to VQ codes: (B, H, W) -> (B, groups)."""
-        latent = self.forward_encoder(actions)
-        return self.vq_layer.get_code(latent)
+    def draw_code_forward(self, encoding_indices: torch.Tensor) -> torch.Tensor:
+        """Decode from codes using official get_codes_from_indices().sum(dim=0)."""
+        with torch.no_grad():
+            z_embed = self.vq_layer.get_codes_from_indices(encoding_indices)
+            z_embed = z_embed.sum(dim=0)
+        return z_embed
 
-    def decode_codes(self, codes: torch.Tensor) -> torch.Tensor:
-        """Decode codes back to actions: (B, groups) -> (B, H*W)."""
-        quantized = self.vq_layer.draw_code_forward(codes)
-        return self.decoder(quantized) / self.act_scale
+    def get_action_from_latent(self, latent: torch.Tensor) -> torch.Tensor:
+        """Decode latent to action chunk [B, T, A]."""
+        output = self.decoder(latent) * self.act_scale
+        return rearrange(output, "N (T A) -> N T A", A=self.input_dim_w)
+
+    def preprocess(self, state: torch.Tensor) -> torch.Tensor:
+        """Official preprocess: divide by act_scale and flatten."""
+        if not torch.is_tensor(state):
+            state = torch.tensor(state, device=self.device)
+        if self.input_dim_h == 1:
+            state = state.squeeze(-2)
+        else:
+            state = rearrange(state, "N T A -> N (T A)")
+        return state.to(self.device)
+
+    def get_code(self, state: torch.Tensor, required_recon: bool = False):
+        """Encode state to VQ codes."""
+        state = state / self.act_scale
+        state = self.preprocess(state)
+        with torch.no_grad():
+            state_rep = self.encoder(state)
+            state_rep_shape = state_rep.shape[:-1]
+            state_rep_flat = state_rep.view(state_rep.size(0), -1, state_rep.size(1))
+            state_rep_flat, vq_code, vq_loss_state = self.vq_layer(state_rep_flat)
+            state_vq = state_rep_flat.view(*state_rep_shape, -1)
+            vq_code = vq_code.view(*state_rep_shape, -1)
+            vq_loss_state = torch.sum(vq_loss_state)
+            if required_recon:
+                recon_state = self.decoder(state_vq) * self.act_scale
+                recon_state_ae = self.decoder(state_rep) * self.act_scale
+                if self.input_dim_h == 1:
+                    return state_vq, vq_code, recon_state, recon_state_ae
+                else:
+                    return (
+                        state_vq,
+                        vq_code,
+                        torch.swapaxes(recon_state, -2, -1),
+                        torch.swapaxes(recon_state_ae, -2, -1),
+                    )
+            else:
+                return state_vq, vq_code
+
+    def state_dict(self) -> dict:
+        """Official state_dict format: encoder, decoder, optimizer, vq_embedding."""
+        return {
+            "encoder": self.encoder.state_dict(),
+            "decoder": self.decoder.state_dict(),
+            "optimizer": self.vqvae_optimizer.state_dict(),
+            "vq_embedding": self.vq_layer.state_dict(),
+        }
+
+    def load_state_dict(self, state_dict: dict):
+        """Load from official checkpoint format."""
+        self.encoder.load_state_dict(state_dict["encoder"])
+        self.decoder.load_state_dict(state_dict["decoder"])
+        self.vqvae_optimizer.load_state_dict(state_dict["optimizer"])
+        self.vq_layer.load_state_dict(state_dict["vq_embedding"])
+        self.vq_layer.eval()
 
 
 # ---------------------------------------------------------------------------
-# VQActionTokenizer (official interface)
+# ActionTokenizer (official non-VQ action tokenizer)
 # ---------------------------------------------------------------------------
-class VQActionTokenizer:
+class ActionTokenizer:
     """
-    Official VQActionTokenizer for MiniVLA.
-    Wraps the frozen VQ-VAE and handles token <-> code mapping.
+    Official ActionTokenizer from teach_code/MiniVLA/prismatic/vla/action_tokenizer.py.
+    Discretizes continuous robot actions into N bins per dimension.
     """
 
     def __init__(
         self,
-        vq_model_path: Optional[str] = None,
-        input_dim_h: int = 8,
-        input_dim_w: int = 7,
-        n_latent_dims: int = 512,
-        vqvae_n_embed: int = 128,
-        vqvae_groups: int = 7,
-        encoder_loss_multiplier: float = 1.0,
-        act_scale: float = 1.0,
-        tokenizer_len: int = 0,
+        tokenizer: PreTrainedTokenizerBase,
+        bins: int = 256,
+        min_action: int = -1,
+        max_action: int = 1,
+        use_extra: bool = False,
     ):
-        self.input_dim_h = input_dim_h
-        self.input_dim_w = input_dim_w
-        self.n_latent_dims = n_latent_dims
-        self.vqvae_n_embed = vqvae_n_embed
-        self.vqvae_groups = vqvae_groups
-        self.encoder_loss_multiplier = encoder_loss_multiplier
-        self.act_scale = act_scale
-        self.tokenizer_len = tokenizer_len
-
-        self.vqvae = VqVae(
-            input_dim_h=input_dim_h,
-            input_dim_w=input_dim_w,
-            n_latent_dims=n_latent_dims,
-            vqvae_n_embed=vqvae_n_embed,
-            vqvae_groups=vqvae_groups,
-            encoder_loss_multiplier=encoder_loss_multiplier,
-            act_scale=act_scale,
+        self.tokenizer, self.n_bins, self.min_action, self.max_action = (
+            tokenizer,
+            bins,
+            min_action,
+            max_action,
         )
 
-        if vq_model_path is not None:
-            self._load_vq_checkpoint(vq_model_path)
+        self.bins = np.linspace(min_action, max_action, self.n_bins)
+        self.bin_centers = (self.bins[:-1] + self.bins[1:]) / 2.0
 
-        self.vqvae.eval()
-        for param in self.vqvae.parameters():
-            param.requires_grad = False
+        self.tokenizer_len = self.tokenizer.vocab_size
+        if isinstance(tokenizer, Qwen2TokenizerFast) and use_extra:
+            self.tokenizer_len = len(self.tokenizer)
+        elif use_extra:
+            raise NotImplementedError("Cannot use extra tokens for this tokenizer!")
 
-    def _load_vq_checkpoint(self, vq_model_path: str) -> None:
-        """Load official VQ checkpoint."""
-        path = Path(vq_model_path)
-        if path.is_dir():
-            path = path / "model.pt"
-        if not path.exists():
-            raise FileNotFoundError(f"VQ checkpoint not found at {vq_model_path}")
-        ckpt = torch.load(path, map_location="cpu", weights_only=True)
-        state_dict = ckpt.get("model", ckpt)
-        self.vqvae.load_state_dict(state_dict, strict=True)
+        self.action_token_begin_idx: int = int(self.tokenizer_len - (self.n_bins + 1))
+        self.action_token_end_idx: int = int(self.tokenizer_len)
 
-    def encode_actions(self, actions: torch.Tensor) -> torch.Tensor:
-        """
-        Encode action chunk to VQ codes.
-        actions: (B, chunk_size, action_dim) -> codes: (B, vqvae_groups)
-        """
-        # actions: (B, H, W) where H=chunk_size, W=action_dim
-        codes = self.vqvae.get_code(actions)
-        return codes
+    def __call__(self, action: np.ndarray) -> Union[str, List[str]]:
+        action = np.clip(action, a_min=float(self.min_action), a_max=float(self.max_action))
+        discretized_action = np.digitize(action, self.bins)
 
-    def decode_codes(self, codes: torch.Tensor) -> torch.Tensor:
-        """
-        Decode VQ codes to action chunk.
-        codes: (B, vqvae_groups) -> actions: (B, chunk_size, action_dim)
-        """
-        return self.vqvae.decode_codes(codes)
+        if len(discretized_action.shape) <= 1:
+            return self.tokenizer.decode(list(self.tokenizer_len - discretized_action))
+        else:
+            return self.tokenizer.batch_decode((self.tokenizer_len - discretized_action).tolist())
 
-    def encode_token_ids(self, actions: torch.Tensor) -> torch.Tensor:
-        """
-        Encode actions to token IDs (for Qwen input).
-        token_id = tokenizer_len - 1 - code
-        """
-        codes = self.encode_actions(actions)
-        return self.tokenizer_len - 1 - codes
-
-    def decode_token_ids_to_actions(self, token_ids: torch.Tensor) -> torch.Tensor:
-        """
-        Decode token IDs back to actions.
-        code = tokenizer_len - 1 - token_id
-        """
-        codes = self.tokenizer_len - 1 - token_ids
-        return self.decode_codes(codes)
+    def decode_token_ids_to_actions(self, action_token_ids: np.ndarray) -> np.ndarray:
+        discretized_actions = self.tokenizer_len - action_token_ids
+        discretized_actions = np.clip(discretized_actions - 1, a_min=0, a_max=self.bin_centers.shape[0] - 1)
+        return self.bin_centers[discretized_actions]
 
     @property
-    def vq_action_dim(self) -> int:
-        return self.input_dim_w
+    def vocab_size(self) -> int:
+        return self.n_bins
+
+    @property
+    def required_future_horizon(self) -> int:
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# VQActionTokenizer (official VQ action tokenizer)
+# ---------------------------------------------------------------------------
+class VQActionTokenizer(ActionTokenizer):
+    """
+    Official VQActionTokenizer from teach_code/MiniVLA/prismatic/vla/action_tokenizer.py.
+    Loads VqVae and handles token <-> code mapping.
+    """
+
+    def __init__(
+        self,
+        tokenizer: PreTrainedTokenizerBase,
+        vq_vae_path: str = "",
+        device: str = "cpu",
+        use_extra: bool = False,
+    ):
+        self.tokenizer = tokenizer
+        self.device = device
+
+        self.vq_path = Path(vq_vae_path)
+        assert self.vq_path.exists(), f"Missing VQ VAE path: {self.vq_path}"
+        vq_model_path = self.vq_path / "checkpoints" / "model.pt"
+        vq_config_path = self.vq_path / "config.json"
+        assert vq_model_path.exists(), f"Missing VQ checkpoint path: {vq_model_path}"
+        assert vq_config_path.exists(), f"Missing VQ config path: {vq_config_path}"
+
+        with open(vq_config_path, "r") as f:
+            vq_config = dict(json.load(f))
+
+        vq_config["load_dir"] = vq_model_path
+        vq_config["eval"] = True
+        vq_config["device"] = self.device
+
+        self.vq_vae = VqVae(**vq_config)
+
+        self.n_bins = self.vq_vae.vqvae_n_embed
+
+        self.tokenizer_len = self.tokenizer.vocab_size
+        if isinstance(tokenizer, Qwen2TokenizerFast) and use_extra:
+            self.tokenizer_len = len(self.tokenizer)
+        elif use_extra:
+            raise NotImplementedError("Cannot use extra tokens for this tokenizer!")
+
+        self.action_token_begin_idx: int = int(self.tokenizer_len - (self.n_bins + 1))
+        self.action_token_end_idx: int = int(self.tokenizer_len)
+
+    def __call__(self, action: np.ndarray) -> Union[str, List[str]]:
+        action = torch.from_numpy(action).to(self.device).reshape(
+            (1, self.vq_vae.input_dim_h, self.vq_vae.input_dim_w)
+        )
+        _, vq_code = self.vq_vae.get_code(action)
+        assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
+
+        return self.tokenizer.decode(list(self.tokenizer_len - 1 - vq_code[0].numpy()))
+
+    def decode_token_ids_to_actions(self, action_token_ids: np.ndarray) -> np.ndarray:
+        action_token_ids = self.tokenizer_len - 1 - action_token_ids
+        initial_shape = action_token_ids.shape
+        action_token_ids = np.clip(action_token_ids, 0, self.n_bins - 1)
+        action_token_ids = torch.from_numpy(action_token_ids).to(self.device).reshape(
+            -1, self.vq_vae.vqvae_groups
+        )
+        assert torch.all(action_token_ids >= 0) and torch.all(action_token_ids < self.n_bins)
+
+        latent = self.vq_vae.draw_code_forward(action_token_ids)
+        ret_action = self.vq_vae.get_action_from_latent(latent)
+
+        if action_token_ids.shape[0] == 1 and len(initial_shape) == 1:
+            return ret_action[0, 0]
+
+        return ret_action[:, 0]
+
+    @property
+    def required_future_horizon(self) -> int:
+        return self.vq_vae.input_dim_h - 1
+
+
+# ---------------------------------------------------------------------------
+# Action tokenizer registry (matching official ACTION_TOKENIZERS)
+# ---------------------------------------------------------------------------
+ACTION_TOKENIZERS = {
+    "action_tokenizer": ActionTokenizer,
+    "extra_action_tokenizer": partial(ActionTokenizer, use_extra=True),
+    "libero_vq_action_tokenizer": partial(
+        VQActionTokenizer, vq_vae_path="vq/pretrain_vq+mx-libero_90+fach-7+ng-7+nemb-128+nlatent-512"
+    ),
+    "libero_vq_extra_action_tokenizer": partial(
+        VQActionTokenizer, vq_vae_path="vq/pretrain_vq+mx-libero_90+fach-7+ng-7+nemb-128+nlatent-512", use_extra=True
+    ),
+    "libero_vq_h0_extra_action_tokenizer": partial(
+        VQActionTokenizer, vq_vae_path="vq/pretrain_vq+mx-libero_90+fach-0+ng-7+nemb-128+nlatent-512", use_extra=True
+    ),
+    "bridge_vq_extra_action_tokenizer": partial(
+        VQActionTokenizer,
+        vq_vae_path="vq/pretrain_modvq+mx-bridge_dataset+fach-7+ng-7+nemb-256+nlatent-512",
+        use_extra=True,
+    ),
+}

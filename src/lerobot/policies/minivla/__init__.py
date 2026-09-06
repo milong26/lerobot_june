@@ -10,7 +10,6 @@ from .tokenizer import VLATokenizerWrapper as VLATokenizerWrapper
 from .tokenizer import QwenPromptBuilder as QwenPromptBuilder
 from .vq_action import VQActionTokenizer as VQActionTokenizer
 from .vq_action import VqVae as VqVae
-from .vq_action import ResidualVQ as ResidualVQ
 from .vla_backbone import MiniVLAVLBackbone as MiniVLAVLBackbone
 
 __all__ = [
@@ -26,6 +25,5 @@ __all__ = [
     "QwenPromptBuilder",
     "VQActionTokenizer",
     "VqVae",
-    "ResidualVQ",
     "MiniVLAVLBackbone",
 ]

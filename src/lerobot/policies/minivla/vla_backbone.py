@@ -9,29 +9,31 @@ Key design:
   - Vision patches inserted after first token of each sequence
   - attention_mask extended with True for vision tokens
   - labels set to IGNORE_INDEX (-100) for vision tokens
-  - generation cache support (past_key_values)
+  - GenerationMixin-compatible: prepare_inputs_for_generation preserves pixel_values
+  - forward() checks past_key_values to skip vision encoder during generation
   - No state tokens, no dummy layers, no full-zero text embeddings
 """
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Dict, List, Optional
 
 import torch
 import torch.nn as nn
-from transformers import AutoModelForCausalLM
+from transformers import AutoModelForCausalLM, GenerationMixin
+from transformers.modeling_outputs import CausalLMOutputWithPast
 
 from .encoders import DINOSigLIPViTBackbone
 from .fusion import FusedMLPProjector
-from .tokenizer import VLATokenizerWrapper
 
 IGNORE_INDEX = -100
 
 
-class MiniVLAVLBackbone(nn.Module):
+class MiniVLAVLBackbone(nn.Module, GenerationMixin):
     """
     Official MiniVLA VLM backbone.
     Combines DINO-SigLIP vision encoder, FusedMLP projector, and Qwen2.5 CausalLM.
+    Inherits GenerationMixin for proper multi-modal generation support.
     """
 
     def __init__(
@@ -43,7 +45,7 @@ class MiniVLAVLBackbone(nn.Module):
         image_resize_strategy: str = "resize-naive",
         arch_specifier: str = "no-align+fused-gelu-mlp",
         image_sequence_len: int = 1,
-        num_extra_tokens: int = 256,
+        tokenizer_len: int = None,
         enable_gradient_checkpointing: bool = True,
         freeze_vision_backbone: bool = False,
         freeze_llm_backbone: bool = False,
@@ -51,7 +53,7 @@ class MiniVLAVLBackbone(nn.Module):
     ):
         super().__init__()
         self.image_sequence_len = image_sequence_len
-        self.num_extra_tokens = num_extra_tokens
+        self.tokenizer_len = tokenizer_len
 
         # === Vision backbone ===
         self.vision_backbone = DINOSigLIPViTBackbone(
@@ -66,11 +68,10 @@ class MiniVLAVLBackbone(nn.Module):
 
         # === Projector ===
         fused_vision_dim = self.vision_backbone.embed_dim
-        # Get LLM hidden size from config
-        self._llm_config = AutoModelForCausalLM.from_pretrained(
-            base_vlm_checkpoint, trust_remote_code=True
-        ).config
-        llm_dim = self._llm_config.hidden_size
+        # Use AutoConfig to avoid loading full model just to get hidden size
+        from transformers import AutoConfig
+        llm_config = AutoConfig.from_pretrained(base_vlm_checkpoint, trust_remote_code=True)
+        llm_dim = llm_config.hidden_size
 
         self.projector = FusedMLPProjector(
             fused_vision_dim=fused_vision_dim,
@@ -82,51 +83,88 @@ class MiniVLAVLBackbone(nn.Module):
         self.llm = AutoModelForCausalLM.from_pretrained(
             base_vlm_checkpoint, trust_remote_code=True
         )
-        # Resize embeddings for extra tokens
-        self.llm.resize_token_embeddings(
-            self.llm.config.vocab_size + num_extra_tokens,
-            pad_to_multiple_of=64,
-        )
-        self.llm.config.pad_token_id = self.llm.config.eos_token_id
+        # Resize embeddings using tokenizer_len from shared tokenizer
+        assert tokenizer_len is not None, "tokenizer_len must be provided for embedding resize"
+        self.llm.resize_token_embeddings(tokenizer_len, pad_to_multiple_of=64)
+        # Sync pad_token_id - will be set by caller from shared tokenizer
 
         if freeze_llm_backbone:
             for param in self.llm.parameters():
                 param.requires_grad = False
 
         if unfreeze_last_llm_layer:
-            for param in self.llm.layers[-1].parameters():
+            # Use correct Qwen path: self.llm.model.layers[-1]
+            for param in self.llm.model.layers[-1].parameters():
                 param.requires_grad = True
 
         # === Gradient checkpointing ===
         if enable_gradient_checkpointing:
             self.llm.gradient_checkpointing_enable()
 
+        # === GenerationMixin required attributes ===
+        self.generation_config = self.llm.generation_config
+        self.main_input_name = "input_ids"
+
     @property
     def num_patches(self) -> int:
-        return self.vision_backbone.num_patches
+        """Return number of vision patches for single image or sequence."""
+        if self.image_sequence_len == 1:
+            return self.vision_backbone.num_patches
+        else:
+            return self.vision_backbone.num_patches
+
+    def set_pad_token_id(self, pad_token_id: int):
+        """Set pad_token_id on LLM config from shared tokenizer."""
+        self.llm.config.pad_token_id = pad_token_id
+
+    @staticmethod
+    def can_generate() -> bool:
+        return True
+
+    @property
+    def config(self):
+        return self.llm.config
+
+    def _reorder_cache(self, past_key_values, beam_idx):
+        return self.llm._reorder_cache(past_key_values, beam_idx)
 
     def forward(
         self,
-        pixel_values: dict[str, torch.Tensor],
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        pixel_values: Optional[Dict[str, torch.Tensor]] = None,
         labels: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list] = None,
+        past_key_values: Optional[List[torch.Tensor]] = None,
         use_cache: bool = False,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         """
         Training forward: inserts vision patches into LLM embeddings.
         Generation forward: uses past_key_values cache to skip vision backbone.
+        Mirrors PrismaticVLM.forward().
         """
-        if past_key_values is not None:
-            # Generation mode: only process the last token
+        # Handle Inference: leverage cache, short-circuit on just LLM forward
+        if input_ids.shape[1] == 1 and past_key_values is not None:
+            # We're in generation mode with cache; just forward through LLM
             return self.llm(
                 input_ids=input_ids,
-                attention_mask=attention_mask,
-                labels=labels,
+                attention_mask=None,
+                position_ids=None,
                 past_key_values=past_key_values,
+                inputs_embeds=None,
+                labels=None,
                 use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
             )
+
+        # Training mode or first generation step: run vision encoder
+        if pixel_values is None:
+            raise RuntimeError("forward() requires pixel_values for the first step!")
 
         # === Get vision patches ===
         patch_embeddings = self.vision_backbone(pixel_values)  # (B, num_patches, fused_dim)
@@ -169,21 +207,42 @@ class MiniVLAVLBackbone(nn.Module):
             attention_mask=attention_mask,
             labels=labels,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.Tensor,
-        past_key_values: Optional[list] = None,
+        past_key_values: Optional[List[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        pixel_values: Optional[Dict[str, torch.Tensor]] = None,
+        use_cache: bool = True,
         **kwargs,
-    ):
-        """Official prepare_inputs_for_generation matching PrismaticVLM."""
+    ) -> Dict[str, torch.Tensor]:
+        """
+        Official prepare_inputs_for_generation matching PrismaticVLM.
+        Ensures pixel_values are preserved in model_inputs for the first generation step.
+        """
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
-        return {
-            "input_ids": input_ids,
-            "past_key_values": past_key_values,
-            "use_cache": kwargs.get("use_cache", True),
-            "attention_mask": attention_mask,
-        }
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and past_key_values is None:
+            model_inputs = {"inputs_embeds": inputs_embeds}
+        else:
+            model_inputs = {"input_ids": input_ids}
+
+        # Make sure `pixel_values` are preserved in `model_inputs`
+        model_inputs.update(
+            {
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+            }
+        )
+
+        return model_inputs

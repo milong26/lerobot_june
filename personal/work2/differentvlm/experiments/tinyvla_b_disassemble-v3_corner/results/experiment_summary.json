@@ -6,8 +6,8 @@
   "gpu_id": 1,
   "num_episodes": 112,
   "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
-  "start_time": "2026-09-06 16:18:59",
-  "end_time": "2026-09-06 16:18:59",
+  "start_time": "2026-09-06 16:23:44",
+  "end_time": "2026-09-06 19:10:26",
   "current_stage": "failed",
   "failed_stage": "episode_selection",
   "selection_vlm_model_id": "lesjie/Llava-Pythia-700M",
@@ -36,11 +36,11 @@
   "stages": {
     "embedding_extraction": {
       "status": "completed",
-      "time_seconds": 0.0,
+      "time_seconds": 9999.5,
       "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/embeddings"
     }
   },
   "final_metrics": {},
-  "total_time_seconds": 0.3,
+  "total_time_seconds": 10001.4,
   "error": "our_v5 selection script not found: /data/zhonglinye/jun/lerobot/personal/our_v5/select_our_v5.py"
 }

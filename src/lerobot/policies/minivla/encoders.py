@@ -206,6 +206,10 @@ class DINOSigLIPViTBackbone(nn.Module):
     def num_patches(self) -> int:
         return self.dino_featurizer.patch_embed.num_patches * self.image_sequence_len
 
+    def get_image_transform(self):
+        """Standard get_image_transform() interface."""
+        return self.image_transform
+
     def forward(self, pixel_values: Dict[str, torch.Tensor]) -> torch.Tensor:
         """
         pixel_values: {"dino": tensor, "siglip": tensor}
@@ -213,9 +217,33 @@ class DINOSigLIPViTBackbone(nn.Module):
           Multi-image:  (B, T, C, H, W)
         Returns: (B, num_patches, dino_dim + siglip_dim)
         """
+        dino_input = pixel_values["dino"]
+        siglip_input = pixel_values["siglip"]
+
+        # Shape validation
         if self.image_sequence_len == 1:
-            dino_patches = self.dino_featurizer(pixel_values["dino"])
-            siglip_patches = self.siglip_featurizer(pixel_values["siglip"])
+            assert dino_input.dim() == 4, f"DINO input must be (B, C, H, W), got {dino_input.shape}"
+            assert siglip_input.dim() == 4, f"SigLIP input must be (B, C, H, W), got {siglip_input.shape}"
+        else:
+            assert dino_input.dim() == 5, f"DINO input must be (B, T, C, H, W), got {dino_input.shape}"
+            assert siglip_input.dim() == 5, f"SigLIP input must be (B, T, C, H, W), got {siglip_input.shape}"
+            assert dino_input.shape[1] >= self.image_sequence_len, (
+                f"DINO sequence length {dino_input.shape[1]} < required {self.image_sequence_len}"
+            )
+            assert siglip_input.shape[1] >= self.image_sequence_len, (
+                f"SigLIP sequence length {siglip_input.shape[1]} < required {self.image_sequence_len}"
+            )
+
+        # DINO/SigLIP patch count consistency check
+        dino_num_patches = self.dino_featurizer.patch_embed.num_patches
+        siglip_num_patches = self.siglip_featurizer.patch_embed.num_patches
+        assert dino_num_patches == siglip_num_patches, (
+            f"DINO ({dino_num_patches}) and SigLIP ({siglip_num_patches}) patch counts must match!"
+        )
+
+        if self.image_sequence_len == 1:
+            dino_patches = self.dino_featurizer(dino_input)
+            siglip_patches = self.siglip_featurizer(siglip_input)
         else:
             featurizers = {"dino": self.dino_featurizer, "siglip": self.siglip_featurizer}
             patches = compute_sequence_patches(pixel_values, featurizers, self.image_sequence_len)

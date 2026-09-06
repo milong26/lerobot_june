@@ -15,6 +15,8 @@ Reference files in teach_code/MiniVLA:
 
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Optional
 
 from lerobot.configs import NormalizationMode, PreTrainedConfig
 from lerobot.optim import AdamWConfig
@@ -67,6 +69,7 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     use_wrist_image: bool = False
 
     # === Action / VQ ===
+    action_tokenizer_type: str = "extra_action_tokenizer"
     chunk_size: int = _OFFICIAL_CHUNK_SIZE
     n_action_steps: int = _OFFICIAL_N_ACTION_STEPS
     vqvae_n_embed: int = _OFFICIAL_VQVAE_N_EMBED
@@ -102,6 +105,16 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     def __post_init__(self):
         super().__post_init__()
 
+    @property
+    def is_vq_mode(self) -> bool:
+        return self.action_tokenizer_type in (
+            "libero_vq_extra_action_tokenizer",
+            "libero_vq_action_tokenizer",
+            "libero_vq_h0_extra_action_tokenizer",
+            "bridge_vq_extra_action_tokenizer",
+            "vq_action_tokenizer",
+        )
+
     def validate_features(self) -> None:
         image_features = self.image_features
         if not image_features:
@@ -109,13 +122,14 @@ class _MiniVLAConfigBase(PreTrainedConfig):
         if not self.action_feature:
             raise ValueError("action output is required for MiniVLA.")
 
-        action_dim = self.action_feature.shape[0]
-        if action_dim != self.vq_action_dim:
-            raise ValueError(
-                f"LeRobot action dimension ({action_dim}) does not match the VQ configuration "
-                f"input_dim_w ({self.vq_action_dim}). You must pre-train a VQ model for this "
-                f"dataset's action dimension. Set vq_model_path to a compatible VQ checkpoint."
-            )
+        if self.is_vq_mode:
+            action_dim = self.action_feature.shape[0]
+            if action_dim != self.vq_action_dim:
+                raise ValueError(
+                    f"LeRobot action dimension ({action_dim}) does not match the VQ configuration "
+                    f"vq_action_dim ({self.vq_action_dim}). You must pre-train a VQ model for this "
+                    f"dataset's action dimension. Set vq_model_path to a compatible VQ checkpoint."
+                )
 
     def validate_vla_config(self) -> None:
         pass
@@ -143,6 +157,17 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     @property
     def reward_delta_indices(self) -> None:
         return None
+
+    def resolve_vq_model_path(self) -> str:
+        """Resolve VQ model path from config or official checkpoint directory."""
+        if self.vq_model_path:
+            return self.vq_model_path
+        if self.official_vla_checkpoint:
+            ckpt_dir = Path(self.official_vla_checkpoint).parent
+            default_vq = ckpt_dir / "vq"
+            if default_vq.exists():
+                return str(default_vq)
+        return ""
 
 
 # ---------------------------------------------------------------------------
