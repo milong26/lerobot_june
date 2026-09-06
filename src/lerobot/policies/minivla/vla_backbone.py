@@ -11,7 +11,9 @@ Key design:
   - labels set to IGNORE_INDEX (-100) for vision tokens
   - GenerationMixin-compatible: prepare_inputs_for_generation preserves pixel_values
   - forward() checks past_key_values to skip vision encoder during generation
-  - No state tokens, no dummy layers, no full-zero text embeddings
+  - device property for GenerationMixin
+  - torch.manual_seed(vision_backbone.embed_dim) before projector creation
+  - num_patches from projected_patches.shape[1]
 """
 
 from __future__ import annotations
@@ -68,10 +70,12 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
 
         # === Projector ===
         fused_vision_dim = self.vision_backbone.embed_dim
-        # Use AutoConfig to avoid loading full model just to get hidden size
         from transformers import AutoConfig
         llm_config = AutoConfig.from_pretrained(base_vlm_checkpoint, trust_remote_code=True)
         llm_dim = llm_config.hidden_size
+
+        # Official: torch.manual_seed(vision_backbone.embed_dim) before projector creation
+        torch.manual_seed(fused_vision_dim)
 
         self.projector = FusedMLPProjector(
             fused_vision_dim=fused_vision_dim,
@@ -83,17 +87,14 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         self.llm = AutoModelForCausalLM.from_pretrained(
             base_vlm_checkpoint, trust_remote_code=True
         )
-        # Resize embeddings using tokenizer_len from shared tokenizer
         assert tokenizer_len is not None, "tokenizer_len must be provided for embedding resize"
         self.llm.resize_token_embeddings(tokenizer_len, pad_to_multiple_of=64)
-        # Sync pad_token_id - will be set by caller from shared tokenizer
 
         if freeze_llm_backbone:
             for param in self.llm.parameters():
                 param.requires_grad = False
 
         if unfreeze_last_llm_layer:
-            # Use correct Qwen path: self.llm.model.layers[-1]
             for param in self.llm.model.layers[-1].parameters():
                 param.requires_grad = True
 
@@ -106,12 +107,14 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         self.main_input_name = "input_ids"
 
     @property
+    def device(self):
+        """Borrowed from transformers.modeling_utils -- required by GenerationMixin."""
+        return next(self.parameters()).device
+
+    @property
     def num_patches(self) -> int:
         """Return number of vision patches for single image or sequence."""
-        if self.image_sequence_len == 1:
-            return self.vision_backbone.num_patches
-        else:
-            return self.vision_backbone.num_patches
+        return self.vision_backbone.num_patches
 
     def set_pad_token_id(self, pad_token_id: int):
         """Set pad_token_id on LLM config from shared tokenizer."""
@@ -148,7 +151,6 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         """
         # Handle Inference: leverage cache, short-circuit on just LLM forward
         if input_ids.shape[1] == 1 and past_key_values is not None:
-            # We're in generation mode with cache; just forward through LLM
             return self.llm(
                 input_ids=input_ids,
                 attention_mask=None,
@@ -167,25 +169,23 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
             raise RuntimeError("forward() requires pixel_values for the first step!")
 
         # === Get vision patches ===
-        patch_embeddings = self.vision_backbone(pixel_values)  # (B, num_patches, fused_dim)
-        projected_patches = self.projector(patch_embeddings)  # (B, num_patches, llm_dim)
+        patch_embeddings = self.vision_backbone(pixel_values)
+        projected_patches = self.projector(patch_embeddings)
 
         # === Get LLM embeddings ===
-        inputs_embeds = self.llm.get_input_embeddings()(input_ids)  # (B, seq_len, llm_dim)
+        inputs_embeds = self.llm.get_input_embeddings()(input_ids)
 
         # === Insert vision patches after first token ===
-        # inputs_embeds: (B, seq_len, llm_dim)
-        # projected_patches: (B, num_patches, llm_dim)
-        # Result: (B, 1 + num_patches + seq_len - 1, llm_dim)
-        before = inputs_embeds[:, :1, :]  # (B, 1, llm_dim)
-        after = inputs_embeds[:, 1:, :]   # (B, seq_len - 1, llm_dim)
+        # Use projected_patches.shape[1] for num_patches (not static attribute)
+        num_patches = projected_patches.shape[1]
+
+        before = inputs_embeds[:, :1, :]
+        after = inputs_embeds[:, 1:, :]
         inputs_embeds = torch.cat([before, projected_patches, after], dim=1)
 
         # === Extend attention_mask ===
-        # Original: (B, seq_len)
-        # Vision mask: (B, num_patches) all True
         vision_mask = torch.ones(
-            inputs_embeds.shape[0], self.num_patches,
+            inputs_embeds.shape[0], num_patches,
             dtype=attention_mask.dtype, device=attention_mask.device
         )
         attention_mask = torch.cat(
@@ -195,7 +195,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         # === Set labels for vision tokens to IGNORE_INDEX ===
         if labels is not None:
             vision_labels = torch.full(
-                (labels.shape[0], self.num_patches),
+                (labels.shape[0], num_patches),
                 IGNORE_INDEX,
                 dtype=labels.dtype,
                 device=labels.device,
@@ -229,13 +229,11 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
 
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and past_key_values is None:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
             model_inputs = {"input_ids": input_ids}
 
-        # Make sure `pixel_values` are preserved in `model_inputs`
         model_inputs.update(
             {
                 "attention_mask": attention_mask,

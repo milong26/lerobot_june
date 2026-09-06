@@ -68,6 +68,10 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     image_sequence_len: int = 1
     use_wrist_image: bool = False
 
+    # === Camera keys (explicit, no guessing) ===
+    primary_image_key: str = ""
+    wrist_image_key: str = ""
+
     # === Action / VQ ===
     action_tokenizer_type: str = "extra_action_tokenizer"
     chunk_size: int = _OFFICIAL_CHUNK_SIZE
@@ -85,6 +89,9 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     freeze_vision_backbone: bool = False
     freeze_llm_backbone: bool = False
     unfreeze_last_llm_layer: bool = False
+
+    # === dtype for training (matches official Qwen BF16) ===
+    dtype: str = "bfloat16"
 
     # === Optimizer (AdamW defaults) ===
     optimizer_lr: float = _OFFICIAL_LR
@@ -115,6 +122,12 @@ class _MiniVLAConfigBase(PreTrainedConfig):
             "vq_action_tokenizer",
         )
 
+    @property
+    def action_delta_indices(self) -> list:
+        if self.is_vq_mode:
+            return list(range(self.chunk_size))
+        return [0]
+
     def validate_features(self) -> None:
         image_features = self.image_features
         if not image_features:
@@ -122,7 +135,34 @@ class _MiniVLAConfigBase(PreTrainedConfig):
         if not self.action_feature:
             raise ValueError("action output is required for MiniVLA.")
 
+        if not self.primary_image_key:
+            raise ValueError(
+                "primary_image_key must be set in config to identify the primary camera. "
+                "e.g. 'observation.images.cam_high'."
+            )
+
+        if self.use_wrist_image and not self.wrist_image_key:
+            raise ValueError(
+                "wrist_image_key must be set when use_wrist_image=True. "
+                "e.g. 'observation.images.wrist' or 'observation.images.gripperPOV'."
+            )
+
         if self.is_vq_mode:
+            if not self.vq_model_path and not self.official_vla_checkpoint:
+                raise ValueError(
+                    "VQ mode requires either vq_model_path or official_vla_checkpoint "
+                    "pointing to a directory containing a 'vq' subdirectory."
+                )
+            vq_path = self.resolve_vq_model_path()
+            if vq_path:
+                vq_dir = Path(vq_path)
+                config_json = vq_dir / "config.json"
+                model_pt = vq_dir / "checkpoints" / "model.pt"
+                if not config_json.exists():
+                    raise ValueError(f"VQ config.json not found at {config_json}")
+                if not model_pt.exists():
+                    raise ValueError(f"VQ checkpoint model.pt not found at {model_pt}")
+
             action_dim = self.action_feature.shape[0]
             if action_dim != self.vq_action_dim:
                 raise ValueError(
@@ -149,10 +189,6 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     @property
     def observation_delta_indices(self) -> list:
         raise NotImplementedError("Subclasses must define observation_delta_indices.")
-
-    @property
-    def action_delta_indices(self) -> list:
-        return list(range(self.chunk_size))
 
     @property
     def reward_delta_indices(self) -> None:

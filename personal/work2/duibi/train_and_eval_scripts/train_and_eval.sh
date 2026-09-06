@@ -45,6 +45,9 @@ if [ "$MODE" = "uniform" ]; then
 elif [ "$MODE" = "state_uniform" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT="$SCRIPT_DIR/select_new_uniform.py"
+elif [ "$MODE" = "grid_uniform" ]; then
+    EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
+    SELECT_SCRIPT="$SCRIPT_DIR/select_grid_uniform.py"
 elif [ "$MODE" = "random" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT="$SCRIPT_DIR/select_random_episodes.py"
@@ -61,7 +64,7 @@ elif [ "$MODE" = "our_v5" ]; then
     EXP_NAME="${MODE}_${NUM_EPISODES}_seed${SEED}"
     SELECT_SCRIPT=""
 else
-    echo "Error: mode must be 'uniform', 'state_uniform', 'random', 'dynamicanchor', 'subzerocore', 'deminf', or 'our_v5'"
+    echo "Error: mode must be 'uniform', 'state_uniform', 'grid_uniform', 'random', 'dynamicanchor', 'subzerocore', 'deminf', or 'our_v5'"
     exit 1
 fi
 

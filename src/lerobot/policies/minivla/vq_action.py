@@ -9,13 +9,14 @@ and teach_code/MiniVLA/vq/pretrain_vq+mx-libero_90+fach-7+ng-7+nemb-128+nlatent-
 Key design:
   - EncoderMLP: Linear -> ReLU -> (Linear -> ReLU) * layer_num -> Linear -> (optional activation)
   - hidden_dim=128 (official), ReLU (not GELU)
-  - VqVae: encoder + decoder + ResidualVQ (from vector_quantize_pytorch)
+  - VqVae: nn.Module with encoder + decoder + ResidualVQ
   - VQActionTokenizer: preprocess -> encode -> decode with official token mapping
   - Frozen VQ-VAE (eval, requires_grad=False)
   - Token mapping: token_id = tokenizer_len - 1 - code
-  - Official checkpoint loading: encoder, decoder, optimizer, vq_embedding keys
+  - Official checkpoint loading via load_official_checkpoint() (not overriding state_dict)
   - [B,T,A] -> [B,T*A] flatten before encoding, [B,T*A] -> [B,T,A] after decoding
   - action/act_scale processing as in official code
+  - Dynamic device via next(self.parameters()).device
 """
 
 from __future__ import annotations
@@ -91,12 +92,13 @@ class EncoderMLP(nn.Module):
 
 
 # ---------------------------------------------------------------------------
-# VqVae (official structure)
+# VqVae (official structure as nn.Module)
 # ---------------------------------------------------------------------------
 class VqVae(nn.Module):
     """
     Official VQ-VAE from MiniVLA.
     encoder + decoder + vq_layer (ResidualVQ from vector_quantize_pytorch)
+    Properly inherits nn.Module for standard state_dict/load_state_dict.
     """
 
     def __init__(
@@ -107,9 +109,7 @@ class VqVae(nn.Module):
         n_latent_dims: int = 512,
         vqvae_n_embed: int = 32,
         vqvae_groups: int = 4,
-        eval: bool = True,
-        device: str = "cuda",
-        load_dir: Optional[str] = None,
+        eval_mode: bool = True,
         encoder_loss_multiplier: float = 1.0,
         act_scale: float = 1.0,
     ):
@@ -121,7 +121,6 @@ class VqVae(nn.Module):
         self.vqvae_n_embed = vqvae_n_embed
         self.vqvae_lr = 1e-3
         self.vqvae_groups = vqvae_groups
-        self.device = device
         self.encoder_loss_multiplier = encoder_loss_multiplier
         self.act_scale = act_scale
 
@@ -138,44 +137,35 @@ class VqVae(nn.Module):
             dim=self.n_latent_dims,
             num_quantizers=self.vqvae_groups,
             codebook_size=self.vqvae_n_embed,
-        ).to(self.device)
+        )
         self.embedding_dim = self.n_latent_dims
 
         if self.input_dim_h == 1:
             self.encoder = EncoderMLP(
                 input_dim=input_dim_w, output_dim=n_latent_dims
-            ).to(self.device)
+            )
             self.decoder = EncoderMLP(
                 input_dim=n_latent_dims, output_dim=input_dim_w
-            ).to(self.device)
+            )
         else:
             self.encoder = EncoderMLP(
                 input_dim=input_dim_w * self.input_dim_h, output_dim=n_latent_dims
-            ).to(self.device)
+            )
             self.decoder = EncoderMLP(
                 input_dim=n_latent_dims, output_dim=input_dim_w * self.input_dim_h
-            ).to(self.device)
+            )
 
-        params = (
-            list(self.encoder.parameters())
-            + list(self.decoder.parameters())
-            + list(self.vq_layer.parameters())
-        )
-        self.vqvae_optimizer = torch.optim.Adam(
-            params, lr=self.vqvae_lr, weight_decay=0.0001
-        )
+        if eval_mode:
+            self._freeze()
 
-        if load_dir is not None:
-            try:
-                state_dict = torch.load(load_dir, map_location=device)
-            except RuntimeError:
-                state_dict = torch.load(load_dir, map_location=torch.device("cpu"))
-            self.load_state_dict(state_dict)
+    @property
+    def device(self):
+        return next(self.parameters()).device
 
-        if eval:
-            self.vq_layer.eval()
-        else:
-            self.vq_layer.train()
+    def _freeze(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self.eval()
 
     def draw_code_forward(self, encoding_indices: torch.Tensor) -> torch.Tensor:
         """Decode from codes using official get_codes_from_indices().sum(dim=0)."""
@@ -226,22 +216,19 @@ class VqVae(nn.Module):
             else:
                 return state_vq, vq_code
 
-    def state_dict(self) -> dict:
-        """Official state_dict format: encoder, decoder, optimizer, vq_embedding."""
-        return {
-            "encoder": self.encoder.state_dict(),
-            "decoder": self.decoder.state_dict(),
-            "optimizer": self.vqvae_optimizer.state_dict(),
-            "vq_embedding": self.vq_layer.state_dict(),
-        }
+    def load_official_checkpoint(self, load_dir: str):
+        """
+        Load from official checkpoint format.
+        Official state_dict has keys: encoder, decoder, optimizer, vq_embedding.
+        Does NOT override standard nn.Module.load_state_dict.
+        """
+        state_dict = torch.load(load_dir, map_location="cpu")
 
-    def load_state_dict(self, state_dict: dict):
-        """Load from official checkpoint format."""
         self.encoder.load_state_dict(state_dict["encoder"])
         self.decoder.load_state_dict(state_dict["decoder"])
-        self.vqvae_optimizer.load_state_dict(state_dict["optimizer"])
         self.vq_layer.load_state_dict(state_dict["vq_embedding"])
-        self.vq_layer.eval()
+
+        self._freeze()
 
 
 # ---------------------------------------------------------------------------
@@ -310,6 +297,7 @@ class VQActionTokenizer(ActionTokenizer):
     """
     Official VQActionTokenizer from teach_code/MiniVLA/prismatic/vla/action_tokenizer.py.
     Loads VqVae and handles token <-> code mapping.
+    Accepts both NumPy and Torch inputs.
     """
 
     def __init__(
@@ -320,7 +308,7 @@ class VQActionTokenizer(ActionTokenizer):
         use_extra: bool = False,
     ):
         self.tokenizer = tokenizer
-        self.device = device
+        self._init_device = device
 
         self.vq_path = Path(vq_vae_path)
         assert self.vq_path.exists(), f"Missing VQ VAE path: {self.vq_path}"
@@ -332,11 +320,10 @@ class VQActionTokenizer(ActionTokenizer):
         with open(vq_config_path, "r") as f:
             vq_config = dict(json.load(f))
 
-        vq_config["load_dir"] = vq_model_path
-        vq_config["eval"] = True
-        vq_config["device"] = self.device
+        vq_config["eval_mode"] = True
 
         self.vq_vae = VqVae(**vq_config)
+        self.vq_vae.load_official_checkpoint(str(vq_model_path))
 
         self.n_bins = self.vq_vae.vqvae_n_embed
 
@@ -349,20 +336,28 @@ class VQActionTokenizer(ActionTokenizer):
         self.action_token_begin_idx: int = int(self.tokenizer_len - (self.n_bins + 1))
         self.action_token_end_idx: int = int(self.tokenizer_len)
 
-    def __call__(self, action: np.ndarray) -> Union[str, List[str]]:
-        action = torch.from_numpy(action).to(self.device).reshape(
+    def __call__(self, action) -> Union[str, List[str]]:
+        if isinstance(action, torch.Tensor):
+            action = action.detach().cpu().numpy()
+        action = np.array(action)
+
+        action = torch.from_numpy(action).to(self.vq_vae.device).reshape(
             (1, self.vq_vae.input_dim_h, self.vq_vae.input_dim_w)
         )
         _, vq_code = self.vq_vae.get_code(action)
         assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
 
-        return self.tokenizer.decode(list(self.tokenizer_len - 1 - vq_code[0].numpy()))
+        return self.tokenizer.decode(list(self.tokenizer_len - 1 - vq_code[0].detach().cpu().tolist()))
 
-    def decode_token_ids_to_actions(self, action_token_ids: np.ndarray) -> np.ndarray:
+    def decode_token_ids_to_actions(self, action_token_ids) -> np.ndarray:
+        if isinstance(action_token_ids, torch.Tensor):
+            action_token_ids = action_token_ids.detach().cpu().numpy()
+        action_token_ids = np.array(action_token_ids)
+
         action_token_ids = self.tokenizer_len - 1 - action_token_ids
         initial_shape = action_token_ids.shape
         action_token_ids = np.clip(action_token_ids, 0, self.n_bins - 1)
-        action_token_ids = torch.from_numpy(action_token_ids).to(self.device).reshape(
+        action_token_ids = torch.from_numpy(action_token_ids).to(self.vq_vae.device).reshape(
             -1, self.vq_vae.vqvae_groups
         )
         assert torch.all(action_token_ids >= 0) and torch.all(action_token_ids < self.n_bins)
@@ -371,9 +366,9 @@ class VQActionTokenizer(ActionTokenizer):
         ret_action = self.vq_vae.get_action_from_latent(latent)
 
         if action_token_ids.shape[0] == 1 and len(initial_shape) == 1:
-            return ret_action[0, 0]
+            return ret_action[0, 0].detach().cpu().numpy()
 
-        return ret_action[:, 0]
+        return ret_action[:, 0].detach().cpu().numpy()
 
     @property
     def required_future_horizon(self) -> int:

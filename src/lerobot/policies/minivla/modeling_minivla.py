@@ -10,10 +10,12 @@ Key design:
   - MiniVLACore: vision_backbone + projector + Qwen CausalLM + frozen action tokenizer
   - No independent action_logits_head
   - Training: action -> action tokenizer -> action token text -> Qwen prompt -> input_ids/labels -> CausalLM loss
-  - Inference: super().generate with pixel_values -> decode to [B, chunk_size, A]
+  - Inference: batch-safe autoregressive action token generation with KV cache
   - predict_action_chunk: returns [B, chunk_size, action_dim]
   - select_action: returns [B, action_dim] (chunk[:, 0])
   - get_optim_params: only trainable vision, projector, Qwen params
+  - Official checkpoint loading following prismatic/models/load.py and prismatic.py::from_pretrained
+  - LeRobot checkpoint save/restore via standard PreTrainedPolicy
 """
 
 from __future__ import annotations
@@ -51,7 +53,6 @@ class MiniVLACore(nn.Module):
         )
 
         # === VLM Backbone ===
-        # Pass tokenizer_len from shared tokenizer for embedding resize
         self.vlm = MiniVLAVLBackbone(
             vision_backbone_id=config.vision_backbone_id,
             llm_backbone_id=config.llm_backbone_id,
@@ -67,23 +68,25 @@ class MiniVLACore(nn.Module):
             unfreeze_last_llm_layer=config.unfreeze_last_llm_layer,
         )
 
-        # Sync pad_token_id from shared tokenizer to LLM config
         self.vlm.set_pad_token_id(self.tokenizer.pad_token_id)
 
         # === Action Tokenizer ===
-        # Sync the tokenizer_len from shared tokenizer
         tokenizer_len = self.tokenizer.tokenizer_len
 
         if config.is_vq_mode:
+            vq_path = config.resolve_vq_model_path()
+            if not vq_path:
+                raise ValueError(
+                    "VQ mode requires vq_model_path or official_vla_checkpoint "
+                    "pointing to a directory with a 'vq' subdirectory."
+                )
             self.action_tokenizer = VQActionTokenizer(
                 tokenizer=self.tokenizer.tokenizer,
-                vq_vae_path=config.vq_model_path,
-                device="cpu",  # Will be moved by .to(device)
+                vq_vae_path=vq_path,
+                device="cpu",
                 use_extra=True,
             )
-            # Register VQ-VAE as nn.Module so it moves with .to(device)
             self.vq_vae = self.action_tokenizer.vq_vae
-            # Ensure VQ is frozen and in eval mode
             for param in self.vq_vae.parameters():
                 param.requires_grad = False
             self.vq_vae.eval()
@@ -103,8 +106,13 @@ class MiniVLACore(nn.Module):
 
     def _load_official_checkpoint(self, checkpoint_path: str):
         """
-        Load official MiniVLA checkpoint following teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::from_pretrained.
+        Load official MiniVLA checkpoint following
+        teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::from_pretrained
+        and teach_code/MiniVLA/prismatic/models/load.py::load_vla.
+
         Expects checkpoint["model"] with keys: projector, llm_backbone, optional vision_backbone.
+        Does NOT use strict=False silently; raises on unexpected missing/unexpected keys
+        except for known wrapper/prefix differences.
         """
         checkpoint_path = Path(checkpoint_path)
         if not checkpoint_path.exists():
@@ -114,44 +122,61 @@ class MiniVLACore(nn.Module):
         model_state = checkpoint.get("model", checkpoint)
 
         # Load projector
-        if "projector" in model_state:
-            missing, unexpected = self.vlm.projector.load_state_dict(model_state["projector"], strict=False)
-            if missing:
-                print(f"[Official Checkpoint] Missing projector keys: {missing}")
-            if unexpected:
-                print(f"[Official Checkpoint] Unexpected projector keys: {unexpected}")
+        if "projector" not in model_state:
+            raise ValueError(
+                "Official checkpoint missing 'projector' key. "
+                "Expected keys: ['projector', 'llm_backbone', optional 'vision_backbone']."
+            )
+        missing, unexpected = self.vlm.projector.load_state_dict(model_state["projector"], strict=True)
+        if missing:
+            raise ValueError(f"[Official Checkpoint] Missing projector keys: {missing}")
+        if unexpected:
+            raise ValueError(f"[Official Checkpoint] Unexpected projector keys: {unexpected}")
 
         # Load LLM backbone
-        if "llm_backbone" in model_state:
-            llm_state = model_state["llm_backbone"]
-            # Filter out keys that don't belong to the LLM
-            filtered_llm_state = {}
-            for k, v in llm_state.items():
-                # Remove any prefix if present
-                clean_key = k.replace("llm.", "") if k.startswith("llm.") else k
-                filtered_llm_state[clean_key] = v
-            missing, unexpected = self.vlm.llm.load_state_dict(filtered_llm_state, strict=False)
-            if missing:
-                print(f"[Official Checkpoint] Missing LLM keys: {missing}")
-            if unexpected:
-                print(f"[Official Checkpoint] Unexpected LLM keys: {unexpected}")
+        if "llm_backbone" not in model_state:
+            raise ValueError("Official checkpoint missing 'llm_backbone' key.")
+        llm_state = model_state["llm_backbone"]
+
+        # Filter: remove any 'llm.' prefix that might exist in official checkpoints
+        filtered_llm_state = {}
+        for k, v in llm_state.items():
+            clean_key = k.replace("llm.", "") if k.startswith("llm.") else k
+            filtered_llm_state[clean_key] = v
+
+        # Handle embedding padding differences (official may have different vocab size)
+        official_embed_shape = filtered_llm_state.get("model.embed_tokens.weight", None)
+        if official_embed_shape is not None:
+            official_vocab_size = official_embed_shape.shape[0]
+            current_vocab_size = self.vlm.llm.model.embed_tokens.weight.shape[0]
+            if official_vocab_size != current_vocab_size:
+                # Resize to official size, then our extra tokens will be re-added
+                self.vlm.llm.resize_token_embeddings(official_vocab_size)
+
+        missing, unexpected = self.vlm.llm.load_state_dict(filtered_llm_state, strict=True)
+        if missing:
+            raise ValueError(f"[Official Checkpoint] Missing LLM keys: {missing}")
+        if unexpected:
+            raise ValueError(f"[Official Checkpoint] Unexpected LLM keys: {unexpected}")
 
         # Load vision backbone (optional)
         if "vision_backbone" in model_state:
-            missing, unexpected = self.vlm.vision_backbone.load_state_dict(model_state["vision_backbone"], strict=False)
+            missing, unexpected = self.vlm.vision_backbone.load_state_dict(
+                model_state["vision_backbone"], strict=True
+            )
             if missing:
-                print(f"[Official Checkpoint] Missing vision keys: {missing}")
+                raise ValueError(f"[Official Checkpoint] Missing vision keys: {missing}")
             if unexpected:
-                print(f"[Official Checkpoint] Unexpected vision keys: {unexpected}")
+                raise ValueError(f"[Official Checkpoint] Unexpected vision keys: {unexpected}")
 
         # Load adjacent config.json for action tokenizer type
-        config_dir = checkpoint_path.parent
+        config_dir = checkpoint_path.parents[1]
         config_json = config_dir / "config.json"
         if config_json.exists():
             with open(config_json, "r") as f:
                 vla_config = json.load(f)
-            if "action_tokenizer" in vla_config:
-                print(f"[Official Checkpoint] Action tokenizer type: {vla_config['action_tokenizer']}")
+            if "vla" in vla_config and "action_tokenizer" in vla_config["vla"]:
+                print(f"[Official Checkpoint] Action tokenizer type: {vla_config['vla']['action_tokenizer']}")
 
         # Load dataset_statistics.json for action denormalization
         dataset_stats = config_dir / "dataset_statistics.json"
@@ -177,34 +202,28 @@ class MiniVLACore(nn.Module):
         """
         batch_size = len(instruction)
 
-        # Infer batch size from pixel_values if action is None
         if action is None and batch_size == 0:
             batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size
 
         if action is not None:
-            # === Encode actions to text ===
             action_texts = []
             for i in range(batch_size):
-                single_action = action[i].cpu().numpy()  # [chunk_size, action_dim]
+                single_action = action[i].cpu().numpy()
 
                 if self.config.is_vq_mode:
-                    # VQ mode: action is [chunk_size, action_dim] -> encode to VQ codes
-                    action_tensor = torch.from_numpy(single_action).unsqueeze(0)  # [1, chunk_size, action_dim]
+                    action_tensor = single_action
                     action_text = self.action_tokenizer(action_tensor)
                 else:
-                    # Non-VQ mode: use last action step (single-step discretization)
-                    action_text = self.action_tokenizer(single_action[-1])  # Last step only
+                    action_text = self.action_tokenizer(single_action[0])
 
                 action_texts.append(action_text)
 
-            # === Build prompts ===
             input_ids_list = []
             labels_list = []
             attention_mask_list = []
 
             for i in range(batch_size):
-                # Build full prompt with action tokens
                 prompt = self.tokenizer.build_prompt(instruction[i], action_texts[i])
                 encoded = self.tokenizer.tokenizer(
                     prompt,
@@ -212,27 +231,20 @@ class MiniVLACore(nn.Module):
                     padding=False,
                     truncation=False,
                 )
-                input_ids = encoded["input_ids"].squeeze(0)  # (seq_len,)
+                input_ids = encoded["input_ids"].squeeze(0)
                 seq_len = len(input_ids)
 
-                # === Build labels matching official RLDSBatchTransform ===
-                # Tokenize the action text to find num_answer_tokens
                 action_tokens = self.tokenizer.tokenizer(action_texts[i])["input_ids"]
                 num_answer_tokens = len(action_tokens)
-
-                # Qwen has 2 end tokens: <|im_end|><|endoftext|>
                 num_end_tokens = 2
 
-                # Create labels: only action tokens and end tokens participate in loss
                 labels = input_ids.clone()
                 labels[: -(num_answer_tokens + num_end_tokens)] = IGNORE_INDEX
 
                 input_ids_list.append(input_ids)
                 labels_list.append(labels)
-                # Create attention mask: 1 for valid tokens, 0 for padding
                 attention_mask_list.append(torch.ones(seq_len, dtype=torch.long))
 
-            # === Pad sequences ===
             input_ids = nn.utils.rnn.pad_sequence(
                 input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
             )
@@ -243,7 +255,6 @@ class MiniVLACore(nn.Module):
                 attention_mask_list, batch_first=True, padding_value=0
             )
         else:
-            # Inference: build prompt without action
             input_ids_list = []
             attention_mask_list = []
             for i in range(batch_size):
@@ -254,9 +265,8 @@ class MiniVLACore(nn.Module):
                     padding=False,
                     truncation=False,
                 )
-                input_ids = encoded["input_ids"].squeeze(0)
-                input_ids_list.append(input_ids)
-                attention_mask_list.append(torch.ones(len(input_ids), dtype=torch.long))
+                input_ids_list.append(encoded["input_ids"].squeeze(0))
+                attention_mask_list.append(torch.ones(len(input_ids_list[-1]), dtype=torch.long))
 
             input_ids = nn.utils.rnn.pad_sequence(
                 input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
@@ -271,7 +281,6 @@ class MiniVLACore(nn.Module):
         if labels is not None:
             labels = labels.to(pixel_values["dino"].device)
 
-        # === Forward through VLM ===
         outputs = self.vlm(
             pixel_values=pixel_values,
             input_ids=input_ids,
@@ -292,7 +301,9 @@ class MiniVLACore(nn.Module):
     ) -> torch.Tensor:
         """
         Official multi-modal autoregressive action prediction.
-        Uses super().generate with pixel_values to leverage KV cache.
+        Batch-safe: each sample executes image+prompt forward(use_cache=True) ->
+        read last position logits -> greedy/sample -> send single token + past_key_values
+        back to VLM -> repeat for required token count.
         Returns: [B, chunk_size, action_dim]
         """
         batch_size = len(instruction)
@@ -304,7 +315,7 @@ class MiniVLACore(nn.Module):
         if self.config.is_vq_mode:
             num_action_tokens = self.config.vqvae_groups
         else:
-            num_action_tokens = self.config.vq_action_dim
+            num_action_tokens = self.config.action_feature.shape[0]
 
         if max_new_tokens is None:
             max_new_tokens = num_action_tokens
@@ -325,41 +336,78 @@ class MiniVLACore(nn.Module):
             input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
         ).to(pixel_values["dino"].device)
 
-        # === Multi-modal generation using GenerationMixin ===
-        # This calls super().generate which uses prepare_inputs_for_generation
-        # to properly handle pixel_values in the first step and KV cache thereafter
-        generated_ids = self.vlm.generate(
+        # === Batch-safe autoregressive generation with KV cache ===
+        # First forward pass: image + full prompt -> get past_key_values and last logits
+        outputs = self.vlm(
             input_ids=input_ids,
             pixel_values=pixel_values,
-            max_new_tokens=max_new_tokens,
-            do_sample=do_sample,
-            temperature=temperature if do_sample else 1.0,
+            attention_mask=torch.ones_like(input_ids, device=input_ids.device),
             use_cache=True,
-            pad_token_id=self.tokenizer.pad_token_id,
         )
 
+        # Get the logits from the last position
+        logits = outputs.logits[:, -1, :]  # [B, vocab_size]
+        past_key_values = outputs.past_key_values
+
+        # Build attention mask for generation (right padding)
+        attention_mask = torch.ones(
+            input_ids.shape[0], input_ids.shape[1],
+            dtype=torch.long, device=input_ids.device
+        )
+
+        generated_token_ids = []
+        current_input_ids = input_ids
+
+        for step in range(max_new_tokens):
+            if do_sample and temperature > 0:
+                probs = torch.softmax(logits / temperature, dim=-1)
+                next_token = torch.multinomial(probs, num_samples=1)
+            else:
+                next_token = torch.argmax(logits, dim=-1, keepdim=True)
+
+            generated_token_ids.append(next_token)
+
+            if step < max_new_tokens - 1:
+                # Feed single token + past_key_values back to VLM
+                outputs = self.vlm(
+                    input_ids=next_token,
+                    attention_mask=attention_mask,
+                    past_key_values=past_key_values,
+                    use_cache=True,
+                )
+                logits = outputs.logits[:, -1, :]
+                past_key_values = outputs.past_key_values
+
+                # Update attention mask
+                new_mask = torch.ones(
+                    next_token.shape[0], 1,
+                    dtype=torch.long, device=next_token.device
+                )
+                attention_mask = torch.cat([attention_mask, new_mask], dim=1)
+
         # === Extract action token IDs ===
-        prompt_len = input_ids.shape[1]
-        action_token_ids = generated_ids[:, prompt_len:prompt_len + num_action_tokens]
+        action_token_ids = torch.cat(generated_token_ids, dim=1)  # [B, num_tokens]
 
         # === Decode to actions ===
         action_token_ids_np = action_token_ids.cpu().numpy()
 
         if self.config.is_vq_mode:
-            # VQ mode: decode VQ token IDs to [B, chunk_size, action_dim]
             actions = self.action_tokenizer.decode_token_ids_to_actions(action_token_ids_np)
-            # Ensure output shape is [B, chunk_size, action_dim]
-            if actions.ndim == 2:
-                actions = actions.unsqueeze(1)  # [B, 1, A] -> need to expand
-            # VQ returns [B, 0] (first horizon element), reshape to [B, 1, A]
-            if actions.ndim == 2:
+            actions = torch.from_numpy(actions).float()
+            if actions.ndim == 1:
+                actions = actions.unsqueeze(0).unsqueeze(0)
+            elif actions.ndim == 2:
                 actions = actions.unsqueeze(1)
         else:
-            # Non-VQ mode: decode to [B, action_dim]
             actions = self.action_tokenizer.decode_token_ids_to_actions(action_token_ids_np)
-            # Expand to [B, 1, action_dim] for consistency
-            actions = actions.reshape(batch_size, 1, -1)
+            actions = torch.from_numpy(actions).float()
+            if actions.ndim == 1:
+                actions = actions.unsqueeze(0).unsqueeze(0)
+            elif actions.ndim == 2:
+                actions = actions.unsqueeze(1)
 
+        # Ensure output is on same device as pixel_values
+        actions = actions.to(pixel_values["dino"].device)
         return actions
 
     def get_optim_params(self) -> dict:
@@ -368,17 +416,13 @@ class MiniVLACore(nn.Module):
         VQ-VAE is excluded.
         """
         params = []
-        # Vision backbone
         if not self.config.freeze_vision_backbone:
             params.extend(self.vlm.vision_backbone.parameters())
 
-        # Projector
         params.extend(self.vlm.projector.parameters())
 
-        # LLM
         if self.config.freeze_llm_backbone:
             if self.config.unfreeze_last_llm_layer:
-                # Use correct Qwen path: self.llm.model.layers[-1]
                 params.extend(self.vlm.llm.model.layers[-1].parameters())
         else:
             params.extend(self.vlm.llm.parameters())
@@ -400,30 +444,19 @@ class MiniVLAPolicy(PreTrainedPolicy):
         self._action_queue: Optional[torch.Tensor] = None
 
     def forward(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict | None]:
-        """
-        Training forward.
-        batch contains:
-          - observation.images.*: image tensors
-          - task: list of instruction strings
-          - action: [B, chunk_size, action_dim] normalized actions
-        """
-        # === Extract pixel values ===
         pixel_values = self._extract_pixel_values(batch)
 
-        # === Extract instruction ===
         if "task" in batch:
             instruction = batch["task"]
             if isinstance(instruction, torch.Tensor):
                 instruction = ["" for _ in range(len(instruction))]
         else:
-            # Infer batch size from action or pixel_values
             if "action" in batch:
                 batch_size = batch["action"].shape[0]
             else:
                 batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size
 
-        # === Forward ===
         action = batch.get("action", None)
         outputs = self.model(
             pixel_values=pixel_values,
@@ -436,18 +469,13 @@ class MiniVLAPolicy(PreTrainedPolicy):
     def predict_action_chunk(
         self, batch: dict[str, torch.Tensor], **kwargs: Unpack[ActionSelectKwargs]
     ) -> torch.Tensor:
-        """
-        Returns [B, chunk_size, action_dim].
-        """
         pixel_values = self._extract_pixel_values(batch)
 
-        # === Extract instruction ===
         if "task" in batch:
             instruction = batch["task"]
             if isinstance(instruction, torch.Tensor):
                 instruction = ["" for _ in range(len(instruction))]
         else:
-            # Infer batch size from pixel_values
             batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size
 
@@ -460,25 +488,16 @@ class MiniVLAPolicy(PreTrainedPolicy):
     def select_action(
         self, batch: dict[str, torch.Tensor], **kwargs: Unpack[ActionSelectKwargs]
     ) -> torch.Tensor:
-        """
-        Returns [B, action_dim] (chunk[:, 0]).
-        Only executes the first step of the chunk.
-        Follows official: decode_token_ids_to_actions(...) -> ret_action[:, 0]
-        """
         if self._action_queue is None or self._action_queue.shape[1] == 0:
-            # Predict new chunk
             chunk = self.predict_action_chunk(batch, **kwargs)
-            # Cache only the first n_action_steps
             n_steps = self.config.n_action_steps
             self._action_queue = chunk[:, :n_steps]
 
         action = self._action_queue[:, 0]
-        # Remove first step from queue
         self._action_queue = self._action_queue[:, 1:]
         return action
 
     def reset(self):
-        """Clear action queue and generation cache."""
         self._action_queue = None
 
     def get_optim_params(self) -> dict:
@@ -488,16 +507,17 @@ class MiniVLAPolicy(PreTrainedPolicy):
         """
         Extract DINO and SigLIP pixel values from LeRobot batch.
         Expects batch to already contain "dino" and "siglip" keys from processor.
+        Raises clear error if missing.
         """
         if "dino" in batch and "siglip" in batch:
             return {"dino": batch["dino"], "siglip": batch["siglip"]}
 
-        # Fallback: look for observation.images.* keys
-        pixel_values = {}
-        for key in batch:
-            if key.startswith("observation.images"):
-                pixel_values[key] = batch[key]
-        return pixel_values
+        raise ValueError(
+            "Batch missing 'dino' and 'siglip' keys. "
+            "The MiniVLA processor must run first to convert observation.images.* "
+            "into DINO/SigLIP normalized tensors. "
+            "Ensure make_minivla_pre_post_processors() is configured and applied."
+        )
 
 
 # ---------------------------------------------------------------------------
