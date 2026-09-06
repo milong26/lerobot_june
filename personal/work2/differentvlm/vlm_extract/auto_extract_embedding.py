@@ -49,9 +49,10 @@ def get_extractor(cfg: VLMExperimentConfig) -> BaseVLMExtractor:
         )
 
 
-def check_embedding_cache(embedding_dir: str, expected_model_name: str, expected_camera: str) -> tuple:
+def check_embedding_cache(embedding_dir: str, expected_model_name: str, expected_camera: str, expected_total_episodes: int = 0) -> tuple:
     """
     Check if embedding cache exists and matches expected model and camera.
+    Also validates that all episodes are present (not incomplete from failed run).
     Returns (is_valid, reason, episode_count).
     """
     cache_dir = Path(embedding_dir)
@@ -81,6 +82,10 @@ def check_embedding_cache(embedding_dir: str, expected_model_name: str, expected
 
     if count == 0:
         return False, f"No episode_*.json files found in {embedding_dir}", 0
+
+    # Check if cache is incomplete (from a failed run)
+    if expected_total_episodes > 0 and count < expected_total_episodes:
+        return False, f"Cache incomplete: {count}/{expected_total_episodes} episodes found", count
 
     pca_dir = cache_dir / "pca_models"
     pca_g = pca_dir / f"pca_global_32.joblib"
@@ -115,10 +120,25 @@ def auto_extract_embedding(cfg: VLMExperimentConfig) -> str:
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu_id)
 
+    # Load dataset first to get total episode count
+    print(f"\nLoading dataset...")
+    print(f"  Repo: {cfg.lerobot_repo_id}")
+    print(f"  Root: {cfg.dataset_root}")
+    sys.stdout.flush()
+
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+    dataset = LeRobotDataset(
+        repo_id=cfg.lerobot_repo_id,
+        root=cfg.dataset_root,
+    )
+    print(f"Dataset loaded: {dataset.num_episodes} episodes, {dataset.num_frames} frames")
+    sys.stdout.flush()
+
     is_valid, reason, episode_count = check_embedding_cache(
         cfg.embedding_cache_dir,
         cfg.vlm_name,
         cfg.camera,
+        expected_total_episodes=dataset.num_episodes,
     )
 
     if is_valid:
@@ -132,19 +152,6 @@ def auto_extract_embedding(cfg: VLMExperimentConfig) -> str:
     sys.stdout.flush()
 
     extractor = get_extractor(cfg)
-
-    print(f"\nLoading dataset...")
-    print(f"  Repo: {cfg.lerobot_repo_id}")
-    print(f"  Root: {cfg.dataset_root}")
-    sys.stdout.flush()
-
-    from lerobot.datasets.lerobot_dataset import LeRobotDataset
-    dataset = LeRobotDataset(
-        repo_id=cfg.lerobot_repo_id,
-        root=cfg.dataset_root,
-    )
-    print(f"Dataset loaded: {dataset.num_episodes} episodes, {dataset.num_frames} frames")
-    sys.stdout.flush()
 
     result = extractor.extract_and_save_all(dataset, output_dir=Path(cfg.embedding_cache_dir))
 

@@ -226,3 +226,4 @@ personal/work2/dataset/libero/*
 *.npz
 teach_code/*
 personal/work2/differentvlm/embeddings/*
+**/embeddings/*

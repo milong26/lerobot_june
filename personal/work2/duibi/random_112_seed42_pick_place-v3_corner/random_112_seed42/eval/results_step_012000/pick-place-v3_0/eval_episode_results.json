@@ -1,17 +1,17 @@
 {
   "num_episodes": 16,
-  "success_count": 3,
-  "grasp_success_count": 14,
-  "fail_count": 13,
-  "success_rate": 0.1875,
-  "grasp_success_rate": 0.875,
+  "success_count": 4,
+  "grasp_success_count": 16,
+  "fail_count": 12,
+  "success_rate": 0.25,
+  "grasp_success_rate": 1.0,
   "episodes": [
     {
       "episode_ix": 0,
-      "success": false,
+      "success": true,
       "grasp_success": true,
-      "sum_reward": 1170.630494220733,
-      "max_reward": 3.3541787443979496,
+      "sum_reward": 101.88698643611392,
+      "max_reward": 6.7963714599609375,
       "seed": 42,
       "initial_state": {
         "episode_ix": 0,
@@ -32,8 +32,8 @@
       "episode_ix": 1,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 1803.1987748425236,
-      "max_reward": 5.149374008178711,
+      "sum_reward": 2550.9991654328824,
+      "max_reward": 6.817302276484847,
       "seed": 43,
       "initial_state": {
         "episode_ix": 1,
@@ -52,10 +52,10 @@
     },
     {
       "episode_ix": 2,
-      "success": false,
+      "success": true,
       "grasp_success": true,
-      "sum_reward": 27.56188706138179,
-      "max_reward": 0.18745739255775543,
+      "sum_reward": 158.2119863523533,
+      "max_reward": 6.775031566619873,
       "seed": 44,
       "initial_state": {
         "episode_ix": 2,
@@ -74,10 +74,10 @@
     },
     {
       "episode_ix": 3,
-      "success": false,
+      "success": true,
       "grasp_success": true,
-      "sum_reward": 1623.9506225791806,
-      "max_reward": 5.2713212966918945,
+      "sum_reward": 145.94203888116158,
+      "max_reward": 6.792023599396454,
       "seed": 45,
       "initial_state": {
         "episode_ix": 3,
@@ -98,8 +98,8 @@
       "episode_ix": 4,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 2268.1269177419135,
-      "max_reward": 6.346297986040843,
+      "sum_reward": 1663.7308304482826,
+      "max_reward": 4.400769233703613,
       "seed": 46,
       "initial_state": {
         "episode_ix": 4,
@@ -119,9 +119,9 @@
     {
       "episode_ix": 5,
       "success": false,
-      "grasp_success": false,
-      "sum_reward": 11.961806165345635,
-      "max_reward": 0.12592946765740187,
+      "grasp_success": true,
+      "sum_reward": 453.74983442753984,
+      "max_reward": 5.5650763511657715,
       "seed": 47,
       "initial_state": {
         "episode_ix": 5,
@@ -140,10 +140,10 @@
     },
     {
       "episode_ix": 6,
-      "success": true,
+      "success": false,
       "grasp_success": true,
-      "sum_reward": 44.360473699970484,
-      "max_reward": 6.441545486450195,
+      "sum_reward": 1248.53239179249,
+      "max_reward": 6.299191979280874,
       "seed": 48,
       "initial_state": {
         "episode_ix": 6,
@@ -164,8 +164,8 @@
       "episode_ix": 7,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 1576.6394861180256,
-      "max_reward": 4.898150444030762,
+      "sum_reward": 1633.0218175729042,
+      "max_reward": 5.516421318054199,
       "seed": 49,
       "initial_state": {
         "episode_ix": 7,
@@ -186,8 +186,8 @@
       "episode_ix": 8,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 37.358708851334384,
-      "max_reward": 0.19559259915687716,
+      "sum_reward": 1724.451746710085,
+      "max_reward": 4.5803203135845365,
       "seed": 50,
       "initial_state": {
         "episode_ix": 8,
@@ -208,8 +208,8 @@
       "episode_ix": 9,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 1652.1572683968031,
-      "max_reward": 5.17405891418457,
+      "sum_reward": 1507.1534681116923,
+      "max_reward": 4.264281749725342,
       "seed": 51,
       "initial_state": {
         "episode_ix": 9,
@@ -230,8 +230,8 @@
       "episode_ix": 10,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 1706.5367651647148,
-      "max_reward": 4.114783763885498,
+      "sum_reward": 1406.5074523760186,
+      "max_reward": 3.4116735458374023,
       "seed": 52,
       "initial_state": {
         "episode_ix": 10,
@@ -252,8 +252,8 @@
       "episode_ix": 11,
       "success": true,
       "grasp_success": true,
-      "sum_reward": 6.05867513838294,
-      "max_reward": 0.3845573572397067,
+      "sum_reward": 43.12015232900518,
+      "max_reward": 6.604014809458192,
       "seed": 53,
       "initial_state": {
         "episode_ix": 11,
@@ -274,8 +274,8 @@
       "episode_ix": 12,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 1552.0746646109112,
-      "max_reward": 4.596869945526123,
+      "sum_reward": 2439.776023921138,
+      "max_reward": 6.336984108941481,
       "seed": 54,
       "initial_state": {
         "episode_ix": 12,
@@ -295,9 +295,9 @@
     {
       "episode_ix": 13,
       "success": false,
-      "grasp_success": false,
-      "sum_reward": 9.425462659538374,
-      "max_reward": 0.10107593481925205,
+      "grasp_success": true,
+      "sum_reward": 2220.4340967926846,
+      "max_reward": 5.164083957672119,
       "seed": 55,
       "initial_state": {
         "episode_ix": 13,
@@ -316,10 +316,10 @@
     },
     {
       "episode_ix": 14,
-      "success": true,
+      "success": false,
       "grasp_success": true,
-      "sum_reward": 61.85104499505775,
-      "max_reward": 6.737994194030762,
+      "sum_reward": 997.919273111728,
+      "max_reward": 3.7021732330322266,
       "seed": 56,
       "initial_state": {
         "episode_ix": 14,
@@ -340,8 +340,8 @@
       "episode_ix": 15,
       "success": false,
       "grasp_success": true,
-      "sum_reward": 1942.0704798208728,
-      "max_reward": 5.254276275634766,
+      "sum_reward": 1594.239962342883,
+      "max_reward": 3.7457527689570593,
       "seed": 57,
       "initial_state": {
         "episode_ix": 15,

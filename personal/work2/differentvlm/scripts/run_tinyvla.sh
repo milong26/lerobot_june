@@ -104,14 +104,15 @@ fi
 
 # Create tmux session and run experiment
 tmux new-session -d -s "$SESSION_NAME" \
-    "export CUDA_VISIBLE_DEVICES=$GPU_ID && \
+    "export HF_HUB_OFFLINE=1 && \
+     export CUDA_VISIBLE_DEVICES=$GPU_ID && \
      cd $PROJECT_ROOT && \
      python personal/work2/differentvlm/scripts/run_tinyvla.py \
      --policy_type $POLICY_TYPE \
      --dataset_name $DATASET_NAME \
      --gpu $GPU_ID \
      --num_episodes $NUM_EPISODES \
-     2>&1 | tee $LOG_FILE"
+     2>&1 | tee -a $LOG_FILE"
 
 echo "Experiment started successfully."
 echo "Monitor progress: tail -f $LOG_FILE"
