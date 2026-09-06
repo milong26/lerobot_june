@@ -48,6 +48,7 @@ def build_eval_cmd(policy_path: Path, env_task: str, n_episodes: int, start_seed
         f"--eval.n_episodes={n_episodes}",
         f"--policy.device={device}",
         f"--seed={start_seed}",
+        f"--output_dir={output_dir}",
         f"--rename_map={rename_map}",
     ]
 
@@ -73,16 +74,67 @@ def run_eval(cmd: list, label: str) -> dict:
 
 
 def load_existing_episodes(model_dir: Path, checkpoint: str) -> list:
-    """Load existing eval episodes."""
-    results_dir = model_dir / "eval" / f"results_step_{checkpoint}"
-    if not results_dir.exists():
-        return []
+    """Load existing eval episodes from multiple possible locations."""
     episodes = []
-    for f in sorted(results_dir.rglob("eval_episode_results.json")):
+    # Search in multiple possible result directories
+    search_dirs = [
+        model_dir / "eval" / f"results_step_{checkpoint}" / "paired" / "eval_results",
+        model_dir / "eval" / f"results_step_{checkpoint}",
+        PROJECT_ROOT / "outputs" / "eval",
+    ]
+    for search_dir in search_dirs:
+        if not search_dir.exists():
+            continue
+        for f in sorted(search_dir.rglob("eval_episode_results.json")):
+            with open(f) as fh:
+                data = json.load(fh)
+            episodes.extend(data.get("episodes", []))
+    # Deduplicate by episode index
+    seen = set()
+    unique_episodes = []
+    for ep in episodes:
+        idx = ep.get("episode_index", ep.get("seed", id(ep)))
+        if idx not in seen:
+            seen.add(idx)
+            unique_episodes.append(ep)
+    return unique_episodes
+
+
+def load_latest_eval_results(task: str, label: str) -> list:
+    """Load the latest eval results from outputs/eval/ directory."""
+    eval_root = PROJECT_ROOT / "outputs" / "eval"
+    if not eval_root.exists():
+        return []
+    # Find the latest directory for this task
+    latest_dir = None
+    latest_time = ""
+    for d in sorted(eval_root.iterdir()):
+        if not d.is_dir():
+            continue
+        # Check if this directory contains results for our task
+        for f in d.rglob("eval_episode_results.json"):
+            try:
+                with open(f) as fh:
+                    data = json.load(fh)
+                episodes = data.get("episodes", [])
+                if episodes and "seed" in episodes[0]:
+                    # This is a valid result file
+                    dir_time = d.name
+                    if dir_time > latest_time:
+                        latest_time = dir_time
+                        latest_dir = d
+            except (json.JSONDecodeError, KeyError):
+                continue
+    if latest_dir is None:
+        return []
+    # Load results
+    for f in sorted(latest_dir.rglob("eval_episode_results.json")):
         with open(f) as fh:
             data = json.load(fh)
-        episodes.extend(data.get("episodes", []))
-    return episodes
+        episodes = data.get("episodes", [])
+        if episodes:
+            return episodes
+    return []
 
 
 def main():
@@ -148,17 +200,10 @@ def main():
     print("Starting V5 eval...")
     print(f"{'='*60}")
     sys.stdout.flush()
-    v5_proc = subprocess.Popen(v5_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    v5_lines = []
-    for line in v5_proc.stdout:
-        line = line.rstrip()
-        v5_lines.append(line)
-        # Print every line in real-time so user can see progress
-        print(f"  [V5] {line}")
-        sys.stdout.flush()
-    v5_proc.wait()
-    if v5_proc.returncode != 0:
-        print(f"ERROR: V5 eval failed with return code {v5_proc.returncode}")
+    v5_result = subprocess.run(v5_cmd, capture_output=True, text=True, timeout=600)
+    if v5_result.returncode != 0:
+        print(f"ERROR: V5 eval failed with return code {v5_result.returncode}")
+        print(v5_result.stderr[-500:] if v5_result.stderr else v5_result.stdout[-500:])
         sys.exit(1)
     print("V5 eval completed")
 
@@ -167,16 +212,10 @@ def main():
     print("Starting Random eval...")
     print(f"{'='*60}")
     sys.stdout.flush()
-    random_proc = subprocess.Popen(random_cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-    random_lines = []
-    for line in random_proc.stdout:
-        line = line.rstrip()
-        random_lines.append(line)
-        print(f"  [Random] {line}")
-        sys.stdout.flush()
-    random_proc.wait()
-    if random_proc.returncode != 0:
-        print(f"ERROR: Random eval failed with return code {random_proc.returncode}")
+    random_result = subprocess.run(random_cmd, capture_output=True, text=True, timeout=600)
+    if random_result.returncode != 0:
+        print(f"ERROR: Random eval failed with return code {random_result.returncode}")
+        print(random_result.stderr[-500:] if random_result.stderr else random_result.stdout[-500:])
         sys.exit(1)
     print("Random eval completed")
 

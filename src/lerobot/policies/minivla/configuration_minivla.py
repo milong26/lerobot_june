@@ -124,6 +124,12 @@ class _MiniVLAConfigBase(PreTrainedConfig):
 
     @property
     def action_delta_indices(self) -> list:
+        """
+        Dynamically determine action_delta_indices based on action tokenizer type.
+        Mirrors teach_code/MiniVLA/prismatic/vla/action_tokenizer.py:
+        - VQ mode: uses full chunk (all indices)
+        - Non-VQ mode: uses only current action (index 0)
+        """
         if self.is_vq_mode:
             return list(range(self.chunk_size))
         return [0]

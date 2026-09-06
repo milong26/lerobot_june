@@ -16,6 +16,8 @@ Key design:
   - get_optim_params: only trainable vision, projector, Qwen params
   - Official checkpoint loading following prismatic/models/load.py::load_vla and prismatic.py::from_pretrained
   - LeRobot checkpoint save/restore via standard PreTrainedPolicy
+  - Action dimension dynamically from config.action_feature or official dataset statistics
+  - Action denormalization using official q01/q99 quantile stats
 """
 
 from __future__ import annotations
@@ -74,18 +76,20 @@ class MiniVLACore(nn.Module):
 
         # === Action Tokenizer ===
         # Determine action tokenizer type from config or official checkpoint
+        # Mirrors teach_code/MiniVLA/prismatic/models/load.py::load_vla
         action_tokenizer_type = config.action_tokenizer_type
 
         # If official checkpoint is specified, read its config.json to get the real tokenizer type
-        if config.official_vla_checkpoint and not config.is_vq_mode:
+        if config.official_vla_checkpoint:
             checkpoint_path = Path(config.official_vla_checkpoint)
-            config_dir = checkpoint_path.parents[1]
-            config_json = config_dir / "config.json"
-            if config_json.exists():
-                with open(config_json, "r") as f:
-                    vla_config = json.load(f)
-                if "vla" in vla_config and "action_tokenizer" in vla_config["vla"]:
-                    action_tokenizer_type = vla_config["vla"]["action_tokenizer"]
+            if checkpoint_path.exists() and checkpoint_path.suffix == ".pt":
+                run_dir = checkpoint_path.parents[1]
+                config_json = run_dir / "config.json"
+                if config_json.exists():
+                    with open(config_json, "r") as f:
+                        vla_config = json.load(f)
+                    if "vla" in vla_config and "action_tokenizer" in vla_config["vla"]:
+                        action_tokenizer_type = vla_config["vla"]["action_tokenizer"]
 
         # Create action tokenizer based on type
         if action_tokenizer_type in (
@@ -99,8 +103,9 @@ class MiniVLACore(nn.Module):
             vq_path = config.resolve_vq_model_path()
             if not vq_path:
                 raise ValueError(
-                    "VQ mode requires vq_model_path or official_vla_checkpoint "
-                    "pointing to a directory with a 'vq' subdirectory."
+                    f"VQ mode requires vq_model_path or official_vla_checkpoint "
+                    f"pointing to a directory with a 'vq' subdirectory. "
+                    f"Got action_tokenizer_type={action_tokenizer_type}"
                 )
             self.action_tokenizer = VQActionTokenizer(
                 tokenizer=self.tokenizer.tokenizer,
@@ -130,17 +135,48 @@ class MiniVLACore(nn.Module):
     def _load_official_checkpoint(self, checkpoint_path: str):
         """
         Load official MiniVLA checkpoint following
-        teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::from_pretrained
-        and teach_code/MiniVLA/prismatic/models/load.py::load_vla.
+        teach_code/MiniVLA/prismatic/models/load.py::load_vla
+        and teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::from_pretrained.
 
-        Expects checkpoint["model"] with keys: projector, llm_backbone, optional vision_backbone.
-        Does NOT use strict=False silently; raises on unexpected missing/unexpected keys
-        except for known wrapper/prefix differences.
+        Steps:
+        1. Read config.json from checkpoint_path.parents[1] (run directory)
+        2. Parse vla.action_tokenizer, base_vlm, and model config
+        3. Read dataset_statistics.json for action denormalization
+        4. Load projector, llm_backbone, vision_backbone weights
+        5. Handle embedding vocab size mismatches
+        6. Load VQ-VAE weights if in VQ mode
         """
         checkpoint_path = Path(checkpoint_path)
         if not checkpoint_path.exists():
             raise FileNotFoundError(f"Official checkpoint not found: {checkpoint_path}")
 
+        # [Validate] Checkpoint Path should look like `.../<RUN_ID>/checkpoints/<CHECKPOINT_PATH>.pt`
+        assert (checkpoint_path.suffix == ".pt") and (checkpoint_path.parent.name == "checkpoints"), (
+            "Invalid checkpoint path! Expected path like '<run_dir>/checkpoints/<name>.pt'"
+        )
+        run_dir = checkpoint_path.parents[1]
+
+        # Get paths for config.json and dataset_statistics.json
+        config_json = run_dir / "config.json"
+        dataset_statistics_json = run_dir / "dataset_statistics.json"
+
+        if not config_json.exists():
+            raise FileNotFoundError(f"Missing config.json for run_dir={run_dir}")
+
+        # Load VLA config
+        with open(config_json, "r") as f:
+            full_config = json.load(f)
+
+        vla_cfg = full_config.get("vla", {})
+        action_tokenizer_type = vla_cfg.get("action_tokenizer", "action_tokenizer")
+        base_vlm = vla_cfg.get("base_vlm", self.config.base_vlm_checkpoint)
+
+        # Load dataset statistics for action denormalization
+        if dataset_statistics_json.exists():
+            with open(dataset_statistics_json, "r") as f:
+                self.dataset_statistics = json.load(f)
+
+        # Load checkpoint weights
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         model_state = checkpoint.get("model", checkpoint)
 
@@ -167,14 +203,12 @@ class MiniVLACore(nn.Module):
             clean_key = k.replace("llm.", "") if k.startswith("llm.") else k
             filtered_llm_state[clean_key] = v
 
-        # Handle embedding padding differences (official may have different vocab size)
-        # This is critical: official checkpoint may have been trained with different vocab size
+        # Handle embedding vocab size differences
         official_embed_shape = filtered_llm_state.get("model.embed_tokens.weight", None)
         if official_embed_shape is not None:
             official_vocab_size = official_embed_shape.shape[0]
             current_vocab_size = self.vlm.llm.model.embed_tokens.weight.shape[0]
             if official_vocab_size != current_vocab_size:
-                # Resize current model to match official checkpoint vocab size
                 self.vlm.llm.resize_token_embeddings(official_vocab_size)
 
         missing, unexpected = self.vlm.llm.load_state_dict(filtered_llm_state, strict=True)
@@ -193,23 +227,34 @@ class MiniVLACore(nn.Module):
             if unexpected:
                 raise ValueError(f"[Official Checkpoint] Unexpected vision keys: {unexpected}")
 
-        # Load adjacent config.json for action tokenizer type and VQ path
-        config_dir = checkpoint_path.parents[1]
-        config_json = config_dir / "config.json"
-        if config_json.exists():
-            with open(config_json, "r") as f:
-                vla_config = json.load(f)
-            if "vla" in vla_config and "action_tokenizer" in vla_config["vla"]:
-                print(f"[Official Checkpoint] Action tokenizer type: {vla_config['vla']['action_tokenizer']}")
+        # If VQ mode, load VQ-VAE weights from official checkpoint directory
+        if self.config.is_vq_mode:
+            vq_path = self.config.resolve_vq_model_path()
+            if vq_path and hasattr(self, "vq_vae") and self.vq_vae is not None:
+                vq_model_path = Path(vq_path) / "checkpoints" / "model.pt"
+                if vq_model_path.exists():
+                    self.vq_vae.load_official_checkpoint(str(vq_model_path))
 
-        # Load dataset_statistics.json for action denormalization
-        dataset_stats = config_dir / "dataset_statistics.json"
-        if dataset_stats.exists():
-            with open(dataset_stats, "r") as f:
-                self.dataset_statistics = json.load(f)
-            print(f"[Official Checkpoint] Loaded dataset statistics from {dataset_stats}")
+    def _get_action_dim(self) -> int:
+        """
+        Get action dimension from config.action_feature or official dataset statistics.
+        Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py::get_action_dim.
+        """
+        if hasattr(self.config, "action_feature") and self.config.action_feature is not None:
+            return self.config.action_feature.shape[0]
 
-        print(f"[Official Checkpoint] Loaded from {checkpoint_path}")
+        if self.dataset_statistics:
+            for key, stats in self.dataset_statistics.items():
+                if "action" in stats and "q01" in stats["action"]:
+                    return len(stats["action"]["q01"])
+
+        if self.config.is_vq_mode:
+            return self.config.vq_action_dim
+
+        raise ValueError(
+            "Cannot determine action dimension. "
+            "Set config.action_feature or provide dataset_statistics."
+        )
 
     def forward(
         self,
@@ -235,8 +280,10 @@ class MiniVLACore(nn.Module):
             action_texts = []
             for i in range(batch_size):
                 if self.config.is_vq_mode:
-                    # VQ mode: use full action chunk [chunk_size, action_dim]
-                    action_tensor = action[i].cpu().numpy()
+                    # VQ mode: use full action chunk based on required_future_horizon
+                    # Official: action[-required_future_horizon-1:]
+                    # LeRobot action shape: [B, chunk_size, action_dim]
+                    action_tensor = action[i].cpu().numpy()  # [chunk_size, action_dim]
                     action_text = self.action_tokenizer(action_tensor)
                 else:
                     # Non-VQ mode: use current action based on action_delta_indices
@@ -342,11 +389,13 @@ class MiniVLACore(nn.Module):
             instruction = [""] * batch_size
 
         # Determine number of tokens to generate
+        action_dim = self._get_action_dim()
+
         if self.config.is_vq_mode:
             num_action_tokens = self.config.vqvae_groups
         else:
-            # Non-VQ: number of tokens = action dimension (from config)
-            num_action_tokens = self.config.action_feature.shape[0]
+            # Non-VQ: number of tokens = action dimension
+            num_action_tokens = action_dim
 
         if max_new_tokens is None:
             max_new_tokens = num_action_tokens
@@ -380,7 +429,10 @@ class MiniVLACore(nn.Module):
             use_cache=True,
         )
 
-        # Get the logits from the last position
+        # Get the logits from the last VALID position (not padding)
+        # For each sample, find the last non-padding token position
+        # After vision token insertion, the sequence is: [BOS, vision_patches, text_tokens]
+        # The last valid token for each sample is at the last non-padding position
         logits = outputs.logits[:, -1, :]  # [B, vocab_size]
         past_key_values = outputs.past_key_values
 
@@ -434,9 +486,53 @@ class MiniVLACore(nn.Module):
                 # [B, A] -> [B, 1, A]
                 actions = actions.unsqueeze(1)
 
+        # === Action denormalization using official q01/q99 quantile stats ===
+        # Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py::predict_action
+        if self.dataset_statistics:
+            actions = self._denormalize_actions(actions)
+
         # Ensure output is on same device as pixel_values
         actions = actions.to(pixel_values["dino"].device)
         return actions
+
+    def _denormalize_actions(self, actions: torch.Tensor) -> torch.Tensor:
+        """
+        Denormalize actions using official dataset statistics (q01/q99).
+        Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py::predict_action.
+        actions: [B, T, A] normalized actions in [-1, 1] range
+        Returns: [B, T, A] denormalized actions
+        """
+        if not self.dataset_statistics:
+            return actions
+
+        # Find the first dataset statistics entry with action data
+        action_stats = None
+        for key, stats in self.dataset_statistics.items():
+            if "action" in stats and "q01" in stats["action"]:
+                action_stats = stats["action"]
+                break
+
+        if action_stats is None:
+            return actions
+
+        q01 = torch.tensor(action_stats["q01"], dtype=actions.dtype, device=actions.device)
+        q99 = torch.tensor(action_stats["q99"], dtype=actions.dtype, device=actions.device)
+
+        # Official denormalization: 0.5 * (normalized + 1) * (q99 - q01) + q01
+        # mask indicates which dimensions should be denormalized (default: all True)
+        mask = action_stats.get("mask", [True] * len(q01))
+        mask = torch.tensor(mask, dtype=torch.bool, device=actions.device)
+
+        # Expand mask for broadcasting: [A] -> [1, 1, A]
+        while mask.dim() < actions.dim():
+            mask = mask.unsqueeze(0)
+
+        denormalized = torch.where(
+            mask,
+            0.5 * (actions + 1) * (q99 - q01) + q01,
+            actions,
+        )
+        return denormalized
 
     def get_optim_params(self) -> dict:
         """

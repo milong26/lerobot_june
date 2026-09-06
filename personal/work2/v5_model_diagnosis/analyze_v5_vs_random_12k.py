@@ -40,25 +40,91 @@ TASK_CONFIGS = {
 DIAGNOSTIC_SEEDS = list(range(42, 62))  # 20 seeds max for diagnostic eval
 
 
-def find_eval_results(model_dir: Path, checkpoint: str) -> list:
-    """Find existing eval episode results JSON files."""
+def find_latest_paired_eval_results(task: str) -> tuple:
+    """Find the latest paired V5/Random eval results from outputs/eval/.
+    
+    Returns (v5_episodes, random_episodes) from the two most recent eval runs.
+    Assumes the earlier run is V5 and the later run is Random (based on run order).
+    """
+    eval_root = PROJECT_ROOT / "outputs" / "eval"
+    if not eval_root.exists():
+        return [], []
+    
+    # Find all disassemble-v3 eval result directories, sorted by time
+    all_results = []
+    for date_dir in sorted(eval_root.iterdir()):
+        if not date_dir.is_dir():
+            continue
+        for time_dir in sorted(date_dir.iterdir()):
+            if not time_dir.is_dir():
+                continue
+            # Look for task-specific results
+            for f in time_dir.rglob("eval_episode_results.json"):
+                task_dir = f.parent.name  # e.g., "disassemble-v3_0"
+                if task.replace("-v3", "") in task_dir or task in task_dir:
+                    try:
+                        with open(f) as fh:
+                            data = json.load(fh)
+                        episodes = data.get("episodes", [])
+                        if episodes and "seed" in episodes[0]:
+                            all_results.append({
+                                "path": f,
+                                "time": f"{date_dir.name}/{time_dir.name}",
+                                "episodes": episodes,
+                            })
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+    
+    if len(all_results) < 2:
+        return [], []
+    
+    # Take the two most recent results
+    # The earlier one is V5, the later one is Random
+    latest_two = all_results[-2:]
+    v5_episodes = latest_two[0]["episodes"]
+    random_episodes = latest_two[1]["episodes"]
+    
+    return v5_episodes, random_episodes
+
+
+def find_eval_results(model_dir: Path, checkpoint: str, task: str = None) -> list:
+    """Find existing eval episode results JSON files, prioritizing latest results."""
+    # First check model-specific paired directory
+    paired_dir = model_dir / "eval" / f"results_step_{checkpoint}" / "paired" / "eval_results"
+    if paired_dir.exists():
+        files = list(paired_dir.rglob("eval_episode_results.json"))
+        if files:
+            return sorted(files)
+    
+    # Then check model-specific results directory
     results_dir = model_dir / "eval" / f"results_step_{checkpoint}"
-    if not results_dir.exists():
-        return []
-    json_files = []
-    for f in results_dir.rglob("eval_episode_results.json"):
-        json_files.append(f)
-    return sorted(json_files)
+    if results_dir.exists():
+        files = list(results_dir.rglob("eval_episode_results.json"))
+        if files:
+            return sorted(files)
+    
+    # Fall back to outputs/eval - but this can't distinguish V5 vs Random
+    # Return empty to signal that find_latest_paired_eval_results should be used instead
+    return []
 
 
-def load_eval_episodes(json_path: Path) -> list:
-    """Load per-episode eval results from JSON."""
-    with open(json_path) as f:
-        data = json.load(f)
-    episodes = data.get("episodes", [])
-    if not episodes:
-        return []
-    return episodes
+def load_eval_episodes(json_paths: list) -> list:
+    """Load per-episode eval results from multiple JSON files, deduplicated by seed."""
+    all_episodes = []
+    for json_path in json_paths:
+        try:
+            with open(json_path) as f:
+                data = json.load(f)
+            episodes = data.get("episodes", [])
+            all_episodes.extend(episodes)
+        except (json.JSONDecodeError, KeyError):
+            continue
+    # Deduplicate by seed (keep latest)
+    by_seed = {}
+    for ep in all_episodes:
+        if "seed" in ep:
+            by_seed[ep["seed"]] = ep
+    return sorted(by_seed.values(), key=lambda x: x["seed"])
 
 
 def find_selection_log(v5_dir: Path) -> Optional[Path]:
@@ -108,15 +174,49 @@ def find_v5_subset(v5_dir: Path) -> Optional[Path]:
 
 
 def load_selection_log(path: Path) -> dict:
-    """Load V5 selection log."""
+    """Load V5 selection log.
+    
+    Format: {"selected_episode_indices": [7, 16, 18, ...]}
+    """
     with open(path) as f:
-        return json.load(f)
+        data = json.load(f)
+    return {
+        "selected_indices": data.get("selected_episode_indices", []),
+        "n_selected": len(data.get("selected_episode_indices", [])),
+    }
 
 
 def load_diagnostic(path: Path) -> dict:
-    """Load V5 diagnostic JSON."""
+    """Load V5 diagnostic JSON.
+    
+    Format: {"per_episode_diagnostic": [{"episode_id": 123, "step": 1, "selected_region_id": 18, ...}, ...]}
+    """
     with open(path) as f:
-        return json.load(f)
+        data = json.load(f)
+    
+    # Build region lookup: episode_id -> region info
+    episode_regions = {}
+    region_stats = {}
+    for entry in data.get("per_episode_diagnostic", []):
+        ep_id = entry["episode_id"]
+        region_id = entry.get("selected_region_id", -1)
+        episode_regions[ep_id] = {
+            "region_id": region_id,
+            "region_priority": entry.get("region_priority", 0),
+            "visual_score": entry.get("visual_score", 0),
+            "action_score": entry.get("action_score", 0),
+            "joint_score": entry.get("joint_score", 0),
+        }
+        # Count region usage
+        if region_id not in region_stats:
+            region_stats[region_id] = {"total": 0, "selected": 0}
+        region_stats[region_id]["selected"] += 1
+    
+    return {
+        "episode_regions": episode_regions,
+        "region_stats": region_stats,
+        "n_episodes": len(data.get("per_episode_diagnostic", [])),
+    }
 
 
 def load_embeddings_data(embed_paths: dict) -> dict:
@@ -149,22 +249,55 @@ def compute_physical_distance(eval_state: dict, subset_states: list) -> tuple:
     return min_dist, nearest_idx
 
 
-def get_region_info(seed: int, selection_log: dict) -> dict:
-    """Get region info for a given seed from selection log."""
-    regions = selection_log.get("regions", {})
-    for region_id, region_data in regions.items():
-        seeds = region_data.get("seeds", [])
-        if seed in seeds:
-            total = region_data.get("total_episodes", 0)
-            selected = region_data.get("selected_episodes", len(seeds))
-            ratio = selected / total if total > 0 else 0
-            return {
-                "region": region_id,
-                "total": total,
-                "selected": selected,
-                "selection_ratio": ratio,
-            }
-    return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
+def get_region_info(eval_state: dict, selection_log: dict, diagnostic: dict,
+                    subset_states: list) -> dict:
+    """Get region info for a given eval episode.
+    
+    Finds the nearest training episode in the V5 subset, then looks up its region
+    from the diagnostic JSON.
+    """
+    if not diagnostic or not subset_states:
+        return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
+    
+    # Find nearest subset episode by physical distance
+    eval_pos = np.array(eval_state.get("obj_init_pos", [0, 0, 0]))
+    min_dist = float("inf")
+    nearest_ep_id = None
+    for state in subset_states:
+        subset_pos = np.array(state.get("obj_init_pos", [0, 0, 0]))
+        dist = np.linalg.norm(eval_pos - subset_pos)
+        if dist < min_dist:
+            min_dist = dist
+            nearest_ep_id = state.get("episode_id")
+    
+    if nearest_ep_id is None:
+        return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
+    
+    # Look up region from diagnostic
+    episode_regions = diagnostic.get("episode_regions", {})
+    region_stats = diagnostic.get("region_stats", {})
+    
+    ep_info = episode_regions.get(nearest_ep_id)
+    if ep_info is None:
+        return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
+    
+    region_id = ep_info["region_id"]
+    stats = region_stats.get(region_id, {"total": 0, "selected": 0})
+    total = stats.get("total", 0)
+    selected = stats.get("selected", 0)
+    # If total is not set, estimate from selection log
+    if total == 0 and selection_log:
+        n_selected = selection_log.get("n_selected", 0)
+        # Estimate total as ~3x selected (rough heuristic)
+        total = max(n_selected * 3, selected)
+    ratio = selected / total if total > 0 else 0
+    
+    return {
+        "region": region_id,
+        "total": total,
+        "selected": selected,
+        "selection_ratio": ratio,
+    }
 
 
 def classify_paired_results(v5_episodes: list, random_episodes: list) -> dict:
@@ -287,16 +420,26 @@ def write_summary_json(groups: dict, diagnostic_label: str, output_path: Path):
         region_ratios = []
         action_divs = []
         for case in rs_vf:
-            v5_rv = case.get("v5_nearest_randvec_dist", float("nan"))
-            rand_rv = case.get("random_nearest_randvec_dist", float("nan"))
-            if not np.isnan(v5_rv) and not np.isnan(rand_rv):
-                rand_vec_deltas.append(v5_rv - rand_rv)
-            v5_vis = case.get("v5_nearest_visual_dist", float("nan"))
-            rand_vis = case.get("random_nearest_visual_dist", float("nan"))
-            if not np.isnan(v5_vis) and not np.isnan(rand_vis):
-                visual_deltas.append(v5_vis - rand_vis)
+            v5_rv = case.get("v5_nearest_randvec_dist", "NA")
+            rand_rv = case.get("random_nearest_randvec_dist", "NA")
+            if v5_rv != "NA" and rand_rv != "NA":
+                try:
+                    rand_vec_deltas.append(float(v5_rv) - float(rand_rv))
+                except (ValueError, TypeError):
+                    pass
+            v5_vis = case.get("v5_nearest_visual_dist", "NA")
+            rand_vis = case.get("random_nearest_visual_dist", "NA")
+            if v5_vis != "NA" and rand_vis != "NA":
+                try:
+                    visual_deltas.append(float(v5_vis) - float(rand_vis))
+                except (ValueError, TypeError):
+                    pass
             region_ratios.append(case.get("v5_region_selection_ratio", 0))
-            action_divs.append(case.get("trace_action_divergence", 0))
+            action_div = case.get("trace_action_divergence", 0)
+            try:
+                action_divs.append(float(action_div))
+            except (ValueError, TypeError):
+                action_divs.append(0.0)
 
         summary["random_success_v5_fail_stats"] = {
             "mean_randvec_distance_delta": float(np.mean(rand_vec_deltas)) if rand_vec_deltas else "NA",
@@ -322,17 +465,27 @@ def determine_diagnostic_label(groups: dict) -> str:
     region_ratios = []
 
     for case in rs_vf:
-        v5_rv = case.get("v5_nearest_randvec_dist", float("nan"))
-        rand_rv = case.get("random_nearest_randvec_dist", float("nan"))
-        if not np.isnan(v5_rv) and not np.isnan(rand_rv):
-            rand_vec_deltas.append(v5_rv - rand_rv)
+        v5_rv = case.get("v5_nearest_randvec_dist", "NA")
+        rand_rv = case.get("random_nearest_randvec_dist", "NA")
+        if v5_rv != "NA" and rand_rv != "NA":
+            try:
+                rand_vec_deltas.append(float(v5_rv) - float(rand_rv))
+            except (ValueError, TypeError):
+                pass
 
-        v5_vis = case.get("v5_nearest_visual_dist", float("nan"))
-        rand_vis = case.get("random_nearest_visual_dist", float("nan"))
-        if not np.isnan(v5_vis) and not np.isnan(rand_vis):
-            visual_deltas.append(v5_vis - rand_vis)
+        v5_vis = case.get("v5_nearest_visual_dist", "NA")
+        rand_vis = case.get("random_nearest_visual_dist", "NA")
+        if v5_vis != "NA" and rand_vis != "NA":
+            try:
+                visual_deltas.append(float(v5_vis) - float(rand_vis))
+            except (ValueError, TypeError):
+                pass
 
-        action_divs.append(case.get("trace_action_divergence", 0))
+        action_div = case.get("trace_action_divergence", 0)
+        try:
+            action_divs.append(float(action_div))
+        except (ValueError, TypeError):
+            action_divs.append(0.0)
         region_ratios.append(case.get("v5_region_selection_ratio", 0))
 
     # Rule 1: RANDVEC_REGION_PROBLEM
@@ -438,18 +591,20 @@ def main():
     print()
 
     # Step 1: Find existing eval results
-    v5_eval_files = find_eval_results(v5_dir, args.checkpoint)
-    random_eval_files = find_eval_results(random_dir, args.checkpoint)
-    print(f"Found {len(v5_eval_files)} V5 eval result files")
-    print(f"Found {len(random_eval_files)} Random eval result files")
-
-    v5_episodes = []
-    random_episodes = []
-    for f in v5_eval_files:
-        v5_episodes.extend(load_eval_episodes(f))
-    for f in random_eval_files:
-        random_episodes.extend(load_eval_episodes(f))
-
+    # First try to find latest paired eval results from outputs/eval/ (these have matching seeds)
+    v5_episodes, random_episodes = find_latest_paired_eval_results(args.task)
+    
+    # If no paired results found, fall back to model-specific eval results
+    if not v5_episodes or not random_episodes:
+        v5_eval_files = find_eval_results(v5_dir, args.checkpoint, task=args.task)
+        random_eval_files = find_eval_results(random_dir, args.checkpoint, task=args.task)
+        v5_episodes = load_eval_episodes(v5_eval_files)
+        random_episodes = load_eval_episodes(random_eval_files)
+        print(f"Found {len(v5_eval_files)} V5 eval result files (model-specific)")
+        print(f"Found {len(random_eval_files)} Random eval result files (model-specific)")
+    else:
+        print(f"Found latest paired eval results from outputs/eval/")
+    
     print(f"Loaded {len(v5_episodes)} V5 episodes, {len(random_episodes)} Random episodes")
 
     if not v5_episodes or not random_episodes:
@@ -473,6 +628,27 @@ def main():
     if selection_log_path:
         selection_log = load_selection_log(selection_log_path)
 
+    diagnostic = {}
+    if diagnostic_path:
+        diagnostic = load_diagnostic(diagnostic_path)
+
+    # Load V5 subset states if available
+    subset_states = []
+    if v5_subset_path and v5_subset_path.exists():
+        try:
+            with open(v5_subset_path) as f:
+                subset_indices = json.load(f)
+            # Load episode initial states from dataset
+            initial_states_path = embed_paths.get("episode_initial_states")
+            if initial_states_path and initial_states_path.exists():
+                with open(initial_states_path) as f:
+                    all_states = json.load(f)
+                # Filter to subset indices
+                if isinstance(subset_indices, list) and isinstance(all_states, list):
+                    subset_states = [all_states[i] for i in subset_indices if i < len(all_states)]
+        except Exception as e:
+            print(f"WARNING: Could not load subset states: {e}")
+
     # Step 3: Classify paired results
     groups = classify_paired_results(v5_episodes, random_episodes)
     print(f"\nPaired case counts:")
@@ -491,7 +667,7 @@ def main():
             obj_init_pos = initial_state.get("obj_init_pos", [0, 0, 0])
             goal_pos = initial_state.get("goal_pos", [0, 0, 0])
 
-            region_info = get_region_info(seed, selection_log)
+            region_info = get_region_info(initial_state, selection_log, diagnostic, subset_states)
 
             case["group"] = group_name
             case["obj_init_pos"] = obj_init_pos

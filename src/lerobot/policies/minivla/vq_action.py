@@ -310,7 +310,21 @@ class VQActionTokenizer(ActionTokenizer):
         self.tokenizer = tokenizer
         self._init_device = device
 
-        self.vq_path = Path(vq_vae_path)
+        # Resolve VQ path: support absolute paths, MiniVLA repo root, official ACTION_TOKENIZERS paths
+        vq_path = Path(vq_vae_path)
+        if not vq_path.is_absolute():
+            # Try multiple fallback locations for VQ model
+            possible_paths = [
+                vq_path,
+                Path(__file__).parent.parent.parent.parent.parent / vq_vae_path,
+                Path.cwd() / vq_vae_path,
+            ]
+            for p in possible_paths:
+                if p.exists():
+                    vq_path = p
+                    break
+
+        self.vq_path = vq_path
         assert self.vq_path.exists(), f"Missing VQ VAE path: {self.vq_path}"
         vq_model_path = self.vq_path / "checkpoints" / "model.pt"
         vq_config_path = self.vq_path / "config.json"
@@ -337,6 +351,11 @@ class VQActionTokenizer(ActionTokenizer):
         self.action_token_end_idx: int = int(self.tokenizer_len)
 
     def __call__(self, action) -> Union[str, List[str]]:
+        """
+        Encode action to text tokens.
+        Accepts both numpy arrays and torch tensors.
+        Mirrors teach_code/MiniVLA/prismatic/vla/action_tokenizer.py::VQActionTokenizer.__call__.
+        """
         if isinstance(action, torch.Tensor):
             action = action.detach().cpu().numpy()
         action = np.array(action)
@@ -350,6 +369,11 @@ class VQActionTokenizer(ActionTokenizer):
         return self.tokenizer.decode(list(self.tokenizer_len - 1 - vq_code[0].detach().cpu().tolist()))
 
     def decode_token_ids_to_actions(self, action_token_ids) -> np.ndarray:
+        """
+        Decode action token IDs to continuous actions.
+        Accepts both numpy arrays and torch tensors.
+        Mirrors teach_code/MiniVLA/prismatic/vla/action_tokenizer.py::VQActionTokenizer.decode_token_ids_to_actions.
+        """
         if isinstance(action_token_ids, torch.Tensor):
             action_token_ids = action_token_ids.detach().cpu().numpy()
         action_token_ids = np.array(action_token_ids)

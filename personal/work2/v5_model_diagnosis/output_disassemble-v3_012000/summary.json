@@ -1,10 +1,15 @@
 {
   "group_counts": {
-    "random_success_v5_fail": 0,
-    "v5_success_random_fail": 0,
-    "both_success": 12,
+    "random_success_v5_fail": 1,
+    "v5_success_random_fail": 1,
+    "both_success": 14,
     "both_fail": 4
   },
-  "random_success_v5_fail_stats": {},
+  "random_success_v5_fail_stats": {
+    "mean_randvec_distance_delta": "NA",
+    "mean_visual_distance_delta": "NA",
+    "mean_region_selection_ratio": 0.0,
+    "mean_action_divergence": 0.0
+  },
   "diagnostic_label": "MIXED_OR_INCONCLUSIVE"
 }

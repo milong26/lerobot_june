@@ -3,6 +3,7 @@ processor_minivla.py
 
 LeRobot processor pipeline for MiniVLA.
 Mirrors teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py,
+prismatic/models/backbones/vision/base_vision.py (VisionBackbone.get_image_transform),
 prismatic/vla/datasets/datasets.py (RLDSBatchTransform), and
 prismatic/util/data_utils.py (PaddedCollatorForActionPrediction).
 
@@ -14,9 +15,9 @@ Key design:
   - Base: single primary image via explicit primary_image_key
   - T2: [-1, 0] frames from the same primary camera time dimension
   - Wrist: primary -> wrist via explicit wrist_image_key (compatible with gripperPOV naming)
-  - Uses official DinoSigLIPImageTransform from encoders.py (timm create_transform)
-  - No guessing of normalization state; always uint8->float/255 then official DINO/SigLIP norm
-  - F.resize to [224,224] with TIMM interpolation matching official resize-naive
+  - REUSES official DinoSigLIPImageTransform from encoders.py (timm create_transform)
+  - No handwritten resize/normalize; all transforms come from vision backbone
+  - uint8->float/255 conversion handled before official transform
 """
 
 from __future__ import annotations
@@ -25,8 +26,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-import torchvision.transforms.functional as TVF
-from torchvision.transforms import Compose, Resize
 
 from lerobot.configs import NormalizationMode
 from lerobot.processor import (
@@ -43,16 +42,32 @@ from lerobot.processor import (
 )
 
 from .configuration_minivla import MiniVLAConfig
+from .encoders import DINOSigLIPViTBackbone, DinoSigLIPImageTransform
 
 
-# ---------------------------------------------------------------------------
-# DINO and SigLIP normalization constants (official TIMM defaults)
-# ---------------------------------------------------------------------------
-DINO_MEAN = (0.485, 0.456, 0.406)
-DINO_STD = (0.229, 0.224, 0.225)
-SIGLIP_MEAN = (0.5, 0.5, 0.5)
-SIGLIP_STD = (0.5, 0.5, 0.5)
 TARGET_SIZE = 224
+
+
+def _build_official_transforms(
+    vision_backbone_id: str = "dinosiglip-vit-so-224px",
+    image_resize_strategy: str = "resize-naive",
+    image_size: int = 224,
+    image_sequence_len: int = 1,
+) -> DinoSigLIPImageTransform:
+    """
+    Build official DINO/SigLIP transforms by instantiating the same
+    DINOSigLIPViTBackbone used by the model and extracting its get_image_transform().
+    This guarantees identical Resize dimensions, interpolation, antialias,
+    mean/std, and resize-naive behavior between processor and model.
+    Mirrors teach_code/MiniVLA/prismatic/models/materialize.py::get_vision_backbone_and_transform.
+    """
+    backbone = DINOSigLIPViTBackbone(
+        vision_backbone_id=vision_backbone_id,
+        image_resize_strategy=image_resize_strategy,
+        default_image_size=image_size,
+        image_sequence_len=image_sequence_len,
+    )
+    return backbone.get_image_transform()
 
 
 @ProcessorStepRegistry.register("minivla_image_processor")
@@ -61,14 +76,24 @@ class MiniVLAImageProcessorStep(ProcessorStep):
     """
     Processor step that converts observation images to DINO/SigLIP format.
     Handles single-frame (base), multi-frame (T2), and wrist variants.
-    Uses official TIMM-based resize-naive transforms matching
-    teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py.
+    REUSES official DinoSigLIPImageTransform from encoders.py.
     """
 
     primary_image_key: str = ""
     wrist_image_key: str = ""
     image_sequence_len: int = 1
     use_wrist_image: bool = False
+    vision_backbone_id: str = "dinosiglip-vit-so-224px"
+    image_resize_strategy: str = "resize-naive"
+    image_size: int = 224
+
+    def __post_init__(self):
+        self._image_transform: DinoSigLIPImageTransform = _build_official_transforms(
+            vision_backbone_id=self.vision_backbone_id,
+            image_resize_strategy=self.image_resize_strategy,
+            image_size=self.image_size,
+            image_sequence_len=self.image_sequence_len,
+        )
 
     def __call__(self, transition: EnvTransition) -> EnvTransition:
         obs = transition.get(TransitionKey.OBSERVATION)
@@ -104,8 +129,8 @@ class MiniVLAImageProcessorStep(ProcessorStep):
         img = self._ensure_float_01(img)
         img = self._to_4d(img)
 
-        dino = self._apply_official_transform(img, DINO_MEAN, DINO_STD)
-        siglip = self._apply_official_transform(img, SIGLIP_MEAN, SIGLIP_STD)
+        dino = self._apply_official_transform(img, "dino")
+        siglip = self._apply_official_transform(img, "siglip")
         return {"dino": dino, "siglip": siglip}
 
     def _process_t2(self, obs: dict[str, Any]) -> dict[str, torch.Tensor]:
@@ -134,8 +159,8 @@ class MiniVLAImageProcessorStep(ProcessorStep):
 
         combined = torch.stack([old_frame, current_frame], dim=1)
 
-        dino = self._apply_official_transform_multi(combined, DINO_MEAN, DINO_STD)
-        siglip = self._apply_official_transform_multi(combined, SIGLIP_MEAN, SIGLIP_STD)
+        dino = self._apply_official_transform_multi(combined, "dino")
+        siglip = self._apply_official_transform_multi(combined, "siglip")
         return {"dino": dino, "siglip": siglip}
 
     def _process_wrist(self, obs: dict[str, Any]) -> dict[str, torch.Tensor]:
@@ -163,8 +188,8 @@ class MiniVLAImageProcessorStep(ProcessorStep):
 
         combined = torch.stack([primary_img, wrist_img], dim=1)
 
-        dino = self._apply_official_transform_multi(combined, DINO_MEAN, DINO_STD)
-        siglip = self._apply_official_transform_multi(combined, SIGLIP_MEAN, SIGLIP_STD)
+        dino = self._apply_official_transform_multi(combined, "dino")
+        siglip = self._apply_official_transform_multi(combined, "siglip")
         return {"dino": dino, "siglip": siglip}
 
     def _ensure_float_01(self, img: torch.Tensor) -> torch.Tensor:
@@ -186,37 +211,51 @@ class MiniVLAImageProcessorStep(ProcessorStep):
     def _apply_official_transform(
         self,
         img: torch.Tensor,
-        mean: tuple[float, ...],
-        std: tuple[float, ...],
+        branch: str,
     ) -> torch.Tensor:
         """
-        Official resize-naive transform matching teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py.
-        1. Resize to 224x224 with bilinear interpolation (TIMM default)
-        2. Normalize with DINO/SigLIP mean/std
+        Apply official transform from DinoSigLIPImageTransform.
+        The official transform expects PIL Image or torch.Tensor in [0,1] float.
+        It handles Resize -> ToTensor -> Normalize internally via TIMM create_transform.
+        For torch.Tensor input, the official transform's ToTensor is a no-op
+        (it only acts on PIL Images), so we must ensure the tensor is already
+        float [0,1] and C,H,W ordered.
         """
         if img.dim() == 4:
             b, c, h, w = img.shape
-            if h != TARGET_SIZE or w != TARGET_SIZE:
-                img = TVF.resize(img, [TARGET_SIZE, TARGET_SIZE], interpolation=TVF.InterpolationMode.BILINEAR)
-            img = TVF.normalize(img, mean=mean, std=std)
-            return img
+            results = []
+            for i in range(b):
+                single_img = img[i]
+                transform_fn = (
+                    self._image_transform.dino_transform
+                    if branch == "dino"
+                    else self._image_transform.siglip_transform
+                )
+                results.append(transform_fn(single_img))
+            return torch.stack(results, dim=0)
         else:
             raise ValueError(f"Unexpected image shape: {img.shape}")
 
     def _apply_official_transform_multi(
         self,
         img: torch.Tensor,
-        mean: tuple[float, ...],
-        std: tuple[float, ...],
+        branch: str,
     ) -> torch.Tensor:
         """Apply official transform to multi-frame images (B, T, C, H, W)."""
         if img.dim() == 5:
             b, t, c, h, w = img.shape
-            img = img.view(b * t, c, h, w)
-            if h != TARGET_SIZE or w != TARGET_SIZE:
-                img = TVF.resize(img, [TARGET_SIZE, TARGET_SIZE], interpolation=TVF.InterpolationMode.BILINEAR)
-            img = TVF.normalize(img, mean=mean, std=std)
-            return img.view(b, t, c, TARGET_SIZE, TARGET_SIZE)
+            img_flat = img.view(b * t, c, h, w)
+            results = []
+            for i in range(b * t):
+                single_img = img_flat[i]
+                transform_fn = (
+                    self._image_transform.dino_transform
+                    if branch == "dino"
+                    else self._image_transform.siglip_transform
+                )
+                results.append(transform_fn(single_img))
+            stacked = torch.stack(results, dim=0)
+            return stacked.view(b, t, c, self.image_size, self.image_size)
         else:
             raise ValueError(f"Unexpected image shape: {img.shape}")
 
@@ -226,6 +265,9 @@ class MiniVLAImageProcessorStep(ProcessorStep):
             "wrist_image_key": self.wrist_image_key,
             "image_sequence_len": self.image_sequence_len,
             "use_wrist_image": self.use_wrist_image,
+            "vision_backbone_id": self.vision_backbone_id,
+            "image_resize_strategy": self.image_resize_strategy,
+            "image_size": self.image_size,
         }
 
     def transform_features(
@@ -241,9 +283,9 @@ class MiniVLAImageProcessorStep(ProcessorStep):
         obs_features = new_features.setdefault(PipelineFeatureType.OBSERVATION, {})
 
         if self.image_sequence_len == 1:
-            shape = (3, TARGET_SIZE, TARGET_SIZE)
+            shape = (3, self.image_size, self.image_size)
         else:
-            shape = (self.image_sequence_len, 3, TARGET_SIZE, TARGET_SIZE)
+            shape = (self.image_sequence_len, 3, self.image_size, self.image_size)
 
         obs_features["dino"] = PolicyFeature(
             type=NormalizationMode.IDENTITY,
@@ -270,6 +312,9 @@ def make_minivla_pre_post_processors(
         wrist_image_key=config.wrist_image_key,
         image_sequence_len=config.image_sequence_len,
         use_wrist_image=config.use_wrist_image,
+        vision_backbone_id=config.vision_backbone_id,
+        image_resize_strategy=config.image_resize_strategy,
+        image_size=config.image_size,
     )
 
     input_steps = [
@@ -300,6 +345,9 @@ def make_minivla_t2_pre_post_processors(
         wrist_image_key=config.wrist_image_key,
         image_sequence_len=config.image_sequence_len,
         use_wrist_image=config.use_wrist_image,
+        vision_backbone_id=config.vision_backbone_id,
+        image_resize_strategy=config.image_resize_strategy,
+        image_size=config.image_size,
     )
 
     input_steps = [
@@ -330,6 +378,9 @@ def make_minivla_wrist_pre_post_processors(
         wrist_image_key=config.wrist_image_key,
         image_sequence_len=config.image_sequence_len,
         use_wrist_image=config.use_wrist_image,
+        vision_backbone_id=config.vision_backbone_id,
+        image_resize_strategy=config.image_resize_strategy,
+        image_size=config.image_size,
     )
 
     input_steps = [

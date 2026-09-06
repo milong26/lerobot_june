@@ -3,9 +3,9 @@
 **Diagnostic Label**: `MIXED_OR_INCONCLUSIVE`
 
 ## Paired Result Summary
-- random_success_v5_fail: 0
-- v5_success_random_fail: 0
-- both_success: 12
+- random_success_v5_fail: 1
+- v5_success_random_fail: 1
+- both_success: 14
 - both_fail: 4
 
 ## Evidence

@@ -16,6 +16,7 @@ Key design:
   - num_patches from projected_patches.shape[1]
   - Proper attention_mask handling: preserves real prompt and padding info
   - cache_position, position_ids, pad_token_id, return_dict compatibility
+  - Batch generation: reads last VALID token position (not padding)
 """
 
 from __future__ import annotations
