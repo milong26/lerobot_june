@@ -168,11 +168,16 @@ class VqVae(nn.Module):
         self.eval()
 
     def draw_code_forward(self, encoding_indices: torch.Tensor) -> torch.Tensor:
-        """Decode from codes using official get_codes_from_indices().sum(dim=0)."""
+        """Decode from codes using official get_codes_from_indices().sum(dim=0).
+        
+        encoding_indices: [B, num_quantizers]
+        get_codes_from_indices expects [B, n, num_quantizers], returns [num_quantizers, B, n, dim]
+        After sum: [B, n, dim] -> squeeze to [B, dim] for decoder.
+        """
         with torch.no_grad():
             z_embed = self.vq_layer.get_codes_from_indices(encoding_indices)
-            z_embed = z_embed.sum(dim=0)
-        return z_embed
+            z_embed = z_embed.sum(dim=0)  # [B, n, dim]
+        return z_embed.squeeze(1)  # [B, dim]
 
     def get_action_from_latent(self, latent: torch.Tensor) -> torch.Tensor:
         """Decode latent to action chunk [B, T, A]."""

@@ -41,46 +41,44 @@ def main():
     np.random.seed(42)
     torch.manual_seed(42)
 
-    # Test 1: Random VQ codes -> decode -> encode -> decode should be identical
-    print("\n=== Test 1: VQ code roundtrip ===")
-    n_bins = vq_tokenizer.n_bins
-    vq_groups = vq_tokenizer.vq_vae.vqvae_groups
-    batch_size = 2
-    random_codes = np.random.randint(0, n_bins, size=(batch_size, vq_groups))
-    print(f"Random VQ codes shape: {random_codes.shape}, range: [{random_codes.min()}, {random_codes.max()}]")
-
-    decoded1 = vq_tokenizer.decode_token_ids_to_actions(random_codes)
-    print(f"First decode shape: {decoded1.shape}")
-
-    # Encode the decoded actions back
-    token_ids = vq_tokenizer.encode_token_ids(decoded1)
-    print(f"Re-encoded token shape: {token_ids.shape}")
-
-    decoded2 = vq_tokenizer.decode_token_ids_to_actions(token_ids)
-    print(f"Second decode shape: {decoded2.shape}")
-
-    max_diff = np.max(np.abs(decoded1 - decoded2))
-    print(f"Max absolute difference: {max_diff:.6f}")
-
-    if max_diff < 0.01:
-        print("PASS: VQ encode/decode is consistent!")
-    else:
-        print(f"FAIL: max_diff={max_diff:.6f} exceeds threshold 0.01")
-
-    # Test 2: Random actions -> encode -> decode (lossy, just check shapes)
-    print("\n=== Test 2: Action encode/decode (lossy) ===")
+    # Test 1: Verify state_vq (quantized latent) matches latent reconstructed from codes
+    print("\n=== Test 1: VQ latent consistency ===")
     action = np.random.uniform(-1, 1, (2, 8, 7)).astype(np.float32)
     print(f"Input action shape: {action.shape}")
 
-    encoded = vq_tokenizer.encode_token_ids(action)
-    print(f"Encoded token shape: {encoded.shape}")
+    action_t = torch.from_numpy(action).to(vq_tokenizer.vq_vae.device)
+    state_vq, vq_code = vq_tokenizer.vq_vae.get_code(action_t)
+    print(f"state_vq shape: {state_vq.shape}")
+    print(f"vq_code shape: {vq_code.shape}")
 
-    decoded = vq_tokenizer.decode_token_ids_to_actions(encoded)
+    latent = vq_tokenizer.vq_vae.draw_code_forward(vq_code)
+    print(f"latent shape: {latent.shape}")
+
+    latent_diff = torch.max(torch.abs(state_vq - latent)).item()
+    print(f"state_vq vs latent max diff: {latent_diff:.8f}")
+
+    # Also verify decode shape
+    ret_action = vq_tokenizer.vq_vae.get_action_from_latent(latent)
+    print(f"ret_action shape: {ret_action.shape}")
+
+    shape_ok = ret_action.shape == (2, 8, 7)
+    latent_ok = latent_diff < 1e-5
+
+    if latent_ok and shape_ok:
+        print("PASS: VQ latent consistency verified!")
+    else:
+        print("FAIL: VQ latent mismatch")
+
+    # Test 2: encode_token_ids / decode_token_ids_to_actions roundtrip
+    print("\n=== Test 2: Token ID encode/decode ===")
+    token_ids = vq_tokenizer.encode_token_ids(action)
+    print(f"Encoded token shape: {token_ids.shape}")
+
+    decoded = vq_tokenizer.decode_token_ids_to_actions(token_ids)
     print(f"Decoded action shape: {decoded.shape}")
 
-    # VQ is lossy, so we just verify the shapes are correct
     if decoded.shape == (2, 8, 7):
-        print("PASS: Decoded shape matches input shape!")
+        print("PASS: Decoded shape matches expected (2, 8, 7)!")
     else:
         print(f"FAIL: Expected shape (2, 8, 7), got {decoded.shape}")
 
