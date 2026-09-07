@@ -2,8 +2,8 @@
   "exp_name": "grid_uniform_112_seed42",
   "dataset_name": "disassemble-v3_corner",
   "gpu_id": 0,
-  "start_time": "2026-09-07 19:58:08",
-  "end_time": "2026-09-07 20:00:16",
+  "start_time": "2026-09-07 20:16:19",
+  "end_time": "2026-09-07 20:16:54",
   "current_stage": "evaluation",
   "failed_stage": "evaluation",
   "config": {
@@ -31,10 +31,10 @@
     "training": {
       "status": "success",
       "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints",
-      "time_seconds": 128.4
+      "time_seconds": 35.4
     }
   },
   "final_metrics": {},
-  "total_time_seconds": 128.4,
+  "total_time_seconds": 35.4,
   "error": "No valid checkpoints found in /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints"
 }

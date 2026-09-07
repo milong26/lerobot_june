@@ -28,14 +28,18 @@ DATASET_CONFIGS = {
         "camera_names": "corner,gripperPOV",
         "primary_image_key": "observation.images.corner",
         "wrist_image_key": "observation.images.gripperPOV",
+        "eval_camera": "corner",
+        "eval_camera_names": "corner,gripperPOV",
     },
     "disassemble-v3_corner": {
         "dataset_root": "personal/work2/dataset_view/disassemble-v3_corner",
         "env_task": "disassemble-v3",
-        "camera": "corner",
-        "camera_names": "corner,gripperPOV",
-        "primary_image_key": "observation.images.corner",
-        "wrist_image_key": "observation.images.gripperPOV",
+        "camera": "top",
+        "camera_names": "top,wrist",
+        "primary_image_key": "observation.images.top",
+        "wrist_image_key": "observation.images.wrist",
+        "eval_camera": "corner",
+        "eval_camera_names": "corner,gripperPOV",
     },
 }
 
@@ -55,7 +59,7 @@ EVAL_BATCH_SIZE = 16
 
 VQ_MODEL_PATH = "Stanford-ILIAD/pretrain_vq"
 
-RENAME_MAP = '{"observation.images.corner":"observation.images.camera1","observation.images.gripperPOV":"observation.images.camera2"}'
+RENAME_MAP = '{}'
 
 
 @dataclass
@@ -103,10 +107,12 @@ class MiniVLAExperimentConfig:
     dataset_name: str
     dataset_root: str = ""
     env_task: str = ""
-    camera: str = "corner"
-    camera_names: str = "corner,gripperPOV"
-    primary_image_key: str = "observation.images.corner"
-    wrist_image_key: str = "observation.images.gripperPOV"
+    camera: str = "top"
+    camera_names: str = "top,wrist"
+    primary_image_key: str = "observation.images.top"
+    wrist_image_key: str = "observation.images.wrist"
+    eval_camera: str = "corner"
+    eval_camera_names: str = "corner,gripperPOV"
     gpu_id: int = 0
     selection_num_episodes: int = SELECTION_NUM_EPISODES
     selection_seed: int = SELECTION_SEED
@@ -160,8 +166,10 @@ def get_minivla_config(
         env_task=ds_config.get("env_task", ""),
         camera=ds_config.get("camera", "corner"),
         camera_names=ds_config.get("camera_names", "corner,gripperPOV"),
-        primary_image_key=ds_config.get("primary_image_key", "observation.images.corner"),
-        wrist_image_key=ds_config.get("wrist_image_key", "observation.images.gripperPOV"),
+        primary_image_key=ds_config.get("primary_image_key", "observation.images.top"),
+        wrist_image_key=ds_config.get("wrist_image_key", "observation.images.wrist"),
+        eval_camera=ds_config.get("eval_camera", "corner"),
+        eval_camera_names=ds_config.get("eval_camera_names", "corner,gripperPOV"),
         gpu_id=gpu_id,
         selection_num_episodes=num_episodes,
         selection_seed=seed,
