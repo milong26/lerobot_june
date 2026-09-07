@@ -294,7 +294,7 @@ class MiniVLAImageProcessorStep(ProcessorStep):
                 transformed = transform_obj.apply_tensor_image(single_img)
                 results.append(transformed[branch])
             stacked = torch.stack(results, dim=0)
-            return stacked.view(b, t, -1, self.image_size, self.shape) if False else stacked.view(b, t, results[0].shape[0], self.image_size, self.image_size)
+            return stacked.view(b, t, results[0].shape[0], self.image_size, self.image_size)
         else:
             raise ValueError(f"Unexpected image shape: {img.shape}")
 

@@ -83,13 +83,14 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str) -> Dict:
         f"--eval.batch_size={cfg.eval_batch_size}",
         f"--eval.n_episodes={cfg.eval_n_episodes}",
         "--policy.device=cuda",
+        f"--rename_map={cfg.rename_map}",
     ]
 
     print(f"\nRunning: lerobot-eval ...")
     print(f"Eval log: {eval_log}")
     sys.stdout.flush()
 
-    with open(eval_log, "w") as log_f:
+    with open(eval_log, "a") as log_f:
         result = subprocess.run(
             cmd,
             stdout=log_f,

@@ -60,6 +60,11 @@ VQ_TOKENIZER_TYPES = {
 
 
 def _default_normalization_mapping() -> dict[str, NormalizationMode]:
+    """
+    Official MiniVLA normalization mapping.
+    ACTION uses QUANTILE normalization (q01/q99) matching official dataset_statistics.json.
+    VISUAL uses IDENTITY (no normalization, only DINO/SigLIP transform).
+    """
     return {
         "VISUAL": NormalizationMode.IDENTITY,
         "ACTION": NormalizationMode.QUANTILES,
@@ -144,7 +149,6 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     @property
     def action_delta_indices(self) -> list:
         if self.is_vq_mode:
-            # VQ mode: use input_dim_h from VQ config if available, otherwise fallback to chunk_size
             vq_path = self.resolve_vq_model_path()
             if vq_path:
                 vq_config_json = Path(vq_path) / "config.json"
@@ -159,7 +163,11 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     def resolve_camera_keys(self, dataset_meta=None) -> None:
         """
         Resolve primary_image_key and wrist_image_key.
-        Priority: explicit CLI value > dataset metadata keys > error with available keys.
+        Strictly follows MiniVLA official camera mapping:
+        - Primary image: must be explicitly set or match known primary camera patterns
+        - Wrist image: must be explicitly set when use_wrist_image=True
+        NO automatic guessing of camera order. If dataset_meta exists, validate keys
+        against available observation.images.* keys with explicit error messages.
         """
         image_keys = []
         if dataset_meta is not None:
@@ -168,37 +176,26 @@ class _MiniVLAConfigBase(PreTrainedConfig):
                     image_keys.append(k)
 
         if not self.primary_image_key:
-            if dataset_meta is not None:
-                primary_candidates = [k for k in image_keys if "cam_high" in k or "cam_0" in k or "primary" in k]
-                if primary_candidates:
-                    self.primary_image_key = primary_candidates[0]
-                elif image_keys:
-                    self.primary_image_key = image_keys[0]
-                else:
-                    raise ValueError(
-                        f"Cannot determine primary_image_key. No observation.images.* keys found in dataset. "
-                        f"Please set primary_image_key explicitly."
-                    )
+            if dataset_meta is not None and image_keys:
+                raise ValueError(
+                    f"primary_image_key is not set. Available image keys in dataset: {image_keys}. "
+                    f"MiniVLA requires explicit primary_image_key configuration. "
+                    f"Please set primary_image_key to one of the available keys (e.g., 'observation.images.cam_high')."
+                )
             else:
                 raise ValueError(
-                    "primary_image_key must be set explicitly or dataset_meta must be provided. "
-                    "e.g. 'observation.images.cam_high'."
+                    "primary_image_key must be set explicitly. "
+                    f"Available image keys: {image_keys}. "
+                    f"e.g. 'observation.images.cam_high'."
                 )
 
         if self.use_wrist_image and not self.wrist_image_key:
             if dataset_meta is not None:
-                wrist_candidates = [
-                    k for k in image_keys
-                    if "gripperPOV" in k or "wrist" in k or "cam_wrist" in k
-                ]
-                if wrist_candidates:
-                    self.wrist_image_key = wrist_candidates[0]
-                else:
-                    raise ValueError(
-                        f"use_wrist_image=True but no wrist/gripperPOV camera found. "
-                        f"Available image keys: {image_keys}. "
-                        f"Please set wrist_image_key explicitly."
-                    )
+                raise ValueError(
+                    f"use_wrist_image=True but wrist_image_key is not set. "
+                    f"Available image keys: {image_keys}. "
+                    f"Please set wrist_image_key explicitly (e.g., 'observation.images.wrist' or 'observation.images.gripperPOV')."
+                )
             else:
                 raise ValueError(
                     "wrist_image_key must be set when use_wrist_image=True. "
@@ -207,6 +204,10 @@ class _MiniVLAConfigBase(PreTrainedConfig):
                 )
 
     def validate_features(self) -> None:
+        """
+        Validate feature configuration against official MiniVLA T2/wrist variant requirements.
+        Checks image_sequence_len, use_wrist_image, observation_delta_indices consistency.
+        """
         image_features = self.image_features
         if not image_features:
             raise ValueError("At least one visual input is required for MiniVLA.")
@@ -224,6 +225,30 @@ class _MiniVLAConfigBase(PreTrainedConfig):
                 "wrist_image_key must be set when use_wrist_image=True. "
                 "e.g. 'observation.images.wrist' or 'observation.images.gripperPOV'."
             )
+
+        if self.image_sequence_len == 2 and not self.use_wrist_image:
+            delta = self.observation_delta_indices
+            if delta != [-1, 0]:
+                raise ValueError(
+                    f"T2 variant (image_sequence_len=2, use_wrist_image=False) requires "
+                    f"observation_delta_indices=[-1, 0], got {delta}."
+                )
+
+        if self.image_sequence_len == 2 and self.use_wrist_image:
+            delta = self.observation_delta_indices
+            if delta != [0]:
+                raise ValueError(
+                    f"Wrist variant (image_sequence_len=2, use_wrist_image=True) requires "
+                    f"observation_delta_indices=[0], got {delta}."
+                )
+
+        if self.image_sequence_len == 1 and not self.use_wrist_image:
+            delta = self.observation_delta_indices
+            if delta != [0]:
+                raise ValueError(
+                    f"Base variant (image_sequence_len=1, use_wrist_image=False) requires "
+                    f"observation_delta_indices=[0], got {delta}."
+                )
 
         if self.is_vq_mode:
             vq_path = self.resolve_vq_model_path()
@@ -259,11 +284,23 @@ class _MiniVLAConfigBase(PreTrainedConfig):
                     f"dataset's action dimension. Set vq_model_path to a compatible VQ checkpoint."
                 )
 
+            if self.vqvae_n_embed != vq_vqvae_n_embed:
+                logger.warning(
+                    f"Config vqvae_n_embed ({self.vqvae_n_embed}) != VQ config vqvae_n_embed ({vq_vqvae_n_embed}). "
+                    f"Using VQ config value."
+                )
+            if self.vqvae_groups != vq_vqvae_groups:
+                logger.warning(
+                    f"Config vqvae_groups ({self.vqvae_groups}) != VQ config vqvae_groups ({vq_vqvae_groups}). "
+                    f"Using VQ config value."
+                )
+
             delta_indices = self.action_delta_indices
             if vq_input_dim_h is not None and len(delta_indices) != vq_input_dim_h:
-                logger.warning(
+                raise ValueError(
                     f"VQ input_dim_h ({vq_input_dim_h}) != len(action_delta_indices) ({len(delta_indices)}). "
-                    f"This may indicate a mismatch between the VQ model and the config chunk_size."
+                    f"This indicates a mismatch between the VQ model and the config. "
+                    f"Ensure chunk_size and observation_delta_indices match the VQ model's temporal horizon."
                 )
 
     def validate_vla_config(self) -> None:

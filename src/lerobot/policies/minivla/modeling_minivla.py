@@ -92,8 +92,9 @@ class MiniVLACore(nn.Module):
         If official_vla_checkpoint is specified, reads config.json to get:
         - vla.action_tokenizer (final tokenizer type)
         - vla.base_vlm (base VLM checkpoint)
-        - image_sequence_len, use_wrist_image
-        - Corresponding ModelConfig (vision_backbone_id, llm_backbone_id, arch_specifier)
+        - vla.image_sequence_len, vla.use_wrist_image
+        - model.vision_backbone_id, model.llm_backbone_id, model.arch_specifier, model.image_size
+        These parameters take priority over local default configuration.
         """
         if not self.config.official_vla_checkpoint:
             return
@@ -113,15 +114,15 @@ class MiniVLACore(nn.Module):
         vla_cfg = full_config.get("vla", {})
         model_cfg = full_config.get("model", {})
 
-        # Parse final action tokenizer type
+        # Parse final action tokenizer type (priority over local config)
         action_tokenizer_type = vla_cfg.get("action_tokenizer", self.config.action_tokenizer_type)
         self.config._resolved_action_tokenizer_type = action_tokenizer_type
 
-        # Parse base_vlm checkpoint
+        # Parse base_vlm checkpoint (priority over local config)
         base_vlm = vla_cfg.get("base_vlm", self.config.base_vlm_checkpoint)
         self.config.base_vlm_checkpoint = base_vlm
 
-        # Parse vision/LLM backbone identifiers from model config
+        # Parse vision/LLM backbone identifiers from model config (priority over local config)
         vision_backbone_id = model_cfg.get("vision_backbone_id", self.config.vision_backbone_id)
         llm_backbone_id = model_cfg.get("llm_backbone_id", self.config.llm_backbone_id)
         arch_specifier = model_cfg.get("arch_specifier", self.config.arch_specifier)
@@ -132,13 +133,13 @@ class MiniVLACore(nn.Module):
         self.config.arch_specifier = arch_specifier
         self.config.image_size = image_size
 
-        # Parse image_sequence_len and use_wrist_image
+        # Parse image_sequence_len and use_wrist_image (priority over local config)
         image_sequence_len = vla_cfg.get("image_sequence_len", self.config.image_sequence_len)
         use_wrist_image = vla_cfg.get("use_wrist_image", self.config.use_wrist_image)
         self.config.image_sequence_len = image_sequence_len
         self.config.use_wrist_image = use_wrist_image
 
-        # Load dataset statistics
+        # Load dataset statistics for action denormalization
         dataset_statistics_json = run_dir / "dataset_statistics.json"
         if dataset_statistics_json.exists():
             with open(dataset_statistics_json, "r") as f:
@@ -149,6 +150,7 @@ class MiniVLACore(nn.Module):
         Build action tokenizer based on resolved config.
         Uses config._resolved_action_tokenizer_type (set by _read_official_metadata)
         or falls back to config.action_tokenizer_type.
+        VQ tokenizer behavior must match MiniVLA official action_tokenizer.py exactly.
         """
         action_tokenizer_type = self.config._resolved_action_tokenizer_type or self.config.action_tokenizer_type
 
@@ -319,6 +321,12 @@ class MiniVLACore(nn.Module):
         action: [B, chunk_size, action_dim] normalized actions (in [-1, 1] range)
         Returns: CausalLM loss
         Mirrors teach_code/MiniVLA/prismatic/vla/datasets/datasets.py (RLDSBatchTransform).
+
+        Action token generation logic:
+        - VQ mode: action[i, :required_horizon] where required_horizon = required_future_horizon + 1
+          This matches official action[-required_future_horizon-1:] slice
+        - Non-VQ mode: action[i, delta_idx] where delta_idx = action_delta_indices[0]
+          For base config, delta_idx=0 means action[i, 0] (current action)
         """
         batch_size = len(instruction)
 
@@ -336,6 +344,7 @@ class MiniVLACore(nn.Module):
                     # VQ mode: use full action chunk based on required_future_horizon
                     # Official: action[-required_future_horizon-1:]
                     # LeRobot action shape: [B, chunk_size, action_dim]
+                    # required_horizon = required_future_horizon + 1 (includes current step)
                     required_horizon = self.action_tokenizer.required_future_horizon + 1
                     action_tensor = action[i, :required_horizon].cpu().numpy()
                     action_text = self.action_tokenizer(action_tensor)
@@ -352,6 +361,7 @@ class MiniVLACore(nn.Module):
             attention_mask_list = []
 
             for i in range(batch_size):
+                # Build prompt with official template: "What action should the robot take to {instruction}?"
                 prompt = self.tokenizer.build_prompt(instruction[i], action_texts[i])
                 encoded = self.tokenizer.tokenizer(
                     prompt,
@@ -364,6 +374,7 @@ class MiniVLACore(nn.Module):
 
                 # Official: labels[: -(num_answer_tokens + 2)] = IGNORE_INDEX
                 # num_answer_tokens = len(action_tokens), 2 = eos tokens
+                # This masks out the instruction portion, only training on action tokens
                 action_tokens = self.tokenizer.tokenizer(action_texts[i])["input_ids"]
                 num_answer_tokens = len(action_tokens)
                 num_end_tokens = 2
@@ -631,15 +642,16 @@ class MiniVLAPolicy(PreTrainedPolicy):
     def forward(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict | None]:
         pixel_values = self._extract_pixel_values(batch)
 
+        if "action" in batch:
+            batch_size = batch["action"].shape[0]
+        else:
+            batch_size = pixel_values["dino"].shape[0]
+
         if "task" in batch:
             instruction = batch["task"]
             if isinstance(instruction, torch.Tensor):
-                instruction = ["" for _ in range(len(instruction))]
+                instruction = [""] * batch_size
         else:
-            if "action" in batch:
-                batch_size = batch["action"].shape[0]
-            else:
-                batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size
 
         action = batch.get("action", None)
@@ -659,7 +671,7 @@ class MiniVLAPolicy(PreTrainedPolicy):
         if "task" in batch:
             instruction = batch["task"]
             if isinstance(instruction, torch.Tensor):
-                instruction = ["" for _ in range(len(instruction))]
+                instruction = [""] * batch_size
         else:
             batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size

@@ -52,6 +52,7 @@ def run_tinyvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
 
     train_log = Path(cfg.logs_dir) / f"{exp_name}_training.log"
 
+    # Append to log instead of overwrite - preserve history
     print(f"Experiment name: {exp_name}")
     print(f"Policy type: {cfg.tinyvla_policy_type}")
     print(f"Selected episodes: {len(episode_indices)}")
@@ -85,6 +86,7 @@ def run_tinyvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
         "--env.type=metaworld",
         f"--env.task={cfg.env_task}",
         f"--env.camera_name={cfg.camera_names}",
+        "--env.use_self_mw=true",
         f"--policy.optimizer_lr={cfg.train_lr}",
         f"--policy.optimizer_weight_decay={0.0}",
         f"--save_freq={cfg.train_save_freq}",
@@ -106,7 +108,7 @@ def run_tinyvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
     print(f"Log file: {train_log}")
     sys.stdout.flush()
 
-    with open(train_log, "w") as log_f:
+    with open(train_log, "a") as log_f:
         result = subprocess.run(
             cmd,
             stdout=log_f,

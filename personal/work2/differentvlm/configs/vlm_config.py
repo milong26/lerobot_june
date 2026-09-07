@@ -53,7 +53,7 @@ SmolVLA_POLICY_MODEL = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
 TINYVLA_S_POLICY_MODEL = "tinyvla_s"
 TINYVLA_B_POLICY_MODEL = "tinyvla_b"
 CAMERA_NAMES = "corner,gripperPOV"
-RENAME_MAP = '{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}'
+RENAME_MAP = '{"observation.images.camera1":"observation.images.top","observation.images.camera2":"observation.images.wrist"}'
 
 PCA_DIM = 32
 
