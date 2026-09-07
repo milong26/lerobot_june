@@ -2,14 +2,20 @@
 TinyVLA Experiment Main Entry Point
 
 Orchestrates the complete TinyVLA experiment pipeline:
-1. VLM embedding extraction (using our_v5 method with LLaVA-Pythia backbone)
-2. V5 episode selection (using our_v5 selection algorithm)
+1. VLM embedding extraction (v5 mode only)
+2. Episode selection (v5, grid_uniform, or random)
 3. TinyVLA fine-tuning (with LoRA + diffusion action head)
 4. Evaluation
 
 Usage:
+    # V5 selection (default, uses VLM embeddings)
     python run_tinyvla.py --policy_type tinyvla_s --dataset_name pick_place-v3_corner --gpu 0 --num_episodes 112
-    python run_tinyvla.py --policy_type tinyvla_b --dataset_name pick_place-v3_corner --gpu 1 --num_episodes 112
+    
+    # Grid uniform selection
+    python run_tinyvla.py --policy_type tinyvla_s --dataset_name pick_place-v3_corner --gpu 0 --num_episodes 112 --selection-mode grid_uniform
+    
+    # Random selection
+    python run_tinyvla.py --policy_type tinyvla_b --dataset_name pick_place-v3_corner --gpu 1 --num_episodes 112 --selection-mode random
 
 All intermediate results are saved in differentvlm/experiments/{policy_type}_{dataset_name}/ directory.
 """
@@ -30,12 +36,12 @@ if str(WORK2_ROOT) not in sys.path:
 
 from differentvlm.configs.vlm_config import get_config
 from differentvlm.vlm_extract.auto_extract_embedding import auto_extract_embedding
-from differentvlm.selection.select_v5_wrapper import run_v5_selection
+from differentvlm.selection.unified_selection import run_selection
 from differentvlm.train.train_tinyvla_wrapper import run_tinyvla_training
 from differentvlm.eval.eval_tinyvla_wrapper import run_tinyvla_eval
 
 
-def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_episodes: int = 112):
+def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_episodes: int = 112, selection_mode: str = "v5"):
     """Run the complete TinyVLA experiment pipeline."""
     start_time = time.strftime("%Y-%m-%d %H:%M:%S")
     overall_start = time.time()
@@ -45,10 +51,11 @@ def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_epi
     print(f"# Dataset: {dataset_name}")
     print(f"# GPU: {gpu_id}")
     print(f"# Num Episodes: {num_episodes}")
+    print(f"# Selection Mode: {selection_mode}")
     print(f"# Start time: {start_time}")
     print(f"{'#'*60}")
 
-    cfg = get_config(vlm_name=policy_type, gpu_id=gpu_id, dataset_name=dataset_name)
+    cfg = get_config(vlm_name=policy_type, gpu_id=gpu_id, dataset_name=dataset_name, selection_mode=selection_mode)
     cfg.selection_num_episodes = num_episodes
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
@@ -60,6 +67,7 @@ def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_epi
         "env_task": cfg.env_task,
         "gpu_id": gpu_id,
         "num_episodes": num_episodes,
+        "selection_mode": selection_mode,
         "dataset_root": cfg.dataset_root,
         "start_time": start_time,
         "end_time": None,
@@ -69,6 +77,7 @@ def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_epi
         "selection_vlm_description": cfg.selection_vlm_description,
         "config": {
             "pca_dim": cfg.pca_dim,
+            "selection_mode": cfg.selection_mode,
             "selection_num_episodes": cfg.selection_num_episodes,
             "selection_seed": cfg.selection_seed,
             "train_steps": cfg.train_steps,
@@ -103,40 +112,55 @@ def run_experiment(policy_type: str, dataset_name: str, gpu_id: int = 0, num_epi
         sys.stdout.flush()
 
     try:
-        # Stage 1: VLM Embedding Extraction
-        experiment_state["current_stage"] = "embedding_extraction"
-        print(f"\n{'='*60}")
-        print(f"Stage 1: VLM Embedding Extraction")
-        print(f"{'='*60}")
-        print(f"Using VLM: {cfg.selection_vlm_model_id}")
-        print(f"Embedding dir: {cfg.embedding_cache_dir}")
-        sys.stdout.flush()
+        # Stage 1: VLM Embedding Extraction (only for v5 mode)
+        embedding_dir = None
+        if cfg.selection_mode == "v5":
+            experiment_state["current_stage"] = "embedding_extraction"
+            print(f"\n{'='*60}")
+            print(f"Stage 1: VLM Embedding Extraction")
+            print(f"{'='*60}")
+            print(f"Using VLM: {cfg.selection_vlm_model_id}")
+            print(f"Embedding dir: {cfg.embedding_cache_dir}")
+            sys.stdout.flush()
 
-        stage_start = time.time()
-        embedding_dir = auto_extract_embedding(cfg)
-        stage_time = round(time.time() - stage_start, 1)
+            stage_start = time.time()
+            embedding_dir = auto_extract_embedding(cfg)
+            stage_time = round(time.time() - stage_start, 1)
 
-        experiment_state["stages"]["embedding_extraction"] = {
-            "status": "completed",
-            "time_seconds": stage_time,
-            "embedding_dir": embedding_dir,
-        }
-        experiment_state["paths"]["embedding_dir"] = embedding_dir
-        print(f"\nEmbedding extraction complete in {stage_time}s")
-        print(f"Embedding dir: {embedding_dir}")
-        sys.stdout.flush()
+            experiment_state["stages"]["embedding_extraction"] = {
+                "status": "completed",
+                "time_seconds": stage_time,
+                "embedding_dir": embedding_dir,
+            }
+            experiment_state["paths"]["embedding_dir"] = embedding_dir
+            print(f"\nEmbedding extraction complete in {stage_time}s")
+            print(f"Embedding dir: {embedding_dir}")
+            sys.stdout.flush()
+        else:
+            print(f"\n{'='*60}")
+            print(f"Stage 1: Skipped (not required for {cfg.selection_mode} mode)")
+            print(f"{'='*60}")
+            experiment_state["stages"]["embedding_extraction"] = {
+                "status": "skipped",
+                "reason": f"Not required for {cfg.selection_mode} selection mode",
+            }
 
-        # Stage 2: Episode Selection (V5)
+        # Stage 2: Episode Selection
         experiment_state["current_stage"] = "episode_selection"
         print(f"\n{'='*60}")
-        print(f"Stage 2: Episode Selection (V5 - Rand Vec Aware Adaptive Coverage)")
+        print(f"Stage 2: Episode Selection ({cfg.selection_mode})")
         print(f"{'='*60}")
         print(f"Selecting {cfg.selection_num_episodes} episodes")
         print(f"Seed: {cfg.selection_seed}")
         sys.stdout.flush()
 
         stage_start = time.time()
-        subset_file = run_v5_selection(cfg, embedding_dir)
+        
+        if cfg.selection_mode == "v5":
+            subset_file = run_selection(cfg, embedding_dir)
+        else:
+            subset_file = run_selection(cfg)
+        
         stage_time = round(time.time() - stage_start, 1)
 
         experiment_state["stages"]["episode_selection"] = {
@@ -247,6 +271,13 @@ def main():
         default=112,
         help="Number of episodes to select for training (default: 112)",
     )
+    parser.add_argument(
+        "--selection-mode",
+        type=str,
+        default="v5",
+        choices=["v5", "grid_uniform", "random"],
+        help="Episode selection mode: v5 (default), grid_uniform, or random",
+    )
 
     args = parser.parse_args()
 
@@ -255,6 +286,7 @@ def main():
         dataset_name=args.dataset_name,
         gpu_id=args.gpu,
         num_episodes=args.num_episodes,
+        selection_mode=args.selection_mode,
     )
 
 

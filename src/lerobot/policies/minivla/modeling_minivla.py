@@ -344,6 +344,8 @@ class MiniVLACore(nn.Module):
             assert action.dim() == 3, f"Expected action shape [B, T, A], got {action.shape}"
 
             action_texts = []
+            vq_expected_dim = self.action_tokenizer.vq_vae.input_dim_w
+            
             for i in range(batch_size):
                 if self.config.is_vq_mode:
                     # VQ mode: use full action chunk based on required_future_horizon
@@ -352,6 +354,13 @@ class MiniVLACore(nn.Module):
                     # required_horizon = required_future_horizon + 1 (includes current step)
                     required_horizon = self.action_tokenizer.required_future_horizon + 1
                     action_tensor = action[i, :required_horizon].cpu().numpy()
+                    
+                    # Pad action dimension to match VQ tokenizer expected dimension
+                    current_dim = action_tensor.shape[-1]
+                    if current_dim < vq_expected_dim:
+                        pad_width = [(0, 0)] * (action_tensor.ndim - 1) + [(0, vq_expected_dim - current_dim)]
+                        action_tensor = np.pad(action_tensor, pad_width, mode='constant', constant_values=0.0)
+                    
                     action_text = self.action_tokenizer(action_tensor)
                 else:
                     # Non-VQ mode: use current action based on action_delta_indices

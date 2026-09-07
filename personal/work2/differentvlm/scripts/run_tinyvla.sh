@@ -6,7 +6,8 @@
 #
 # Usage:
 #   bash run_tinyvla.sh tinyvla-s --dataset pick_place-v3_corner --gpu 0 --num_episodes 112
-#   bash run_tinyvla.sh tinyvla-b --dataset pick_place-v3_corner --gpu 1 --num_episodes 112
+#   bash run_tinyvla.sh tinyvla-b --dataset pick_place-v3_corner --gpu 1 --num_episodes 112 --selection-mode grid_uniform
+#   bash run_tinyvla.sh tinyvla-s --dataset pick_place-v3_corner --gpu 0 --num_episodes 112 --selection-mode random
 #
 # Features:
 # - Creates unique tmux session per experiment
@@ -14,6 +15,7 @@
 # - Auto-creates logs directory
 # - Survives SSH disconnection
 # - Prints startup info (session name, log path, GPU)
+# - Supports multiple selection modes: v5, grid_uniform, random
 
 set -e
 
@@ -22,6 +24,7 @@ POLICY_TYPE=""
 DATASET_NAME="pick_place-v3_corner"
 GPU_ID=0
 NUM_EPISODES=112
+SELECTION_MODE="v5"
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -46,9 +49,13 @@ while [[ $# -gt 0 ]]; do
             NUM_EPISODES="$2"
             shift 2
             ;;
+        --selection-mode)
+            SELECTION_MODE="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: bash run_tinyvla.sh <tinyvla-s|tinyvla-b> --dataset <name> --gpu <id> --num_episodes <n>"
+            echo "Usage: bash run_tinyvla.sh <tinyvla-s|tinyvla-b> --dataset <name> --gpu <id> --num_episodes <n> [--selection-mode v5|grid_uniform|random]"
             exit 1
             ;;
     esac
@@ -57,8 +64,15 @@ done
 # Validate required arguments
 if [ -z "$POLICY_TYPE" ]; then
     echo "Error: Policy type is required"
-    echo "Usage: bash run_tinyvla.sh <tinyvla-s|tinyvla-b> --dataset <name> --gpu <id> --num_episodes <n>"
+    echo "Usage: bash run_tinyvla.sh <tinyvla-s|tinyvla-b> --dataset <name> --gpu <id> --num_episodes <n> [--selection-mode v5|grid_uniform|random]"
     echo "Available policy types: tinyvla-s, tinyvla-b"
+    exit 1
+fi
+
+# Validate selection mode
+if [[ "$SELECTION_MODE" != "v5" && "$SELECTION_MODE" != "grid_uniform" && "$SELECTION_MODE" != "random" ]]; then
+    echo "Error: Invalid selection mode '$SELECTION_MODE'"
+    echo "Available selection modes: v5, grid_uniform, random"
     exit 1
 fi
 
@@ -80,13 +94,14 @@ LOG_FILE="$LOG_DIR/experiment.log"
 echo "=============================================="
 echo "  TinyVLA Experiment Launcher"
 echo "=============================================="
-echo "  Policy Type:  $POLICY_TYPE"
-echo "  Dataset:      $DATASET_NAME"
-echo "  GPU:          $GPU_ID"
-echo "  Num Episodes: $NUM_EPISODES"
-echo "  Tmux Session: $SESSION_NAME"
-echo "  Log File:     $LOG_FILE"
-echo "  Project Root: $PROJECT_ROOT"
+echo "  Policy Type:    $POLICY_TYPE"
+echo "  Dataset:        $DATASET_NAME"
+echo "  GPU:            $GPU_ID"
+echo "  Num Episodes:   $NUM_EPISODES"
+echo "  Selection Mode: $SELECTION_MODE"
+echo "  Tmux Session:   $SESSION_NAME"
+echo "  Log File:       $LOG_FILE"
+echo "  Project Root:   $PROJECT_ROOT"
 echo "=============================================="
 echo ""
 echo "Starting experiment in tmux session: $SESSION_NAME"
@@ -112,6 +127,7 @@ tmux new-session -d -s "$SESSION_NAME" \
      --dataset_name $DATASET_NAME \
      --gpu $GPU_ID \
      --num_episodes $NUM_EPISODES \
+     --selection-mode $SELECTION_MODE \
      2>&1 | tee -a $LOG_FILE"
 
 echo "Experiment started successfully."

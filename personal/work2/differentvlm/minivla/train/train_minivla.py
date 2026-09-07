@@ -38,12 +38,15 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
 
     output_dir = Path(cfg.checkpoints_dir)
 
+    # Auto-resume: check if checkpoints directory exists with saved steps
+    resume = False
     if output_dir.exists() and (output_dir / "checkpoints").exists():
         existing_steps = sorted([
             d.name for d in (output_dir / "checkpoints").iterdir()
             if d.is_dir() and d.name.isdigit()
         ])
         if existing_steps:
+            resume = True
             print(f"Found existing checkpoints: {existing_steps[-1]}")
             print(f"Training will resume from latest checkpoint")
 
@@ -112,6 +115,11 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         '--remove_features=["observation.environment_state"]',
         "--wandb.enable=true",
     ]
+
+    # Auto-resume: add --resume flag if checkpoints exist
+    if resume:
+        cmd.append("--resume=true")
+        print(f"Auto-resume enabled: adding --resume=true to command")
 
     print(f"\nRunning: lerobot-train ...")
     print(f"Output dir: {output_dir}")

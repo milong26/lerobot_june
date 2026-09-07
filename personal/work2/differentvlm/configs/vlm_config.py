@@ -93,6 +93,7 @@ class VLMExperimentConfig:
         gpu_id: GPU device id
         selection_num_episodes: number of episodes to select
         selection_seed: random seed for selection
+        selection_mode: episode selection mode (v5, grid_uniform, random, etc.)
         train_steps: training steps
         train_save_freq: checkpoint save frequency
         train_batch_size: training batch size
@@ -126,6 +127,7 @@ class VLMExperimentConfig:
     gpu_id: int = 0
     selection_num_episodes: int = SELECTION_NUM_EPISODES
     selection_seed: int = SELECTION_SEED
+    selection_mode: str = "v5"
     train_steps: int = TRAIN_STEPS
     train_save_freq: int = TRAIN_SAVE_FREQ
     train_batch_size: int = TRAIN_BATCH_SIZE
@@ -225,7 +227,7 @@ def get_prismatic_qwen25_05b_config(gpu_id: int = 0, dataset_name: str = "pick_p
     )
 
 
-def get_tinyvla_s_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", num_episodes: int = 112) -> VLMExperimentConfig:
+def get_tinyvla_s_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", num_episodes: int = 112, selection_mode: str = "v5") -> VLMExperimentConfig:
     """
     TinyVLA-S configuration for fine-tuning.
 
@@ -250,6 +252,7 @@ def get_tinyvla_s_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_cor
         camera_names=ds_config.get("camera_names", CAMERA_NAMES),
         gpu_id=gpu_id,
         selection_num_episodes=num_episodes,
+        selection_mode=selection_mode,
         train_steps=TINYVLA_TRAIN_STEPS,
         train_save_freq=TINYVLA_SAVE_FREQ,
         train_batch_size=TINYVLA_BATCH_SIZE,
@@ -259,7 +262,7 @@ def get_tinyvla_s_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_cor
     )
 
 
-def get_tinyvla_b_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", num_episodes: int = 112) -> VLMExperimentConfig:
+def get_tinyvla_b_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", num_episodes: int = 112, selection_mode: str = "v5") -> VLMExperimentConfig:
     """
     TinyVLA-B configuration for fine-tuning.
 
@@ -284,6 +287,7 @@ def get_tinyvla_b_config(gpu_id: int = 0, dataset_name: str = "pick_place-v3_cor
         camera_names=ds_config.get("camera_names", CAMERA_NAMES),
         gpu_id=gpu_id,
         selection_num_episodes=num_episodes,
+        selection_mode=selection_mode,
         train_steps=TINYVLA_TRAIN_STEPS,
         train_save_freq=TINYVLA_SAVE_FREQ,
         train_batch_size=TINYVLA_BATCH_SIZE,
@@ -301,11 +305,11 @@ VLM_CONFIGS: Dict[str, callable] = {
 }
 
 
-def get_config(vlm_name: str, gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner") -> VLMExperimentConfig:
+def get_config(vlm_name: str, gpu_id: int = 0, dataset_name: str = "pick_place-v3_corner", selection_mode: str = "v5") -> VLMExperimentConfig:
     if vlm_name not in VLM_CONFIGS:
         raise ValueError(f"Unknown VLM: {vlm_name}. Available: {list(VLM_CONFIGS.keys())}")
     if dataset_name not in DATASET_CONFIGS:
         raise ValueError(f"Unknown dataset: {dataset_name}. Available: {list(DATASET_CONFIGS.keys())}")
-    cfg = VLM_CONFIGS[vlm_name](gpu_id=gpu_id, dataset_name=dataset_name)
+    cfg = VLM_CONFIGS[vlm_name](gpu_id=gpu_id, dataset_name=dataset_name, selection_mode=selection_mode)
     cfg.ensure_dirs()
     return cfg
