@@ -166,7 +166,7 @@ class MiniVLACore(nn.Module):
             self.action_tokenizer = VQActionTokenizer(
                 tokenizer=self.tokenizer.tokenizer,
                 vq_vae_path=vq_path,
-                device="cpu",
+                device="cuda:0",
                 use_extra=True,
             )
             self.vq_vae = self.action_tokenizer.vq_vae

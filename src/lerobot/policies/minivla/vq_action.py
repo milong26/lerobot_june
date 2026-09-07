@@ -31,7 +31,7 @@ import torch
 import torch.nn as nn
 from einops import rearrange
 from transformers import PreTrainedTokenizerBase
-from transformers.models.qwen2.tokenization_qwen2_fast import Qwen2TokenizerFast
+from transformers import Qwen2TokenizerFast
 
 
 # ---------------------------------------------------------------------------
@@ -329,10 +329,16 @@ class VQActionTokenizer(ActionTokenizer):
         with open(vq_config_path, "r") as f:
             vq_config = dict(json.load(f))
 
+        # Remove keys that VqVae.__init__ doesn't accept
+        vq_config.pop("eval", None)
+        vq_config.pop("device", None)
+        vq_config.pop("load_dir", None)
+
         vq_config["eval_mode"] = True
 
         self.vq_vae = VqVae(**vq_config)
         self.vq_vae.load_official_checkpoint(str(vq_model_path))
+        self.vq_vae = self.vq_vae.to(self._init_device)
 
         self.n_bins = self.vq_vae.vqvae_n_embed
 
@@ -382,7 +388,41 @@ class VQActionTokenizer(ActionTokenizer):
         _, vq_code = self.vq_vae.get_code(action)
         assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
 
-        return self.tokenizer.decode(list(self.tokenizer_len - 1 - vq_code[0].detach().cpu().tolist()))
+        return self.tokenizer.decode(list((self.tokenizer_len - 1 - vq_code[0]).detach().cpu().tolist()))
+
+    def encode_token_ids(self, action) -> np.ndarray:
+        """
+        Encode action to raw VQ token IDs (not decoded text).
+        Returns numpy array of shape [B, vq_groups].
+        """
+        if isinstance(action, torch.Tensor):
+            action = action.detach().cpu().numpy()
+        action = np.array(action)
+
+        if action.ndim == 1:
+            action = action[np.newaxis, np.newaxis, :]
+        elif action.ndim == 2:
+            action = action[np.newaxis, :]
+        elif action.ndim == 3:
+            pass
+        else:
+            raise ValueError(f"Unexpected action shape: {action.shape}")
+
+        if action.shape[-2] != self.vq_vae.input_dim_h:
+            raise ValueError(
+                f"Action time dimension {action.shape[-2]} does not match VQ input_dim_h {self.vq_vae.input_dim_h}"
+            )
+        if action.shape[-1] != self.vq_vae.input_dim_w:
+            raise ValueError(
+                f"Action feature dimension {action.shape[-1]} does not match VQ input_dim_w {self.vq_vae.input_dim_w}"
+            )
+
+        action = torch.from_numpy(action).to(self.vq_vae.device)
+        _, vq_code = self.vq_vae.get_code(action)
+        assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
+
+        token_ids = self.tokenizer_len - 1 - vq_code
+        return token_ids.detach().cpu().numpy()
 
     def decode_token_ids_to_actions(self, action_token_ids) -> np.ndarray:
         """

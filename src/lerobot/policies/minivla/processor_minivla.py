@@ -30,12 +30,10 @@ from typing import Any
 
 import torch
 
-from lerobot.configs import NormalizationMode
+from lerobot.configs import NormalizationMode, PipelineFeatureType, PolicyFeature
 from lerobot.processor import (
     EnvTransition,
-    PipelineFeatureType,
     PolicyAction,
-    PolicyFeature,
     PolicyProcessorPipeline,
     ProcessorStep,
     ProcessorStepRegistry,

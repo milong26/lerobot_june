@@ -144,9 +144,173 @@ def compare_configs(official_config: dict, lr_config: dict) -> list[str]:
     return mismatches
 
 
+def check_action_tokenizer_consistency(lr_config: dict, lr_action_tokenizer) -> list[str]:
+    """Check action tokenizer encode/decode consistency."""
+    mismatches = []
+
+    np.random.seed(42)
+    torch.manual_seed(42)
+
+    action_dim = lr_config.get("action_dim", 7)
+    chunk_size = lr_config.get("chunk_size", 8)
+    tokenizer_len = lr_config.get("tokenizer_len", 151936)
+
+    random_action = np.random.uniform(-1.0, 1.0, (1, chunk_size, action_dim)).astype(np.float32)
+
+    try:
+        encoded = lr_action_tokenizer(random_action)
+        decoded = lr_action_tokenizer.decode_token_ids_to_actions(encoded)
+
+        if hasattr(decoded, "detach"):
+            decoded = decoded.detach().cpu().numpy()
+
+        if hasattr(random_action, "detach"):
+            random_action = random_action.detach().cpu().numpy()
+
+        max_diff = np.max(np.abs(random_action - decoded))
+        if max_diff > 0.01:
+            mismatches.append(
+                f"Action tokenizer encode/decode mismatch: max_diff={max_diff:.6f} "
+                f"(input_shape={random_action.shape}, output_shape={decoded.shape})"
+            )
+    except Exception as e:
+        mismatches.append(f"Action tokenizer consistency check failed: {e}")
+
+    return mismatches
+
+
+def check_vq_encode_decode_consistency(lr_config: dict, lr_action_tokenizer) -> list[str]:
+    """Check VQ-VAE encode -> decode roundtrip consistency."""
+    mismatches = []
+
+    np.random.seed(42)
+    torch.manual_seed(42)
+
+    action_dim = lr_config.get("action_dim", 7)
+    chunk_size = lr_config.get("chunk_size", 8)
+
+    random_action = np.random.uniform(-1.0, 1.0, (2, chunk_size, action_dim)).astype(np.float32)
+
+    try:
+        encoded = lr_action_tokenizer(random_action)
+
+        decoded = lr_action_tokenizer.decode_token_ids_to_actions(encoded)
+
+        if hasattr(decoded, "detach"):
+            decoded = decoded.detach().cpu().numpy()
+
+        if hasattr(random_action, "detach"):
+            random_action = random_action.detach().cpu().numpy()
+
+        max_diff = np.max(np.abs(random_action - decoded))
+        if max_diff > 0.01:
+            mismatches.append(
+                f"VQ encode/decode roundtrip mismatch: max_diff={max_diff:.6f} "
+                f"(input_shape={random_action.shape}, output_shape={decoded.shape})"
+            )
+        else:
+            print(f"  VQ encode/decode roundtrip OK: max_diff={max_diff:.6f}")
+    except Exception as e:
+        mismatches.append(f"VQ encode/decode consistency check failed: {e}")
+
+    return mismatches
+
+
+def check_vision_projector_shapes(lr_model, lr_config: dict) -> list[str]:
+    """Check vision encoder and projector output shapes."""
+    mismatches = []
+
+    try:
+        image_size = lr_config.get("image_size", 224)
+        batch_size = 2
+
+        dummy_pixel_values = {
+            "image": torch.randn(batch_size, 3, image_size, image_size),
+        }
+
+        with torch.no_grad():
+            patch_embeddings = lr_model.vision_backbone(dummy_pixel_values)
+
+        projected_patches = lr_model.projector(patch_embeddings)
+
+        expected_num_patches = lr_model.num_patches
+        actual_num_patches = projected_patches.shape[1]
+        if actual_num_patches != expected_num_patches:
+            mismatches.append(
+                f"Vision num_patches mismatch: expected={expected_num_patches}, "
+                f"actual={actual_num_patches}"
+            )
+
+        projector_output_dim = projected_patches.shape[-1]
+        llm_config = lr_model.llm.config
+        expected_llm_dim = llm_config.hidden_size
+        if projector_output_dim != expected_llm_dim:
+            mismatches.append(
+                f"Projector output dim mismatch: expected={expected_llm_dim}, "
+                f"actual={projector_output_dim}"
+            )
+
+        print(f"  Vision output shape: {patch_embeddings.shape}")
+        print(f"  Projector output shape: {projected_patches.shape}")
+        print(f"  Projector output dim matches LLM hidden dim: {projector_output_dim == expected_llm_dim}")
+
+    except Exception as e:
+        mismatches.append(f"Vision/projector shape check failed: {e}")
+
+    return mismatches
+
+
+def check_forward_pass_shapes(lr_model, lr_config: dict) -> list[str]:
+    """Check forward pass shapes and tensor operations."""
+    mismatches = []
+
+    try:
+        image_size = lr_config.get("image_size", 224)
+        batch_size = 2
+        seq_len = 10
+
+        input_ids = torch.randint(0, lr_config.get("tokenizer_len", 151936), (batch_size, seq_len))
+        attention_mask = torch.ones(batch_size, seq_len, dtype=torch.long)
+        labels = input_ids.clone()
+
+        pixel_values = {
+            "image": torch.randn(batch_size, 3, image_size, image_size),
+        }
+
+        with torch.no_grad():
+            output = lr_model(
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                pixel_values=pixel_values,
+                labels=labels,
+            )
+
+        if hasattr(output, "logits"):
+            logits = output.logits
+            expected_seq_len = seq_len + lr_model.num_patches
+            if logits.shape[1] != expected_seq_len:
+                mismatches.append(
+                    f"Forward logits seq_len mismatch: expected={expected_seq_len}, "
+                    f"actual={logits.shape[1]}"
+                )
+            print(f"  Forward logits shape: {logits.shape}")
+
+        if hasattr(output, "loss") and output.loss is not None:
+            print(f"  Forward loss: {output.loss.item():.6f}")
+
+        print(f"  Forward pass shapes verified successfully")
+
+    except Exception as e:
+        mismatches.append(f"Forward pass shape check failed: {e}")
+
+    return mismatches
+
+
 def run_alignment_check(
     official_checkpoint: str,
     lr_config: dict,
+    lr_model=None,
+    lr_action_tokenizer=None,
 ) -> list[str]:
     """Run full alignment check between official and LeRobot MiniVLA."""
     all_mismatches = []
@@ -159,8 +323,51 @@ def run_alignment_check(
         return all_mismatches
 
     # Compare configs
+    print("[1/5] Checking config consistency...")
     config_mismatches = compare_configs(official_config, lr_config)
     all_mismatches.extend(config_mismatches)
+    if not config_mismatches:
+        print("  Config consistency OK")
+
+    # Check action tokenizer consistency
+    if lr_action_tokenizer is not None:
+        print("[2/5] Checking action tokenizer consistency...")
+        tokenizer_mismatches = check_action_tokenizer_consistency(lr_config, lr_action_tokenizer)
+        all_mismatches.extend(tokenizer_mismatches)
+        if not tokenizer_mismatches:
+            print("  Action tokenizer consistency OK")
+    else:
+        print("[2/5] Skipping action tokenizer check (no tokenizer provided)")
+
+    # Check VQ encode/decode consistency
+    if lr_action_tokenizer is not None:
+        print("[3/5] Checking VQ encode/decode consistency...")
+        vq_mismatches = check_vq_encode_decode_consistency(lr_config, lr_action_tokenizer)
+        all_mismatches.extend(vq_mismatches)
+        if not vq_mismatches:
+            print("  VQ encode/decode consistency OK")
+    else:
+        print("[3/5] Skipping VQ encode/decode check (no tokenizer provided)")
+
+    # Check vision/projector shapes
+    if lr_model is not None:
+        print("[4/5] Checking vision/projector shapes...")
+        vision_mismatches = check_vision_projector_shapes(lr_model, lr_config)
+        all_mismatches.extend(vision_mismatches)
+        if not vision_mismatches:
+            print("  Vision/projector shapes OK")
+    else:
+        print("[4/5] Skipping vision/projector shape check (no model provided)")
+
+    # Check forward pass shapes
+    if lr_model is not None:
+        print("[5/5] Checking forward pass shapes...")
+        forward_mismatches = check_forward_pass_shapes(lr_model, lr_config)
+        all_mismatches.extend(forward_mismatches)
+        if not forward_mismatches:
+            print("  Forward pass shapes OK")
+    else:
+        print("[5/5] Skipping forward pass shape check (no model provided)")
 
     return all_mismatches
 
@@ -169,6 +376,8 @@ def main():
     parser = argparse.ArgumentParser(description="Check MiniVLA alignment between official and LeRobot implementations")
     parser.add_argument("--official_checkpoint", type=str, required=True, help="Path to official MiniVLA checkpoint (.pt)")
     parser.add_argument("--lr_config_json", type=str, required=True, help="Path to LeRobot MiniVLA config.json")
+    parser.add_argument("--lr_model_path", type=str, default=None, help="Path to LeRobot MiniVLA model checkpoint (optional, for shape checks)")
+    parser.add_argument("--vq_vae_path", type=str, default=None, help="Path to VQ-VAE checkpoint directory (optional, for action tokenizer checks)")
     args = parser.parse_args()
 
     # Load LeRobot config
@@ -182,10 +391,52 @@ def main():
     print(f"LeRobot config: {args.lr_config_json}")
     print()
 
+    # Load LeRobot model if path provided
+    lr_model = None
+    lr_action_tokenizer = None
+
+    if args.lr_model_path is not None:
+        print("Loading LeRobot model...")
+        from ..configuration_minivla import MiniVLAConfig
+        from ..modeling_minivla import MiniVLAPolicy
+
+        config = MiniVLAConfig(**lr_config)
+        lr_model = MiniVLAPolicy(config)
+
+        model_state = torch.load(args.lr_model_path, map_location="cpu")
+        if "model" in model_state:
+            lr_model.load_state_dict(model_state["model"])
+        else:
+            lr_model.load_state_dict(model_state)
+
+        lr_model.eval()
+        print("LeRobot model loaded successfully")
+        print()
+
+    if args.vq_vae_path is not None and lr_config.get("tokenizer_len") is not None:
+        print("Loading LeRobot action tokenizer...")
+        from transformers import AutoTokenizer
+        from ..vq_action import VQActionTokenizer
+
+        tokenizer = AutoTokenizer.from_pretrained(lr_config.get("llm_backbone", "Qwen/Qwen2.5-0.5B"))
+        lr_action_tokenizer = VQActionTokenizer(
+            tokenizer=tokenizer,
+            vq_vae_path=args.vq_vae_path,
+            use_extra=lr_config.get("use_extra_tokens", False),
+        )
+        print("LeRobot action tokenizer loaded successfully")
+        print()
+
     # Run alignment check
-    mismatches = run_alignment_check(args.official_checkpoint, lr_config)
+    mismatches = run_alignment_check(
+        args.official_checkpoint,
+        lr_config,
+        lr_model=lr_model,
+        lr_action_tokenizer=lr_action_tokenizer,
+    )
 
     if mismatches:
+        print()
         print("MISMATCHES FOUND:")
         for i, mismatch in enumerate(mismatches, 1):
             print(f"  {i}. {mismatch}")
@@ -193,6 +444,7 @@ def main():
         print(f"Total mismatches: {len(mismatches)}")
         sys.exit(1)
     else:
+        print()
         print("ALL CHECKS PASSED - Official and LeRobot MiniVLA are aligned!")
         sys.exit(0)
 

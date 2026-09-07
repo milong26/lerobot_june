@@ -405,7 +405,8 @@ def rollout(
             action = action_transition[ACTION]
 
             # Convert to CPU / numpy.
-            action_numpy: np.ndarray = action.to("cpu").numpy()
+            # 只有tinyvla的时候这么干
+            action_numpy: np.ndarray = action.to("cpu").to(dtype=torch.float32).numpy() if getattr(policy, "name", "").startswith("tinyvla") else action.to("cpu").numpy()
             assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
 
             # Apply the next action.
