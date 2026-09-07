@@ -429,10 +429,16 @@ class VQActionTokenizer(ActionTokenizer):
         Decode action token IDs to continuous actions.
         Accepts both numpy arrays and torch tensors.
         Mirrors teach_code/MiniVLA/prismatic/vla/action_tokenizer.py::VQActionTokenizer.decode_token_ids_to_actions.
+        
+        Returns:
+            np.ndarray of shape [B, T, A] for batch input, or [T, A] for single sample.
         """
         if isinstance(action_token_ids, torch.Tensor):
             action_token_ids = action_token_ids.detach().cpu().numpy()
         action_token_ids = np.array(action_token_ids)
+        is_single = action_token_ids.ndim == 1
+        if is_single:
+            action_token_ids = action_token_ids[np.newaxis, :]
 
         action_token_ids = self.tokenizer_len - 1 - action_token_ids
         initial_shape = action_token_ids.shape
@@ -453,11 +459,11 @@ class VQActionTokenizer(ActionTokenizer):
         latent = self.vq_vae.draw_code_forward(action_token_ids)
         ret_action = self.vq_vae.get_action_from_latent(latent)
 
-        # Return only the first horizon action as per official behavior
-        if action_token_ids.shape[0] == 1 and len(initial_shape) == 1:
-            return ret_action[0, 0].detach().cpu().numpy()
-
-        return ret_action[:, 0].detach().cpu().numpy()
+        # ret_action shape: [B, T, A]
+        result = ret_action.detach().cpu().numpy()
+        if is_single:
+            return result[0]  # [T, A]
+        return result  # [B, T, A]
 
     @property
     def required_future_horizon(self) -> int:

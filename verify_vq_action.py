@@ -41,6 +41,34 @@ def main():
     np.random.seed(42)
     torch.manual_seed(42)
 
+    # Test 1: Random VQ codes -> decode -> encode -> decode should be identical
+    print("\n=== Test 1: VQ code roundtrip ===")
+    n_bins = vq_tokenizer.n_bins
+    vq_groups = vq_tokenizer.vq_vae.vqvae_groups
+    batch_size = 2
+    random_codes = np.random.randint(0, n_bins, size=(batch_size, vq_groups))
+    print(f"Random VQ codes shape: {random_codes.shape}, range: [{random_codes.min()}, {random_codes.max()}]")
+
+    decoded1 = vq_tokenizer.decode_token_ids_to_actions(random_codes)
+    print(f"First decode shape: {decoded1.shape}")
+
+    # Encode the decoded actions back
+    token_ids = vq_tokenizer.encode_token_ids(decoded1)
+    print(f"Re-encoded token shape: {token_ids.shape}")
+
+    decoded2 = vq_tokenizer.decode_token_ids_to_actions(token_ids)
+    print(f"Second decode shape: {decoded2.shape}")
+
+    max_diff = np.max(np.abs(decoded1 - decoded2))
+    print(f"Max absolute difference: {max_diff:.6f}")
+
+    if max_diff < 0.01:
+        print("PASS: VQ encode/decode is consistent!")
+    else:
+        print(f"FAIL: max_diff={max_diff:.6f} exceeds threshold 0.01")
+
+    # Test 2: Random actions -> encode -> decode (lossy, just check shapes)
+    print("\n=== Test 2: Action encode/decode (lossy) ===")
     action = np.random.uniform(-1, 1, (2, 8, 7)).astype(np.float32)
     print(f"Input action shape: {action.shape}")
 
@@ -50,15 +78,11 @@ def main():
     decoded = vq_tokenizer.decode_token_ids_to_actions(encoded)
     print(f"Decoded action shape: {decoded.shape}")
 
-    # VQ decode returns only the first time step, so compare action[:, 0, :] with decoded
-    action_first_step = action[:, 0, :]
-    max_diff = np.max(np.abs(action_first_step - decoded))
-    print(f"Max absolute difference (first time step): {max_diff:.6f}")
-
-    if max_diff < 0.01:
-        print("PASS: VQ encode/decode is consistent!")
+    # VQ is lossy, so we just verify the shapes are correct
+    if decoded.shape == (2, 8, 7):
+        print("PASS: Decoded shape matches input shape!")
     else:
-        print(f"FAIL: max_diff={max_diff:.6f} exceeds threshold 0.01")
+        print(f"FAIL: Expected shape (2, 8, 7), got {decoded.shape}")
 
 
 if __name__ == "__main__":

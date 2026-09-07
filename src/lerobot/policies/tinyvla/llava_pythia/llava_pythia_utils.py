@@ -71,7 +71,7 @@ def find_all_linear_names(model, rank0_print, lora_module=None):
     if 'half' in lora_module:
         new_lora_module_names = set()
         for n in lora_module_names:
-            if ('embed_out' not in n) and ('layers' in n) and ('vision' not in name) and ('gpt_neox' in n):
+            if ('embed_out' not in n) and ('layers' in n) and ('vision' not in n) and ('gpt_neox' in n):
                 if int(n.split('.')[2]) % 2 == 0:
                     continue
                 else:

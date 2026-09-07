@@ -6,10 +6,10 @@
   "gpu_id": 0,
   "num_episodes": 112,
   "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
-  "start_time": "2026-09-07 12:32:38",
-  "end_time": "2026-09-07 12:33:03",
-  "current_stage": "failed",
-  "failed_stage": "evaluation",
+  "start_time": "2026-09-07 12:36:26",
+  "end_time": "2026-09-07 16:27:35",
+  "current_stage": "completed",
+  "failed_stage": null,
   "selection_vlm_model_id": "lesjie/Llava-Pythia-400M",
   "selection_vlm_description": "TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
   "config": {
@@ -36,23 +36,35 @@
   "stages": {
     "embedding_extraction": {
       "status": "completed",
-      "time_seconds": 7.3,
+      "time_seconds": 7.7,
       "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/embeddings"
     },
     "episode_selection": {
       "status": "completed",
-      "time_seconds": 4.5,
+      "time_seconds": 4.9,
       "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/selected_episode.json",
       "num_selected_episodes": 112
     },
     "training": {
       "status": "completed",
-      "time_seconds": 12.5,
+      "time_seconds": 12304.2,
       "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints",
       "train_steps": 12000
+    },
+    "evaluation": {
+      "status": "completed",
+      "time_seconds": 1551.7,
+      "eval_results": {
+        "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs/tinyvla_s_disassemble-v3_corner_eval.log",
+        "success_rate": 0.0,
+        "grasp_success_rate": 0.0
+      }
     }
   },
-  "final_metrics": {},
-  "total_time_seconds": 24.4,
-  "error": "No valid checkpoint found in /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints"
+  "final_metrics": {
+    "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs/tinyvla_s_disassemble-v3_corner_eval.log",
+    "success_rate": 0.0,
+    "grasp_success_rate": 0.0
+  },
+  "total_time_seconds": 13868.5
 }

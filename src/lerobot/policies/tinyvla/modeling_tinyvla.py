@@ -393,8 +393,16 @@ class TinyVLAPolicy(PreTrainedPolicy):
                 state_dict = load_file(model_file)
                 # Use strict=False because state dict may have LoRA-specific parameter names
                 # that don't exactly match the freshly-built model structure
-                policy.load_state_dict(state_dict, strict=False)
+                missing_keys, unexpected_keys = policy.load_state_dict(state_dict, strict=False)
+                lora_keys_in_sd = [k for k in state_dict.keys() if 'lora' in k.lower()]
                 logger.info(f"Loaded model weights from {model_file}")
+                logger.info(f"State dict contains {len(lora_keys_in_sd)} LoRA keys")
+                if missing_keys:
+                    logger.warning(f"Missing keys ({len(missing_keys)}): {missing_keys[:10]}...")
+                if unexpected_keys:
+                    logger.warning(f"Unexpected keys ({len(unexpected_keys)}): {unexpected_keys[:10]}...")
+                if not missing_keys and not unexpected_keys:
+                    logger.info("All keys matched successfully")
             else:
                 logger.warning(f"model.safetensors not found in {model_id}")
         else:
