@@ -404,6 +404,9 @@ def make_policy(
         # hyperparameters that we want to vary).
         kwargs["pretrained_name_or_path"] = cfg.pretrained_path
         kwargs["revision"] = cfg.pretrained_revision
+        print(f"[DEBUG factory] policy_cls: {policy_cls}")
+        print(f"[DEBUG factory] policy_cls.__init__ signature: {policy_cls.__init__}")
+        print(f"[DEBUG factory] kwargs keys: {list(kwargs.keys())}")
         policy = policy_cls.from_pretrained(**kwargs)
     elif cfg.pretrained_path and cfg.use_peft:
         # Load a pretrained PEFT model on top of the policy. The pretrained path points to the folder/repo
@@ -442,7 +445,7 @@ def make_policy(
         # Make a fresh policy.
         # For MiniVLA variants, resolve camera keys before instantiation
         if hasattr(cfg, "resolve_camera_keys"):
-            cfg.resolve_camera_keys(dataset_meta)
+            cfg.resolve_camera_keys(ds_meta)
         policy = policy_cls(**kwargs)
 
     policy.to(cfg.device)

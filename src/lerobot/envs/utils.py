@@ -190,6 +190,10 @@ def preprocess_observation(observations: dict[str, np.ndarray]) -> dict[str, Ten
         target = f"{OBS_STR}.{key}"
         if target in return_observations:
             continue
+        # Pass through non-array keys (e.g., task strings) without modification
+        if not isinstance(value, (np.ndarray, Tensor)):
+            return_observations[key] = value
+            continue
         if isinstance(value, np.ndarray):
             val = torch.from_numpy(value).float()
             if val.dim() == 1:

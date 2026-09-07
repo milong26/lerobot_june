@@ -118,7 +118,9 @@ class PreTrainedPolicy(nn.Module, HubMixin, abc.ABC):
                 "`PreTrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-        self.config = config
+        # Store config without registering as a nn.Module submodule
+        # This prevents PyTorch from treating config fields as parameters
+        self.__dict__['config'] = config
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)

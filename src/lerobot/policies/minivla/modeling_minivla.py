@@ -45,9 +45,12 @@ class MiniVLACore(nn.Module):
     Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py::OpenVLA.
     """
 
-    def __init__(self, config: MiniVLAConfig):
+    def __init__(self, config: MiniVLAConfig, **kwargs):
         super().__init__()
-        self.config = config
+        # Store config as a plain Python attribute (not nn.Module parameter)
+        # Using object.__setattr__ to bypass PyTorch's __setattr__ which would
+        # register it as a submodule and include its fields in parameters()
+        self.__dict__['config'] = config
         self.dataset_statistics = None
 
         # === Read official metadata BEFORE creating VLM and action tokenizer ===
@@ -118,9 +121,11 @@ class MiniVLACore(nn.Module):
         action_tokenizer_type = vla_cfg.get("action_tokenizer", self.config.action_tokenizer_type)
         self.config._resolved_action_tokenizer_type = action_tokenizer_type
 
-        # Parse base_vlm checkpoint (priority over local config)
-        base_vlm = vla_cfg.get("base_vlm", self.config.base_vlm_checkpoint)
-        self.config.base_vlm_checkpoint = base_vlm
+        # NOTE: Skip base_vlm override from official config. The official base_vlm field
+        # contains a local path name like "prism-qwen25-extra-dinosiglip-224px+0_5b" which
+        # is not a valid HuggingFace repo ID. We use the default Qwen/Qwen2.5-0.5B instead.
+        # base_vlm = vla_cfg.get("base_vlm", self.config.base_vlm_checkpoint)
+        # self.config.base_vlm_checkpoint = base_vlm
 
         # Parse vision/LLM backbone identifiers from model config (priority over local config)
         vision_backbone_id = model_cfg.get("vision_backbone_id", self.config.vision_backbone_id)
@@ -612,18 +617,46 @@ class MiniVLACore(nn.Module):
         VQ-VAE is excluded.
         """
         params = []
+        
         if not self.config.freeze_vision_backbone:
-            params.extend(self.vlm.vision_backbone.parameters())
+            for p in self.vlm.vision_backbone.parameters():
+                if isinstance(p, torch.Tensor) and p.requires_grad:
+                    params.append(p)
+                elif not isinstance(p, torch.Tensor):
+                    print(f"[WARNING] vision_backbone non-Tensor: {type(p)} = {repr(p)[:100]}")
 
-        params.extend(self.vlm.projector.parameters())
+        for p in self.vlm.projector.parameters():
+            if isinstance(p, torch.Tensor) and p.requires_grad:
+                params.append(p)
+            elif not isinstance(p, torch.Tensor):
+                print(f"[WARNING] projector non-Tensor: {type(p)} = {repr(p)[:100]}")
 
         if self.config.freeze_llm_backbone:
             if self.config.unfreeze_last_llm_layer:
-                params.extend(self.vlm.llm.model.layers[-1].parameters())
+                for p in self.vlm.llm.model.layers[-1].parameters():
+                    if isinstance(p, torch.Tensor) and p.requires_grad:
+                        params.append(p)
+                    elif not isinstance(p, torch.Tensor):
+                        print(f"[WARNING] llm last_layer non-Tensor: {type(p)} = {repr(p)[:100]}")
         else:
-            params.extend(self.vlm.llm.parameters())
+            for p in self.vlm.llm.parameters():
+                if isinstance(p, torch.Tensor) and p.requires_grad:
+                    params.append(p)
+                elif not isinstance(p, torch.Tensor):
+                    print(f"[WARNING] llm non-Tensor: {type(p)} = {repr(p)[:100]}")
 
-        return {"params": [p for p in params if p.requires_grad]}
+        # Final validation
+        for i, p in enumerate(params):
+            if not isinstance(p, torch.Tensor):
+                print(f"[ERROR] Parameter {i} is not a Tensor: type={type(p)}, value={repr(p)[:200]}")
+            elif not p.requires_grad:
+                print(f"[WARNING] Parameter {i} does not require grad: shape={p.shape}")
+
+        print(f"[DEBUG] Total trainable parameters: {len(params)}")
+        print(f"[DEBUG] First param type: {type(params[0]) if params else 'empty'}")
+        print(f"[DEBUG] Last param type: {type(params[-1]) if params else 'empty'}")
+        
+        return {"params": params}
 
 
 class MiniVLAPolicy(PreTrainedPolicy):
@@ -634,7 +667,49 @@ class MiniVLAPolicy(PreTrainedPolicy):
     config_class = MiniVLAConfig
     name = "minivla"
 
-    def __init__(self, config: MiniVLAConfig):
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_name_or_path: str,
+        config: MiniVLAConfig | None = None,
+        **kwargs,
+    ):
+        """
+        Override PreTrainedPolicy.from_pretrained to handle .pt checkpoints
+        instead of safetensors.
+        """
+        import os
+        from pathlib import Path
+
+        if config is None:
+            config = cls.config_class.from_pretrained(
+                pretrained_name_or_path=pretrained_name_or_path,
+            )
+
+        # Find .pt checkpoint file in the checkpoints/ subdirectory
+        pretrained_path = Path(pretrained_name_or_path)
+        checkpoints_dir = pretrained_path / "checkpoints"
+
+        if checkpoints_dir.exists():
+            pt_files = list(checkpoints_dir.glob("*.pt"))
+            if pt_files:
+                # Use the checkpoint with the lowest loss (usually the last one alphabetically)
+                pt_files.sort()
+                official_checkpoint = str(pt_files[-1])
+                print(f"[MiniVLA] Loading official checkpoint: {official_checkpoint}")
+                config.official_vla_checkpoint = official_checkpoint
+            else:
+                print(f"[MiniVLA] No .pt files found in {checkpoints_dir}, using random initialization")
+        else:
+            print(f"[MiniVLA] No checkpoints directory found at {checkpoints_dir}, using random initialization")
+
+        # Create the policy instance (MiniVLACore.__init__ will load the checkpoint if set)
+        instance = cls(config, **kwargs)
+        instance.to(config.device)
+        instance.eval()
+        return instance
+
+    def __init__(self, config: MiniVLAConfig, **kwargs):
         super().__init__(config)
         self.model = MiniVLACore(config)
         self._action_queue: Optional[torch.Tensor] = None

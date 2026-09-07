@@ -108,6 +108,29 @@ class AdamWConfig(OptimizerConfig):
     def build(self, params: OptimizerParams) -> torch.optim.Optimizer:
         kwargs = asdict(self)
         kwargs.pop("grad_clip_norm")
+        
+        # Debug: Check params structure
+        print(f"[Optimizer DEBUG] params type: {type(params)}")
+        if isinstance(params, dict):
+            print(f"[Optimizer DEBUG] params keys: {list(params.keys())}")
+            for k, v in params.items():
+                print(f"[Optimizer DEBUG]   params['{k}'] type: {type(v)}")
+                if k == 'params' and isinstance(v, list):
+                    print(f"[Optimizer DEBUG]   params['params'] length: {len(v)}")
+                    # Check if any item in the list is not a Tensor
+                    for i, p in enumerate(v):
+                        if not isinstance(p, torch.Tensor):
+                            print(f"[Optimizer ERROR] params['params'][{i}] is NOT Tensor: type={type(p)}, value={repr(p)}")
+                            break
+                    else:
+                        print(f"[Optimizer DEBUG] All items in params['params'] are Tensors")
+        
+        # Try passing just the list instead of dict
+        if isinstance(params, dict) and 'params' in params:
+            param_list = params['params']
+            print(f"[Optimizer DEBUG] Passing param_list directly to AdamW (length={len(param_list)})")
+            return torch.optim.AdamW(param_list, **kwargs)
+        
         return torch.optim.AdamW(params, **kwargs)
 
 

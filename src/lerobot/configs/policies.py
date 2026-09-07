@@ -180,6 +180,7 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
         cache_dir: str | Path | None = None,
         local_files_only: bool = False,
         revision: str | None = None,
+        policy_type: str | None = None,
         **policy_kwargs: Any,
     ) -> T:
         model_id = str(pretrained_name_or_path)
@@ -213,12 +214,21 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
         with open(config_file) as f:
             config = json.load(f)
 
+        print(f"[DEBUG] Loaded config from: {config_file}")
+        print(f"[DEBUG] Config keys: {list(config.keys())}")
+        print(f"[DEBUG] policy_type parameter: {policy_type}")
+
         # Resolve the concrete config subclass from the serialized "type" tag, then parse
         # the config (with CLI overrides) directly for that class. The "type" key is
         # stripped because draccus only consumes it when parsing the registry base class.
-        policy_type = config.pop("type", None)
-        if policy_type is None:
-            raise ValueError(f"Missing 'type' field in {CONFIG_NAME} of {model_id}")
+        if policy_type is not None:
+            logger.info(f"Using manually specified policy_type: {policy_type}")
+            print(f"[DEBUG] Using manually specified policy_type: {policy_type}")
+        else:
+            policy_type = config.pop("type", None)
+            print(f"[DEBUG] Extracted policy_type from config: {policy_type}")
+            if policy_type is None:
+                raise ValueError(f"Missing 'type' field in {CONFIG_NAME} of {model_id}")
         try:
             config_cls = cls.get_choice_class(policy_type)
         except Exception as e:
@@ -226,6 +236,22 @@ class PreTrainedConfig(draccus.ChoiceRegistry, HubMixin, abc.ABC):  # type: igno
                 f"Policy type '{policy_type}' (from {CONFIG_NAME} of {model_id}) is not registered. "
                 f"Available policy types: {cls.get_known_choices()}"
             ) from e
+
+        # For external configs (e.g., prismatic format), extract only the relevant nested section
+        if "vla" in config:
+            print(f"[DEBUG] Found 'vla' key in config, using vla section only")
+            config = config["vla"]
+            # Add type back since it was popped earlier
+            config["type"] = policy_type
+        
+        # Filter config to only include fields that the config class accepts
+        import dataclasses
+        if dataclasses.is_dataclass(config_cls):
+            valid_fields = {f.name for f in dataclasses.fields(config_cls)}
+            filtered_config = {k: v for k, v in config.items() if k in valid_fields}
+            print(f"[DEBUG] Filtered config keys: {list(filtered_config.keys())}")
+            print(f"[DEBUG] Removed invalid keys: {set(config.keys()) - valid_fields}")
+            config = filtered_config
 
         with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json") as f:
             json.dump(config, f)
