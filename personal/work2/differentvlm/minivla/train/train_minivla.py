@@ -38,17 +38,22 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
 
     output_dir = Path(cfg.checkpoints_dir)
 
-    # Auto-resume: check if checkpoints directory exists with saved steps
+    # Auto-resume: check if output directory exists (LeRobot will check for checkpoints inside)
     resume = False
-    if output_dir.exists() and (output_dir / "checkpoints").exists():
+    if output_dir.exists():
+        # Check if there are any saved checkpoints (numeric directories)
         existing_steps = sorted([
-            d.name for d in (output_dir / "checkpoints").iterdir()
+            d.name for d in output_dir.iterdir()
             if d.is_dir() and d.name.isdigit()
         ])
         if existing_steps:
             resume = True
             print(f"Found existing checkpoints: {existing_steps[-1]}")
             print(f"Training will resume from latest checkpoint")
+        else:
+            print(f"Output directory exists but no checkpoints found, removing old directory")
+            import shutil
+            shutil.rmtree(output_dir)
 
     train_log = Path(cfg.logs_dir) / f"{cfg.exp_name}_training.log"
 
