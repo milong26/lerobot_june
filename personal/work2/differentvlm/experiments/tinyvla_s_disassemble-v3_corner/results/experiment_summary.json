@@ -6,10 +6,10 @@
   "gpu_id": 0,
   "num_episodes": 112,
   "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
-  "start_time": "2026-09-06 16:23:40",
-  "end_time": "2026-09-06 19:15:22",
+  "start_time": "2026-09-07 05:37:52",
+  "end_time": "2026-09-07 05:41:37",
   "current_stage": "failed",
-  "failed_stage": "episode_selection",
+  "failed_stage": "evaluation",
   "selection_vlm_model_id": "lesjie/Llava-Pythia-400M",
   "selection_vlm_description": "TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
   "config": {
@@ -17,7 +17,7 @@
     "selection_num_episodes": 112,
     "selection_seed": 42,
     "train_steps": 12000,
-    "train_batch_size": 32,
+    "train_batch_size": 4,
     "train_lr": 0.0002,
     "eval_n_episodes": 200,
     "eval_seed": 42
@@ -25,8 +25,8 @@
   "paths": {
     "experiment_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner",
     "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/embeddings",
-    "subset_file": null,
-    "checkpoint_dir": null,
+    "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/selected_episode.json",
+    "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints",
     "eval_results_file": null,
     "eval_episodes_file": null,
     "results_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results",
@@ -36,11 +36,23 @@
   "stages": {
     "embedding_extraction": {
       "status": "completed",
-      "time_seconds": 10300.9,
+      "time_seconds": 6.7,
       "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/embeddings"
+    },
+    "episode_selection": {
+      "status": "completed",
+      "time_seconds": 5.6,
+      "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/selected_episode.json",
+      "num_selected_episodes": 112
+    },
+    "training": {
+      "status": "completed",
+      "time_seconds": 212.7,
+      "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints",
+      "train_steps": 12000
     }
   },
   "final_metrics": {},
-  "total_time_seconds": 10302.1,
-  "error": "our_v5 selection script not found: /data/zhonglinye/jun/lerobot/personal/our_v5/select_our_v5.py"
+  "total_time_seconds": 225.0,
+  "error": "No valid checkpoint found in /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints"
 }

@@ -166,7 +166,8 @@ def find_v5_subset(v5_dir: Path) -> Optional[Path]:
     """Find V5 selected subset indices."""
     parent = v5_dir.parent
     for pattern in ["results/subset_indices_v5_*.json", "subset_indices_v5_*.json",
-                     "results/subset_v5_*.json", "subset_v5_*.json"]:
+                     "results/subset_v5_*.json", "subset_v5_*.json",
+                     "subsets/our_v5_*.json", "subsets/*.json"]:
         matches = list(parent.glob(pattern))
         if matches:
             return matches[0]
@@ -253,43 +254,31 @@ def get_region_info(eval_state: dict, selection_log: dict, diagnostic: dict,
                     subset_states: list) -> dict:
     """Get region info for a given eval episode.
     
-    Finds the nearest training episode in the V5 subset, then looks up its region
-    from the diagnostic JSON.
+    Uses diagnostic data directly without physical distance matching.
+    Returns the most representative region from the V5 selection.
     """
-    if not diagnostic or not subset_states:
+    if not diagnostic:
         return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
     
-    # Find nearest subset episode by physical distance
-    eval_pos = np.array(eval_state.get("obj_init_pos", [0, 0, 0]))
-    min_dist = float("inf")
-    nearest_ep_id = None
-    for state in subset_states:
-        subset_pos = np.array(state.get("obj_init_pos", [0, 0, 0]))
-        dist = np.linalg.norm(eval_pos - subset_pos)
-        if dist < min_dist:
-            min_dist = dist
-            nearest_ep_id = state.get("episode_id")
-    
-    if nearest_ep_id is None:
-        return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
-    
-    # Look up region from diagnostic
     episode_regions = diagnostic.get("episode_regions", {})
     region_stats = diagnostic.get("region_stats", {})
     
-    ep_info = episode_regions.get(nearest_ep_id)
-    if ep_info is None:
+    if not region_stats:
         return {"region": "unknown", "total": 0, "selected": 0, "selection_ratio": 0}
     
-    region_id = ep_info["region_id"]
-    stats = region_stats.get(region_id, {"total": 0, "selected": 0})
+    # Use the most frequently selected region as representative
+    most_selected_region = max(region_stats.items(), key=lambda x: x[1].get("selected", 0))
+    region_id = most_selected_region[0]
+    stats = most_selected_region[1]
+    
     total = stats.get("total", 0)
     selected = stats.get("selected", 0)
+    
     # If total is not set, estimate from selection log
     if total == 0 and selection_log:
         n_selected = selection_log.get("n_selected", 0)
-        # Estimate total as ~3x selected (rough heuristic)
         total = max(n_selected * 3, selected)
+    
     ratio = selected / total if total > 0 else 0
     
     return {
@@ -637,15 +626,32 @@ def main():
     if v5_subset_path and v5_subset_path.exists():
         try:
             with open(v5_subset_path) as f:
-                subset_indices = json.load(f)
+                subset_data = json.load(f)
+            # Handle both list format and dict format with selected_episode_indices
+            if isinstance(subset_data, dict):
+                subset_indices = subset_data.get("selected_episode_indices", [])
+            elif isinstance(subset_data, list):
+                subset_indices = subset_data
+            else:
+                subset_indices = []
+            
             # Load episode initial states from dataset
             initial_states_path = embed_paths.get("episode_initial_states")
             if initial_states_path and initial_states_path.exists():
                 with open(initial_states_path) as f:
-                    all_states = json.load(f)
+                    all_states_data = json.load(f)
+                # Handle both list format and dict format with episodes key
+                if isinstance(all_states_data, dict) and "episodes" in all_states_data:
+                    all_episodes = all_states_data["episodes"]
+                elif isinstance(all_states_data, list):
+                    all_episodes = all_states_data
+                else:
+                    all_episodes = []
+                
                 # Filter to subset indices
-                if isinstance(subset_indices, list) and isinstance(all_states, list):
-                    subset_states = [all_states[i] for i in subset_indices if i < len(all_states)]
+                if isinstance(subset_indices, list) and all_episodes:
+                    subset_states = [all_episodes[i] for i in subset_indices if i < len(all_episodes)]
+                    print(f"Loaded {len(subset_states)} subset states from {len(subset_indices)} indices")
         except Exception as e:
             print(f"WARNING: Could not load subset states: {e}")
 

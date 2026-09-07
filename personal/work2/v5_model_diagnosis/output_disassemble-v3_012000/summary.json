@@ -8,7 +8,7 @@
   "random_success_v5_fail_stats": {
     "mean_randvec_distance_delta": "NA",
     "mean_visual_distance_delta": "NA",
-    "mean_region_selection_ratio": 0.0,
+    "mean_region_selection_ratio": 0.017857142857142856,
     "mean_action_divergence": 0.0
   },
   "diagnostic_label": "MIXED_OR_INCONCLUSIVE"

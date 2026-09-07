@@ -44,6 +44,18 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from sklearn.cluster import KMeans
 
+
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        if isinstance(obj, np.floating):
+            return float(obj)
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        return super().default(obj)
+
 sys.stdout.reconfigure(line_buffering=True)
 
 PROJECT_ROOT = Path(__file__).parent.parent.parent.parent
@@ -832,7 +844,7 @@ def save_selected_episodes(selected_episode_ids: List[int], output_path: Path, m
         subset_data["parameters"] = metadata
 
     with open(output_path, "w") as f:
-        json.dump(subset_data, f, indent=2)
+        json.dump(subset_data, f, indent=2, cls=NumpyEncoder)
 
     print(f"Selected episodes saved to: {output_path}")
 
@@ -973,7 +985,7 @@ def compute_diagnostic(
 
     diag_file = output_dir / "diagnostic_v5.json"
     with open(diag_file, "w") as f:
-        json.dump(diagnostic, f, indent=2)
+        json.dump(diagnostic, f, indent=2, cls=NumpyEncoder)
     print(f"Diagnostic saved to: {diag_file}")
 
     return diagnostic
@@ -1107,7 +1119,7 @@ def main():
 
     log_file = output_dir / "results" / f"selection_log_v5_{args.num_selected}_seed{args.seed}.json"
     with open(log_file, "w") as f:
-        json.dump(result, f, indent=2)
+        json.dump(result, f, indent=2, cls=NumpyEncoder)
     print(f"Selection log saved to: {log_file}")
 
     # Run diagnostic analysis

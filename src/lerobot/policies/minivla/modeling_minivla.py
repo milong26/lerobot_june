@@ -11,7 +11,7 @@ Key design:
   - No independent action_logits_head
   - Training: action -> action tokenizer -> action token text -> Qwen prompt -> input_ids/labels -> CausalLM loss
   - Inference: batch-safe autoregressive action token generation with KV cache
-  - predict_action_chunk: returns [B, chunk_size, action_dim]
+  - predict_action_chunk: returns [B, 1, A] for non-VQ, [B, 1, A] for VQ (first horizon)
   - select_action: returns [B, action_dim] (chunk[:, 0])
   - get_optim_params: only trainable vision, projector, Qwen params
   - Official checkpoint loading following prismatic/models/load.py::load_vla and prismatic.py::from_pretrained
@@ -32,7 +32,7 @@ import torch.nn as nn
 
 from lerobot.policies.pretrained import ActionSelectKwargs, PreTrainedPolicy
 
-from .configuration_minivla import MiniVLAConfig, MiniVLAT2Config, MiniVLAWristConfig
+from .configuration_minivla import MiniVLAConfig, MiniVLAT2Config, MiniVLAWristConfig, VQ_TOKENIZER_TYPES
 from .tokenizer import VLATokenizerWrapper
 from .vq_action import VQActionTokenizer, ActionTokenizer
 from .vla_backbone import MiniVLAVLBackbone, IGNORE_INDEX
@@ -50,11 +50,18 @@ class MiniVLACore(nn.Module):
         self.config = config
         self.dataset_statistics = None
 
+        # === Read official metadata BEFORE creating VLM and action tokenizer ===
+        # Mirrors teach_code/MiniVLA/prismatic/models/load.py::load_vla
+        self._read_official_metadata()
+
         # === Tokenizer (shared between VLM and action tokenizer) ===
         self.tokenizer = VLATokenizerWrapper(
             base_vlm_checkpoint=config.base_vlm_checkpoint,
             num_extra_tokens=config.num_extra_tokens,
         )
+
+        # === Build action tokenizer based on resolved config ===
+        self._build_action_tokenizer()
 
         # === VLM Backbone ===
         self.vlm = MiniVLAVLBackbone(
@@ -74,37 +81,84 @@ class MiniVLACore(nn.Module):
 
         self.vlm.set_pad_token_id(self.tokenizer.pad_token_id)
 
-        # === Action Tokenizer ===
-        # Determine action tokenizer type from config or official checkpoint
-        # Mirrors teach_code/MiniVLA/prismatic/models/load.py::load_vla
-        action_tokenizer_type = config.action_tokenizer_type
-
-        # If official checkpoint is specified, read its config.json to get the real tokenizer type
+        # === Load official checkpoint if specified ===
         if config.official_vla_checkpoint:
-            checkpoint_path = Path(config.official_vla_checkpoint)
-            if checkpoint_path.exists() and checkpoint_path.suffix == ".pt":
-                run_dir = checkpoint_path.parents[1]
-                config_json = run_dir / "config.json"
-                if config_json.exists():
-                    with open(config_json, "r") as f:
-                        vla_config = json.load(f)
-                    if "vla" in vla_config and "action_tokenizer" in vla_config["vla"]:
-                        action_tokenizer_type = vla_config["vla"]["action_tokenizer"]
+            self._load_official_checkpoint(config.official_vla_checkpoint)
 
-        # Create action tokenizer based on type
-        if action_tokenizer_type in (
-            "libero_vq_extra_action_tokenizer",
-            "libero_vq_action_tokenizer",
-            "libero_vq_h0_extra_action_tokenizer",
-            "bridge_vq_extra_action_tokenizer",
-            "vq_action_tokenizer",
-        ):
+    def _read_official_metadata(self):
+        """
+        Read official checkpoint metadata and update config BEFORE creating VLM and action tokenizer.
+        Mirrors teach_code/MiniVLA/prismatic/models/load.py::load_vla.
+        If official_vla_checkpoint is specified, reads config.json to get:
+        - vla.action_tokenizer (final tokenizer type)
+        - vla.base_vlm (base VLM checkpoint)
+        - image_sequence_len, use_wrist_image
+        - Corresponding ModelConfig (vision_backbone_id, llm_backbone_id, arch_specifier)
+        """
+        if not self.config.official_vla_checkpoint:
+            return
+
+        checkpoint_path = Path(self.config.official_vla_checkpoint)
+        if not checkpoint_path.exists() or checkpoint_path.suffix != ".pt":
+            return
+
+        run_dir = checkpoint_path.parents[1]
+        config_json = run_dir / "config.json"
+        if not config_json.exists():
+            return
+
+        with open(config_json, "r") as f:
+            full_config = json.load(f)
+
+        vla_cfg = full_config.get("vla", {})
+        model_cfg = full_config.get("model", {})
+
+        # Parse final action tokenizer type
+        action_tokenizer_type = vla_cfg.get("action_tokenizer", self.config.action_tokenizer_type)
+        self.config._resolved_action_tokenizer_type = action_tokenizer_type
+
+        # Parse base_vlm checkpoint
+        base_vlm = vla_cfg.get("base_vlm", self.config.base_vlm_checkpoint)
+        self.config.base_vlm_checkpoint = base_vlm
+
+        # Parse vision/LLM backbone identifiers from model config
+        vision_backbone_id = model_cfg.get("vision_backbone_id", self.config.vision_backbone_id)
+        llm_backbone_id = model_cfg.get("llm_backbone_id", self.config.llm_backbone_id)
+        arch_specifier = model_cfg.get("arch_specifier", self.config.arch_specifier)
+        image_size = model_cfg.get("image_size", self.config.image_size)
+
+        self.config.vision_backbone_id = vision_backbone_id
+        self.config.llm_backbone_id = llm_backbone_id
+        self.config.arch_specifier = arch_specifier
+        self.config.image_size = image_size
+
+        # Parse image_sequence_len and use_wrist_image
+        image_sequence_len = vla_cfg.get("image_sequence_len", self.config.image_sequence_len)
+        use_wrist_image = vla_cfg.get("use_wrist_image", self.config.use_wrist_image)
+        self.config.image_sequence_len = image_sequence_len
+        self.config.use_wrist_image = use_wrist_image
+
+        # Load dataset statistics
+        dataset_statistics_json = run_dir / "dataset_statistics.json"
+        if dataset_statistics_json.exists():
+            with open(dataset_statistics_json, "r") as f:
+                self.dataset_statistics = json.load(f)
+
+    def _build_action_tokenizer(self):
+        """
+        Build action tokenizer based on resolved config.
+        Uses config._resolved_action_tokenizer_type (set by _read_official_metadata)
+        or falls back to config.action_tokenizer_type.
+        """
+        action_tokenizer_type = self.config._resolved_action_tokenizer_type or self.config.action_tokenizer_type
+
+        if action_tokenizer_type in VQ_TOKENIZER_TYPES:
             # VQ mode
-            vq_path = config.resolve_vq_model_path()
+            vq_path = self.config.resolve_vq_model_path()
             if not vq_path:
                 raise ValueError(
                     f"VQ mode requires vq_model_path or official_vla_checkpoint "
-                    f"pointing to a directory with a 'vq' subdirectory. "
+                    f"pointing to a directory with a valid VQ config.json and checkpoints/model.pt. "
                     f"Got action_tokenizer_type={action_tokenizer_type}"
                 )
             self.action_tokenizer = VQActionTokenizer(
@@ -127,10 +181,6 @@ class MiniVLACore(nn.Module):
                 use_extra=True,
             )
             self.vq_vae = None
-
-        # === Load official checkpoint if specified ===
-        if config.official_vla_checkpoint:
-            self._load_official_checkpoint(config.official_vla_checkpoint)
 
     def _load_official_checkpoint(self, checkpoint_path: str):
         """
@@ -277,13 +327,17 @@ class MiniVLACore(nn.Module):
             instruction = [""] * batch_size
 
         if action is not None:
+            # Validate input shape
+            assert action.dim() == 3, f"Expected action shape [B, T, A], got {action.shape}"
+
             action_texts = []
             for i in range(batch_size):
                 if self.config.is_vq_mode:
                     # VQ mode: use full action chunk based on required_future_horizon
                     # Official: action[-required_future_horizon-1:]
                     # LeRobot action shape: [B, chunk_size, action_dim]
-                    action_tensor = action[i].cpu().numpy()  # [chunk_size, action_dim]
+                    required_horizon = self.action_tokenizer.required_future_horizon + 1
+                    action_tensor = action[i, :required_horizon].cpu().numpy()
                     action_text = self.action_tokenizer(action_tensor)
                 else:
                     # Non-VQ mode: use current action based on action_delta_indices
@@ -378,9 +432,9 @@ class MiniVLACore(nn.Module):
         """
         Official multi-modal autoregressive action prediction.
         Batch-safe: each sample executes image+prompt forward(use_cache=True) ->
-        read last position logits -> greedy/sample -> send single token + past_key_values
+        read last VALID multimodal position logits -> greedy/sample -> send single token + past_key_values
         back to VLM -> repeat for required token count.
-        Returns: [B, chunk_size, action_dim]
+        Returns: [B, 1, A] for non-VQ, [B, 1, A] for VQ (first horizon only)
         Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py::predict_action.
         """
         batch_size = len(instruction)
@@ -429,11 +483,17 @@ class MiniVLACore(nn.Module):
             use_cache=True,
         )
 
-        # Get the logits from the last VALID position (not padding)
-        # For each sample, find the last non-padding token position
+        # Get the logits from the last VALID multimodal position (not padding)
         # After vision token insertion, the sequence is: [BOS, vision_patches, text_tokens]
-        # The last valid token for each sample is at the last non-padding position
-        logits = outputs.logits[:, -1, :]  # [B, vocab_size]
+        # last_valid_text_index = attention_mask.sum(dim=1) - 1  [B]
+        # num_patches from VLM backbone
+        # multimodal_last_index = last_valid_text_index + num_patches
+        num_patches = self.vlm.num_patches
+        last_valid_text_index = attention_mask.sum(dim=1) - 1  # [B]
+        multimodal_last_index = last_valid_text_index + num_patches  # [B]
+
+        batch_indices = torch.arange(batch_size, device=input_ids.device)
+        logits = outputs.logits[batch_indices, multimodal_last_index]  # [B, vocab_size]
         past_key_values = outputs.past_key_values
 
         generated_token_ids = []
@@ -448,16 +508,21 @@ class MiniVLACore(nn.Module):
             generated_token_ids.append(next_token)
 
             if step < max_new_tokens - 1:
-                # Feed single token + past_key_values back to VLM
-                # Note: attention_mask=None for cache steps (official behavior)
+                # Feed single token + past_key_values back to VLM with cached forward
+                # Build multimodal attention mask: append 1 for each generated token
                 outputs = self.vlm(
                     input_ids=next_token,
-                    attention_mask=None,
+                    attention_mask=attention_mask,
                     past_key_values=past_key_values,
                     use_cache=True,
                 )
                 logits = outputs.logits[:, -1, :]
                 past_key_values = outputs.past_key_values
+                # Extend attention_mask for the new token
+                attention_mask = torch.cat(
+                    [attention_mask, torch.ones(batch_size, 1, dtype=attention_mask.dtype, device=attention_mask.device)],
+                    dim=1,
+                )
 
         # === Extract action token IDs ===
         action_token_ids = torch.cat(generated_token_ids, dim=1)  # [B, num_tokens]
@@ -486,11 +551,7 @@ class MiniVLACore(nn.Module):
                 # [B, A] -> [B, 1, A]
                 actions = actions.unsqueeze(1)
 
-        # === Action denormalization using official q01/q99 quantile stats ===
-        # Mirrors teach_code/MiniVLA/prismatic/models/vlas/openvla.py::predict_action
-        if self.dataset_statistics:
-            actions = self._denormalize_actions(actions)
-
+        # NOTE: No internal denormalization here. LeRobot postprocessor handles action unnormalization.
         # Ensure output is on same device as pixel_values
         actions = actions.to(pixel_values["dino"].device)
         return actions

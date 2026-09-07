@@ -440,6 +440,9 @@ def make_policy(
 
     else:
         # Make a fresh policy.
+        # For MiniVLA variants, resolve camera keys before instantiation
+        if hasattr(cfg, "resolve_camera_keys"):
+            cfg.resolve_camera_keys(dataset_meta)
         policy = policy_cls(**kwargs)
 
     policy.to(cfg.device)
@@ -527,6 +530,19 @@ def _make_processors_from_policy_config(
     module_path = config.__class__.__module__.replace(
         "configuration_", "processor_"
     )  # e.g., configuration_diffusion -> processor_diffusion
+
+    # Map policy type variants to their canonical processor module
+    # e.g., tinyvla_s / tinyvla_b -> tinyvla
+    _POLICY_TYPE_TO_PROCESSOR_MODULE = {
+        "tinyvla_s": "tinyvla",
+        "tinyvla_b": "tinyvla",
+    }
+    canonical_type = _POLICY_TYPE_TO_PROCESSOR_MODULE.get(policy_type, policy_type)
+    function_name = f"make_{canonical_type}_pre_post_processors"
+    # Rebuild module_path from canonical type
+    base_module = ".".join(config.__class__.__module__.split(".")[:-1])
+    module_path = f"{base_module}.processor_{canonical_type}"
+
     logging.debug(
         f"Instantiating pre/post processors using function '{function_name}' from module '{module_path}'"
     )

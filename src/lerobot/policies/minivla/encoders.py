@@ -11,6 +11,7 @@ Key design:
   - compute_sequence_patches for multi-image (T2, wrist)
   - concatenated DINO + SigLIP patch features on last dimension
   - get_image_transform() returns official DinoSigLIPImageTransform for processor use
+  - build_dinosiglip_image_transform() pure factory (no model weights) for processor
 """
 
 from __future__ import annotations
@@ -49,6 +50,74 @@ def _unpack_tuple(fn):
         result = fn(*args, **kwargs)
         return result[0] if isinstance(result, tuple) else result
     return wrapper
+
+
+# ---------------------------------------------------------------------------
+# Pure transform factory (no model weights loaded)
+# ---------------------------------------------------------------------------
+def build_dinosiglip_image_transform(
+    vision_backbone_id: str = "dinosiglip-vit-so-224px",
+    image_resize_strategy: str = "resize-naive",
+    image_size: int = 224,
+) -> "DinoSigLIPImageTransform":
+    """
+    Build DINO+SigLIP image transforms WITHOUT loading vision model weights.
+    Mirrors teach_code/MiniVLA/prismatic/models/backbones/vision/dinosiglip_vit.py
+    transform construction logic.
+
+    Only uses TIMM pretrained data config to construct transforms.
+    Does NOT instantiate DINOSigLIPViTBackbone or download model weights.
+    """
+    backbone_cfg = DINOSIGLIP_TIMM_IDS[vision_backbone_id]
+    dino_timm_id = backbone_cfg["dino"]
+    siglip_timm_id = backbone_cfg["siglip"]
+
+    # Build dummy models just to resolve data config (timm needs the model to resolve config)
+    # These are created with pretrained=False to avoid downloading weights
+    dino_dummy = timm.create_model(dino_timm_id, pretrained=False, num_classes=0, img_size=image_size)
+    siglip_dummy = timm.create_model(siglip_timm_id, pretrained=False, num_classes=0, img_size=image_size)
+
+    dino_data_cfg = timm.data.resolve_model_data_config(dino_dummy)
+    dino_data_cfg["input_size"] = (3, image_size, image_size)
+
+    siglip_data_cfg = timm.data.resolve_model_data_config(siglip_dummy)
+    siglip_data_cfg["input_size"] = (3, image_size, image_size)
+
+    default_dino_transform = timm.data.create_transform(**dino_data_cfg, is_training=False)
+    default_siglip_transform = timm.data.create_transform(**siglip_data_cfg, is_training=False)
+
+    # Fix =>> SigLIP default transform resizes to *larger* than `image_size` (crops image)!
+    assert isinstance(default_siglip_transform, Compose), "Unexpected `default_siglip_transform`!"
+    assert isinstance(default_siglip_transform.transforms[0], Resize)
+    default_siglip_transform = Compose(
+        [
+            Resize(image_size, interpolation=default_siglip_transform.transforms[0].interpolation),
+            *default_siglip_transform.transforms[1:],
+        ]
+    )
+
+    if image_resize_strategy == "resize-naive":
+        assert isinstance(default_dino_transform, Compose), "Unexpected `default_dino_transform`!"
+        assert isinstance(default_siglip_transform, Compose), "Unexpected `default_siglip_transform`!"
+        assert isinstance(default_dino_transform.transforms[0], Resize)
+        assert isinstance(default_siglip_transform.transforms[0], Resize)
+
+        target_size = (image_size, image_size)
+        dino_transform = Compose(
+            [
+                Resize(target_size, interpolation=default_dino_transform.transforms[0].interpolation),
+                *default_dino_transform.transforms[1:],
+            ]
+        )
+        siglip_transform = Compose(
+            [
+                Resize(target_size, interpolation=default_siglip_transform.transforms[0].interpolation),
+                *default_siglip_transform.transforms[1:],
+            ]
+        )
+        return DinoSigLIPImageTransform(dino_transform, siglip_transform)
+    else:
+        raise ValueError(f"image_resize_strategy '{image_resize_strategy}' is not supported!")
 
 
 # ---------------------------------------------------------------------------
@@ -108,6 +177,35 @@ class DinoSigLIPImageTransform:
             "dino": self.dino_transform(img),
             "siglip": self.siglip_transform(img),
         }
+
+    def apply_pil_image(self, img: Image.Image) -> Dict[str, torch.Tensor]:
+        """Apply transforms to a PIL Image input."""
+        return {
+            "dino": self.dino_transform(img),
+            "siglip": self.siglip_transform(img),
+        }
+
+    def apply_tensor_image(self, img: torch.Tensor) -> Dict[str, torch.Tensor]:
+        """
+        Apply transforms to a torch.Tensor input [C, H, W] in float [0,1].
+        The official TIMM Compose includes ToTensor which is a no-op for tensors.
+        We manually execute the same operations: Resize -> (ToTensor no-op) -> Normalize.
+        """
+        results = {}
+        for branch, transform in [("dino", self.dino_transform), ("siglip", self.siglip_transform)]:
+            out = img
+            for t in transform.transforms:
+                if isinstance(t, Resize):
+                    out = t(out)
+                elif isinstance(t, nn.Module) and hasattr(t, "forward"):
+                    out = t(out)
+                elif hasattr(t, "__call__"):
+                    try:
+                        out = t(out)
+                    except Exception:
+                        pass
+            results[branch] = out
+        return results
 
 
 # ---------------------------------------------------------------------------
@@ -207,6 +305,10 @@ class DINOSigLIPViTBackbone(nn.Module):
             self.image_transform = DinoSigLIPImageTransform(dino_transform, siglip_transform)
         else:
             raise ValueError(f"image_resize_strategy '{image_resize_strategy}' is not supported!")
+
+    @property
+    def default_image_resolution(self) -> tuple:
+        return self.dino_data_cfg["input_size"]
 
     @property
     def embed_dim(self) -> int:

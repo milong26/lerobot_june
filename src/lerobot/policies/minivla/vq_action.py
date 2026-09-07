@@ -310,22 +310,17 @@ class VQActionTokenizer(ActionTokenizer):
         self.tokenizer = tokenizer
         self._init_device = device
 
-        # Resolve VQ path: support absolute paths, MiniVLA repo root, official ACTION_TOKENIZERS paths
+        # Require caller to pass an absolute VQ directory path (resolved by configuration_minivla.py)
         vq_path = Path(vq_vae_path)
         if not vq_path.is_absolute():
-            # Try multiple fallback locations for VQ model
-            possible_paths = [
-                vq_path,
-                Path(__file__).parent.parent.parent.parent.parent / vq_vae_path,
-                Path.cwd() / vq_vae_path,
-            ]
-            for p in possible_paths:
-                if p.exists():
-                    vq_path = p
-                    break
+            raise ValueError(
+                f"VQActionTokenizer requires an absolute vq_vae_path, got relative: {vq_vae_path}. "
+                f"Use config.resolve_vq_model_path() to resolve the path before calling this constructor."
+            )
+        if not vq_path.exists():
+            raise FileNotFoundError(f"VQ model directory not found: {vq_path}")
 
         self.vq_path = vq_path
-        assert self.vq_path.exists(), f"Missing VQ VAE path: {self.vq_path}"
         vq_model_path = self.vq_path / "checkpoints" / "model.pt"
         vq_config_path = self.vq_path / "config.json"
         assert vq_model_path.exists(), f"Missing VQ checkpoint path: {vq_model_path}"
@@ -360,9 +355,30 @@ class VQActionTokenizer(ActionTokenizer):
             action = action.detach().cpu().numpy()
         action = np.array(action)
 
-        action = torch.from_numpy(action).to(self.vq_vae.device).reshape(
-            (1, self.vq_vae.input_dim_h, self.vq_vae.input_dim_w)
-        )
+        # Validate input shape: must match VQ config input_dim_h and input_dim_w
+        if action.ndim == 1:
+            # [A] -> [1, 1, A]
+            action = action[np.newaxis, np.newaxis, :]
+        elif action.ndim == 2:
+            # [T, A] -> [1, T, A]
+            action = action[np.newaxis, :]
+        elif action.ndim == 3:
+            # [B, T, A] - keep as is
+            pass
+        else:
+            raise ValueError(f"Unexpected action shape: {action.shape}, expected [T,A], [1,T,A] or [B,T,A]")
+
+        # Validate T and A dimensions
+        if action.shape[-2] != self.vq_vae.input_dim_h:
+            raise ValueError(
+                f"Action time dimension {action.shape[-2]} does not match VQ input_dim_h {self.vq_vae.input_dim_h}"
+            )
+        if action.shape[-1] != self.vq_vae.input_dim_w:
+            raise ValueError(
+                f"Action feature dimension {action.shape[-1]} does not match VQ input_dim_w {self.vq_vae.input_dim_w}"
+            )
+
+        action = torch.from_numpy(action).to(self.vq_vae.device)
         _, vq_code = self.vq_vae.get_code(action)
         assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
 
@@ -381,6 +397,14 @@ class VQActionTokenizer(ActionTokenizer):
         action_token_ids = self.tokenizer_len - 1 - action_token_ids
         initial_shape = action_token_ids.shape
         action_token_ids = np.clip(action_token_ids, 0, self.n_bins - 1)
+
+        # Validate last dimension equals vqvae_groups
+        if action_token_ids.shape[-1] != self.vq_vae.vqvae_groups:
+            raise ValueError(
+                f"Action token IDs last dimension {action_token_ids.shape[-1]} "
+                f"does not match VQ vqvae_groups {self.vq_vae.vqvae_groups}"
+            )
+
         action_token_ids = torch.from_numpy(action_token_ids).to(self.vq_vae.device).reshape(
             -1, self.vq_vae.vqvae_groups
         )
@@ -389,6 +413,7 @@ class VQActionTokenizer(ActionTokenizer):
         latent = self.vq_vae.draw_code_forward(action_token_ids)
         ret_action = self.vq_vae.get_action_from_latent(latent)
 
+        # Return only the first horizon action as per official behavior
         if action_token_ids.shape[0] == 1 and len(initial_shape) == 1:
             return ret_action[0, 0].detach().cpu().numpy()
 

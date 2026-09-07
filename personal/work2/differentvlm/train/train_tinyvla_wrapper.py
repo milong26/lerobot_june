@@ -82,7 +82,6 @@ def run_tinyvla_training(cfg: VLMExperimentConfig, subset_file: str) -> str:
         f"--dataset.root={cfg.dataset_root}",
         f"--dataset.episodes={episodes_str}",
         "--dataset.eval_split=0.0",
-        f"--rename_map={cfg.rename_map}",
         "--env.type=metaworld",
         f"--env.task={cfg.env_task}",
         f"--env.camera_name={cfg.camera_names}",

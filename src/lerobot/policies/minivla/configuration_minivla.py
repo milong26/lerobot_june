@@ -13,6 +13,7 @@ Reference files in teach_code/MiniVLA:
   - vq/pretrain_vq+mx-libero_90+.../config.json
 """
 
+import json
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -35,10 +36,27 @@ _OFFICIAL_N_ACTION_STEPS = 1
 _OFFICIAL_VQVAE_N_EMBED = 128
 _OFFICIAL_VQVAE_GROUPS = 7
 _OFFICIAL_N_LATENT_DIMS = 512
-_OFFICIAL_VQ_ACTION_DIM = 7
 _OFFICIAL_LR = 2e-5
 _OFFICIAL_WEIGHT_DECAY = 0.0
 _OFFICIAL_GRAD_CLIP_NORM = 1.0
+
+ACTION_TOKENIZERS = {
+    "action_tokenizer",
+    "extra_action_tokenizer",
+    "libero_vq_action_tokenizer",
+    "libero_vq_extra_action_tokenizer",
+    "libero_vq_h0_extra_action_tokenizer",
+    "bridge_vq_extra_action_tokenizer",
+    "vq_action_tokenizer",
+}
+
+VQ_TOKENIZER_TYPES = {
+    "libero_vq_action_tokenizer",
+    "libero_vq_extra_action_tokenizer",
+    "libero_vq_h0_extra_action_tokenizer",
+    "bridge_vq_extra_action_tokenizer",
+    "vq_action_tokenizer",
+}
 
 
 def _default_normalization_mapping() -> dict[str, NormalizationMode]:
@@ -79,8 +97,14 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     vqvae_n_embed: int = _OFFICIAL_VQVAE_N_EMBED
     vqvae_groups: int = _OFFICIAL_VQVAE_GROUPS
     n_latent_dims: int = _OFFICIAL_N_LATENT_DIMS
-    vq_action_dim: int = _OFFICIAL_VQ_ACTION_DIM
     vq_model_path: str = ""
+
+    # === Official statistics & unnorm key ===
+    official_dataset_statistics_path: str = ""
+    action_unnorm_key: str = ""
+
+    # === Runtime-resolved tokenizer type (set by modeling after reading official config) ===
+    _resolved_action_tokenizer_type: str = ""
 
     # === Training defaults (vla-full-train) ===
     enable_gradient_checkpointing: bool = True
@@ -114,25 +138,73 @@ class _MiniVLAConfigBase(PreTrainedConfig):
 
     @property
     def is_vq_mode(self) -> bool:
-        return self.action_tokenizer_type in (
-            "libero_vq_extra_action_tokenizer",
-            "libero_vq_action_tokenizer",
-            "libero_vq_h0_extra_action_tokenizer",
-            "bridge_vq_extra_action_tokenizer",
-            "vq_action_tokenizer",
-        )
+        tok_type = self._resolved_action_tokenizer_type or self.action_tokenizer_type
+        return tok_type in VQ_TOKENIZER_TYPES
 
     @property
     def action_delta_indices(self) -> list:
-        """
-        Dynamically determine action_delta_indices based on action tokenizer type.
-        Mirrors teach_code/MiniVLA/prismatic/vla/action_tokenizer.py:
-        - VQ mode: uses full chunk (all indices)
-        - Non-VQ mode: uses only current action (index 0)
-        """
         if self.is_vq_mode:
+            # VQ mode: use input_dim_h from VQ config if available, otherwise fallback to chunk_size
+            vq_path = self.resolve_vq_model_path()
+            if vq_path:
+                vq_config_json = Path(vq_path) / "config.json"
+                if vq_config_json.exists():
+                    with open(vq_config_json, "r") as f:
+                        vq_cfg = json.load(f)
+                    input_dim_h = vq_cfg.get("input_dim_h", self.chunk_size)
+                    return list(range(input_dim_h))
             return list(range(self.chunk_size))
         return [0]
+
+    def resolve_camera_keys(self, dataset_meta=None) -> None:
+        """
+        Resolve primary_image_key and wrist_image_key.
+        Priority: explicit CLI value > dataset metadata keys > error with available keys.
+        """
+        image_keys = []
+        if dataset_meta is not None:
+            for k, v in dataset_meta.features.items():
+                if k.startswith("observation.images."):
+                    image_keys.append(k)
+
+        if not self.primary_image_key:
+            if dataset_meta is not None:
+                primary_candidates = [k for k in image_keys if "cam_high" in k or "cam_0" in k or "primary" in k]
+                if primary_candidates:
+                    self.primary_image_key = primary_candidates[0]
+                elif image_keys:
+                    self.primary_image_key = image_keys[0]
+                else:
+                    raise ValueError(
+                        f"Cannot determine primary_image_key. No observation.images.* keys found in dataset. "
+                        f"Please set primary_image_key explicitly."
+                    )
+            else:
+                raise ValueError(
+                    "primary_image_key must be set explicitly or dataset_meta must be provided. "
+                    "e.g. 'observation.images.cam_high'."
+                )
+
+        if self.use_wrist_image and not self.wrist_image_key:
+            if dataset_meta is not None:
+                wrist_candidates = [
+                    k for k in image_keys
+                    if "gripperPOV" in k or "wrist" in k or "cam_wrist" in k
+                ]
+                if wrist_candidates:
+                    self.wrist_image_key = wrist_candidates[0]
+                else:
+                    raise ValueError(
+                        f"use_wrist_image=True but no wrist/gripperPOV camera found. "
+                        f"Available image keys: {image_keys}. "
+                        f"Please set wrist_image_key explicitly."
+                    )
+            else:
+                raise ValueError(
+                    "wrist_image_key must be set when use_wrist_image=True. "
+                    f"Available image keys: {image_keys}. "
+                    "e.g. 'observation.images.wrist' or 'observation.images.gripperPOV'."
+                )
 
     def validate_features(self) -> None:
         image_features = self.image_features
@@ -154,27 +226,44 @@ class _MiniVLAConfigBase(PreTrainedConfig):
             )
 
         if self.is_vq_mode:
-            if not self.vq_model_path and not self.official_vla_checkpoint:
+            vq_path = self.resolve_vq_model_path()
+            if not vq_path:
                 raise ValueError(
                     "VQ mode requires either vq_model_path or official_vla_checkpoint "
-                    "pointing to a directory containing a 'vq' subdirectory."
+                    "pointing to a directory containing a valid VQ config.json and checkpoints/model.pt."
                 )
-            vq_path = self.resolve_vq_model_path()
-            if vq_path:
-                vq_dir = Path(vq_path)
-                config_json = vq_dir / "config.json"
-                model_pt = vq_dir / "checkpoints" / "model.pt"
-                if not config_json.exists():
-                    raise ValueError(f"VQ config.json not found at {config_json}")
-                if not model_pt.exists():
-                    raise ValueError(f"VQ checkpoint model.pt not found at {model_pt}")
+            vq_dir = Path(vq_path)
+            config_json = vq_dir / "config.json"
+            model_pt = vq_dir / "checkpoints" / "model.pt"
+            if not config_json.exists():
+                raise ValueError(f"VQ config.json not found at {config_json}")
+            if not model_pt.exists():
+                raise ValueError(f"VQ checkpoint model.pt not found at {model_pt}")
+
+            with open(config_json, "r") as f:
+                vq_cfg = json.load(f)
+
+            vq_action_dim = vq_cfg.get("input_dim_w", None)
+            vq_input_dim_h = vq_cfg.get("input_dim_h", None)
+            vq_vqvae_groups = vq_cfg.get("vqvae_groups", None)
+            vq_vqvae_n_embed = vq_cfg.get("vqvae_n_embed", None)
+
+            if vq_action_dim is None:
+                raise ValueError(f"VQ config.json missing 'input_dim_w'")
 
             action_dim = self.action_feature.shape[0]
-            if action_dim != self.vq_action_dim:
+            if action_dim != vq_action_dim:
                 raise ValueError(
                     f"LeRobot action dimension ({action_dim}) does not match the VQ configuration "
-                    f"vq_action_dim ({self.vq_action_dim}). You must pre-train a VQ model for this "
+                    f"input_dim_w ({vq_action_dim}). You must pre-train a VQ model for this "
                     f"dataset's action dimension. Set vq_model_path to a compatible VQ checkpoint."
+                )
+
+            delta_indices = self.action_delta_indices
+            if vq_input_dim_h is not None and len(delta_indices) != vq_input_dim_h:
+                logger.warning(
+                    f"VQ input_dim_h ({vq_input_dim_h}) != len(action_delta_indices) ({len(delta_indices)}). "
+                    f"This may indicate a mismatch between the VQ model and the config chunk_size."
                 )
 
     def validate_vla_config(self) -> None:
@@ -201,14 +290,50 @@ class _MiniVLAConfigBase(PreTrainedConfig):
         return None
 
     def resolve_vq_model_path(self) -> str:
-        """Resolve VQ model path from config or official checkpoint directory."""
+        """
+        Resolve VQ model path with strict priority:
+        1. Explicit vq_model_path
+        2. Official config.json action_tokenizer -> ACTION_TOKENIZERS path
+        3. official_vla_checkpoint所在run目录
+        4. teach_code/MiniVLA根目录
+        Must return a directory containing config.json and checkpoints/model.pt.
+        """
         if self.vq_model_path:
-            return self.vq_model_path
+            candidate = Path(self.vq_model_path)
+            if candidate.is_absolute() and (candidate / "config.json").exists():
+                return str(candidate)
+
         if self.official_vla_checkpoint:
-            ckpt_dir = Path(self.official_vla_checkpoint).parent
-            default_vq = ckpt_dir / "vq"
-            if default_vq.exists():
-                return str(default_vq)
+            ckpt_path = Path(self.official_vla_checkpoint)
+            if ckpt_path.suffix == ".pt" and ckpt_path.parent.name == "checkpoints":
+                run_dir = ckpt_path.parents[1]
+                config_json = run_dir / "config.json"
+                if config_json.exists():
+                    with open(config_json, "r") as f:
+                        vla_cfg = json.load(f).get("vla", {})
+                    atype = vla_cfg.get("action_tokenizer", "")
+                    if atype in ("libero_vq_action_tokenizer", "libero_vq_extra_action_tokenizer",
+                                 "libero_vq_h0_extra_action_tokenizer", "bridge_vq_extra_action_tokenizer"):
+                        from .vq_action import ACTION_TOKENIZERS as _AT
+                        if atype in _AT:
+                            partial_fn = _AT[atype]
+                            rel_path = partial_fn.keywords.get("vq_vae_path", "")
+                            if rel_path:
+                                teach_root = Path(__file__).parent.parent.parent.parent.parent / "teach_code" / "MiniVLA"
+                                candidate = teach_root / rel_path
+                                if (candidate / "config.json").exists():
+                                    return str(candidate)
+
+                vq_dir = run_dir / "vq"
+                if (vq_dir / "config.json").exists() and (vq_dir / "checkpoints" / "model.pt").exists():
+                    return str(vq_dir)
+
+        teach_root = Path(__file__).parent.parent.parent.parent.parent / "teach_code" / "MiniVLA"
+        if teach_root.exists():
+            for vq_sub in teach_root.glob("vq/*/"):
+                if (vq_sub / "config.json").exists() and (vq_sub / "checkpoints" / "model.pt").exists():
+                    return str(vq_sub)
+
         return ""
 
 

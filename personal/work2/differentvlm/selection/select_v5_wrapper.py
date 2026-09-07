@@ -16,12 +16,145 @@ Output:
 import sys
 import json
 import subprocess
+import time
 import numpy as np
 from pathlib import Path
 
 sys.stdout.reconfigure(line_buffering=True)
 
 from differentvlm.configs.vlm_config import VLMExperimentConfig
+
+
+def extract_action_descriptors(dataset_root: str, output_dir: str) -> str:
+    """
+    Extract real action descriptors from LeRobot dataset.
+    
+    Reads action sequences from each episode, resamples to fixed length,
+    computes statistics, and saves as .npy files for V5 selection.
+    
+    Args:
+        dataset_root: path to LeRobotDataset root directory
+        output_dir: output directory for action descriptor .npy files
+    
+    Returns:
+        output_dir path string
+    """
+    from lerobot.datasets.lerobot_dataset import LeRobotDataset
+    
+    output_path = Path(output_dir)
+    output_path.mkdir(parents=True, exist_ok=True)
+    
+    # Check if action descriptors already exist
+    existing_files = list(output_path.glob("(*).npy"))
+    if existing_files:
+        print(f"[CACHE HIT] Found {len(existing_files)} existing action descriptors")
+        print(f"  Directory: {output_path}")
+        print(f"  Reusing cached action descriptors. Skipping extraction.")
+        sys.stdout.flush()
+        return str(output_path)
+    
+    print(f"\n{'='*60}")
+    print(f"Extracting Action Descriptors from Dataset")
+    print(f"{'='*60}")
+    print(f"Dataset root: {dataset_root}")
+    print(f"Output dir: {output_path}")
+    sys.stdout.flush()
+    
+    # Load dataset
+    start_time = time.time()
+    print(f"Loading dataset...")
+    dataset = LeRobotDataset(
+        repo_id="work2/metaworld",
+        root=dataset_root
+    )
+    num_episodes = len(dataset.meta.episodes)
+    print(f"Dataset loaded: {num_episodes} episodes")
+    sys.stdout.flush()
+    
+    # Find action key
+    features = dataset.meta.features
+    action_key = None
+    for key in features.keys():
+        if "action" in key.lower():
+            action_key = key
+            break
+    if action_key is None:
+        raise ValueError(f"No action feature found in dataset. Available: {list(features.keys())}")
+    print(f"Action key: {action_key}")
+    sys.stdout.flush()
+    
+    # Extract action descriptors for all episodes
+    V5_ACTION_STEPS = 16
+    extracted_count = 0
+    
+    for ep_idx in range(num_episodes):
+        ep_start = time.time()
+        
+        # Get episode frame range
+        from_idx = dataset.meta.episodes["dataset_from_index"][ep_idx]
+        to_idx = dataset.meta.episodes["dataset_to_index"][ep_idx]
+        
+        # Extract action sequence
+        actions = []
+        for frame_idx in range(from_idx, to_idx):
+            frame = dataset[frame_idx]
+            actions.append(frame[action_key])
+        actions = np.array(actions)
+        
+        # Resample to fixed length
+        T = actions.shape[0]
+        if T != V5_ACTION_STEPS:
+            original_indices = np.linspace(0, T - 1, T)
+            new_indices = np.linspace(0, T - 1, V5_ACTION_STEPS)
+            resampled_actions = np.array([
+                np.interp(new_indices, original_indices, actions[:, d])
+                for d in range(actions.shape[1])
+            ]).T
+        else:
+            resampled_actions = actions
+        
+        # Compute action statistics
+        mean_action = np.mean(actions, axis=0)
+        std_action = np.std(actions, axis=0)
+        delta_actions = np.diff(actions, axis=0)
+        delta_action_mean = np.mean(delta_actions, axis=0)
+        delta_action_std = np.std(delta_actions, axis=0)
+        velocity_mean = np.mean(np.abs(delta_actions), axis=0)
+        trajectory_length = np.array([float(np.sum(np.linalg.norm(delta_actions, axis=1)))])
+        
+        # Concatenate into descriptor
+        descriptor = np.concatenate([
+            resampled_actions.flatten(),
+            mean_action,
+            std_action,
+            delta_action_mean,
+            delta_action_std,
+            velocity_mean,
+            trajectory_length,
+        ]).astype(np.float32)
+        
+        # Save to .npy file
+        npy_file = output_path / f"({ep_idx}).npy"
+        np.save(npy_file, {
+            "episode_index": ep_idx,
+            "action_descriptor": descriptor,
+        }, allow_pickle=True)
+        
+        extracted_count += 1
+        elapsed = time.time() - ep_start
+        
+        if extracted_count % 50 == 0 or extracted_count == num_episodes:
+            progress = extracted_count / num_episodes * 100
+            print(f"  Extracted {extracted_count}/{num_episodes} episodes ({progress:.1f}%), "
+                  f"descriptor shape={descriptor.shape}, last episode time={elapsed:.2f}s")
+            sys.stdout.flush()
+    
+    total_time = time.time() - start_time
+    print(f"\nAction descriptor extraction complete: {extracted_count} episodes in {total_time:.1f}s")
+    print(f"  Output directory: {output_path}")
+    sys.stdout.flush()
+    
+    return str(output_path)
 
 
 def convert_embeddings_to_npy(embedding_dir: str, output_dir: str) -> str:
@@ -131,29 +264,9 @@ def run_v5_selection(cfg: VLMExperimentConfig, embedding_dir: str) -> str:
     npy_dir = Path(embedding_dir) / "npy_for_selection"
     npy_dir = convert_embeddings_to_npy(embedding_dir, str(npy_dir))
 
-    # our_v5 also requires action descriptors
-    # For now, we generate dummy action descriptors (zeros) since differentvlm
-    # doesn't compute action descriptors. This allows our_v5 to run but with
-    # action_weight effectively having no effect.
+    # Extract real action descriptors from dataset (not dummy zeros)
     action_descriptor_dir = Path(embedding_dir) / "action_descriptors"
-    action_descriptor_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Generate dummy action descriptors for all episodes
-    episode_count = validation["episodes"]
-    for ep_idx in range(episode_count):
-        # Dummy 64-dim action descriptor (zeros)
-        dummy_descriptor = np.zeros(64, dtype=np.float32)
-        npy_data = {
-            "episode_index": ep_idx,
-            "action_descriptor": dummy_descriptor,
-        }
-        npy_file = action_descriptor_dir / f"({ep_idx}).npy"
-        np.save(npy_file, npy_data)
-    
-    print(f"Generated {episode_count} dummy action descriptors (zeros)")
-    print(f"  Note: differentvlm doesn't compute action descriptors, so action_weight has no effect")
-    print(f"  Directory: {action_descriptor_dir}")
-    sys.stdout.flush()
+    action_descriptor_dir = extract_action_descriptors(cfg.dataset_root, str(action_descriptor_dir))
 
     # Get dataset directory for rand_vec loading
     dataset_dir = Path(cfg.dataset_root)
@@ -166,7 +279,7 @@ def run_v5_selection(cfg: VLMExperimentConfig, embedding_dir: str) -> str:
         )
 
     # Call our_v5 selection script
-    v5_script = Path(__file__).resolve().parents[3] / "our_v5" / "select_our_v5.py"
+    v5_script = Path(__file__).resolve().parents[2] / "our_v5" / "select_our_v5.py"
     if not v5_script.exists():
         raise FileNotFoundError(f"our_v5 selection script not found: {v5_script}")
 

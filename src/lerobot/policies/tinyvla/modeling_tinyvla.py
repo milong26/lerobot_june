@@ -26,7 +26,7 @@ from torch import Tensor, nn
 from lerobot.utils.constants import ACTION, OBS_IMAGE, OBS_IMAGES, OBS_STATE
 
 from ..pretrained import PreTrainedPolicy
-from .configuration_tinyvla import TinyVLAConfig
+from .configuration_tinyvla import TinyVLAConfig, TinyVLABConfig
 from .llava_pythia.model.language_model.pythia.llava_pythia import (
     LlavaPythiaConfig,
     LlavaPythiaForCausalLM,
@@ -46,7 +46,7 @@ class TinyVLAPolicy(PreTrainedPolicy):
     """
 
     config_class = TinyVLAConfig
-    name = "tinyvla"
+    name = "tinyvla_s"
 
     def __init__(
         self,
@@ -63,6 +63,17 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         self._action_queue = deque([], maxlen=self.config.n_action_steps)
         self.reset()
+
+    def _get_base_model(self):
+        """Get the underlying LlavaPythiaForCausalLM model.
+        
+        When LoRA is enabled, self.model is wrapped by PeftModel.
+        This method returns the actual model regardless of LoRA wrapping.
+        """
+        from peft import PeftModel
+        if isinstance(self.model, PeftModel):
+            return self.model.base_model.model
+        return self.model
 
     def _build_model(self):
         """Build the LLaVA-Pythia model with action head.
@@ -89,23 +100,24 @@ class TinyVLAPolicy(PreTrainedPolicy):
             _fast_init=False,
         )
 
-        self.model.config.use_cache = False
+        base_model = self._get_base_model()
+        base_model.config.use_cache = False
 
         # Apply freezing - match official llava_pythia_utils.py logic
         # Official: model.get_model().requires_grad_(False/True) based on freeze_backbone
         if self.config.freeze_backbone:
-            self.model.get_model().requires_grad_(False)
+            base_model.get_model().requires_grad_(False)
         else:
-            self.model.get_model().requires_grad_(True)
+            base_model.get_model().requires_grad_(True)
 
         # Official: vision_tower set to True first, then conditionally frozen
-        self.model.get_model().vision_tower.requires_grad_(True)
+        base_model.get_model().vision_tower.requires_grad_(True)
         if self.config.freeze_vision_tower:
-            for n, p in self.model.get_model().vision_tower.named_parameters():
+            for n, p in base_model.get_model().vision_tower.named_parameters():
                 if 'lora' not in n.lower():
                     p.requires_grad = False
         else:
-            for p in self.model.get_model().vision_tower.parameters():
+            for p in base_model.get_model().vision_tower.parameters():
                 p.requires_grad = True
 
         # Apply LoRA if enabled - MUST be before setting action head requires_grad
@@ -115,8 +127,16 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         # Always train action head - AFTER LoRA application (official order)
         # Reference: official llava_pythia_utils.py: model.embed_out.requires_grad_(True)
-        self.model.embed_out.requires_grad_(True)
-        self.model.proj_to_action.requires_grad_(True)
+        # After LoRA, self.model is wrapped by PeftModel, need to access base_model
+        base_model = self._get_base_model()
+        
+        # For droid_diffusion head, embed_out is lazily initialized
+        if hasattr(base_model, '_init_diffusion_head') and not getattr(base_model, '_diffusion_initialized', False):
+            base_model._init_diffusion_head()
+        
+        if base_model.embed_out is not None:
+            base_model.embed_out.requires_grad_(True)
+        base_model.proj_to_action.requires_grad_(True)
 
     def _apply_lora(self):
         """Apply LoRA to the model.
@@ -160,17 +180,32 @@ class TinyVLAPolicy(PreTrainedPolicy):
         """Set up the tokenizer for language processing."""
         import transformers
 
-        self.tokenizer = transformers.AutoTokenizer.from_pretrained(
-            self.config.model_name_or_path,
-            model_max_length=self.config.tokenizer_max_length,
-            padding_side="right",
-            trust_remote_code=True,
-        )
+        # GPTNeoXTokenizer doesn't have a Fast equivalent, but the model repo
+        # contains tokenizer.json which can be loaded directly as a fast tokenizer.
+        # Try fast first, fall back to slow if it fails.
+        try:
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+                self.config.model_name_or_path,
+                model_max_length=self.config.tokenizer_max_length,
+                padding_side="right",
+                trust_remote_code=True,
+                use_fast=True,
+            )
+        except ValueError:
+            # Fall back to slow tokenizer
+            self.tokenizer = transformers.AutoTokenizer.from_pretrained(
+                self.config.model_name_or_path,
+                model_max_length=self.config.tokenizer_max_length,
+                padding_side="right",
+                trust_remote_code=True,
+                use_fast=False,
+            )
         self.tokenizer.pad_token_id = 1
 
     def _setup_image_processor(self):
         """Set up the image processor (CLIP or SigLIP)."""
-        vision_tower = self.model.get_model().vision_tower
+        base_model = self._get_base_model()
+        vision_tower = base_model.get_model().vision_tower
         vision_config = vision_tower.config
 
         if hasattr(vision_config, "image_size"):
@@ -212,7 +247,8 @@ class TinyVLAPolicy(PreTrainedPolicy):
 
         # Convert to the same dtype as the model weights to avoid dtype mismatch
         # (e.g., pretrained LLaVA-Pythia uses bfloat16, but batch data is float32)
-        model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+        base_model = self._get_base_model()
+        model_dtype = base_model.get_model().mm_projector[0].weight.dtype
         all_images = all_images.to(dtype=model_dtype)
 
         return all_images
@@ -434,7 +470,8 @@ class TinyVLAPolicy(PreTrainedPolicy):
         image_chunks = torch.chunk(processed_images, num_cams, dim=0)
 
         # Convert states to model dtype to avoid dtype mismatch
-        model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+        base_model = self._get_base_model()
+        model_dtype = base_model.get_model().mm_projector[0].weight.dtype
         if states is not None:
             states = states.to(dtype=model_dtype)
 
@@ -482,7 +519,8 @@ class TinyVLAPolicy(PreTrainedPolicy):
         processed_images = self._process_images(images)
 
         # Convert states and actions to model dtype to avoid dtype mismatch
-        model_dtype = self.model.get_model().mm_projector[0].weight.dtype
+        base_model = self._get_base_model()
+        model_dtype = base_model.get_model().mm_projector[0].weight.dtype
         if states is not None:
             states = states.to(dtype=model_dtype)
         actions = actions.to(dtype=model_dtype)
@@ -530,3 +568,41 @@ class TinyVLAPolicy(PreTrainedPolicy):
             info = {}
 
         return loss, info
+
+
+class TinyVLABPolicy(TinyVLAPolicy):
+    """
+    TinyVLA-B (Vision-Language-Action) Policy.
+
+    TinyVLA-B uses the larger LLaVA-Pythia-700M backbone (lesjie/Llava-Pythia-700M).
+    This is an alias for TinyVLAPolicy that uses TinyVLABConfig.
+    """
+
+    config_class = TinyVLABConfig
+    name = "tinyvla_b"
+
+    def __init__(
+        self,
+        config: TinyVLABConfig,
+        **kwargs,
+    ):
+        super().__init__(config, **kwargs)
+
+
+class TinyVLASPolicy(TinyVLAPolicy):
+    """
+    TinyVLA-S (Vision-Language-Action) Policy.
+
+    TinyVLA-S uses the smaller LLaVA-Pythia-400M backbone (lesjie/Llava-Pythia-400M).
+    This is an alias for TinyVLAPolicy that uses TinyVLAConfig.
+    """
+
+    config_class = TinyVLAConfig
+    name = "tinyvla_s"
+
+    def __init__(
+        self,
+        config: TinyVLAConfig,
+        **kwargs,
+    ):
+        super().__init__(config, **kwargs)

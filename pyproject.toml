@@ -241,7 +241,7 @@ minivla = [
     "lerobot[transformers-dep]",
     "lerobot[timm-dep]",
     "einops>=0.8.0,<1.0.0",
-    "vector-quantize-pytorch",
+    "vector-quantize-pytorch>=1.9.0,<2.0.0",
 ]
 lingbot_va = ["lerobot[transformers-dep]", "lerobot[diffusers-dep]", "lerobot[accelerate-dep]"]
 

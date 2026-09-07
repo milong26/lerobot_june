@@ -149,6 +149,8 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        cache_position: Optional[torch.Tensor] = None,
     ):
         """
         Training forward: inserts vision patches into LLM embeddings.
@@ -160,8 +162,8 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         if input_ids.shape[1] == 1 and past_key_values is not None:
             return self.llm(
                 input_ids=input_ids,
-                attention_mask=None,
-                position_ids=None,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
                 past_key_values=past_key_values,
                 inputs_embeds=None,
                 labels=None,
@@ -169,6 +171,7 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                cache_position=cache_position,
             )
 
         # Training mode or first generation step: run vision encoder
@@ -191,7 +194,8 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         after = inputs_embeds[:, 1:, :]
         inputs_embeds = torch.cat([before, projected_patches, after], dim=1)
 
-        # === Extend attention_mask ===
+        # === Build multimodal attention mask ===
+        # [first_text_token_mask, vision_all_ones, remaining_text_mask]
         # Vision tokens should have True attention (not masked)
         # Mirrors official: projected_patch_attention_mask = torch.full(..., True, ...)
         vision_mask = torch.ones(
@@ -213,6 +217,12 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
             )
             labels = torch.cat([labels[:, :1], vision_labels, labels[:, 1:]], dim=1)
 
+        # === Build position_ids if not provided ===
+        if position_ids is None:
+            position_ids = torch.arange(
+                attention_mask.shape[1], dtype=torch.long, device=attention_mask.device
+            ).unsqueeze(0).expand(input_ids.shape[0], -1)
+
         return self.llm(
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -221,6 +231,8 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            position_ids=position_ids,
+            cache_position=cache_position,
         )
 
     def prepare_inputs_for_generation(
@@ -238,18 +250,36 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         Ensures pixel_values are preserved in model_inputs for the first generation step.
         Mirrors teach_code/MiniVLA/prismatic/models/vlms/prismatic.py::prepare_inputs_for_generation.
         """
-        if past_key_values is not None:
-            input_ids = input_ids[:, -1:]
-
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
+        # Prefer LLM's own prepare_inputs_for_generation when available
+        if hasattr(self.llm, "prepare_inputs_for_generation"):
+            llm_inputs = self.llm.prepare_inputs_for_generation(
+                input_ids=input_ids,
+                past_key_values=past_key_values,
+                attention_mask=attention_mask,
+                inputs_embeds=inputs_embeds,
+                use_cache=use_cache,
+                **kwargs,
+            )
         else:
-            model_inputs = {"input_ids": input_ids}
+            # Fallback to official MiniVLA logic
+            if past_key_values is not None:
+                input_ids = input_ids[:, -1:]
+
+            if inputs_embeds is not None and past_key_values is None:
+                llm_inputs = {"inputs_embeds": inputs_embeds}
+            else:
+                llm_inputs = {"input_ids": input_ids}
+
+        # Add multimodal-specific inputs
+        model_inputs = dict(llm_inputs)
+
+        # Only attach pixel_values on the very first step (when past_key_values is empty/None)
+        if past_key_values is None:
+            model_inputs["pixel_values"] = pixel_values
 
         model_inputs.update(
             {
                 "attention_mask": attention_mask,
-                "pixel_values": pixel_values,
                 "past_key_values": past_key_values,
                 "use_cache": use_cache,
             }
