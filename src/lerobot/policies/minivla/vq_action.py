@@ -174,10 +174,18 @@ class VqVae(nn.Module):
         get_codes_from_indices expects [B, n, num_quantizers], returns [num_quantizers, B, n, dim]
         After sum: [B, n, dim] -> squeeze to [B, dim] for decoder.
         """
+        # Ensure VQ-VAE is in eval mode
+        self.eval()
+        
         with torch.no_grad():
             z_embed = self.vq_layer.get_codes_from_indices(encoding_indices)
             z_embed = z_embed.sum(dim=0)  # [B, n, dim]
-        return z_embed.squeeze(1)  # [B, dim]
+        result = z_embed.squeeze(1)  # [B, dim]
+        
+        # Clean up
+        del z_embed
+        
+        return result
 
     def get_action_from_latent(self, latent: torch.Tensor) -> torch.Tensor:
         """Decode latent to action chunk [B, T, A]."""
@@ -196,6 +204,9 @@ class VqVae(nn.Module):
 
     def get_code(self, state: torch.Tensor, required_recon: bool = False):
         """Encode state to VQ codes."""
+        # Ensure VQ-VAE is in eval mode to prevent gradient tracking and memory leaks
+        self.eval()
+        
         state = state / self.act_scale
         state = self.preprocess(state)
         with torch.no_grad():
@@ -389,11 +400,20 @@ class VQActionTokenizer(ActionTokenizer):
                 f"Action feature dimension {action.shape[-1]} does not match VQ input_dim_w {self.vq_vae.input_dim_w}"
             )
 
-        action = torch.from_numpy(action).to(self.vq_vae.device)
-        _, vq_code = self.vq_vae.get_code(action)
+        action_tensor = torch.from_numpy(action).to(self.vq_vae.device)
+        _, vq_code = self.vq_vae.get_code(action_tensor)
+        
+        # Clean up intermediate tensors to prevent memory fragmentation
+        del action_tensor
+        
         assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
 
-        return self.tokenizer.decode(list((self.tokenizer_len - 1 - vq_code[0]).detach().cpu().tolist()))
+        result = self.tokenizer.decode(list((self.tokenizer_len - 1 - vq_code[0]).detach().cpu().tolist()))
+        
+        # Clean up vq_code tensor
+        del vq_code
+        
+        return result
 
     def encode_token_ids(self, action) -> np.ndarray:
         """
@@ -422,12 +442,21 @@ class VQActionTokenizer(ActionTokenizer):
                 f"Action feature dimension {action.shape[-1]} does not match VQ input_dim_w {self.vq_vae.input_dim_w}"
             )
 
-        action = torch.from_numpy(action).to(self.vq_vae.device)
-        _, vq_code = self.vq_vae.get_code(action)
+        action_tensor = torch.from_numpy(action).to(self.vq_vae.device)
+        _, vq_code = self.vq_vae.get_code(action_tensor)
+        
+        # Clean up intermediate tensors
+        del action_tensor
+        
         assert torch.all(vq_code >= 0) and torch.all(vq_code < self.n_bins)
 
         token_ids = self.tokenizer_len - 1 - vq_code
-        return token_ids.detach().cpu().numpy()
+        result = token_ids.detach().cpu().numpy()
+        
+        # Clean up
+        del vq_code, token_ids
+        
+        return result
 
     def decode_token_ids_to_actions(self, action_token_ids) -> np.ndarray:
         """

@@ -565,6 +565,13 @@ class MiniVLACore(nn.Module):
             elif actions.ndim == 2:
                 # [B, A] or [T, A] -> [B, 1, A] (take first horizon)
                 actions = actions.unsqueeze(1)
+
+            # Unpad action dimension if VQ-VAE was trained with higher action dim
+            # (e.g., LIBERO 7-dim VQ-VAE used for Meta-World 4-dim actions)
+            vq_action_dim = self.action_tokenizer.vq_vae.input_dim_w
+            actual_action_dim = self._get_action_dim()
+            if vq_action_dim > actual_action_dim:
+                actions = actions[:, :, :actual_action_dim]
         else:
             actions = self.action_tokenizer.decode_token_ids_to_actions(action_token_ids_np)
             actions = torch.from_numpy(actions).float()
@@ -699,6 +706,9 @@ class MiniVLAPolicy(PreTrainedPolicy):
         pretrained_path = Path(pretrained_name_or_path)
         checkpoints_dir = pretrained_path / "checkpoints"
 
+        # Check if this is a LeRobot-format checkpoint (model.safetensors exists)
+        is_lerobot_format = (pretrained_path / "model.safetensors").exists()
+
         if checkpoints_dir.exists():
             pt_files = list(checkpoints_dir.glob("*.pt"))
             if pt_files:
@@ -707,9 +717,9 @@ class MiniVLAPolicy(PreTrainedPolicy):
                 official_checkpoint = str(pt_files[-1])
                 print(f"[MiniVLA] Loading official checkpoint: {official_checkpoint}")
                 config.official_vla_checkpoint = official_checkpoint
-            else:
+            elif not is_lerobot_format:
                 print(f"[MiniVLA] No .pt files found in {checkpoints_dir}, using random initialization")
-        else:
+        elif not is_lerobot_format:
             print(f"[MiniVLA] No checkpoints directory found at {checkpoints_dir}, using random initialization")
 
         # Create the policy instance (MiniVLACore.__init__ will load the checkpoint if set)

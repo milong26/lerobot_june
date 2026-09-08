@@ -1,17 +1,18 @@
 #!/bin/bash
 # Launch random experiment in tmux
-# Usage: bash launch_random.sh <seed> <gpu_id> <dataset_name>
+# Usage: bash launch_random.sh <gpu_id> <num_episodes> <dataset_name> [seed]
 
 set -e
 
-SEED=$1
-GPU_ID=${2:-0}
+GPU_ID=$1
+NUM_EPISODES=$2
 DATASET_NAME=${3:-disassemble-v3_corner}
+SEED=${4:-42}
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_${SEED}_${DATASET_NAME}"
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_ep${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
-EXP_NAME="random_112_seed${SEED}"
-TMUX_SESSION="random_112_s${SEED}_${DATASET_NAME}"
+EXP_NAME="random_${NUM_EPISODES}_seed${SEED}"
+TMUX_SESSION="random_ep${NUM_EPISODES}_s${SEED}_${DATASET_NAME}"
 
 # Auto-construct dataset root path from dataset name
 DATASET_ROOT="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}"
@@ -33,11 +34,12 @@ conda activate lb_server
 # Change to lerobot root directory for module imports
 cd /data/zhonglinye/jun/lerobot
 
-EXP_NAME="random_112_seed${SEED}"
+EXP_NAME="random_${NUM_EPISODES}_seed${SEED}"
 GPU_ID=\$1
 SEED_VAL=\$2
 DATASET_NAME=\$3
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_\${SEED_VAL}_\${DATASET_NAME}"
+NUM_EPISODES=\$4
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_ep\${NUM_EPISODES}_seed\${SEED_VAL}_\${DATASET_NAME}"
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
@@ -54,6 +56,7 @@ echo "PID: \$\$" >> "\$TIME_FILE"
 echo "========================================"
 echo "Experiment: \$EXP_NAME"
 echo "GPU: \$GPU_ID"
+echo "Episodes: \$NUM_EPISODES"
 echo "Seed: \$SEED_VAL"
 echo "Dataset: \$DATASET_NAME"
 echo "Dataset Root: \$DATASET_ROOT"
@@ -65,7 +68,7 @@ echo ""
 # Step 1: Select random episodes
 echo "=== Step 1: Selecting random episodes ==="
 python "\$SELECT_SCRIPT" \
-    --num-episodes 112 \
+    --num-episodes \${NUM_EPISODES} \
     --seed \${SEED_VAL} \
     --dataset-root "\$DATASET_ROOT" \
     --output-dir "\$OUTPUT_BASE_DIR/subsets"
@@ -77,7 +80,7 @@ fi
 
 echo ""
 echo "=== Step 2: Training and evaluation ==="
-bash "\$TRAIN_SCRIPT" random 112 \${SEED_VAL} \$GPU_ID "" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
+bash "\$TRAIN_SCRIPT" random \${NUM_EPISODES} \${SEED_VAL} \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo "" >> "\$TIME_FILE"
 echo "End time: \$(date '+%Y-%m-%d %H:%M:%S')" >> "\$TIME_FILE"
@@ -95,13 +98,15 @@ RUNNER_EOF
 chmod +x "$RUNNER_SCRIPT"
 
 # Launch in tmux
-tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $SEED $DATASET_NAME"
+tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $SEED $DATASET_NAME $NUM_EPISODES"
 
 echo "Launched experiment: $EXP_NAME"
 echo "tmux session: $TMUX_SESSION"
 echo "Output dir: $OUTPUT_BASE_DIR"
 echo "Dataset: $DATASET_NAME"
 echo "Dataset root: $DATASET_ROOT"
+echo "GPU: $GPU_ID"
+echo "Episodes: $NUM_EPISODES"
 echo ""
 echo "Monitor with: tmux attach -t $TMUX_SESSION"
 echo "Check logs: tail -f $LOG_DIR/$EXP_NAME.log"

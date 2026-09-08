@@ -67,12 +67,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../../.." && pwd)"
 # Create unique session name
 SESSION_NAME="minivla_${DATASET}_gpu${GPU_ID}"
 
-# Create log directory
-LOG_DIR="$PROJECT_ROOT/personal/work2/differentvlm/minivla/logs/${DATASET}_gpu${GPU_ID}"
+# Create log directory with pipeline_logs
+LOG_DIR="$PROJECT_ROOT/personal/work2/differentvlm/minivla/pipeline_logs/${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET}_gpu${GPU_ID}"
 mkdir -p "$LOG_DIR"
 
-# Log file path
-LOG_FILE="$LOG_DIR/experiment.log"
+# Log file path with experiment info
+LOG_FILE="$LOG_DIR/${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET}_gpu${GPU_ID}.log"
 
 # Print startup info
 echo "  MiniVLA Experiment Launcher"

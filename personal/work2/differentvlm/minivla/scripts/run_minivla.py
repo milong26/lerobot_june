@@ -129,12 +129,41 @@ def _select_grid_uniform(cfg: MiniVLAExperimentConfig) -> str:
     ]
 
     print(f"\nRunning: {' '.join(cmd)}")
+    print(f"Script exists: {select_script.exists()}")
+    print(f"Dataset root: {cfg.dataset_root}")
+    print(f"Output dir: {cfg.subsets_dir}")
     sys.stdout.flush()
 
-    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
+    import time
+    start_time = time.time()
+    print(f"[{time.strftime('%H:%M:%S')}] Starting subprocess (real-time output)...")
+    sys.stdout.flush()
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Episode selection failed with exit code {result.returncode}")
+    # Use Popen for real-time output
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        stdout=None,  # Inherit parent stdout for real-time output
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        _, stderr_output = process.communicate(timeout=600)
+        elapsed = time.time() - start_time
+        print(f"\n[{time.strftime('%H:%M:%S')}] Subprocess finished in {elapsed:.1f}s")
+        print(f"Return code: {process.returncode}")
+
+        if stderr_output:
+            print(f"\n[SELECTION STDERR]")
+            print(stderr_output)
+        sys.stdout.flush()
+
+        if process.returncode != 0:
+            raise RuntimeError(f"Episode selection failed with exit code {process.returncode}\nSTDERR:\n{stderr_output}")
+    except subprocess.TimeoutExpired:
+        process.kill()
+        raise RuntimeError(f"Episode selection timed out after 600s")
 
     if not subset_file.exists():
         raise FileNotFoundError(f"Subset file not generated: {subset_file}")
@@ -167,12 +196,41 @@ def _select_random(cfg: MiniVLAExperimentConfig) -> str:
     ]
 
     print(f"\nRunning: {' '.join(cmd)}")
+    print(f"Script exists: {select_script.exists()}")
+    print(f"Dataset root: {cfg.dataset_root}")
+    print(f"Output dir: {cfg.subsets_dir}")
     sys.stdout.flush()
 
-    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT))
+    import time
+    start_time = time.time()
+    print(f"[{time.strftime('%H:%M:%S')}] Starting subprocess (real-time output)...")
+    sys.stdout.flush()
 
-    if result.returncode != 0:
-        raise RuntimeError(f"Episode selection failed with exit code {result.returncode}")
+    # Use Popen for real-time output
+    process = subprocess.Popen(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        stdout=None,  # Inherit parent stdout for real-time output
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+
+    try:
+        _, stderr_output = process.communicate(timeout=600)
+        elapsed = time.time() - start_time
+        print(f"\n[{time.strftime('%H:%M:%S')}] Subprocess finished in {elapsed:.1f}s")
+        print(f"Return code: {process.returncode}")
+
+        if stderr_output:
+            print(f"\n[SELECTION STDERR]")
+            print(stderr_output)
+        sys.stdout.flush()
+
+        if process.returncode != 0:
+            raise RuntimeError(f"Episode selection failed with exit code {process.returncode}\nSTDERR:\n{stderr_output}")
+    except subprocess.TimeoutExpired:
+        process.kill()
+        raise RuntimeError(f"Episode selection timed out after 600s")
 
     if not subset_file.exists():
         raise FileNotFoundError(f"Subset file not generated: {subset_file}")

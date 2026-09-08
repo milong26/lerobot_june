@@ -158,7 +158,14 @@ def get_minivla_config(
     selection_mode: str = "grid_uniform",
 ) -> MiniVLAExperimentConfig:
     ds_config = DATASET_CONFIGS.get(dataset_name, {})
-    exp_name = f"{selection_mode}_{num_episodes}_seed{seed}"
+    
+    # Build experiment name with dataset, model and algorithm info
+    # Format: {selection_mode}_{num_episodes}_seed{seed}_{dataset_name}_{model}_{algorithm}
+    # Example: random_112_seed42_disassemblyv3corner_minivla_random
+    dataset_short = dataset_name.replace("-", "").replace("_", "")
+    model_name = "minivla"
+    exp_name = f"{selection_mode}_{num_episodes}_seed{seed}_{dataset_short}_{model_name}_{selection_mode}"
+    
     return MiniVLAExperimentConfig(
         exp_name=exp_name,
         dataset_name=dataset_name,

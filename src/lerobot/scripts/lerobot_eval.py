@@ -105,6 +105,58 @@ else:
 logger = logging.getLogger(__name__)
 
 
+def _get_tinyvla_action_stats(pretrained_path) -> dict | None:
+    """Load action statistics from TinyVLA checkpoint for action scaling."""
+    try:
+        from safetensors.torch import load_file
+        from pathlib import Path
+        
+        norm_path = Path(pretrained_path) / "policy_preprocessor_step_3_normalizer_processor.safetensors"
+        if not norm_path.exists():
+            return None
+        
+        stats = load_file(str(norm_path))
+        return {
+            "mean": stats["action.mean"],
+            "std": stats["action.std"],
+            "min": stats["action.min"],
+            "max": stats["action.max"],
+        }
+    except Exception:
+        return None
+
+
+def _scale_tinyvla_actions(action_numpy: np.ndarray, action_stats: dict) -> np.ndarray:
+    """Scale TinyVLA actions from dataset range to [-1, 1] environment range.
+    
+    TinyVLA is trained on actions that exceed the [-1, 1] range of the MetaWorld environment.
+    This function linearly maps the xyz action range to [-1, 1] to prevent clipping.
+    
+    IMPORTANT: Only scales xyz dimensions (0,1,2), NOT gripper (dimension 3).
+    Gripper range [0, 0.8] is already within [-1, 1], scaling would invert semantics.
+    """
+    action_min = action_stats["min"].numpy()
+    action_max = action_stats["max"].numpy()
+    
+    scaled = action_numpy.copy()
+    # 只应该在tinyvla的时候才这么做
+    
+    # Only scale xyz dimensions (0, 1, 2), NOT gripper (dimension 3)
+    # Gripper range [0, 0.8] is already within [-1, 1], no scaling needed
+    xyz_dims = min(3, action_numpy.shape[-1])
+    action_range = action_max[:xyz_dims] - action_min[:xyz_dims]
+    # Avoid division by zero
+    action_range = np.where(action_range < 1e-8, 1.0, action_range)
+    
+    # Linear mapping: [action_min, action_max] -> [-1, 1] for xyz only
+    scaled[..., :xyz_dims] = (action_numpy[..., :xyz_dims] - action_min[:xyz_dims]) / action_range * 2 - 1
+    
+    # Clip xyz to [-1, 1], gripper stays as-is (will be clipped by env if needed)
+    scaled[..., :xyz_dims] = np.clip(scaled[..., :xyz_dims], -1.0, 1.0)
+    
+    return scaled
+
+
 def _env_features_to_dataset_features(env_features: dict) -> dict:
     """Convert EnvConfig.features to the dict format expected by LeRobotDataset.create()."""
     features = {}
@@ -179,6 +231,7 @@ def rollout(
     recording_repo_id: str | None = None,
     recording_private: bool = False,
     predicted_latents_callback: Callable[[PreTrainedPolicy], None] | None = None,
+    tinyvla_action_stats: dict | None = None,
 ) -> dict:
     """Run a batched policy rollout once through a batch of environments.
 
@@ -409,6 +462,23 @@ def rollout(
             action_numpy: np.ndarray = action.to("cpu").to(dtype=torch.float32).numpy() if getattr(policy, "name", "").startswith("tinyvla") else action.to("cpu").numpy()
             assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
 
+            # Debug: Log TinyVLA raw action values (before scaling)
+            if tinyvla_action_stats is not None and step % 50 == 0:
+                raw_min = action_numpy.min(axis=0)
+                raw_max = action_numpy.max(axis=0)
+                raw_mean = action_numpy.mean(axis=0)
+                logger.info(f"[DEBUG-TinyVLA] Raw action at step {step}: min={raw_min}, max={raw_max}, mean={raw_mean}")
+
+            # Scale TinyVLA actions from dataset range to [-1, 1] environment range
+            if tinyvla_action_stats is not None:
+                action_numpy = _scale_tinyvla_actions(action_numpy, tinyvla_action_stats)
+                # Debug: Log scaled action values
+                if step % 50 == 0:
+                    scaled_min = action_numpy.min(axis=0)
+                    scaled_max = action_numpy.max(axis=0)
+                    scaled_mean = action_numpy.mean(axis=0)
+                    logger.info(f"[DEBUG-TinyVLA] Scaled action at step {step}: min={scaled_min}, max={scaled_max}, mean={scaled_mean}")
+
             # Apply the next action.
             observation, reward, terminated, truncated, info = env.step(action_numpy)
             if render_callback is not None:
@@ -597,6 +667,18 @@ def eval_policy(
     was_training = policy.training
     policy.eval()
 
+    # Load TinyVLA action stats for scaling if applicable
+    is_tinyvla = getattr(policy, "name", "").startswith("tinyvla")
+    tinyvla_action_stats = None
+    if is_tinyvla:
+        pretrained_path = getattr(getattr(policy, "config", None), "pretrained_path", None)
+        if pretrained_path:
+            tinyvla_action_stats = _get_tinyvla_action_stats(str(pretrained_path))
+            if tinyvla_action_stats is not None:
+                logger.info(f"TinyVLA action scaling enabled: stats loaded from {pretrained_path}")
+            else:
+                logger.warning("TinyVLA detected but action stats not found, actions will not be scaled")
+
     # Determine how many batched rollouts we need to get n_episodes. Note that if n_episodes is not evenly
     # divisible by env.num_envs we end up discarding some data in the last batch.
     n_batches = n_episodes // env.num_envs + int((n_episodes % env.num_envs) != 0)
@@ -679,6 +761,7 @@ def eval_policy(
             recording_repo_id=recording_repo_id,
             recording_private=recording_private,
             predicted_latents_callback=collect_predicted_latents if save_predicted_video else None,
+            tinyvla_action_stats=tinyvla_action_stats,
         )
 
         # Figure out where in each rollout sequence the first done condition was encountered (results after

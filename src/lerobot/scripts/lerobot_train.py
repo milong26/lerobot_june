@@ -202,6 +202,8 @@ def update_policy(
     train_metrics.update_s = time.perf_counter() - start_time
     if torch.cuda.is_available():
         train_metrics.gpu_mem_gb = torch.cuda.max_memory_allocated() / (1024**3)
+        # Clear CUDA cache to prevent memory fragmentation
+        torch.cuda.empty_cache()
     # Aggregate the policy's scalar outputs for logging and rank-reduction across the log window.
     if output_dict:
         train_metrics.update_metrics(output_dict)
