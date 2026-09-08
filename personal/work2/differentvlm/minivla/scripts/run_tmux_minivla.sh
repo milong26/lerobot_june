@@ -5,6 +5,8 @@
 # Usage:
 #   bash run_tmux_minivla.sh --gpu 0 --dataset disassemble-v3_corner
 #   bash run_tmux_minivla.sh --gpu 1 --dataset pick_place-v3_corner
+#   bash run_tmux_minivla.sh --gpu 0 --dataset disassemble-v3_corner --selection-mode our_v5
+#   bash run_tmux_minivla.sh --gpu 1 --dataset disassemble-v3_corner --selection-mode deminf
 #
 # Features:
 # - Creates unique tmux session per experiment
@@ -21,6 +23,7 @@ DATASET="disassemble-v3_corner"
 NUM_EPISODES=112
 SEED=42
 SELECTION_MODE="grid_uniform"
+EVAL_LATEST_ONLY=""
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -45,9 +48,13 @@ while [[ $# -gt 0 ]]; do
             SELECTION_MODE="$2"
             shift 2
             ;;
+        --eval-latest-only)
+            EVAL_LATEST_ONLY="--eval-latest-only"
+            shift
+            ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: bash run_tmux_minivla.sh --gpu <id> --dataset <name> [--num-episodes <n>] [--seed <s>] [--selection-mode <mode>]"
+            echo "Usage: bash run_tmux_minivla.sh --gpu <id> --dataset <name> [--num-episodes <n>] [--seed <s>] [--selection-mode <mode>] [--eval-latest-only]"
             exit 1
             ;;
     esac
@@ -68,9 +75,7 @@ mkdir -p "$LOG_DIR"
 LOG_FILE="$LOG_DIR/experiment.log"
 
 # Print startup info
-echo "=============================================="
 echo "  MiniVLA Experiment Launcher"
-echo "=============================================="
 echo "  GPU:            $GPU_ID"
 echo "  Dataset:        $DATASET"
 echo "  Num Episodes:   $NUM_EPISODES"
@@ -79,7 +84,6 @@ echo "  Selection Mode: $SELECTION_MODE"
 echo "  Tmux Session:   $SESSION_NAME"
 echo "  Log File:       $LOG_FILE"
 echo "  Project Root:   $PROJECT_ROOT"
-echo "=============================================="
 echo ""
 echo "Starting experiment in tmux session: $SESSION_NAME"
 echo "To attach: tmux attach -t $SESSION_NAME"
@@ -104,6 +108,7 @@ tmux new-session -d -s "$SESSION_NAME" \
          --num-episodes $NUM_EPISODES \
          --seed $SEED \
          --selection-mode $SELECTION_MODE \
+         $EVAL_LATEST_ONLY \
          2>&1 | tee -a $LOG_FILE"
 
 echo "Experiment started successfully!"

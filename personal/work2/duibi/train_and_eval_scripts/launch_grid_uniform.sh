@@ -91,7 +91,7 @@ echo ""
 # 5. Allocate balanced quotas across valid joint regions
 # 6. Select episodes closest to joint region centers
 
-bash "\$TRAIN_SCRIPT" grid_uniform \$NUM_EPISODES 42 \$GPU_ID "" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
+bash "\$TRAIN_SCRIPT" grid_uniform \$NUM_EPISODES 42 \$GPU_ID "\$OUTPUT_BASE_DIR" "\$DATASET_NAME" 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 
 echo "" >> "\$TIME_FILE"

@@ -4,17 +4,19 @@
   "camera": "corner",
   "env_task": "disassemble-v3",
   "gpu_id": 0,
-  "num_episodes": 112,
+  "num_episodes": 300,
+  "selection_mode": "random",
   "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
-  "start_time": "2026-09-07 12:36:26",
-  "end_time": "2026-09-07 16:27:35",
+  "start_time": "2026-09-08 00:20:24",
+  "end_time": "2026-09-08 02:19:51",
   "current_stage": "completed",
   "failed_stage": null,
   "selection_vlm_model_id": "lesjie/Llava-Pythia-400M",
   "selection_vlm_description": "TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
   "config": {
     "pca_dim": 32,
-    "selection_num_episodes": 112,
+    "selection_mode": "random",
+    "selection_num_episodes": 300,
     "selection_seed": 42,
     "train_steps": 12000,
     "train_batch_size": 4,
@@ -25,7 +27,7 @@
   "paths": {
     "experiment_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner",
     "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/embeddings",
-    "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/selected_episode.json",
+    "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/random_300_seed42.json",
     "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints",
     "eval_results_file": null,
     "eval_episodes_file": null,
@@ -35,36 +37,33 @@
   },
   "stages": {
     "embedding_extraction": {
-      "status": "completed",
-      "time_seconds": 7.7,
-      "embedding_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/embeddings"
+      "status": "skipped",
+      "reason": "Not required for random selection mode"
     },
     "episode_selection": {
       "status": "completed",
-      "time_seconds": 4.9,
-      "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/selected_episode.json",
-      "num_selected_episodes": 112
+      "time_seconds": 9.7,
+      "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/random_300_seed42.json",
+      "num_selected_episodes": 300
     },
     "training": {
       "status": "completed",
-      "time_seconds": 12304.2,
+      "time_seconds": 6808.2,
       "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints",
       "train_steps": 12000
     },
     "evaluation": {
       "status": "completed",
-      "time_seconds": 1551.7,
+      "time_seconds": 349.3,
       "eval_results": {
-        "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs/tinyvla_s_disassemble-v3_corner_eval.log",
-        "success_rate": 0.0,
-        "grasp_success_rate": 0.0
+        "error": "Evaluation failed with code 1",
+        "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs/tinyvla_s_disassemble-v3_corner_eval.log"
       }
     }
   },
   "final_metrics": {
-    "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs/tinyvla_s_disassemble-v3_corner_eval.log",
-    "success_rate": 0.0,
-    "grasp_success_rate": 0.0
+    "error": "Evaluation failed with code 1",
+    "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/logs/tinyvla_s_disassemble-v3_corner_eval.log"
   },
-  "total_time_seconds": 13868.5
+  "total_time_seconds": 7167.2
 }

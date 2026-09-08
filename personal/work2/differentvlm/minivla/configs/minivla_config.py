@@ -5,8 +5,8 @@ Manages all experiment configurations for MiniVLA experiments.
 Mirrors the duibi/grid_uniform experiment flow but uses MiniVLA policy instead of SmolVLA.
 
 Key design:
-- No VLM embedding extraction stage (MiniVLA uses its own VQ action tokenizer)
-- Direct episode selection via grid_uniform algorithm (same as duibi)
+- For our_v5 mode: auto-extracts VLM embeddings if not cached
+- Direct episode selection via various algorithms (grid_uniform, random, our_v5, deminf)
 - Training uses lerobot-train with policy.type=minivla
 - Evaluation uses lerobot-eval with MiniVLA checkpoint
 """
@@ -34,12 +34,12 @@ DATASET_CONFIGS = {
     "disassemble-v3_corner": {
         "dataset_root": "personal/work2/dataset_view/disassemble-v3_corner",
         "env_task": "disassemble-v3",
-        "camera": "top",
+        "camera": "corner",
         "camera_names": "top,wrist",
         "primary_image_key": "observation.images.top",
         "wrist_image_key": "observation.images.wrist",
         "eval_camera": "corner",
-        "eval_camera_names": "corner,gripperPOV",
+        "eval_camera_names": "top,wrist",
     },
 }
 
@@ -48,7 +48,7 @@ SELECTION_SEED = 42
 
 TRAIN_STEPS = 12000
 TRAIN_SAVE_FREQ = 2000
-TRAIN_BATCH_SIZE = 16
+TRAIN_BATCH_SIZE = 4
 TRAIN_NUM_WORKERS = 16
 TRAIN_LR = 2e-5
 

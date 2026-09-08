@@ -1001,6 +1001,7 @@ def eval_main(cfg: EvalPipelineConfig):
             env_features=cfg.env.features if cfg.eval.recording else None,
             recording_repo_id=cfg.eval.recording_repo_id,
             recording_private=cfg.eval.recording_private,
+            env_rename_map=cfg.rename_map,
         )
         logger.info("Overall Aggregated Metrics:")
         logger.info(info["overall"])

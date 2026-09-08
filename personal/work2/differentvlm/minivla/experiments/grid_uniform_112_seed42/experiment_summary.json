@@ -2,16 +2,16 @@
   "exp_name": "grid_uniform_112_seed42",
   "dataset_name": "disassemble-v3_corner",
   "gpu_id": 3,
-  "start_time": "2026-09-07 21:04:22",
-  "end_time": "2026-09-07 21:04:39",
-  "current_stage": "evaluation",
-  "failed_stage": "evaluation",
+  "start_time": "2026-09-08 00:09:12",
+  "end_time": "2026-09-08 05:45:09",
+  "current_stage": "completed",
+  "failed_stage": null,
   "config": {
     "selection_mode": "grid_uniform",
     "selection_num_episodes": 112,
     "selection_seed": 42,
     "train_steps": 12000,
-    "train_batch_size": 16,
+    "train_batch_size": 4,
     "train_lr": 2e-05,
     "eval_n_episodes": 200,
     "eval_seed": 42,
@@ -31,10 +31,60 @@
     "training": {
       "status": "success",
       "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints",
-      "time_seconds": 17.8
+      "time_seconds": 19749.2
+    },
+    "evaluation": {
+      "status": "success",
+      "time_seconds": 407.7
     }
   },
-  "final_metrics": {},
-  "total_time_seconds": 17.8,
-  "error": "No valid checkpoints found in /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints"
+  "final_metrics": {
+    "eval_results": [
+      {
+        "pc_success": -1,
+        "pc_grasp_success": -1,
+        "parse_status": "failed",
+        "step": 2000,
+        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints/002000/pretrained_model"
+      },
+      {
+        "pc_success": -1,
+        "pc_grasp_success": -1,
+        "parse_status": "failed",
+        "step": 4000,
+        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints/004000/pretrained_model"
+      },
+      {
+        "pc_success": -1,
+        "pc_grasp_success": -1,
+        "parse_status": "failed",
+        "step": 6000,
+        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints/006000/pretrained_model"
+      },
+      {
+        "pc_success": -1,
+        "pc_grasp_success": -1,
+        "parse_status": "failed",
+        "step": 8000,
+        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints/008000/pretrained_model"
+      },
+      {
+        "pc_success": -1,
+        "pc_grasp_success": -1,
+        "parse_status": "failed",
+        "step": 10000,
+        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints/010000/pretrained_model"
+      },
+      {
+        "pc_success": -1,
+        "pc_grasp_success": -1,
+        "parse_status": "failed",
+        "step": 12000,
+        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/grid_uniform_112_seed42/checkpoints/checkpoints/012000/pretrained_model"
+      }
+    ],
+    "best_pc_success": -1,
+    "best_pc_grasp_success": -1
+  },
+  "total_time_seconds": 20156.9
 }

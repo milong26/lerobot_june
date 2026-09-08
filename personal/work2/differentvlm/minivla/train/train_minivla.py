@@ -40,6 +40,7 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
 
     # Auto-resume: check if output directory exists (LeRobot will check for checkpoints inside)
     resume = False
+    training_complete = False
     if output_dir.exists():
         # Check if there are any saved checkpoints (numeric directories)
         existing_steps = sorted([
@@ -49,11 +50,15 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         if existing_steps:
             resume = True
             print(f"Found existing checkpoints: {existing_steps[-1]}")
-            print(f"Training will resume from latest checkpoint")
+            # Check if training already completed all steps
+            last_step = int(existing_steps[-1])
+            if last_step >= cfg.train_steps:
+                training_complete = True
+                print(f"Training already complete: step {last_step} >= {cfg.train_steps}")
+            else:
+                print(f"Training will resume from latest checkpoint (step {last_step}/{cfg.train_steps})")
         else:
-            print(f"Output directory exists but no checkpoints found, removing old directory")
-            import shutil
-            shutil.rmtree(output_dir)
+            print(f"Output directory exists but no checkpoints found, starting fresh training")
 
     train_log = Path(cfg.logs_dir) / f"{cfg.exp_name}_training.log"
 
@@ -126,23 +131,34 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         cmd.append("--resume=true")
         print(f"Auto-resume enabled: adding --resume=true to command")
 
-    print(f"\nRunning: lerobot-train ...")
-    print(f"Output dir: {output_dir}")
-    print(f"Log file: {train_log}")
-    sys.stdout.flush()
-
-    with open(train_log, "w") as log_f:
-        result = subprocess.run(
-            cmd,
-            stdout=log_f,
-            stderr=subprocess.STDOUT,
-            cwd=str(Path(__file__).resolve().parents[5]),
-        )
-
-    if result.returncode != 0:
-        print(f"WARNING: Training exited with code {result.returncode}")
-        print(f"Check log: {train_log}")
+    # If training already complete, skip training
+    if training_complete:
+        print(f"\nSkipping training (already complete at step {cfg.train_steps})")
         sys.stdout.flush()
+    else:
+        print(f"\nRunning: lerobot-train ...")
+        print(f"Output dir: {output_dir}")
+        print(f"Log file: {train_log}")
+        sys.stdout.flush()
+
+        # Use append mode when resuming, write mode for fresh start
+        log_mode = "a" if resume else "w"
+        with open(train_log, log_mode) as log_f:
+            if resume:
+                log_f.write(f"\n\n{'='*60}\n")
+                log_f.write(f"RESUMING TRAINING from existing checkpoints\n")
+                log_f.write(f"{'='*60}\n\n")
+            result = subprocess.run(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                cwd=str(Path(__file__).resolve().parents[5]),
+            )
+
+        if result.returncode != 0:
+            print(f"WARNING: Training exited with code {result.returncode}")
+            print(f"Check log: {train_log}")
+            sys.stdout.flush()
 
     checkpoint_dir = output_dir / "checkpoints"
     print(f"\nTraining complete.")

@@ -80,11 +80,11 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
-# Create unique session name
-SESSION_NAME="tinyvla_${POLICY_TYPE}_${DATASET_NAME}"
+# Create unique session name (include selection mode to avoid conflicts)
+SESSION_NAME="tinyvla_${POLICY_TYPE}_${SELECTION_MODE}_${DATASET_NAME}"
 
-# Create log directory
-LOG_DIR="$PROJECT_ROOT/personal/work2/differentvlm/experiments/${POLICY_TYPE}_${DATASET_NAME}/logs"
+# Create log directory (include selection mode in path for better organization)
+LOG_DIR="$PROJECT_ROOT/personal/work2/differentvlm/experiments/${POLICY_TYPE}_${SELECTION_MODE}_${DATASET_NAME}/logs"
 mkdir -p "$LOG_DIR"
 
 # Log file path

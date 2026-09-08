@@ -48,7 +48,11 @@ DINOSIGLIP_TIMM_IDS = {
 def _unpack_tuple(fn):
     def wrapper(*args, **kwargs):
         result = fn(*args, **kwargs)
-        return result[0] if isinstance(result, tuple) else result
+        # get_intermediate_layers returns a list/tuple of tensors
+        # We want the first (and only) element which is the tensor
+        if isinstance(result, (tuple, list)):
+            return result[0] if len(result) == 1 else result
+        return result
     return wrapper
 
 

@@ -67,7 +67,6 @@ echo \$\$ > "\$PID_FILE"
 echo "Start time: \$(date '+%Y-%m-%d %H:%M:%S')" > "\$TIME_FILE"
 echo "PID: \$\$" >> "\$TIME_FILE"
 
-echo "========================================"
 echo "MiniVLA Experiment: \$EXP_NAME"
 echo "Sampling: factorized obj-goal joint-region uniform"
 echo "GPU: \$GPU_ID"
@@ -75,7 +74,6 @@ echo "Dataset: \$DATASET_NAME"
 echo "Dataset Path: \$DATASET_PATH"
 echo "PID: \$\$"
 echo "Started: \$(date '+%Y-%m-%d %H:%M:%S')"
-echo "========================================"
 echo ""
 
 python personal/work2/differentvlm/minivla/scripts/run_minivla.py \

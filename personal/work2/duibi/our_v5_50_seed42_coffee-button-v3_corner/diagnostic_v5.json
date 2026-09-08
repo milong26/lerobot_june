@@ -1,0 +1,764 @@
+{
+  "per_episode_diagnostic": [
+    {
+      "episode_id": 219,
+      "step": 1,
+      "selected_region_id": 16,
+      "region_priority": 0.5830873626105195,
+      "visual_score": 1.044074184188119,
+      "action_score": 1.1772587352675683,
+      "joint_score": 0.8865599339714134
+    },
+    {
+      "episode_id": 303,
+      "step": 2,
+      "selected_region_id": 9,
+      "region_priority": 0.5822581631620553,
+      "visual_score": 0.8718329125274847,
+      "action_score": 2.304650755876029,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 351,
+      "step": 3,
+      "selected_region_id": 13,
+      "region_priority": 0.5803503135319457,
+      "visual_score": 1.2446456195821642,
+      "action_score": 4.01815544767521,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 336,
+      "step": 4,
+      "selected_region_id": 37,
+      "region_priority": 0.5785838059334152,
+      "visual_score": 0.9745942414649866,
+      "action_score": 1.1849769845734284,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 144,
+      "step": 5,
+      "selected_region_id": 22,
+      "region_priority": 0.5740915190585967,
+      "visual_score": 0.7446758251845441,
+      "action_score": 1.432943912172287,
+      "joint_score": 0.9440391455160039
+    },
+    {
+      "episode_id": 8,
+      "step": 6,
+      "selected_region_id": 21,
+      "region_priority": 0.5737996687510575,
+      "visual_score": 1.0468179612553996,
+      "action_score": 1.3325994947307955,
+      "joint_score": 0.8227885202952475
+    },
+    {
+      "episode_id": 323,
+      "step": 7,
+      "selected_region_id": 35,
+      "region_priority": 0.5729897814429933,
+      "visual_score": 1.0223243482561015,
+      "action_score": 1.652743500969025,
+      "joint_score": 0.9506687235351968
+    },
+    {
+      "episode_id": 192,
+      "step": 8,
+      "selected_region_id": 19,
+      "region_priority": 0.5718340111066328,
+      "visual_score": 0.6264510425400998,
+      "action_score": 1.37054886880091,
+      "joint_score": 0.7229218425074402
+    },
+    {
+      "episode_id": 329,
+      "step": 9,
+      "selected_region_id": 36,
+      "region_priority": 0.5714626049690088,
+      "visual_score": 0.9455623204657945,
+      "action_score": 1.2653889937198644,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 108,
+      "step": 10,
+      "selected_region_id": 24,
+      "region_priority": 0.568508084527042,
+      "visual_score": 0.7102005263436185,
+      "action_score": 1.0324836101039232,
+      "joint_score": 0.9559265873981718
+    },
+    {
+      "episode_id": 73,
+      "step": 11,
+      "selected_region_id": 20,
+      "region_priority": 0.5684119086332089,
+      "visual_score": 0.8811000065773557,
+      "action_score": 0.8741426449184122,
+      "joint_score": 0.7232752747238662
+    },
+    {
+      "episode_id": 335,
+      "step": 12,
+      "selected_region_id": 15,
+      "region_priority": 0.5681683708384287,
+      "visual_score": 0.8870985880823615,
+      "action_score": 0.9482780780545282,
+      "joint_score": 0.9629153815406805
+    },
+    {
+      "episode_id": 389,
+      "step": 13,
+      "selected_region_id": 31,
+      "region_priority": 0.5671797787730797,
+      "visual_score": 0.673660378102096,
+      "action_score": 1.1839400314633763,
+      "joint_score": 0.6539496868595466
+    },
+    {
+      "episode_id": 200,
+      "step": 14,
+      "selected_region_id": 25,
+      "region_priority": 0.5649376960951942,
+      "visual_score": 0.9346224391869328,
+      "action_score": 1.9363439654340857,
+      "joint_score": 0.8997773725881193
+    },
+    {
+      "episode_id": 150,
+      "step": 15,
+      "selected_region_id": 33,
+      "region_priority": 0.5647127868940218,
+      "visual_score": 0.6834656020917712,
+      "action_score": 1.1460118986115806,
+      "joint_score": 0.8402701025172968
+    },
+    {
+      "episode_id": 246,
+      "step": 16,
+      "selected_region_id": 10,
+      "region_priority": 0.5644938652583862,
+      "visual_score": 0.8865878018819209,
+      "action_score": 1.0166556767686785,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 346,
+      "step": 17,
+      "selected_region_id": 38,
+      "region_priority": 0.5636748864134148,
+      "visual_score": 0.8481106918465565,
+      "action_score": 1.0669862229379012,
+      "joint_score": 0.9317550657072149
+    },
+    {
+      "episode_id": 244,
+      "step": 18,
+      "selected_region_id": 8,
+      "region_priority": 0.5627675376187745,
+      "visual_score": 0.757889683468775,
+      "action_score": 0.8813873238506881,
+      "joint_score": 0.7674212827027358
+    },
+    {
+      "episode_id": 5,
+      "step": 19,
+      "selected_region_id": 26,
+      "region_priority": 0.5625958810098551,
+      "visual_score": 0.7242364519025027,
+      "action_score": 0.8568290771948682,
+      "joint_score": 0.6845158091556001
+    },
+    {
+      "episode_id": 64,
+      "step": 20,
+      "selected_region_id": 39,
+      "region_priority": 0.5619504357788161,
+      "visual_score": 1.0157850339344063,
+      "action_score": 0.6087998437782205,
+      "joint_score": 0.7307000147094062
+    },
+    {
+      "episode_id": 302,
+      "step": 21,
+      "selected_region_id": 23,
+      "region_priority": 0.5596630651072005,
+      "visual_score": 0.7102364494377834,
+      "action_score": 1.1127446123708358,
+      "joint_score": 0.770356341724903
+    },
+    {
+      "episode_id": 276,
+      "step": 22,
+      "selected_region_id": 29,
+      "region_priority": 0.5590410714200925,
+      "visual_score": 1.1705601282862974,
+      "action_score": 1.011407406444565,
+      "joint_score": 0.8262490116543662
+    },
+    {
+      "episode_id": 383,
+      "step": 23,
+      "selected_region_id": 27,
+      "region_priority": 0.558182012701827,
+      "visual_score": 0.6741544092118864,
+      "action_score": 1.42476418682795,
+      "joint_score": 0.8281336122914005
+    },
+    {
+      "episode_id": 264,
+      "step": 24,
+      "selected_region_id": 11,
+      "region_priority": 0.5571464596847896,
+      "visual_score": 0.859055719179993,
+      "action_score": 0.7177997323426404,
+      "joint_score": 0.8542510716101764
+    },
+    {
+      "episode_id": 195,
+      "step": 25,
+      "selected_region_id": 28,
+      "region_priority": 0.5562728791230916,
+      "visual_score": 0.7102473158083622,
+      "action_score": 0.9196444744889314,
+      "joint_score": 0.8560259427447434
+    },
+    {
+      "episode_id": 46,
+      "step": 26,
+      "selected_region_id": 12,
+      "region_priority": 0.5531711739423328,
+      "visual_score": 0.6431311449089755,
+      "action_score": 0.8652489290036051,
+      "joint_score": 0.8843077975190179
+    },
+    {
+      "episode_id": 366,
+      "step": 27,
+      "selected_region_id": 17,
+      "region_priority": 0.5484982248225166,
+      "visual_score": 0.7279676627245385,
+      "action_score": 0.3720085970812682,
+      "joint_score": 0.869245687907868
+    },
+    {
+      "episode_id": 365,
+      "step": 28,
+      "selected_region_id": 18,
+      "region_priority": 0.5481488269850056,
+      "visual_score": 0.8747461005769867,
+      "action_score": 0.7000110927990244,
+      "joint_score": 0.8246602965999783
+    },
+    {
+      "episode_id": 253,
+      "step": 29,
+      "selected_region_id": 2,
+      "region_priority": 0.544743662105135,
+      "visual_score": 0.7094800604203312,
+      "action_score": 0.5000805275005331,
+      "joint_score": 0.7923521784922546
+    },
+    {
+      "episode_id": 1,
+      "step": 30,
+      "selected_region_id": 16,
+      "region_priority": 0.5446258241489812,
+      "visual_score": 0.7202154024443359,
+      "action_score": 0.8953617922177026,
+      "joint_score": 0.9067851416565245
+    },
+    {
+      "episode_id": 328,
+      "step": 31,
+      "selected_region_id": 32,
+      "region_priority": 0.543144159260231,
+      "visual_score": 0.9011900064783389,
+      "action_score": 0.656399686870381,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 151,
+      "step": 32,
+      "selected_region_id": 30,
+      "region_priority": 0.5410822908242866,
+      "visual_score": 0.6819276738214796,
+      "action_score": 0.4245043255045431,
+      "joint_score": 0.9169860523691032
+    },
+    {
+      "episode_id": 20,
+      "step": 33,
+      "selected_region_id": 34,
+      "region_priority": 0.5409279324341315,
+      "visual_score": 0.7208751016108345,
+      "action_score": 0.7963846735830097,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 7,
+      "step": 34,
+      "selected_region_id": 9,
+      "region_priority": 0.5368036177075098,
+      "visual_score": 0.7809905409394579,
+      "action_score": 0.5412106914976352,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 174,
+      "step": 35,
+      "selected_region_id": 1,
+      "region_priority": 0.5356499774677345,
+      "visual_score": 0.7207175909205593,
+      "action_score": 0.9820333274457754,
+      "joint_score": 0.9064173821251762
+    },
+    {
+      "episode_id": 177,
+      "step": 36,
+      "selected_region_id": 22,
+      "region_priority": 0.5356299805970582,
+      "visual_score": 0.6105676874311531,
+      "action_score": 0.5934074730674335,
+      "joint_score": 0.7611508085891493
+    },
+    {
+      "episode_id": 333,
+      "step": 37,
+      "selected_region_id": 23,
+      "region_priority": 0.5346630651072005,
+      "visual_score": 0.8112342164224454,
+      "action_score": 0.4564882187918629,
+      "joint_score": 0.7209363129450496
+    },
+    {
+      "episode_id": 129,
+      "step": 38,
+      "selected_region_id": 7,
+      "region_priority": 0.5319250755361806,
+      "visual_score": 0.6692939553627997,
+      "action_score": 0.820638732116542,
+      "joint_score": 0.9175359339221995
+    },
+    {
+      "episode_id": 131,
+      "step": 39,
+      "selected_region_id": 36,
+      "region_priority": 0.5297959383023421,
+      "visual_score": 0.7023477504194909,
+      "action_score": 0.5186862428459519,
+      "joint_score": 0.7479332323846846
+    },
+    {
+      "episode_id": 182,
+      "step": 40,
+      "selected_region_id": 12,
+      "region_priority": 0.5281711739423328,
+      "visual_score": 0.5096499339274372,
+      "action_score": 0.9461537324751931,
+      "joint_score": 0.7262264165641463
+    },
+    {
+      "episode_id": 277,
+      "step": 41,
+      "selected_region_id": 5,
+      "region_priority": 0.5279702513610885,
+      "visual_score": 0.8118481710722361,
+      "action_score": 0.910502269571576,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 370,
+      "step": 42,
+      "selected_region_id": 21,
+      "region_priority": 0.5237996687510574,
+      "visual_score": 0.7592221040019977,
+      "action_score": 0.5068250740573139,
+      "joint_score": 0.9451077687170103
+    }
+  ],
+  "dataset_statistics": {
+    "selected_count": 50,
+    "total_count": 400,
+    "full_count": 350,
+    "selected_visual_score": {
+      "mean": -0.00017866946573182933,
+      "std": 0.017098142511774533
+    },
+    "full_visual_score": {
+      "mean": 2.55242093904981e-05,
+      "std": 0.01340552536102781
+    },
+    "selected_action_score": {
+      "mean": 0.3875758657890419,
+      "std": 0.04478414022957576
+    },
+    "full_action_score": {
+      "mean": 0.38595134869710623,
+      "std": 0.0437143711864317
+    }
+  },
+  "action_coverage_analysis": {
+    "selected_action_distribution_distance": {
+      "mean_l2_distance": 3.30888689723969,
+      "mean_cosine_distance": 0.030422052261486567
+    },
+    "n_comparisons": 50
+  },
+  "rand_vec_coverage_statistics": {
+    "selected_region_count": 39,
+    "total_region_count": 40,
+    "region_coverage_ratio": 0.975,
+    "region_selection_distribution": [
+      {
+        "region_id": 0,
+        "total_episodes": 4,
+        "selected_episodes": 1,
+        "selection_ratio": 0.25
+      },
+      {
+        "region_id": 1,
+        "total_episodes": 11,
+        "selected_episodes": 2,
+        "selection_ratio": 0.18181818181818182
+      },
+      {
+        "region_id": 2,
+        "total_episodes": 15,
+        "selected_episodes": 2,
+        "selection_ratio": 0.13333333333333333
+      },
+      {
+        "region_id": 3,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 4,
+        "total_episodes": 5,
+        "selected_episodes": 1,
+        "selection_ratio": 0.2
+      },
+      {
+        "region_id": 5,
+        "total_episodes": 13,
+        "selected_episodes": 2,
+        "selection_ratio": 0.15384615384615385
+      },
+      {
+        "region_id": 6,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 7,
+        "total_episodes": 16,
+        "selected_episodes": 2,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 8,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 9,
+        "total_episodes": 11,
+        "selected_episodes": 2,
+        "selection_ratio": 0.18181818181818182
+      },
+      {
+        "region_id": 10,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 11,
+        "total_episodes": 14,
+        "selected_episodes": 1,
+        "selection_ratio": 0.07142857142857142
+      },
+      {
+        "region_id": 12,
+        "total_episodes": 20,
+        "selected_episodes": 2,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 13,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 14,
+        "total_episodes": 2,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 15,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 16,
+        "total_episodes": 13,
+        "selected_episodes": 2,
+        "selection_ratio": 0.15384615384615385
+      },
+      {
+        "region_id": 17,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 18,
+        "total_episodes": 13,
+        "selected_episodes": 1,
+        "selection_ratio": 0.07692307692307693
+      },
+      {
+        "region_id": 19,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 20,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 21,
+        "total_episodes": 10,
+        "selected_episodes": 2,
+        "selection_ratio": 0.2
+      },
+      {
+        "region_id": 22,
+        "total_episodes": 13,
+        "selected_episodes": 2,
+        "selection_ratio": 0.15384615384615385
+      },
+      {
+        "region_id": 23,
+        "total_episodes": 20,
+        "selected_episodes": 2,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 24,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 25,
+        "total_episodes": 11,
+        "selected_episodes": 1,
+        "selection_ratio": 0.09090909090909091
+      },
+      {
+        "region_id": 26,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 27,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 28,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 29,
+        "total_episodes": 13,
+        "selected_episodes": 1,
+        "selection_ratio": 0.07692307692307693
+      },
+      {
+        "region_id": 30,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 31,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 32,
+        "total_episodes": 11,
+        "selected_episodes": 1,
+        "selection_ratio": 0.09090909090909091
+      },
+      {
+        "region_id": 33,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 34,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 35,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 36,
+        "total_episodes": 12,
+        "selected_episodes": 2,
+        "selection_ratio": 0.16666666666666666
+      },
+      {
+        "region_id": 37,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 38,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 39,
+        "total_episodes": 6,
+        "selected_episodes": 1,
+        "selection_ratio": 0.16666666666666666
+      }
+    ],
+    "average_region_coverage_gap": 0.9803550616050616,
+    "average_region_visual_uncertainty": 0.09402843902667483,
+    "average_region_action_uncertainty": 0.18722621051144955,
+    "selected_rand_vec_distribution": [
+      [
+        -0.03953348472714424,
+        0.8146755695343018,
+        -0.0008153227972798049
+      ],
+      [
+        0.08372218161821365,
+        0.84884113073349,
+        0.00022348773200064898
+      ],
+      [
+        0.04469303414225578,
+        0.8977989554405212,
+        7.699173875153065e-05
+      ],
+      [
+        0.006171138491481543,
+        0.8232728242874146,
+        -0.0009772024350240827
+      ],
+      [
+        -0.0983906090259552,
+        0.8309735655784607,
+        0.0009152074926532805
+      ],
+      [
+        0.0631674975156784,
+        0.8035889863967896,
+        0.0003835151728708297
+      ],
+      [
+        0.05161517113447189,
+        0.8313077092170715,
+        0.0008744747028686106
+      ],
+      [
+        -0.010028219781816006,
+        0.8457019925117493,
+        -0.0003766980080399662
+      ],
+      [
+        0.02205144613981247,
+        0.849298894405365,
+        -0.0005710760015062988
+      ],
+      [
+        -0.0345829613506794,
+        0.8248860239982605,
+        0.000620727427303791
+      ]
+    ],
+    "full_rand_vec_distribution": [
+      [
+        0.008976636454463005,
+        0.8423655033111572,
+        0.0002917882229667157
+      ],
+      [
+        -0.03953348472714424,
+        0.8146755695343018,
+        -0.0008153227972798049
+      ],
+      [
+        -0.012935521081089973,
+        0.842036783695221,
+        -0.0003393303486518562
+      ],
+      [
+        0.002165521029382944,
+        0.8892946839332581,
+        0.0007925861864350736
+      ],
+      [
+        0.04296319931745529,
+        0.8697729110717773,
+        -0.0005678210291080177
+      ],
+      [
+        0.08372218161821365,
+        0.84884113073349,
+        0.00022348773200064898
+      ],
+      [
+        -0.09166067838668823,
+        0.8107656836509705,
+        0.00019010412506759167
+      ],
+      [
+        0.04469303414225578,
+        0.8977989554405212,
+        7.699173875153065e-05
+      ],
+      [
+        0.006171138491481543,
+        0.8232728242874146,
+        -0.0009772024350240827
+      ],
+      [
+        -0.07323409616947174,
+        0.8142111301422119,
+        -0.0005628826329484582
+      ]
+    ]
+  }
+}

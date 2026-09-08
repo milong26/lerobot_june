@@ -214,7 +214,7 @@ def parse_eval_log(log_path: str) -> tuple:
     return aggregated, episode_details
 
 
-def run_eval_all_checkpoints(cfg: MiniVLAExperimentConfig, checkpoint_dir: str) -> List[Dict]:
+def run_eval_all_checkpoints(cfg: MiniVLAExperimentConfig, checkpoint_dir: str, latest_only: bool = False) -> List[Dict]:
     """
     Run evaluation for all checkpoints in the training directory.
     Returns list of evaluation results.
@@ -223,7 +223,12 @@ def run_eval_all_checkpoints(cfg: MiniVLAExperimentConfig, checkpoint_dir: str) 
     if not checkpoints:
         raise FileNotFoundError(f"No valid checkpoints found in {checkpoint_dir}")
 
-    print(f"\nFound {len(checkpoints)} checkpoints to evaluate:")
+    if latest_only:
+        checkpoints = [checkpoints[-1]]
+        print(f"\nEvaluating LATEST checkpoint only:")
+    else:
+        print(f"\nFound {len(checkpoints)} checkpoints to evaluate:")
+
     for step_num, ckpt_path in checkpoints:
         print(f"  step_{step_num:06d}: {ckpt_path}")
     sys.stdout.flush()
