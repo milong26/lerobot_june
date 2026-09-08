@@ -1,13 +1,13 @@
 #!/bin/bash
 # Launch DemInf experiment in tmux
-# Usage: bash launch_deminf.sh <gpu_id> <dataset_name>
-#   All other parameters use defaults: num_episodes=112, seed=42
+# Usage: bash launch_deminf.sh <gpu_id> <dataset_name> [num_episodes]
+#   Default: num_episodes=112, seed=42
 
 set -e
 
 GPU_ID=${1:-0}
 DATASET_NAME=${2:-disassemble-v3_corner}
-NUM_EPISODES=112
+NUM_EPISODES=${3:-112}
 SEED=42
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

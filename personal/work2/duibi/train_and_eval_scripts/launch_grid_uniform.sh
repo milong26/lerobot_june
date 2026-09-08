@@ -1,23 +1,23 @@
 #!/bin/bash
 # Launch grid-based obj-goal joint-region uniform experiment in tmux
-# Usage: bash launch_grid_uniform.sh <gpu_id> <dataset_name> [dataset_path]
+# Usage: bash launch_grid_uniform.sh <gpu_id> <num_episodes> <dataset_name> [dataset_path]
 # 新的grid_uniform：obj_init_pos空间独立分区 × goal_pose空间独立分区 → 联合区域均匀分配
-# 第三个参数可选：数据集路径，默认为 /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/pick_place_<dataset_name>
+# 第四个参数可选：数据集路径，默认为 /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/<dataset_name>
 
 set -e
 
 GPU_ID=${1:-0}
-DATASET_NAME=${2:-disassemble-v3_corner}
-DATASET_PATH=${3:-/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}}
+NUM_EPISODES=${2:-112}
+DATASET_NAME=${3:-disassemble-v3_corner}
+DATASET_PATH=${4:-/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/grid_uniform_42_${DATASET_NAME}"
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/grid_uniform_ep${NUM_EPISODES}_seed42_${DATASET_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
 
-NUM_EPISODES=112
 EXP_NAME="grid_uniform_${NUM_EPISODES}_seed42"
-TMUX_SESSION="grid_uniform_${NUM_EPISODES}_s42_${DATASET_NAME}"
+TMUX_SESSION="grid_uniform_ep${NUM_EPISODES}_s42_${DATASET_NAME}"
 
 mkdir -p "$LOG_DIR"
 
@@ -39,14 +39,14 @@ export PYTHONUNBUFFERED=1
 
 cd /data/zhonglinye/jun/lerobot
 
-NUM_EPISODES=112
+GPU_ID=\$1
+NUM_EPISODES=\$2
+DATASET_NAME=\$3
+DATASET_PATH=\$4
+
 EXP_NAME="grid_uniform_\${NUM_EPISODES}_seed42"
 
-GPU_ID=\$1
-DATASET_NAME=\$2
-DATASET_PATH=\$3
-
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/grid_uniform_42_\${DATASET_NAME}"
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/grid_uniform_ep\${NUM_EPISODES}_seed42_\${DATASET_NAME}"
 
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 
@@ -69,6 +69,7 @@ echo "========================================"
 echo "Experiment: \$EXP_NAME"
 echo "Sampling: factorized obj-goal joint-region uniform"
 echo "GPU: \$GPU_ID"
+echo "Episodes: \$NUM_EPISODES"
 echo "Dataset: \$DATASET_NAME"
 echo "Dataset Path: \$DATASET_PATH"
 echo "PID: \$\$"
@@ -112,7 +113,7 @@ RUNNER_EOF
 chmod +x "$RUNNER_SCRIPT"
 
 
-tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $DATASET_NAME $DATASET_PATH"
+tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $NUM_EPISODES $DATASET_NAME $DATASET_PATH"
 
 
 echo "Launched experiment: $EXP_NAME"
@@ -120,6 +121,7 @@ echo "tmux session: $TMUX_SESSION"
 echo "Output dir: $OUTPUT_BASE_DIR"
 echo "Dataset: $DATASET_NAME"
 echo "Dataset Path: $DATASET_PATH"
+echo "Episodes: $NUM_EPISODES"
 echo ""
 echo "Monitor with:"
 echo "tmux attach -t $TMUX_SESSION"

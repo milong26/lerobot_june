@@ -213,6 +213,7 @@ def ensure_shared_embeddings(
             output_dir=building_dir,
             n_components=pca_dim,
             device="cuda",
+            dataset_name=dataset_name,
         )
         
         # Write metadata

@@ -18,6 +18,7 @@ from .config import (
     SHARED_EMBEDDING_ROOT,
     MODEL_NAME,
     PROMPT_TEXT,
+    get_prompt_text,
     TOKEN_POOLING,
     GLOBAL_FRAME_RULE,
     WRIST_START_RATIO,
@@ -54,16 +55,14 @@ KNOWN_LEGACY_SOURCE_TYPES = {
 
 def normalize_dataset_name(dataset_name: str) -> str:
     """
-    Normalize dataset name to include pick_place_ prefix if not already present.
+    Normalize dataset name (no prefix added).
     
     Examples:
-        corner -> pick_place_corner
-        corner2 -> pick_place_corner2
-        pick_place_corner -> pick_place_corner (unchanged)
+        corner -> corner
+        corner2 -> corner2
+        pick_place_corner -> pick_place_corner
     """
-    if dataset_name.startswith("pick_place_"):
-        return dataset_name
-    return f"pick_place_{dataset_name}"
+    return dataset_name
 
 
 def get_shared_embedding_dir(dataset_name: str, pca_dim: int = DEFAULT_PCA_DIM) -> Path:
@@ -125,7 +124,7 @@ def build_expected_metadata(
         "num_episodes": len(episode_indices),
         "episode_indices": episode_indices,
         "model_name": MODEL_NAME,
-        "prompt_text": PROMPT_TEXT,
+        "prompt_text": get_prompt_text(dataset_name),
         "token_pooling": TOKEN_POOLING,
         "global_frame_rule": GLOBAL_FRAME_RULE,
         "wrist_start_ratio": WRIST_START_RATIO,
@@ -273,7 +272,7 @@ def validate_previous_shared_cache(
 
         required_fields = {
             "model_name": MODEL_NAME,
-            "prompt_text": PROMPT_TEXT,
+            "prompt_text": get_prompt_text(dataset_name),
             "token_pooling": TOKEN_POOLING,
             "global_frame_rule": GLOBAL_FRAME_RULE,
             "wrist_start_ratio": WRIST_START_RATIO,
@@ -439,7 +438,7 @@ def validate_shared_cache(
         
         required_fields = {
             "model_name": MODEL_NAME,
-            "prompt_text": PROMPT_TEXT,
+            "prompt_text": get_prompt_text(dataset_name),
             "token_pooling": TOKEN_POOLING,
             "global_frame_rule": GLOBAL_FRAME_RULE,
             "wrist_start_ratio": WRIST_START_RATIO,

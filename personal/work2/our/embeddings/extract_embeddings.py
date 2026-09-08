@@ -34,7 +34,7 @@ from sklearn.decomposition import PCA
 
 # Import constants from shared config (config.py only)
 from embedding_utils.config import (
-    MODEL_NAME, PROMPT_TEXT, TOKEN_POOLING,
+    MODEL_NAME, PROMPT_TEXT, get_prompt_text, TOKEN_POOLING,
     GLOBAL_FRAME_RULE, WRIST_START_RATIO, WRIST_END_RATIO,
     TEMPORAL_POOLING, DEFAULT_PCA_DIM, EXTRACTOR_VERSION,
 )
@@ -81,7 +81,8 @@ def extract_frame_embeddings(
     processor,
     frames,
     device: str = "cuda",
-    batch_size: int = 8
+    batch_size: int = 8,
+    dataset_name: str = None,
 ) -> np.ndarray:
     """
     批量提取帧的嵌入（优化版，使用真正的批量推理）
@@ -92,6 +93,7 @@ def extract_frame_embeddings(
         frames: PIL Image 列表或 torch.Tensor, shape=(n_frames, C, H, W) 或 (n_frames, H, W, C)
         device: 计算设备
         batch_size: 批量处理大小
+        dataset_name: 数据集名称，用于获取task-specific prompt
     
     返回:
         np.ndarray, shape=(n_frames, embedding_dim)
@@ -135,7 +137,8 @@ def extract_frame_embeddings(
             # SmolVLM 要求每个样本的文本中 <image> token 数量与图像数量匹配
             # 对于批量处理，我们需要为每个图像创建单独的样本
             # 使用 PIL Image 格式，processor 可以正确处理并自动转到 GPU
-            batch_texts = [PROMPT_TEXT] * len(batch_frames)
+            prompt_text = get_prompt_text(dataset_name) if dataset_name else PROMPT_TEXT
+            batch_texts = [prompt_text] * len(batch_frames)
             batch_images = [[img] for img in batch_frames]  # PIL Image 列表的列表
             
             inputs = processor(
@@ -176,7 +179,8 @@ def extract_episode_embeddings(
     model,
     processor,
     episode_data: Dict,
-    device: str = "cuda"
+    device: str = "cuda",
+    dataset_name: str = None,
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     提取单个episode的global和wrist嵌入
@@ -189,6 +193,7 @@ def extract_episode_embeddings(
         processor: 处理器
         episode_data: Dict，包含 "observation.images.top" 和 "observation.images.wrist"
         device: 计算设备
+        dataset_name: 数据集名称，用于获取task-specific prompt
     
     返回:
         (phi_global, phi_wrist) - 两个视角的嵌入
@@ -207,11 +212,11 @@ def extract_episode_embeddings(
     wrist_frames_selected = wrist_frames[wrist_start:wrist_end]
     
     print(f"  提取global嵌入: 帧 {global_start}-{global_end}")
-    global_embs = extract_frame_embeddings(model, processor, global_frames, device)
+    global_embs = extract_frame_embeddings(model, processor, global_frames, device, dataset_name=dataset_name)
     phi_global = global_embs.mean(axis=0)
     
     print(f"  提取wrist嵌入: 帧 {wrist_start}-{wrist_end}")
-    wrist_embs = extract_frame_embeddings(model, processor, wrist_frames_selected, device)
+    wrist_embs = extract_frame_embeddings(model, processor, wrist_frames_selected, device, dataset_name=dataset_name)
     phi_wrist = wrist_embs.mean(axis=0)
     
     return phi_global, phi_wrist
@@ -245,6 +250,7 @@ def process_dataset(
     output_dir: Path,
     n_components: int = 32,
     device: str = "cuda",
+    dataset_name: str = None,
 ) -> Dict:
     """
     处理整个数据集，提取嵌入并缓存
@@ -259,6 +265,7 @@ def process_dataset(
         output_dir: 输出目录
         n_components: PCA降维维度
         device: 计算设备
+        dataset_name: 数据集名称，用于获取task-specific prompt
     
     返回:
         包含处理信息的字典，包括episode_indices、pca_global、pca_wrist等
@@ -395,7 +402,7 @@ def process_dataset(
         global_start_time = time.time()
         print(f"    → 提取 global 嵌入 (前{global_end}帧)...")
         sys.stdout.flush()
-        global_embs = extract_frame_embeddings(model, processor, episode_frames_top[:global_end], device)
+        global_embs = extract_frame_embeddings(model, processor, episode_frames_top[:global_end], device, dataset_name=dataset_name)
         phi_global = global_embs.mean(axis=0)
         global_time = time.time() - global_start_time
         print(f"    ✓ Global 嵌入完成: {global_time:.2f}s, 维度={phi_global.shape}")
@@ -405,7 +412,7 @@ def process_dataset(
         wrist_start_time = time.time()
         print(f"    → 提取 wrist 嵌入 (帧 {wrist_start}-{wrist_end}, 共{len(wrist_frames_selected)}帧)...")
         sys.stdout.flush()
-        wrist_embs = extract_frame_embeddings(model, processor, wrist_frames_selected, device)
+        wrist_embs = extract_frame_embeddings(model, processor, wrist_frames_selected, device, dataset_name=dataset_name)
         phi_wrist = wrist_embs.mean(axis=0)
         wrist_time = time.time() - wrist_start_time
         print(f"    ✓ Wrist 嵌入完成: {wrist_time:.2f}s, 维度={phi_wrist.shape}")
@@ -515,6 +522,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="提取VLM嵌入")
     parser.add_argument("--dataset-dir", type=str, required=True,
                        help="数据集目录路径")
+    parser.add_argument("--dataset-name", type=str, default=None,
+                       help="数据集名称 (e.g., coffee-button-v3_corner)，用于获取task-specific prompt")
     parser.add_argument("--output-dir", type=str, 
                        default="personal/work2/our/embeddings/cache",
                        help="嵌入缓存输出目录")
@@ -528,18 +537,24 @@ if __name__ == "__main__":
                        help="可选：输出metadata.json路径供ensure_embeddings.py使用")
     args = parser.parse_args()
     
+    # Infer dataset_name if not provided
+    dataset_name = args.dataset_name
+    if dataset_name is None:
+        dataset_name = Path(args.dataset_dir).name
+    
     result = process_dataset(
         dataset_dir=Path(args.dataset_dir),
         output_dir=Path(args.output_dir),
         n_components=args.n_components,
         device=args.device,
+        dataset_name=dataset_name,
     )
     
     if args.metadata_output and not result.get("skipped", False):
         from embedding_utils.cache import build_expected_metadata
         meta = build_expected_metadata(
             dataset_root=str(args.dataset_dir),
-            dataset_name=Path(args.dataset_dir).name.replace("pick_place_", ""),
+            dataset_name=dataset_name,
             pca_dim=args.n_components,
             episode_indices=result["episode_indices"],
             source="cli_extract",

@@ -5,6 +5,7 @@ All embedding extraction parameters are defined here to ensure
 consistency across all experiments and the shared cache system.
 """
 
+import json
 from pathlib import Path
 
 # Shared embedding root directory
@@ -12,7 +13,12 @@ SHARED_EMBEDDING_ROOT = Path("/data/zhonglinye/jun/lerobot/personal/work2/shared
 
 # Model configuration
 MODEL_NAME = "HuggingFaceTB/SmolVLM2-500M-Video-Instruct"
-PROMPT_TEXT = "<image> Pick and place a puck to a goal"
+
+# MetaWorld task descriptions config
+METAWORLD_CONFIG_PATH = Path("/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld_config.json")
+
+# Default prompt text (fallback when task description not found)
+DEFAULT_PROMPT_TEXT = "<image> Pick and place a puck to a goal"
 
 # Token pooling strategy
 TOKEN_POOLING = "last_hidden_token_mean"
@@ -28,6 +34,58 @@ DEFAULT_PCA_DIM = 32
 
 # Extractor version - increment when extraction logic changes
 EXTRACTOR_VERSION = "v1"
+
+
+def _extract_task_name(dataset_name: str) -> str:
+    """
+    Extract MetaWorld task name from dataset name.
+    
+    Examples:
+        coffee-button-v3_corner -> coffee-button-v3
+        pick_place_corner -> pick-place-v3
+        disassemble-v3_corner -> disassemble-v3
+        pick_place_v3_top -> pick-place-v3
+    """
+    # Remove view suffixes: _corner, _top, _gripper, _left, _right, etc.
+    import re
+    base = re.sub(r'_(corner|top|gripper|left|right|front|back|view)[0-9]*$', '', dataset_name)
+    # Convert underscores to hyphens
+    base = base.replace('_', '-')
+    # Add -v3 if not already present
+    if 'v3' not in base and 'v2' not in base:
+        base = f'{base}-v3'
+    return base
+
+
+def get_prompt_text(dataset_name: str) -> str:
+    """
+    Get task-specific prompt text from MetaWorld config.
+    
+    Args:
+        dataset_name: Dataset name like 'coffee-button-v3_corner' or 'pick_place_corner'
+    
+    Returns:
+        Prompt text like '<image> Push a button on the coffee machine'
+    """
+    task_name = _extract_task_name(dataset_name)
+    
+    # Try to load from metaworld_config.json
+    if METAWORLD_CONFIG_PATH.exists():
+        try:
+            with open(METAWORLD_CONFIG_PATH) as f:
+                config = json.load(f)
+            task_descriptions = config.get('TASK_DESCRIPTIONS', {})
+            if task_name in task_descriptions:
+                return f"<image> {task_descriptions[task_name]}"
+        except Exception:
+            pass
+    
+    # Fallback to default
+    return DEFAULT_PROMPT_TEXT
+
+
+# Backward compatibility: keep PROMPT_TEXT as default
+PROMPT_TEXT = DEFAULT_PROMPT_TEXT
 
 
 def sanitize_name(value: str) -> str:

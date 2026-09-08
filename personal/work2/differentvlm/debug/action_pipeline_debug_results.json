@@ -1,0 +1,139 @@
+{
+  "tinyvla_s": {
+    "raw": {
+      "raw_action": {
+        "name": "raw_action",
+        "shape": [
+          4
+        ],
+        "dtype": "float32",
+        "min": -0.9321286082267761,
+        "max": 0.12709705531597137,
+        "mean": -0.19741390645503998,
+        "std": 0.4270142614841461
+      },
+      "raw_state": {
+        "name": "raw_state",
+        "shape": [
+          4
+        ],
+        "dtype": "float32",
+        "min": 0.11673258244991302,
+        "max": 0.9966920614242554,
+        "mean": 0.4879722595214844,
+        "std": 0.37721526622772217
+      },
+      "raw_image_observation.images.top": {
+        "name": "raw_image_observation.images.top",
+        "shape": [
+          3,
+          480,
+          480
+        ],
+        "dtype": "float32",
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.3963754177093506,
+        "std": 0.14354640245437622
+      },
+      "raw_image_observation.images.wrist": {
+        "name": "raw_image_observation.images.wrist",
+        "shape": [
+          3,
+          480,
+          480
+        ],
+        "dtype": "float32",
+        "min": 0.0,
+        "max": 1.0,
+        "mean": 0.41247594356536865,
+        "std": 0.1568090170621872
+      },
+      "task": "Pick a nut out of a peg"
+    },
+    "preprocessed_action": {
+      "name": "preprocessed_action_normalized",
+      "shape": [
+        1,
+        4
+      ],
+      "dtype": "float32",
+      "min": -1.5674567222595215,
+      "max": -0.3089083731174469,
+      "mean": -0.929476797580719,
+      "std": 0.6107408404350281
+    },
+    "preprocessed_state": {
+      "name": "preprocessed_state",
+      "shape": [
+        1,
+        4
+      ],
+      "dtype": "float32",
+      "min": -0.14431045949459076,
+      "max": 1.3646891117095947,
+      "mean": 0.45173126459121704,
+      "std": 0.6131510138511658
+    },
+    "prediction_action": {
+      "name": "model_prediction_action",
+      "shape": [
+        1,
+        16,
+        4
+      ],
+      "dtype": "float32",
+      "min": -1.0,
+      "max": 0.7265625,
+      "mean": -0.2018280029296875,
+      "std": 0.5398616194725037,
+      "chunk_length": 16
+    },
+    "final_action": {
+      "name": "final_action_unnormalized",
+      "shape": [
+        1,
+        16,
+        4
+      ],
+      "dtype": "float32",
+      "min": -0.5703125,
+      "max": 0.8203125,
+      "mean": 0.12007904052734375,
+      "std": 0.4247001111507416
+    },
+    "action_head_info": {
+      "action_head_type": "droid_diffusion",
+      "chunk_size": 16,
+      "n_action_steps": 16,
+      "action_dim": 4,
+      "normalization_mapping": {
+        "VISUAL": "NormalizationMode.IDENTITY",
+        "STATE": "NormalizationMode.MEAN_STD",
+        "ACTION": "NormalizationMode.MEAN_STD"
+      }
+    },
+    "metadata": {
+      "policy_type": "tinyvla_s",
+      "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_b_disassemble-v3_corner/checkpoints/010000/pretrained_model",
+      "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+      "episode_index": 0,
+      "device": "cuda",
+      "dataset_features": {
+        "observation.images.top": "{'dtype': 'video', 'shape': (3, 480, 480), 'names': ['channels', 'height', 'width'], 'info': {'video.height': 480, 'video.width': 480, 'video.codec': 'av1', 'video.pix_fmt': 'yuv420p', 'video.fps': 80, 'video.channels': 3, 'has_audio': False, 'video.g': 2, 'video.crf': 30, 'video.preset': 12, 'video.fast_decode': 0, 'video.video_backend': 'pyav', 'video.extra_options': {}, 'is_depth_map': False}}",
+        "observation.images.wrist": "{'dtype': 'video', 'shape': (3, 480, 480), 'names': ['channels', 'height', 'width'], 'info': {'video.height': 480, 'video.width': 480, 'video.codec': 'av1', 'video.pix_fmt': 'yuv420p', 'video.fps': 80, 'video.channels': 3, 'has_audio': False, 'video.g': 2, 'video.crf': 30, 'video.preset': 12, 'video.fast_decode': 0, 'video.video_backend': 'pyav', 'video.extra_options': {}, 'is_depth_map': False}}",
+        "observation.state": "{'dtype': 'float32', 'shape': (4,)}",
+        "observation.environment_state": "{'dtype': 'float32', 'shape': (39,), 'names': ['keypoints']}",
+        "action": "{'dtype': 'float32', 'shape': (4,), 'names': {'axes': ['x', 'y', 'z', 'gripper']}}",
+        "next.reward": "{'dtype': 'float32', 'shape': (1,)}",
+        "next.success": "{'dtype': 'bool', 'shape': (1,)}",
+        "timestamp": "{'dtype': 'float32', 'shape': (1,), 'names': None}",
+        "frame_index": "{'dtype': 'int64', 'shape': (1,), 'names': None}",
+        "episode_index": "{'dtype': 'int64', 'shape': (1,), 'names': None}",
+        "index": "{'dtype': 'int64', 'shape': (1,), 'names': None}",
+        "task_index": "{'dtype': 'int64', 'shape': (1,), 'names': None}"
+      },
+      "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/action_pipeline_debug.log"
+    }
+  }
+}
