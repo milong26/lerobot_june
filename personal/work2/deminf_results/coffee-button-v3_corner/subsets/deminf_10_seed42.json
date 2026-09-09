@@ -1,0 +1,64 @@
+{
+  "selected_episode_indices": [
+    29,
+    37,
+    38,
+    60,
+    170,
+    186,
+    217,
+    239,
+    370,
+    373
+  ],
+  "num_episodes": 10,
+  "selection_method": "deminf",
+  "parameters": {
+    "algorithm": "DemInf",
+    "representation": "state_action",
+    "state_key": "observation.environment_state",
+    "action_key": "action",
+    "state_dim": 39,
+    "action_dim": 4,
+    "state_latent_dim": 12,
+    "action_latent_dim": 6,
+    "score_type": "ksg_mutual_information",
+    "episode_aggregation": "mean",
+    "uses_policy_rollout": false,
+    "uses_reward": false,
+    "uses_visual_embedding": false,
+    "official_deminf": true,
+    "target_episodes": 10,
+    "seed": 42,
+    "vae_steps": 50000,
+    "vae_lr": 0.0001,
+    "vae_batch_size": 256,
+    "quality_batch_size": 1024,
+    "quality_repeat": 4,
+    "requested_discard_fraction": 0.5,
+    "effective_discard_fraction": 0.0,
+    "quality_cache": true,
+    "ks": [
+      5,
+      6,
+      7
+    ],
+    "state_source": "observation.environment_state",
+    "vae_beta_state": 0.05,
+    "vae_beta_action": 0.05,
+    "hidden_dims": [
+      512,
+      512
+    ],
+    "relative_action": true,
+    "dataset_path": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/coffee-button-v3_corner",
+    "score_clip_percentiles": [
+      1.0,
+      99.0
+    ],
+    "score_normalization": "global_zscore_after_clipping",
+    "ksg_mode": "deminf_rank",
+    "ksg_backend": "chunked",
+    "representation_type": "state_action"
+  }
+}

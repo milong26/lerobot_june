@@ -1,13 +1,52 @@
 #!/bin/bash
 # Launch random experiment in tmux
-# Usage: bash launch_random.sh <gpu_id> <num_episodes> <dataset_name> [seed]
+# Usage: bash launch_random.sh --gpu-id <id> --num-episodes <num> --dataset-name <name> [--seed <seed>]
 
 set -e
 
-GPU_ID=$1
-NUM_EPISODES=$2
-DATASET_NAME=${3:-disassemble-v3_corner}
-SEED=${4:-42}
+# Default values
+GPU_ID=""
+NUM_EPISODES=""
+DATASET_NAME="disassemble-v3_corner"
+SEED=42
+
+# Parse named arguments
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --gpu-id)
+            GPU_ID="$2"
+            shift 2
+            ;;
+        --num-episodes)
+            NUM_EPISODES="$2"
+            shift 2
+            ;;
+        --dataset-name)
+            DATASET_NAME="$2"
+            shift 2
+            ;;
+        --seed)
+            SEED="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            echo "Usage: bash launch_random.sh --gpu-id <id> --num-episodes <num> --dataset-name <name> [--seed <seed>]"
+            exit 1
+            ;;
+    esac
+done
+
+# Validate required arguments
+if [ -z "$GPU_ID" ]; then
+    echo "Error: --gpu-id is required"
+    exit 1
+fi
+
+if [ -z "$NUM_EPISODES" ]; then
+    echo "Error: --num-episodes is required"
+    exit 1
+fi
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_ep${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
@@ -34,11 +73,37 @@ conda activate lb_server
 # Change to lerobot root directory for module imports
 cd /data/zhonglinye/jun/lerobot
 
-EXP_NAME="random_${NUM_EPISODES}_seed${SEED}"
-GPU_ID=\$1
-SEED_VAL=\$2
-DATASET_NAME=\$3
-NUM_EPISODES=\$4
+# Parse named arguments
+GPU_ID=""
+SEED_VAL=""
+DATASET_NAME=""
+NUM_EPISODES=""
+
+while [[ \$# -gt 0 ]]; do
+    case \$1 in
+        --gpu-id)
+            GPU_ID="\$2"
+            shift 2
+            ;;
+        --seed)
+            SEED_VAL="\$2"
+            shift 2
+            ;;
+        --dataset-name)
+            DATASET_NAME="\$2"
+            shift 2
+            ;;
+        --num-episodes)
+            NUM_EPISODES="\$2"
+            shift 2
+            ;;
+        *)
+            shift
+            ;;
+    esac
+done
+
+EXP_NAME="random_\${NUM_EPISODES}_seed\${SEED_VAL}"
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_ep\${NUM_EPISODES}_seed\${SEED_VAL}_\${DATASET_NAME}"
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
@@ -98,7 +163,7 @@ RUNNER_EOF
 chmod +x "$RUNNER_SCRIPT"
 
 # Launch in tmux
-tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT $GPU_ID $SEED $DATASET_NAME $NUM_EPISODES"
+tmux new-session -d -s $TMUX_SESSION "bash $RUNNER_SCRIPT --gpu-id $GPU_ID --seed $SEED --dataset-name $DATASET_NAME --num-episodes $NUM_EPISODES"
 
 echo "Launched experiment: $EXP_NAME"
 echo "tmux session: $TMUX_SESSION"

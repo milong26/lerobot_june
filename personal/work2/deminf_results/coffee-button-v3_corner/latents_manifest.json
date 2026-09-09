@@ -1,0 +1,42 @@
+{
+  "fingerprint": "37532a98aba38c7e9b25fbc0b3d98d67",
+  "git_commit": "45df540a28308e80979d7c57cfec0109af71ff29",
+  "dataset_path": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/coffee-button-v3_corner",
+  "info_hash": "f19cdb04537af161",
+  "state_source": "observation.environment_state",
+  "state_dim": 39,
+  "action_dim": 4,
+  "state_latent_dim": 12,
+  "action_latent_dim": 6,
+  "normalization_manifest": {
+    "state_dim": 39,
+    "action_dim": 4,
+    "state_gripper_indices": [
+      3,
+      21
+    ],
+    "state_mean_hash": "0fb3a2be91883450",
+    "state_std_hash": "1bc3e086aaa565fc",
+    "action_mean_hash": "5c27249831282e9c",
+    "action_std_hash": "5469b32804143c23",
+    "action_gripper_min": -1.0,
+    "action_gripper_max": -1.0,
+    "action_gripper_bounds_applied": true
+  },
+  "state_ckpt_path": "state_vae.pt",
+  "state_ckpt_sha256": "4f2b2356c30a56f5",
+  "action_ckpt_path": "action_vae.pt",
+  "action_ckpt_sha256": "eeb353340f1daf19",
+  "num_transitions": 17579,
+  "z_state_shape": [
+    17579,
+    12
+  ],
+  "z_action_shape": [
+    17579,
+    6
+  ],
+  "episode_ids_hash": "5123cb582eac804d",
+  "timestep_ids_hash": "4f56bc68657e88c0",
+  "global_row_ids_hash": "c7012228c011b6f8"
+}

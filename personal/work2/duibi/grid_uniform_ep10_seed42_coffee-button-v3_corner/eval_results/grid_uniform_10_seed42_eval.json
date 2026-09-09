@@ -1,0 +1,11 @@
+{
+  "experiment": "grid_uniform_10_seed42",
+  "mode": "grid_uniform",
+  "num_episodes": 10,
+  "seed": 42,
+  "gpu_id": 2,
+  "success_rates": [],
+  "final_success_rate": null,
+  "max_success_rate": null,
+  "avg_success_rate": null
+}

@@ -1,0 +1,14 @@
+{
+  "tinyvla_s": {
+    "error": "No module named 'lerobot.policies.common.preprocessor'",
+    "traceback": "Traceback (most recent call last):\n  File \"/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/batch_check_12k.py\", line 84, in run_single_policy_check\n    policy, preprocessor, postprocessor, policy_config = load_policy_and_processors(\n                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/batch_check_12k.py\", line 53, in load_policy_and_processors\n    from lerobot.policies.common.preprocessor import make_pre_post_processors\nModuleNotFoundError: No module named 'lerobot.policies.common.preprocessor'\n"
+  },
+  "tinyvla_b": {
+    "error": "No module named 'lerobot.policies.common.preprocessor'",
+    "traceback": "Traceback (most recent call last):\n  File \"/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/batch_check_12k.py\", line 84, in run_single_policy_check\n    policy, preprocessor, postprocessor, policy_config = load_policy_and_processors(\n                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/batch_check_12k.py\", line 53, in load_policy_and_processors\n    from lerobot.policies.common.preprocessor import make_pre_post_processors\nModuleNotFoundError: No module named 'lerobot.policies.common.preprocessor'\n"
+  },
+  "minivla": {
+    "error": "No module named 'lerobot.policies.common.preprocessor'",
+    "traceback": "Traceback (most recent call last):\n  File \"/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/batch_check_12k.py\", line 84, in run_single_policy_check\n    policy, preprocessor, postprocessor, policy_config = load_policy_and_processors(\n                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/batch_check_12k.py\", line 53, in load_policy_and_processors\n    from lerobot.policies.common.preprocessor import make_pre_post_processors\nModuleNotFoundError: No module named 'lerobot.policies.common.preprocessor'\n"
+  }
+}

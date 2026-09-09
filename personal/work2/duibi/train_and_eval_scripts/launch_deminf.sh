@@ -1,14 +1,42 @@
 #!/bin/bash
 # Launch DemInf experiment in tmux
-# Usage: bash launch_deminf.sh <gpu_id> <dataset_name> [num_episodes]
-#   Default: num_episodes=112, seed=42
+# Usage: bash launch_deminf.sh --gpu <gpu_id> --dataset <dataset_name> --episodes <num_episodes> [--seed <seed>]
+# Example: bash launch_deminf.sh --gpu 3 --dataset coffee-button-v3_corner --episodes 10
+#   Default: gpu=0, dataset=disassemble-v3_corner, episodes=112, seed=42
 
 set -e
 
-GPU_ID=${1:-0}
-DATASET_NAME=${2:-disassemble-v3_corner}
-NUM_EPISODES=${3:-112}
+# Parse command line arguments
+GPU_ID=0
+DATASET_NAME="disassemble-v3_corner"
+NUM_EPISODES=112
 SEED=42
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --gpu)
+            GPU_ID="$2"
+            shift 2
+            ;;
+        --dataset)
+            DATASET_NAME="$2"
+            shift 2
+            ;;
+        --episodes)
+            NUM_EPISODES="$2"
+            shift 2
+            ;;
+        --seed)
+            SEED="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown argument: $1"
+            echo "Usage: bash launch_deminf.sh --gpu <gpu_id> --dataset <dataset_name> --episodes <num_episodes> [--seed <seed>]"
+            exit 1
+            ;;
+    esac
+done
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/deminf_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"

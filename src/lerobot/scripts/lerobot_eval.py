@@ -308,6 +308,7 @@ def rollout(
     all_successes = []
     all_dones = []
     all_grasp_successes = []
+    all_obj_to_targets = []
 
     # Capture initial scene settings for each environment
     all_initial_states = []
@@ -315,6 +316,7 @@ def rollout(
     try:
         obj_init_pos_list = env.call("obj_init_pos")
         goal_pos_list = env.call("goal_pos")
+        task_list = env.call("task")
         for env_idx in range(env.num_envs):
             obj_pos = obj_init_pos_list[env_idx]
             if hasattr(obj_pos, "tolist"):
@@ -327,8 +329,11 @@ def rollout(
                 "obj_init_pos": obj_pos,
                 "goal_pos": goal,
             })
+        # Store task names for strict success metric
+        eval_task_name = task_list[0] if task_list else ""
     except (AttributeError, NotImplementedError):
         all_initial_states = None
+        eval_task_name = ""
 
     step = 0
     # Keep track of which environments are done.
@@ -570,6 +575,31 @@ def rollout(
             else:
                 all_grasp_successes.append(torch.tensor([False] * env.num_envs))
 
+            # Collect obj_to_target for strict success metric (coffee-button-v3 only)
+            if "obj_to_target" in info:
+                ott_data = info["obj_to_target"]
+                if hasattr(ott_data, "tolist"):
+                    all_obj_to_targets.append(torch.tensor(ott_data.tolist()))
+                else:
+                    all_obj_to_targets.append(torch.tensor([float(ott_data)] * env.num_envs))
+            elif "final_info" in info:
+                final_info = info["final_info"]
+                if isinstance(final_info, dict):
+                    ott = final_info.get("obj_to_target", [None] * env.num_envs)
+                    ott_vals = [float(o) if o is not None else float("inf") for o in (ott.tolist() if hasattr(ott, "tolist") else [ott] * env.num_envs)]
+                    all_obj_to_targets.append(torch.tensor(ott_vals))
+                else:
+                    ott_list = []
+                    for item in final_info:
+                        if isinstance(item, dict) and "obj_to_target" in item:
+                            v = item["obj_to_target"]
+                            ott_list.append(float(v) if v is not None else float("inf"))
+                        else:
+                            ott_list.append(float("inf"))
+                    all_obj_to_targets.append(torch.tensor(ott_list))
+            else:
+                all_obj_to_targets.append(torch.tensor([float("inf")] * env.num_envs))
+
             step += 1
             running_success_rate = (
                 einops.reduce(torch.stack(all_successes, dim=1), "b n -> b", "any").numpy().mean()
@@ -596,6 +626,7 @@ def rollout(
         "success": torch.stack(all_successes, dim=1),
         "done": torch.stack(all_dones, dim=1),
         "grasp_success": torch.stack(all_grasp_successes, dim=1),
+        "obj_to_target": torch.stack(all_obj_to_targets, dim=1),
         "initial_states": all_initial_states,
     }
     if return_observations:
@@ -691,10 +722,20 @@ def eval_policy(
     max_rewards = []
     all_successes = []
     all_grasp_successes = []
+    all_obj_to_targets = []
     all_seeds = []
     all_initial_states = []  # Capture scene settings per episode
     threads = []  # for video saving threads
     n_episodes_rendered = 0  # for saving the correct number of videos
+
+    # Get task name for strict success metric
+    eval_task_name = ""
+    try:
+        task_list = env.call("task")
+        if task_list:
+            eval_task_name = task_list[0]
+    except (AttributeError, NotImplementedError):
+        pass
 
     # Callback for visualization.
     def render_frame(env: gym.vector.VectorEnv):
@@ -786,6 +827,12 @@ def eval_policy(
             all_grasp_successes.extend(batch_grasp_successes.tolist())
         else:
             all_grasp_successes.extend([False] * env.num_envs)
+        # Collect obj_to_target for strict success metric (coffee-button-v3 only)
+        if "obj_to_target" in rollout_data:
+            batch_obj_to_targets = einops.reduce((rollout_data["obj_to_target"] * mask), "b n -> b", "min")
+            all_obj_to_targets.extend(batch_obj_to_targets.tolist())
+        else:
+            all_obj_to_targets.extend([float("inf")] * env.num_envs)
         if seeds:
             all_seeds.extend(seeds)
         else:
@@ -894,6 +941,13 @@ def eval_policy(
     # Close progress bar
     progress_bar.close()
 
+    # Compute strict success for coffee-button-v3 (obj_to_target <= 5mm threshold)
+    STRICT_THRESHOLD = 0.005  # 5mm
+    is_coffee_task = "coffee-button" in eval_task_name.lower() if eval_task_name else False
+    all_coffee_strict_success = []
+    if is_coffee_task and len(all_obj_to_targets) >= n_episodes:
+        all_coffee_strict_success = [float(ott) <= STRICT_THRESHOLD for ott in all_obj_to_targets[:n_episodes]]
+
     # Compile eval info.
     info = {
         "per_episode": [
@@ -903,6 +957,8 @@ def eval_policy(
                 "max_reward": max_reward,
                 "success": success,
                 "grasp_success": grasp_success,
+                "obj_to_target": all_obj_to_targets[i] if i < len(all_obj_to_targets) else None,
+                "success@5mm": all_coffee_strict_success[i] if i < len(all_coffee_strict_success) else None,
                 "seed": seed,
                 "initial_state": all_initial_states[i] if i < len(all_initial_states) else None,
             }
@@ -922,6 +978,8 @@ def eval_policy(
             "avg_max_reward": float(np.nanmean(max_rewards[:n_episodes])),
             "pc_success": float(np.nanmean(all_successes[:n_episodes]) * 100),
             "pc_grasp_success": float(np.nanmean(all_grasp_successes[:n_episodes]) * 100),
+            "success@5mm": float(np.nanmean(all_coffee_strict_success) * 100) if all_coffee_strict_success else None,
+            "coffee_success_5mm_count": sum(all_coffee_strict_success) if all_coffee_strict_success else None,
             "eval_s": time.time() - start,
             "eval_ep_s": (time.time() - start) / n_episodes,
         },
@@ -945,6 +1003,8 @@ def eval_policy(
                 "episode_ix": ep["episode_ix"],
                 "success": ep["success"],
                 "grasp_success": ep.get("grasp_success", False),
+                "obj_to_target": ep.get("obj_to_target"),
+                "success@5mm": ep.get("success@5mm"),
                 "sum_reward": ep["sum_reward"],
                 "max_reward": ep["max_reward"],
                 "seed": ep["seed"],
@@ -960,6 +1020,8 @@ def eval_policy(
                 "fail_count": sum(1 for ep in episode_results if not ep["success"]),
                 "success_rate": sum(1 for ep in episode_results if ep["success"]) / max(1, len(episode_results)),
                 "grasp_success_rate": sum(1 for ep in episode_results if ep.get("grasp_success", False)) / max(1, len(episode_results)),
+                "success@5mm": info["aggregated"].get("success@5mm"),
+                "coffee_success_5mm_count": info["aggregated"].get("coffee_success_5mm_count"),
                 "episodes": episode_results,
             }, f, indent=2)
         logging.info(f"Saved per-episode eval results to {results_file}")
@@ -1111,6 +1173,8 @@ class TaskMetrics(TypedDict):
     grasp_successes: list[bool]
     video_paths: list[str]
     predicted_video_paths: list[str]
+    success_at_5mm: list[bool] | None  # strict success for coffee-button-v3
+    obj_to_targets: list[float] | None  # final obj_to_target distances
 
 
 ACC_KEYS = ("sum_rewards", "max_rewards", "successes", "grasp_successes", "video_paths", "predicted_video_paths")
@@ -1173,6 +1237,15 @@ def eval_one(
     )
 
     per_episode = task_result["per_episode"]
+    aggregated = task_result.get("aggregated", {})
+    
+    # Extract strict success data if available
+    success_at_5mm = None
+    obj_to_targets = None
+    if per_episode and "success@5mm" in per_episode[0]:
+        success_at_5mm = [ep.get("success@5mm") for ep in per_episode]
+        obj_to_targets = [ep.get("obj_to_target") for ep in per_episode]
+    
     return TaskMetrics(
         sum_rewards=[ep["sum_reward"] for ep in per_episode],
         max_rewards=[ep["max_reward"] for ep in per_episode],
@@ -1180,6 +1253,8 @@ def eval_one(
         grasp_successes=[ep.get("grasp_success", False) for ep in per_episode],
         video_paths=task_result.get("video_paths", []),
         predicted_video_paths=task_result.get("predicted_video_paths", []),
+        success_at_5mm=success_at_5mm,
+        obj_to_targets=obj_to_targets,
     )
 
 
@@ -1287,8 +1362,8 @@ def eval_policy_all(
     tasks = [(tg, tid, vec) for tg, group in envs.items() for tid, vec in group.items()]
 
     # accumulators: track metrics at both per-group level and across all groups
-    group_acc: dict[str, dict[str, list]] = defaultdict(lambda: {k: [] for k in ACC_KEYS})
-    overall: dict[str, list] = {k: [] for k in ACC_KEYS}
+    group_acc: dict[str, dict[str, list]] = defaultdict(lambda: {k: [] for k in ACC_KEYS + ("success_at_5mm", "obj_to_targets")})
+    overall: dict[str, list] = {k: [] for k in ACC_KEYS + ("success_at_5mm", "obj_to_targets")}
     per_task_infos: list[dict] = []
 
     # Progress bar for tracking evaluation progress across tasks
@@ -1318,6 +1393,9 @@ def eval_policy_all(
             if paths:
                 group_acc[group][key].extend(paths)
                 overall[key].extend(paths)
+        # Accumulate strict success data
+        _append("success_at_5mm", metrics.get("success_at_5mm"))
+        _append("obj_to_targets", metrics.get("obj_to_targets"))
 
     # Choose runner (sequential vs threaded)
     task_runner = partial(
@@ -1410,22 +1488,30 @@ def eval_policy_all(
     # compute per-group aggregates
     groups_aggregated = {}
     for group, acc in group_acc.items():
+        strict_success_list = acc.get("success_at_5mm", [])
+        # Filter out None values
+        strict_success_list = [s for s in strict_success_list if s is not None]
         groups_aggregated[group] = {
             "avg_sum_reward": _agg_from_list(acc["sum_rewards"]),
             "avg_max_reward": _agg_from_list(acc["max_rewards"]),
             "pc_success": _agg_from_list(acc["successes"]) * 100 if acc["successes"] else float("nan"),
             "pc_grasp_success": _agg_from_list(acc["grasp_successes"]) * 100 if acc["grasp_successes"] else float("nan"),
+            "success@5mm": float(np.nanmean(strict_success_list) * 100) if strict_success_list else None,
+            "coffee_success_5mm_count": sum(strict_success_list) if strict_success_list else None,
             "n_episodes": len(acc["sum_rewards"]),
             "video_paths": list(acc["video_paths"]),
             "predicted_video_paths": list(acc["predicted_video_paths"]),
         }
 
     # overall aggregates
+    overall_strict_success = [s for s in overall.get("success_at_5mm", []) if s is not None]
     overall_agg = {
         "avg_sum_reward": _agg_from_list(overall["sum_rewards"]),
         "avg_max_reward": _agg_from_list(overall["max_rewards"]),
         "pc_success": _agg_from_list(overall["successes"]) * 100 if overall["successes"] else float("nan"),
         "pc_grasp_success": _agg_from_list(overall["grasp_successes"]) * 100 if overall["grasp_successes"] else float("nan"),
+        "success@5mm": float(np.nanmean(overall_strict_success) * 100) if overall_strict_success else None,
+        "coffee_success_5mm_count": sum(overall_strict_success) if overall_strict_success else None,
         "n_episodes": len(overall["sum_rewards"]),
         "eval_s": time.time() - start_t,
         "eval_ep_s": (time.time() - start_t) / max(1, len(overall["sum_rewards"])),
@@ -1452,19 +1538,29 @@ def eval_policy_all(
                         "task_id": task_info["task_id"],
                         "episode_ix": ep["episode_ix"],
                         "success": ep["success"],
+                        "grasp_success": ep.get("grasp_success", False),
+                        "obj_to_target": ep.get("obj_to_target"),
+                        "success@5mm": ep.get("success@5mm"),
                         "sum_reward": ep["sum_reward"],
                         "max_reward": ep["max_reward"],
                         "seed": ep["seed"],
                         "initial_state": ep.get("initial_state"),
                     })
 
+        # Compute strict success stats
+        strict_success_list = [ep.get("success@5mm") for ep in episode_results if ep.get("success@5mm") is not None]
+        
         results_file = results_dir / "eval_episode_results.json"
         with open(results_file, "w") as f:
             json.dump({
                 "num_episodes": len(episode_results),
                 "success_count": sum(1 for ep in episode_results if ep["success"]),
+                "grasp_success_count": sum(1 for ep in episode_results if ep.get("grasp_success", False)),
                 "fail_count": sum(1 for ep in episode_results if not ep["success"]),
                 "success_rate": sum(1 for ep in episode_results if ep["success"]) / max(1, len(episode_results)),
+                "grasp_success_rate": sum(1 for ep in episode_results if ep.get("grasp_success", False)) / max(1, len(episode_results)),
+                "success@5mm": float(np.nanmean(strict_success_list) * 100) if strict_success_list else None,
+                "coffee_success_5mm_count": sum(strict_success_list) if strict_success_list else None,
                 "episodes": episode_results,
             }, f, indent=2)
         logging.info(f"Saved per-episode eval results to {results_file}")

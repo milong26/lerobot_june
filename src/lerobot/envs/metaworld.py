@@ -328,10 +328,17 @@ class MetaworldEnv(gym.Env):
         self.obj_init_pos = self._env.obj_init_pos.copy() if self._env.obj_init_pos is not None else None
         self.goal_pos = self._env.goal.copy()
 
+        # Compute obj_to_target distance (used for strict success metric in coffee-button-v3)
+        if self.obj_init_pos is not None and self.goal_pos is not None:
+            self.obj_to_target = float(np.linalg.norm(self.obj_init_pos - self.goal_pos))
+        else:
+            self.obj_to_target = None
+
         info = {
             "is_success": False,
             "obj_init_pos": self.obj_init_pos,
             "goal_pos": self.goal_pos,
+            "obj_to_target": self.obj_to_target,
         }
         return observation, info
 
@@ -357,6 +364,14 @@ class MetaworldEnv(gym.Env):
             )
         raw_obs, reward, done, truncated, info = self._env.step(action)
 
+        # Compute obj_to_target distance for strict success metric
+        obj_init_pos = self._env.obj_init_pos
+        goal_pos = self._env.goal
+        if obj_init_pos is not None and goal_pos is not None:
+            obj_to_target = float(np.linalg.norm(obj_init_pos - goal_pos))
+        else:
+            obj_to_target = None
+
         # Determine whether the task was successful
         is_success = bool(info.get("success", 0))
         terminated = done or is_success
@@ -366,6 +381,7 @@ class MetaworldEnv(gym.Env):
                 "done": done,
                 "is_success": is_success,
                 "grasp_success": bool(info.get("grasp_success", 0)),
+                "obj_to_target": obj_to_target,
             }
         )
 
@@ -377,6 +393,7 @@ class MetaworldEnv(gym.Env):
                 "done": bool(done),
                 "is_success": bool(is_success),
                 "grasp_success": bool(info.get("grasp_success", 0)),
+                "obj_to_target": obj_to_target,
             }
             self.reset()
 

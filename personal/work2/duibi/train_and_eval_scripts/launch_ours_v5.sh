@@ -211,7 +211,7 @@ lerobot-train \\
     --steps=12000 \\
     --batch_size=64 \\
     --num_workers=16 \\
-    --eval.n_episodes=16 \\
+    --eval.n_episodes=200 \\
     --eval.batch_size=16 \\
     --env_eval_freq=12000 \\
     --seed=\$SEED \\

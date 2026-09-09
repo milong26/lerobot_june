@@ -109,10 +109,7 @@ def print_stats(stats: dict, prefix: str = "", logger: logging.Logger | None = N
 
 def print_separator(title: str, logger: logging.Logger | None = None) -> None:
     log = logger or logging.getLogger("action_pipeline_debug")
-    width = 72
-    log.info(f"\n{'=' * width}")
-    log.info(f"  {title}")
-    log.info(f"{'=' * width}")
+    log.info(f"\n--- {title} ---")
 
 
 # ---------------------------------------------------------------------------
