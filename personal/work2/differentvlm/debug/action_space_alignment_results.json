@@ -1,0 +1,981 @@
+{
+  "tinyvla_s": {
+    "policy_type": "tinyvla_s",
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model",
+    "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+    "episode_index": 0,
+    "dataset_schema": {
+      "observation_keys": [
+        "observation.images.top",
+        "observation.images.wrist",
+        "observation.state",
+        "observation.environment_state",
+        "action",
+        "next.reward",
+        "next.success",
+        "timestamp",
+        "frame_index",
+        "episode_index",
+        "index",
+        "task_index"
+      ],
+      "action_feature": "{'dtype': 'float32', 'shape': (4,), 'names': {'axes': ['x', 'y', 'z', 'gripper']}}",
+      "state_feature": "{'dtype': 'float32', 'shape': (4,)}",
+      "num_episodes": 400,
+      "num_frames": 54067,
+      "fps": 80,
+      "action_shape": [
+        4
+      ],
+      "action_axes": {
+        "axes": [
+          "x",
+          "y",
+          "z",
+          "gripper"
+        ]
+      },
+      "state_shape": [
+        4
+      ],
+      "stats_keys": [
+        "next.success",
+        "action",
+        "timestamp",
+        "index",
+        "next.reward",
+        "task_index",
+        "episode_index",
+        "observation.images.top",
+        "observation.images.wrist",
+        "observation.environment_state",
+        "observation.state",
+        "frame_index"
+      ],
+      "action_stats": {
+        "min": [
+          -0.8964769244194031,
+          -0.0898125171661377,
+          -1.6804183721542358,
+          0.0
+        ],
+        "max": [
+          2.0505282878875732,
+          3.4976677894592285,
+          1.0,
+          0.800000011920929
+        ],
+        "mean": [
+          0.14447343104746693,
+          0.39580566771064557,
+          0.0669124578904274,
+          0.5566134229276223
+        ],
+        "std": [
+          0.4179151627906609,
+          0.8160687158839546,
+          0.6373644142538906,
+          0.36806480791846413
+        ],
+        "count": [
+          54067
+        ],
+        "q01": [
+          -0.11459810526005246,
+          -0.0288531061828143,
+          -0.9902033806272262,
+          -1.000000013351432e-10
+        ],
+        "q10": [
+          -0.06254447541754389,
+          -0.017720148699026512,
+          -0.5362852622081041,
+          0.004142182187006742
+        ],
+        "q50": [
+          0.0015795739768732482,
+          0.0191187644479827,
+          -0.23101007181991606,
+          0.6939018301894411
+        ],
+        "q90": [
+          0.6444113309155959,
+          1.6544122585228116,
+          0.9998614637133522,
+          0.7999761730003595
+        ],
+        "q99": [
+          1.522369549754244,
+          2.7345288263483245,
+          0.9999861463713356,
+          0.7999976280288713
+        ]
+      }
+    },
+    "chunk_alignment": {
+      "dataset_action_chunk_length": 1,
+      "dataset_action_dim": 4,
+      "config_chunk_size": 16,
+      "config_n_action_steps": 16,
+      "policy_action_chunk_length": 16,
+      "executed_action_horizon": 16,
+      "mismatch": false
+    },
+    "single_frame_pipeline": {
+      "raw_dataset_action": {
+        "name": "raw_dataset_action",
+        "shape": [
+          4
+        ],
+        "dtype": "float32",
+        "min": -0.9321286082267761,
+        "max": 0.12709705531597137,
+        "mean": -0.19741390645503998,
+        "std": 0.4270142614841461
+      },
+      "preprocessed_action": {
+        "name": "preprocessed_action_normalized",
+        "shape": [
+          1,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.5674567222595215,
+        "max": -0.3089083731174469,
+        "mean": -0.929476797580719,
+        "std": 0.6107408404350281
+      },
+      "normalization_check": {
+        "raw_to_normalized_mae": 0.7320629358291626,
+        "raw_range": [
+          -0.9321286082267761,
+          0.12709705531597137
+        ],
+        "normalized_range": [
+          -1.5674567222595215,
+          -0.3089083731174469
+        ],
+        "normalization_ok": true
+      },
+      "policy_raw_output": {
+        "name": "policy_raw_output_continuous_action",
+        "shape": [
+          1,
+          16,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.0,
+        "max": 0.490234375,
+        "mean": -0.4792618751525879,
+        "std": 0.44426825642585754,
+        "chunk_length": 16
+      },
+      "postprocessed_action": {
+        "name": "postprocessed_final_robot_action",
+        "shape": [
+          1,
+          16,
+          4
+        ],
+        "dtype": "float32",
+        "min": -0.5703125,
+        "max": 0.55859375,
+        "mean": 0.0494537353515625,
+        "std": 0.2961280047893524
+      },
+      "prediction_vs_real": {
+        "real_action": [
+          0.015375935472548008,
+          0.12709705531597137,
+          -0.9321286082267761,
+          0.0
+        ],
+        "predicted_step0": [
+          0.349609375,
+          0.55859375,
+          -0.4453125,
+          0.1953125
+        ],
+        "abs_error_per_dim": [
+          0.33423343300819397,
+          0.43149667978286743,
+          0.4868161082267761,
+          0.1953125
+        ],
+        "max_absolute_error": 0.4868161082267761,
+        "mean_absolute_error": 0.36196470260620117,
+        "distribution_comparison": {
+          "mean_absolute_error": 0.36196470260620117,
+          "max_absolute_error": 0.4868161082267761,
+          "correlation_coefficient": 0.9702338581123737,
+          "distribution_difference": 0.4140136241912842
+        }
+      },
+      "config_info": {
+        "action_head_type": "droid_diffusion",
+        "chunk_size": 16,
+        "n_action_steps": 16,
+        "action_dim": 4,
+        "normalization_mapping": {
+          "VISUAL": "NormalizationMode.IDENTITY",
+          "STATE": "NormalizationMode.MEAN_STD",
+          "ACTION": "NormalizationMode.MEAN_STD"
+        }
+      }
+    },
+    "multi_timestep_distribution": {
+      "raw_action_distribution": {
+        "mean_per_dim": [
+          1.1635668277740479,
+          2.961778163909912,
+          -0.5444871783256531,
+          0.0
+        ],
+        "std_per_dim": [
+          0.14659586548805237,
+          0.1855577528476715,
+          0.08697107434272766,
+          0.0
+        ],
+        "min_per_dim": [
+          0.8821786642074585,
+          2.61163592338562,
+          -0.6345024704933167,
+          0.0
+        ],
+        "max_per_dim": [
+          1.316188097000122,
+          3.1590182781219482,
+          -0.37577757239341736,
+          0.0
+        ],
+        "overall_mean": 0.8952144384384155,
+        "overall_std": 1.349104881286621
+      },
+      "raw_prediction_distribution": {
+        "mean_per_dim": [
+          0.6890624761581421,
+          0.880664050579071,
+          -0.4025634825229645,
+          -0.9429687261581421
+        ],
+        "std_per_dim": [
+          0.21421213448047638,
+          0.17290717363357544,
+          0.25546830892562866,
+          0.06332945823669434
+        ],
+        "min_per_dim": [
+          0.3515625,
+          0.462890625,
+          -0.90234375,
+          -0.99609375
+        ],
+        "max_per_dim": [
+          0.9921875,
+          0.9921875,
+          -0.016357421875,
+          -0.81640625
+        ],
+        "overall_mean": 0.05604858323931694,
+        "overall_std": 0.7800827622413635
+      },
+      "postprocessed_prediction_distribution": {
+        "mean_per_dim": [
+          0.4324430823326111,
+          1.1144880056381226,
+          -0.18966713547706604,
+          0.20953984558582306
+        ],
+        "std_per_dim": [
+          0.08952249586582184,
+          0.14110413193702698,
+          0.16282640397548676,
+          0.02330934815108776
+        ],
+        "min_per_dim": [
+          0.29139673709869385,
+          0.7735562324523926,
+          -0.5082092881202698,
+          0.18998637795448303
+        ],
+        "max_per_dim": [
+          0.5591236352920532,
+          1.2054988145828247,
+          0.0564868189394474,
+          0.25612303614616394
+        ],
+        "overall_mean": 0.3917009234428406,
+        "overall_std": 0.48739948868751526
+      },
+      "distribution_alignment_check": {
+        "mean_difference": 0.503513514995575,
+        "std_difference": 0.8617053925991058,
+        "raw_mean": 0.8952144384384155,
+        "post_mean": 0.3917009234428406,
+        "raw_std": 1.349104881286621,
+        "post_std": 0.48739948868751526,
+        "distribution_mismatch": true
+      }
+    },
+    "diagnosis": "PIPELINE_ERROR: Action distribution mismatch detected. Further training unlikely to help. Check normalization, VQ decoder, or postprocessing."
+  },
+  "tinyvla_b": {
+    "policy_type": "tinyvla_b",
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_b_disassemble-v3_corner/checkpoints/012000/pretrained_model",
+    "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+    "episode_index": 0,
+    "dataset_schema": {
+      "observation_keys": [
+        "observation.images.top",
+        "observation.images.wrist",
+        "observation.state",
+        "observation.environment_state",
+        "action",
+        "next.reward",
+        "next.success",
+        "timestamp",
+        "frame_index",
+        "episode_index",
+        "index",
+        "task_index"
+      ],
+      "action_feature": "{'dtype': 'float32', 'shape': (4,), 'names': {'axes': ['x', 'y', 'z', 'gripper']}}",
+      "state_feature": "{'dtype': 'float32', 'shape': (4,)}",
+      "num_episodes": 400,
+      "num_frames": 54067,
+      "fps": 80,
+      "action_shape": [
+        4
+      ],
+      "action_axes": {
+        "axes": [
+          "x",
+          "y",
+          "z",
+          "gripper"
+        ]
+      },
+      "state_shape": [
+        4
+      ],
+      "stats_keys": [
+        "next.success",
+        "action",
+        "timestamp",
+        "index",
+        "next.reward",
+        "task_index",
+        "episode_index",
+        "observation.images.top",
+        "observation.images.wrist",
+        "observation.environment_state",
+        "observation.state",
+        "frame_index"
+      ],
+      "action_stats": {
+        "min": [
+          -0.8964769244194031,
+          -0.0898125171661377,
+          -1.6804183721542358,
+          0.0
+        ],
+        "max": [
+          2.0505282878875732,
+          3.4976677894592285,
+          1.0,
+          0.800000011920929
+        ],
+        "mean": [
+          0.14447343104746693,
+          0.39580566771064557,
+          0.0669124578904274,
+          0.5566134229276223
+        ],
+        "std": [
+          0.4179151627906609,
+          0.8160687158839546,
+          0.6373644142538906,
+          0.36806480791846413
+        ],
+        "count": [
+          54067
+        ],
+        "q01": [
+          -0.11459810526005246,
+          -0.0288531061828143,
+          -0.9902033806272262,
+          -1.000000013351432e-10
+        ],
+        "q10": [
+          -0.06254447541754389,
+          -0.017720148699026512,
+          -0.5362852622081041,
+          0.004142182187006742
+        ],
+        "q50": [
+          0.0015795739768732482,
+          0.0191187644479827,
+          -0.23101007181991606,
+          0.6939018301894411
+        ],
+        "q90": [
+          0.6444113309155959,
+          1.6544122585228116,
+          0.9998614637133522,
+          0.7999761730003595
+        ],
+        "q99": [
+          1.522369549754244,
+          2.7345288263483245,
+          0.9999861463713356,
+          0.7999976280288713
+        ]
+      }
+    },
+    "chunk_alignment": {
+      "dataset_action_chunk_length": 1,
+      "dataset_action_dim": 4,
+      "config_chunk_size": 16,
+      "config_n_action_steps": 16,
+      "policy_action_chunk_length": 16,
+      "executed_action_horizon": 16,
+      "mismatch": false
+    },
+    "single_frame_pipeline": {
+      "raw_dataset_action": {
+        "name": "raw_dataset_action",
+        "shape": [
+          4
+        ],
+        "dtype": "float32",
+        "min": -0.9321286082267761,
+        "max": 0.12709705531597137,
+        "mean": -0.19741390645503998,
+        "std": 0.4270142614841461
+      },
+      "preprocessed_action": {
+        "name": "preprocessed_action_normalized",
+        "shape": [
+          1,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.5674567222595215,
+        "max": -0.3089083731174469,
+        "mean": -0.929476797580719,
+        "std": 0.6107408404350281
+      },
+      "normalization_check": {
+        "raw_to_normalized_mae": 0.7320629358291626,
+        "raw_range": [
+          -0.9321286082267761,
+          0.12709705531597137
+        ],
+        "normalized_range": [
+          -1.5674567222595215,
+          -0.3089083731174469
+        ],
+        "normalization_ok": true
+      },
+      "policy_raw_output": {
+        "name": "policy_raw_output_continuous_action",
+        "shape": [
+          1,
+          16,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.0,
+        "max": 0.9609375,
+        "mean": -0.2032928466796875,
+        "std": 0.5481749176979065,
+        "chunk_length": 16
+      },
+      "postprocessed_action": {
+        "name": "postprocessed_final_robot_action",
+        "shape": [
+          1,
+          16,
+          4
+        ],
+        "dtype": "float32",
+        "min": -0.06640625,
+        "max": 1.1796875,
+        "mean": 0.26280975341796875,
+        "std": 0.31113213300704956
+      },
+      "prediction_vs_real": {
+        "real_action": [
+          0.015375935472548008,
+          0.12709705531597137,
+          -0.9321286082267761,
+          0.0
+        ],
+        "predicted_step0": [
+          0.125,
+          1.1796875,
+          0.04150390625,
+          0.1875
+        ],
+        "abs_error_per_dim": [
+          0.10962406545877457,
+          1.0525904893875122,
+          0.9736325144767761,
+          0.1875
+        ],
+        "max_absolute_error": 1.0525904893875122,
+        "mean_absolute_error": 0.5808367729187012,
+        "distribution_comparison": {
+          "mean_absolute_error": 0.5808367729187012,
+          "max_absolute_error": 1.0525904893875122,
+          "correlation_coefficient": 0.5263739259620345,
+          "distribution_difference": 0.6164546608924866
+        }
+      },
+      "config_info": {
+        "action_head_type": "droid_diffusion",
+        "chunk_size": 16,
+        "n_action_steps": 16,
+        "action_dim": 4,
+        "normalization_mapping": {
+          "VISUAL": "NormalizationMode.IDENTITY",
+          "STATE": "NormalizationMode.MEAN_STD",
+          "ACTION": "NormalizationMode.MEAN_STD"
+        }
+      }
+    },
+    "multi_timestep_distribution": {
+      "raw_action_distribution": {
+        "mean_per_dim": [
+          1.1635668277740479,
+          2.961778163909912,
+          -0.5444871783256531,
+          0.0
+        ],
+        "std_per_dim": [
+          0.14659586548805237,
+          0.1855577528476715,
+          0.08697107434272766,
+          0.0
+        ],
+        "min_per_dim": [
+          0.8821786642074585,
+          2.61163592338562,
+          -0.6345024704933167,
+          0.0
+        ],
+        "max_per_dim": [
+          1.316188097000122,
+          3.1590182781219482,
+          -0.37577757239341736,
+          0.0
+        ],
+        "overall_mean": 0.8952144384384155,
+        "overall_std": 1.349104881286621
+      },
+      "raw_prediction_distribution": {
+        "mean_per_dim": [
+          0.30610352754592896,
+          0.29619139432907104,
+          -0.5541015863418579,
+          -0.8373047113418579
+        ],
+        "std_per_dim": [
+          0.4983513653278351,
+          0.39245033264160156,
+          0.37897318601608276,
+          0.35291194915771484
+        ],
+        "min_per_dim": [
+          -0.427734375,
+          -0.345703125,
+          -1.0,
+          -0.9765625
+        ],
+        "max_per_dim": [
+          0.9921875,
+          0.90234375,
+          0.06005859375,
+          0.220703125
+        ],
+        "overall_mean": -0.19727782905101776,
+        "overall_std": 0.6527635455131531
+      },
+      "postprocessed_prediction_distribution": {
+        "mean_per_dim": [
+          0.27239876985549927,
+          0.6375182271003723,
+          -0.28625214099884033,
+          0.2484310418367386
+        ],
+        "std_per_dim": [
+          0.20826858282089233,
+          0.320266455411911,
+          0.2415439933538437,
+          0.12989448010921478
+        ],
+        "min_per_dim": [
+          -0.03428325057029724,
+          0.1136881411075592,
+          -0.5704519152641296,
+          0.19717514514923096
+        ],
+        "max_per_dim": [
+          0.5591236352920532,
+          1.1321802139282227,
+          0.1051916629076004,
+          0.6378464698791504
+        ],
+        "overall_mean": 0.21802397072315216,
+        "overall_std": 0.40475717186927795
+      },
+      "distribution_alignment_check": {
+        "mean_difference": 0.6771904677152634,
+        "std_difference": 0.9443477094173431,
+        "raw_mean": 0.8952144384384155,
+        "post_mean": 0.21802397072315216,
+        "raw_std": 1.349104881286621,
+        "post_std": 0.40475717186927795,
+        "distribution_mismatch": true
+      }
+    },
+    "diagnosis": "PIPELINE_ERROR: Action distribution mismatch detected. Further training unlikely to help. Check normalization, VQ decoder, or postprocessing."
+  },
+  "minivla": {
+    "policy_type": "minivla",
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_112_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/012000/pretrained_model",
+    "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+    "episode_index": 0,
+    "dataset_schema": {
+      "observation_keys": [
+        "observation.images.top",
+        "observation.images.wrist",
+        "observation.state",
+        "observation.environment_state",
+        "action",
+        "next.reward",
+        "next.success",
+        "timestamp",
+        "frame_index",
+        "episode_index",
+        "index",
+        "task_index"
+      ],
+      "action_feature": "{'dtype': 'float32', 'shape': (4,), 'names': {'axes': ['x', 'y', 'z', 'gripper']}}",
+      "state_feature": "{'dtype': 'float32', 'shape': (4,)}",
+      "num_episodes": 400,
+      "num_frames": 54067,
+      "fps": 80,
+      "action_shape": [
+        4
+      ],
+      "action_axes": {
+        "axes": [
+          "x",
+          "y",
+          "z",
+          "gripper"
+        ]
+      },
+      "state_shape": [
+        4
+      ],
+      "stats_keys": [
+        "next.success",
+        "action",
+        "timestamp",
+        "index",
+        "next.reward",
+        "task_index",
+        "episode_index",
+        "observation.images.top",
+        "observation.images.wrist",
+        "observation.environment_state",
+        "observation.state",
+        "frame_index"
+      ],
+      "action_stats": {
+        "min": [
+          -0.8964769244194031,
+          -0.0898125171661377,
+          -1.6804183721542358,
+          0.0
+        ],
+        "max": [
+          2.0505282878875732,
+          3.4976677894592285,
+          1.0,
+          0.800000011920929
+        ],
+        "mean": [
+          0.14447343104746693,
+          0.39580566771064557,
+          0.0669124578904274,
+          0.5566134229276223
+        ],
+        "std": [
+          0.4179151627906609,
+          0.8160687158839546,
+          0.6373644142538906,
+          0.36806480791846413
+        ],
+        "count": [
+          54067
+        ],
+        "q01": [
+          -0.11459810526005246,
+          -0.0288531061828143,
+          -0.9902033806272262,
+          -1.000000013351432e-10
+        ],
+        "q10": [
+          -0.06254447541754389,
+          -0.017720148699026512,
+          -0.5362852622081041,
+          0.004142182187006742
+        ],
+        "q50": [
+          0.0015795739768732482,
+          0.0191187644479827,
+          -0.23101007181991606,
+          0.6939018301894411
+        ],
+        "q90": [
+          0.6444113309155959,
+          1.6544122585228116,
+          0.9998614637133522,
+          0.7999761730003595
+        ],
+        "q99": [
+          1.522369549754244,
+          2.7345288263483245,
+          0.9999861463713356,
+          0.7999976280288713
+        ]
+      }
+    },
+    "chunk_alignment": {
+      "dataset_action_chunk_length": 1,
+      "dataset_action_dim": 4,
+      "config_chunk_size": 8,
+      "config_n_action_steps": 1,
+      "policy_action_chunk_length": 8,
+      "executed_action_horizon": 1,
+      "mismatch": false
+    },
+    "single_frame_pipeline": {
+      "raw_dataset_action": {
+        "name": "raw_dataset_action",
+        "shape": [
+          4
+        ],
+        "dtype": "float32",
+        "min": -0.9321286082267761,
+        "max": 0.12709705531597137,
+        "mean": -0.19741390645503998,
+        "std": 0.4270142614841461
+      },
+      "preprocessed_action": {
+        "name": "preprocessed_action_normalized",
+        "shape": [
+          1,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.0,
+        "max": -0.83984375,
+        "mean": -0.9169921875,
+        "std": 0.05990556254982948
+      },
+      "vq_mode": true,
+      "vq_config": {
+        "input_dim_h": 8,
+        "input_dim_w": 7,
+        "vqvae_groups": 7,
+        "n_latent_dims": 512,
+        "vqvae_n_embed": 128
+      },
+      "vq_independent_test": "skipped (shape mismatch between single-frame action and VQ chunk input)",
+      "policy_raw_output": {
+        "name": "policy_raw_output",
+        "shape": [
+          1,
+          8,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.2265625,
+        "max": -0.1708984375,
+        "mean": -0.602752685546875,
+        "std": 0.30548223853111267
+      },
+      "vq_decoded_action_internal": {
+        "name": "vq_decoded_action_before_postprocess",
+        "shape": [
+          1,
+          8,
+          7
+        ],
+        "dtype": "float32",
+        "min": -1.2265625,
+        "max": 0.384765625,
+        "mean": -0.3559405505657196,
+        "std": 0.42444318532943726
+      },
+      "vq_decoded_action_step0": [
+        -0.353515625,
+        -0.5703125,
+        -1.2265625,
+        -0.208984375,
+        -0.63671875,
+        0.384765625,
+        0.00726318359375
+      ],
+      "postprocessed_action": {
+        "name": "postprocessed_final_robot_action",
+        "shape": [
+          1,
+          8,
+          4
+        ],
+        "dtype": "float32",
+        "min": -1.2156544923782349,
+        "max": 0.5648422241210938,
+        "mean": -0.00372980535030365,
+        "std": 0.5586302876472473
+      },
+      "prediction_vs_real": {
+        "real_action": [
+          0.015375935472548008,
+          0.12709705531597137,
+          -0.9321286082267761,
+          0.0
+        ],
+        "predicted_step0": [
+          0.4145389199256897,
+          0.5648422241210938,
+          -1.2156544923782349,
+          0.316405326128006
+        ],
+        "abs_error_per_dim": [
+          0.39916297793388367,
+          0.4377451539039612,
+          0.28352588415145874,
+          0.316405326128006
+        ],
+        "max_absolute_error": 0.4377451539039612,
+        "mean_absolute_error": 0.3592098355293274,
+        "distribution_comparison": {
+          "mean_absolute_error": 0.3592098355293274,
+          "max_absolute_error": 0.4377451539039612,
+          "correlation_coefficient": 0.9993678189741149,
+          "distribution_difference": 0.5093227624893188
+        }
+      },
+      "config_info": {
+        "is_vq_mode": true,
+        "chunk_size": 8,
+        "n_action_steps": 1,
+        "action_dim": null
+      }
+    },
+    "multi_timestep_distribution": {
+      "raw_action_distribution": {
+        "mean_per_dim": [
+          1.1635668277740479,
+          2.961778163909912,
+          -0.5444871783256531,
+          0.0
+        ],
+        "std_per_dim": [
+          0.14659586548805237,
+          0.1855577528476715,
+          0.08697107434272766,
+          0.0
+        ],
+        "min_per_dim": [
+          0.8821786642074585,
+          2.61163592338562,
+          -0.6345024704933167,
+          0.0
+        ],
+        "max_per_dim": [
+          1.316188097000122,
+          3.1590182781219482,
+          -0.37577757239341736,
+          0.0
+        ],
+        "overall_mean": 0.8952144384384155,
+        "overall_std": 1.349104881286621
+      },
+      "raw_prediction_distribution": {
+        "mean_per_dim": [
+          0.15957030653953552,
+          0.8050781488418579,
+          -0.5977538824081421,
+          -0.809374988079071
+        ],
+        "std_per_dim": [
+          0.0837865024805069,
+          0.09403359144926071,
+          0.21777670085430145,
+          0.07905308157205582
+        ],
+        "min_per_dim": [
+          0.0712890625,
+          0.671875,
+          -0.8203125,
+          -0.87890625
+        ],
+        "max_per_dim": [
+          0.271484375,
+          0.921875,
+          -0.2353515625,
+          -0.60546875
+        ],
+        "overall_mean": -0.11062011867761612,
+        "overall_std": 0.6531849503517151
+      },
+      "postprocessed_prediction_distribution": {
+        "mean_per_dim": [
+          0.8344914317131042,
+          2.465207099914551,
+          -0.5899304747581482,
+          0.07624976336956024
+        ],
+        "std_per_dim": [
+          0.06857790052890778,
+          0.12992537021636963,
+          0.2167084515094757,
+          0.03162113577127457
+        ],
+        "min_per_dim": [
+          0.7622346878051758,
+          2.2811615467071533,
+          -0.8113973140716553,
+          0.04843735694885254
+        ],
+        "max_per_dim": [
+          0.9260912537574768,
+          2.62658429145813,
+          -0.22930574417114258,
+          0.15781202912330627
+        ],
+        "overall_mean": 0.6965044736862183,
+        "overall_std": 1.1463557481765747
+      },
+      "distribution_alignment_check": {
+        "mean_difference": 0.19870996475219727,
+        "std_difference": 0.2027491331100464,
+        "raw_mean": 0.8952144384384155,
+        "post_mean": 0.6965044736862183,
+        "raw_std": 1.349104881286621,
+        "post_std": 1.1463557481765747,
+        "distribution_mismatch": false
+      }
+    },
+    "diagnosis": "TRAINING_INSUFFICIENT: Action distribution is reasonable but control\u80fd\u529b\u4e0d\u8db3. More training steps may help."
+  }
+}

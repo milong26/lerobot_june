@@ -5,14 +5,9 @@ import argparse
 import json
 import logging
 import os
-import sys
 import traceback
 from pathlib import Path
 
-# Add lerobot to path
-LEROBOT_ROOT = "/data/zhonglinye/jun/lerobot"
-if LEROBOT_ROOT not in sys.path:
-    sys.path.insert(0, LEROBOT_ROOT + "/src")
 
 import numpy as np
 import torch

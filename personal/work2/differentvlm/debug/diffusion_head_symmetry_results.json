@@ -1,0 +1,189 @@
+{
+  "policy_type": "tinyvla_s",
+  "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model",
+  "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+  "config_summary": {
+    "action_head_type": "droid_diffusion",
+    "chunk_size": 16,
+    "n_action_steps": 16,
+    "action_dim": 4,
+    "state_dim": 4,
+    "num_inference_timesteps": 10
+  },
+  "scheduler_consistency": {
+    "scheduler_type": "DDIMScheduler",
+    "scheduler_config": {
+      "num_train_timesteps": 100,
+      "beta_schedule": "squaredcos_cap_v2",
+      "prediction_type": "epsilon",
+      "clip_sample": true,
+      "clip_sample_value": null,
+      "set_alpha_to_one": true,
+      "steps_offset": 0,
+      "trained_betas": null
+    },
+    "num_inference_timesteps": 10,
+    "prediction_type_consistent": true,
+    "clip_sample_issue": true,
+    "betas": {
+      "min": 0.00063128158217296,
+      "max": 0.9990000128746033,
+      "mean": 0.07878896594047546
+    },
+    "alphas_cumprod": {
+      "t0": 0.9993687272071838,
+      "t50": 0.47826457023620605,
+      "t99": 2.4285407107527135e-07
+    },
+    "issues": [
+      "clip_sample=True but action range [-1.6804183721542358, 3.4976677894592285] exceeds [-1, 1]"
+    ]
+  },
+  "training_action_flow": {
+    "raw_action": {
+      "name": "raw_action",
+      "shape": [
+        1,
+        4
+      ],
+      "dtype": "torch.float32",
+      "device": "cpu",
+      "min": -0.6071893572807312,
+      "max": 3.1590182781219482,
+      "mean": 0.9670042395591736,
+      "std": 1.6673369407653809
+    },
+    "normalized_action": {
+      "name": "normalized_action",
+      "shape": [
+        1,
+        4
+      ],
+      "dtype": "torch.float32",
+      "device": "cuda:0",
+      "min": -1.512270212173462,
+      "max": 3.38600492477417,
+      "mean": 0.9049522876739502,
+      "std": 2.5466089248657227
+    },
+    "normalization_check": {
+      "expected": [
+        [
+          2.8037140369415283,
+          3.38600492477417,
+          -1.0576395988464355,
+          -1.512270212173462
+        ]
+      ],
+      "actual": [
+        [
+          2.8037140369415283,
+          3.38600492477417,
+          -1.0576395988464355,
+          -1.512270212173462
+        ]
+      ],
+      "max_diff": 0.0,
+      "is_correct": true
+    },
+    "chunked_action": {
+      "name": "chunked_action",
+      "shape": [
+        2,
+        16,
+        4
+      ],
+      "dtype": "torch.float32",
+      "device": "cuda:0",
+      "min": -1.512270212173462,
+      "max": 3.38600492477417,
+      "mean": 0.5783670544624329,
+      "std": 1.8407316207885742
+    },
+    "forward_loss": 0.05224609375,
+    "forward_info_keys": [],
+    "forward_skipped": false,
+    "loss_analysis": {
+      "value": 0.05224609375,
+      "expected_random": 1.0,
+      "status": "low"
+    },
+    "multi_frame_distribution": {
+      "n_frames": 100,
+      "mean_per_dim": [
+        0.6355196237564087,
+        0.9084663391113281,
+        -0.006612073164433241,
+        -0.6863294243812561
+      ],
+      "std_per_dim": [
+        1.4935204982757568,
+        1.5285441875457764,
+        1.0412040948867798,
+        1.0550016164779663
+      ],
+      "overall_mean": 0.21276141703128815,
+      "overall_std": 1.4390453100204468
+    },
+    "issues": []
+  },
+  "inference_action_flow": {
+    "policy_raw_output": {
+      "name": "policy_raw_output",
+      "shape": [
+        1,
+        16,
+        4
+      ],
+      "dtype": "torch.float32",
+      "device": "cuda:0",
+      "min": -0.99609375,
+      "max": 0.55078125,
+      "mean": -0.31639909744262695,
+      "std": 0.4501868188381195
+    },
+    "output_distribution_check": {
+      "mean": -0.2196044921875,
+      "std": 0.6620337963104248,
+      "is_near_zero": false
+    },
+    "postprocessed_action": {
+      "name": "postprocessed_action",
+      "shape": [
+        1,
+        16,
+        4
+      ],
+      "dtype": "torch.float32",
+      "device": "cpu",
+      "min": -0.36328125,
+      "max": 0.84375,
+      "mean": 0.16858291625976562,
+      "std": 0.2589632570743561
+    },
+    "unnormalization_check": {
+      "expected": [
+        0.18548952043056488,
+        0.8452810049057007,
+        -0.3438888192176819,
+        0.231681227684021
+      ],
+      "actual": [
+        0.185546875,
+        0.84375,
+        -0.34375,
+        0.23046875
+      ],
+      "max_diff": 0.0015310049057006836,
+      "is_correct": false
+    },
+    "issues": [
+      "Unnormalization mismatch (max diff: 0.00153100)"
+    ]
+  },
+  "all_issues": [
+    "clip_sample=True but action range [-1.6804183721542358, 3.4976677894592285] exceeds [-1, 1]",
+    "Unnormalization mismatch (max diff: 0.00153100)"
+  ],
+  "total_issues": 2
+}

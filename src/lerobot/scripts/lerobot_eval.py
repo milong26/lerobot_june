@@ -52,6 +52,7 @@ You can learn about the CLI options for this script in the `EvalPipelineConfig` 
 import concurrent.futures as cf
 import json
 import logging
+import os
 import threading
 import time
 from collections import defaultdict
@@ -472,7 +473,7 @@ def rollout(
                 raw_min = action_numpy.min(axis=0)
                 raw_max = action_numpy.max(axis=0)
                 raw_mean = action_numpy.mean(axis=0)
-                logger.info(f"[DEBUG-TinyVLA] Raw action at step {step}: min={raw_min}, max={raw_max}, mean={raw_mean}")
+                # logger.info(f"[DEBUG-TinyVLA] Raw action at step {step}: min={raw_min}, max={raw_max}, mean={raw_mean}")
 
             # Scale TinyVLA actions from dataset range to [-1, 1] environment range
             if tinyvla_action_stats is not None:
@@ -482,7 +483,7 @@ def rollout(
                     scaled_min = action_numpy.min(axis=0)
                     scaled_max = action_numpy.max(axis=0)
                     scaled_mean = action_numpy.mean(axis=0)
-                    logger.info(f"[DEBUG-TinyVLA] Scaled action at step {step}: min={scaled_min}, max={scaled_max}, mean={scaled_mean}")
+                    # logger.info(f"[DEBUG-TinyVLA] Scaled action at step {step}: min={scaled_min}, max={scaled_max}, mean={scaled_mean}")
 
             # Apply the next action.
             observation, reward, terminated, truncated, info = env.step(action_numpy)
@@ -1079,6 +1080,17 @@ def _compile_episode_data(
 @parser.wrap()
 def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
+
+    # Set CUDA_VISIBLE_DEVICES based on policy device so that
+    # MetaWorld environment subprocesses inherit the same GPU
+    if cfg.policy.device.startswith("cuda:"):
+        gpu_id = cfg.policy.device.split(":")[1]
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        logging.info(f"Set CUDA_VISIBLE_DEVICES={gpu_id} for policy and environment subprocesses")
+    elif cfg.policy.device == "cuda":
+        # Default to GPU 0 if no specific index is provided
+        os.environ["CUDA_VISIBLE_DEVICES"] = "0"
+        logging.info("Set CUDA_VISIBLE_DEVICES=0 for policy and environment subprocesses")
 
     # Check device is available
     device = get_safe_torch_device(cfg.policy.device, log=True)

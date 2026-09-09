@@ -1,0 +1,387 @@
+{
+  "policy_type": "tinyvla_s",
+  "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model",
+  "dataset_root": "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner",
+  "episode_index": 0,
+  "config_summary": {
+    "action_head_type": "droid_diffusion",
+    "chunk_size": 16,
+    "n_action_steps": 16,
+    "action_dim": 4,
+    "state_dim": 4,
+    "normalization_mapping": {
+      "VISUAL": "NormalizationMode.IDENTITY",
+      "STATE": "NormalizationMode.MEAN_STD",
+      "ACTION": "NormalizationMode.MEAN_STD"
+    },
+    "num_inference_timesteps": 10,
+    "concat": "token_cat"
+  },
+  "image_processor_check": {
+    "image_size": {
+      "vision_config": 336,
+      "policy_image_size": 336,
+      "config_pretrain_image_size": 320
+    },
+    "normalization": {
+      "mean": [
+        0.48145467042922974,
+        0.45782750844955444,
+        0.40821072459220886
+      ],
+      "std": [
+        0.2686295509338379,
+        0.2613025903701782,
+        0.27577710151672363
+      ]
+    },
+    "is_clip_normalization": true,
+    "resize": {
+      "method": "bilinear",
+      "align_corners": false,
+      "function": "F.interpolate"
+    },
+    "camera_order": [
+      "observation.images.top",
+      "observation.images.wrist"
+    ],
+    "concat_style": "token_cat",
+    "sample_observation.images.top": {
+      "original_shape": [
+        1,
+        3,
+        480,
+        480
+      ],
+      "original_range": [
+        0.0,
+        1.0
+      ],
+      "processed_shape": [
+        1,
+        3,
+        336,
+        336
+      ],
+      "processed_range": [
+        -1.7922625541687012,
+        2.1458969116210938
+      ],
+      "processed_mean": -0.2146952897310257,
+      "processed_std": 0.5364429354667664
+    },
+    "sample_observation.images.wrist": {
+      "original_shape": [
+        1,
+        3,
+        480,
+        480
+      ],
+      "original_range": [
+        0.0,
+        1.0
+      ],
+      "processed_shape": [
+        1,
+        3,
+        336,
+        336
+      ],
+      "processed_range": [
+        -1.7922625541687012,
+        1.9303361177444458
+      ],
+      "processed_mean": -0.14336584508419037,
+      "processed_std": 0.5294419527053833
+    },
+    "preprocessor_image_handling": "images_pass_through_preprocessor_unchanged",
+    "train_eval_image_consistency": true,
+    "issues": []
+  },
+  "instruction_check": {
+    "tokenizer": {
+      "type": "GPTNeoXTokenizer",
+      "max_length": 2048,
+      "padding_side": "right",
+      "pad_token_id": 1
+    },
+    "prompt_template": "<image>\\n{instruction}",
+    "train_eval_prompt_consistency": true,
+    "tokenization": {
+      "task": "Pick a nut out of a peg",
+      "full_prompt": "<image>\nPick a nut out of a peg",
+      "input_ids_shape": [
+        9
+      ],
+      "input_ids": [
+        -200,
+        187,
+        36942,
+        247,
+        5825,
+        562,
+        273,
+        247,
+        47997
+      ],
+      "labels": [
+        -100,
+        -100,
+        -100,
+        -100,
+        -100,
+        -100,
+        -100,
+        -100,
+        -100
+      ],
+      "image_token_index": -200,
+      "ignore_index": -100,
+      "all_labels_masked": true
+    },
+    "task_in_dataset": true,
+    "task_value": "Pick a nut out of a peg",
+    "train_eval_task_consistency": true,
+    "issues": []
+  },
+  "state_normalization_check": {
+    "normalization_mode": {
+      "full_mapping": {
+        "VISUAL": "NormalizationMode.IDENTITY",
+        "STATE": "NormalizationMode.MEAN_STD",
+        "ACTION": "NormalizationMode.MEAN_STD"
+      },
+      "state_mode": "NormalizationMode.MEAN_STD"
+    },
+    "dataset_stats_keys": [
+      "next.success",
+      "action",
+      "timestamp",
+      "index",
+      "next.reward",
+      "task_index",
+      "episode_index",
+      "observation.images.top",
+      "observation.images.wrist",
+      "observation.environment_state",
+      "observation.state",
+      "frame_index"
+    ],
+    "state_stats": {
+      "mean": [
+        0.13800567465414693,
+        0.6451309091934544,
+        0.1249482570935769,
+        0.6699325606100972
+      ],
+      "std": [
+        0.06150043725839339,
+        0.09080027855251112,
+        0.05693053628157622,
+        0.23943877254501855
+      ],
+      "dim": 4
+    },
+    "state_dimension": {
+      "config": 4,
+      "dataset": 4
+    },
+    "preprocessor_normalization": {
+      "input_features": {
+        "observation.images.top": "PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 480, 480))",
+        "observation.images.wrist": "PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 480, 480))",
+        "observation.state": "PolicyFeature(type=<FeatureType.STATE: 'STATE'>, shape=(4,))"
+      },
+      "norm_map": {
+        "VISUAL": "NormalizationMode.IDENTITY",
+        "STATE": "NormalizationMode.MEAN_STD",
+        "ACTION": "NormalizationMode.MEAN_STD"
+      },
+      "stats_source": "dataset_meta_stats"
+    },
+    "train_eval_state_normalization_consistency": true,
+    "normalization_effectiveness": {
+      "expected_mean_global": 0.0,
+      "expected_std_global": 1.0,
+      "actual_mean_single_sample": -0.5604091882705688,
+      "actual_std_single_sample": 2.164924383163452,
+      "note": "Single sample will not have mean=0, std=1; this is expected"
+    },
+    "normalization_formula_check": {
+      "expected": [
+        -2.158677577972412,
+        -2.6914494037628174,
+        1.2299853563308716,
+        1.3785046339035034
+      ],
+      "actual": [
+        -2.158677101135254,
+        -2.6914491653442383,
+        1.2299851179122925,
+        1.3785045146942139
+      ],
+      "max_difference": 4.76837158203125e-07,
+      "is_correct": true
+    },
+    "raw_state": {
+      "name": "raw_state",
+      "shape": [
+        4
+      ],
+      "dtype": "float32",
+      "min": 0.005246063694357872,
+      "max": 1.0,
+      "mean": 0.4002411663532257,
+      "std": 0.37345266342163086
+    },
+    "preprocessed_state": {
+      "name": "preprocessed_state",
+      "shape": [
+        1,
+        4
+      ],
+      "dtype": "float32",
+      "min": -2.6914491653442383,
+      "max": 1.3785045146942139,
+      "mean": -0.5604091286659241,
+      "std": 1.8748793601989746
+    },
+    "issues": []
+  },
+  "diffusion_action_head_check": {
+    "action_head_type": "droid_diffusion",
+    "noise_scheduler": {
+      "type": "DDIMScheduler",
+      "num_train_timesteps": 100,
+      "beta_schedule": "squaredcos_cap_v2",
+      "clip_sample": true,
+      "set_alpha_to_one": true,
+      "steps_offset": 0,
+      "prediction_type": "epsilon"
+    },
+    "num_inference_timesteps": 10,
+    "unet": {
+      "type": "ConditionalUnet1D",
+      "input_dim": null,
+      "global_cond_dim": null,
+      "state_dim": null
+    },
+    "action_normalization_mode": "NormalizationMode.MEAN_STD",
+    "action_mean": [
+      0.14447343104746693,
+      0.39580566771064557,
+      0.0669124578904274,
+      0.5566134229276223
+    ],
+    "action_std": [
+      0.4179151627906609,
+      0.8160687158839546,
+      0.6373644142538906,
+      0.36806480791846413
+    ],
+    "action_min": [
+      -0.8964769244194031,
+      -0.0898125171661377,
+      -1.6804183721542358,
+      0.0
+    ],
+    "action_max": [
+      2.0505282878875732,
+      3.4976677894592285,
+      1.0,
+      0.800000011920929
+    ],
+    "postprocessor_unnormalization": {
+      "features": {
+        "action": "PolicyFeature(type=<FeatureType.ACTION: 'ACTION'>, shape=(4,))"
+      },
+      "norm_map": {
+        "VISUAL": "NormalizationMode.IDENTITY",
+        "STATE": "NormalizationMode.MEAN_STD",
+        "ACTION": "NormalizationMode.MEAN_STD"
+      },
+      "stats_source": "dataset_meta_stats"
+    },
+    "train_eval_action_flow_consistency": true,
+    "raw_action": {
+      "name": "raw_action",
+      "shape": [
+        4
+      ],
+      "dtype": "float32",
+      "min": -0.6071893572807312,
+      "max": 3.1590182781219482,
+      "mean": 0.9670042395591736,
+      "std": 1.4439561367034912
+    },
+    "normalized_action": {
+      "name": "normalized_action",
+      "shape": [
+        1,
+        4
+      ],
+      "dtype": "float32",
+      "min": -1.512270212173462,
+      "max": 3.38600492477417,
+      "mean": 0.904952347278595,
+      "std": 2.205427885055542
+    },
+    "policy_raw_output": {
+      "name": "policy_raw_output",
+      "shape": [
+        1,
+        16,
+        4
+      ],
+      "dtype": "float32",
+      "min": -1.0,
+      "max": 1.0,
+      "mean": 0.07883262634277344,
+      "std": 0.7095229625701904
+    },
+    "postprocessed_action": {
+      "name": "postprocessed_action",
+      "shape": [
+        1,
+        16,
+        4
+      ],
+      "dtype": "float32",
+      "min": -0.158203125,
+      "max": 1.2109375,
+      "mean": 0.3960838317871094,
+      "std": 0.3758836090564728
+    },
+    "unnormalization_check": {
+      "expected": [
+        0.3909780979156494,
+        1.1799967288970947,
+        -0.05134851485490799,
+        0.19142413139343262
+      ],
+      "actual": [
+        0.390625,
+        1.1796875,
+        -0.05126953125,
+        0.189453125
+      ],
+      "max_difference": 0.001971006393432617,
+      "is_correct": false
+    },
+    "ddim_inference": {
+      "num_train_timesteps": 100,
+      "num_inference_timesteps": 10,
+      "is_expected_behavior": true
+    },
+    "issues": [
+      "Normalized action range (4.90) is unusually large",
+      "Unnormalization mismatch: max diff = 0.001971"
+    ]
+  },
+  "all_issues": [
+    "Normalized action range (4.90) is unusually large",
+    "Unnormalization mismatch: max diff = 0.001971"
+  ],
+  "total_issues": 2,
+  "overall_diagnosis": "FOUND 2 CONSISTENCY ISSUES"
+}

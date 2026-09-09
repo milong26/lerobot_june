@@ -196,6 +196,14 @@ def update_policy(
     if has_method(accelerator.unwrap_model(policy, keep_fp32_wrapper=True), "update"):
         accelerator.unwrap_model(policy, keep_fp32_wrapper=True).update()
 
+    # Validate loss is finite before accessing it
+    if not torch.isfinite(loss):
+        raise ValueError(
+            f"Loss is not finite at step {train_metrics.step}: loss={loss.item()}. "
+            "This may indicate numerical instability, data issues, or device mismatch. "
+            "Check your learning rate, batch size, and ensure all model components are on the correct device."
+        )
+
     train_metrics.loss = loss.item()
     train_metrics.grad_norm = grad_norm.item()
     train_metrics.lr = optimizer.param_groups[0]["lr"]
@@ -733,8 +741,8 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                         start_seed=cfg.seed,
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
                         env_rename_map={
-                            "observation.pixels/top": "observation.images.camera1",
-                            "observation.pixels/wrist": "observation.images.camera2",
+                            "observation.images.camera1": "observation.images.top",
+                            "observation.images.camera2": "observation.images.wrist",
                         },
                     )
                 # overall metrics (suite-agnostic)

@@ -1,15 +1,47 @@
 #!/bin/bash
 # Launch grid-based obj-goal joint-region uniform experiment in tmux
-# Usage: bash launch_grid_uniform.sh <gpu_id> <num_episodes> <dataset_name> [dataset_path]
+# Usage: bash launch_grid_uniform.sh --gpu <gpu_id> --episodes <num_episodes> --dataset <dataset_name> [--dataset-path <dataset_path>]
 # 新的grid_uniform：obj_init_pos空间独立分区 × goal_pose空间独立分区 → 联合区域均匀分配
-# 第四个参数可选：数据集路径，默认为 /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/<dataset_name>
 
 set -e
 
-GPU_ID=${1:-0}
-NUM_EPISODES=${2:-112}
-DATASET_NAME=${3:-disassemble-v3_corner}
-DATASET_PATH=${4:-/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}}
+# Parse command line arguments with -- markers
+GPU_ID=""
+NUM_EPISODES=""
+DATASET_NAME=""
+DATASET_PATH=""
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --gpu)
+            GPU_ID="$2"
+            shift 2
+            ;;
+        --episodes)
+            NUM_EPISODES="$2"
+            shift 2
+            ;;
+        --dataset)
+            DATASET_NAME="$2"
+            shift 2
+            ;;
+        --dataset-path)
+            DATASET_PATH="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown parameter: $1"
+            echo "Usage: bash launch_grid_uniform.sh --gpu <gpu_id> --episodes <num_episodes> --dataset <dataset_name> [--dataset-path <dataset_path>]"
+            exit 1
+            ;;
+    esac
+done
+
+# Set defaults if not provided
+GPU_ID=${GPU_ID:-0}
+NUM_EPISODES=${NUM_EPISODES:-112}
+DATASET_NAME=${DATASET_NAME:-disassemble-v3_corner}
+DATASET_PATH=${DATASET_PATH:-/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}}
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 

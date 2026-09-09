@@ -1,0 +1,9 @@
+[
+  {
+    "pc_success": -1,
+    "pc_grasp_success": -1,
+    "parse_status": "failed",
+    "step": 20000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model"
+  }
+]
