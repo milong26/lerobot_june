@@ -69,10 +69,18 @@ def load_policy_and_processors(policy_type: str, checkpoint_path: str, device: s
     # Load policy
     policy_cls = get_policy_class(policy_type)
     policy = PreTrainedPolicy.from_pretrained.__func__(policy_cls, checkpoint_path)
+
+    # Convert model to correct dtype
+    model_dtype = getattr(config, "dtype", "float32")
+    if model_dtype == "bfloat16":
+        policy = policy.to(dtype=torch.bfloat16)
+    elif model_dtype == "float16":
+        policy = policy.to(dtype=torch.float16)
+
     policy.to(device)
     policy.eval()
 
-    log.info(f"Policy loaded: {type(policy).__name__}")
+    log.info(f"Policy loaded: {type(policy).__name__}, dtype={model_dtype}")
     return policy, preprocessor, postprocessor, config
 
 
@@ -87,6 +95,26 @@ def run_single_policy_check(policy_type: str, checkpoint_path: str, sample: dict
     except Exception as e:
         log.error(f"Failed to load {policy_type}: {e}")
         return {"error": str(e), "traceback": traceback.format_exc()}
+
+    # Patch MiniVLA's VQ action tokenizer to handle bfloat16 -> float32 conversion
+    if policy_type == "minivla":
+        try:
+            core = policy.model
+            if hasattr(core, "action_tokenizer"):
+                action_tokenizer = core.action_tokenizer
+                if hasattr(action_tokenizer, "vq_vae"):
+                    original_get_action = action_tokenizer.vq_vae.get_action_from_latent
+
+                    def patched_get_action(latent):
+                        result = original_get_action(latent)
+                        if result.dtype == torch.bfloat16:
+                            return result.float()
+                        return result
+
+                    action_tokenizer.vq_vae.get_action_from_latent = patched_get_action
+                    log.info("Patched MiniVLA vq_vae.get_action_from_latent for bfloat16 compatibility")
+        except Exception as e:
+            log.warning(f"Failed to patch MiniVLA action tokenizer: {e}")
 
     # 1. Raw action stats
     raw_act = sample[ACTION]
@@ -104,12 +132,31 @@ def run_single_policy_check(policy_type: str, checkpoint_path: str, sample: dict
         if isinstance(preprocessed_action, torch.Tensor):
             log.info(f"Preprocessed action: shape={preprocessed_action.shape}, min={preprocessed_action.min():.4f}, max={preprocessed_action.max():.4f}")
 
+    # Convert to model dtype (MiniVLA uses bfloat16)
+    model_dtype = getattr(policy_config, "dtype", "float32")
+    if model_dtype == "bfloat16":
+        torch_dtype = torch.bfloat16
+    elif model_dtype == "float16":
+        torch_dtype = torch.float16
+    else:
+        torch_dtype = torch.float32
+
+    # Convert preprocessed tensors to model dtype
+    if isinstance(preprocessed, dict):
+        for k, v in preprocessed.items():
+            if isinstance(v, torch.Tensor) and v.is_floating_point():
+                preprocessed[k] = v.to(dtype=torch_dtype)
+
     # 3. Model forward
     with torch.no_grad():
         if hasattr(policy, "predict_action_chunk"):
             pred_actions = policy.predict_action_chunk(preprocessed)
         else:
             pred_actions = policy(preprocessed)
+
+    # Convert prediction to float32 for postprocessing (numpy doesn't support bfloat16)
+    if isinstance(pred_actions, torch.Tensor) and pred_actions.dtype == torch.bfloat16:
+        pred_actions = pred_actions.float()
 
     if isinstance(pred_actions, torch.Tensor):
         log.info(f"Model prediction: shape={pred_actions.shape}, min={pred_actions.min():.4f}, max={pred_actions.max():.4f}")
@@ -130,7 +177,10 @@ def run_single_policy_check(policy_type: str, checkpoint_path: str, sample: dict
             else:
                 pred_step0 = final_actions
 
-            abs_error = (raw_act_t - pred_step0.float()).abs()
+            # Move to same device as raw action
+            pred_step0 = pred_step0.float().to(raw_act_t.device)
+
+            abs_error = (raw_act_t - pred_step0).abs()
             max_err = float(abs_error.max())
             mean_err = float(abs_error.mean())
 
@@ -156,20 +206,19 @@ def run_single_policy_check(policy_type: str, checkpoint_path: str, sample: dict
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Batch check 12k step models")
+    parser = argparse.ArgumentParser(description="Check minivla 12k step model")
     parser.add_argument("--dataset_root", type=str, required=True)
     parser.add_argument("--episode_index", type=int, default=0)
-    parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--gpu_id", type=int, default=0, help="GPU device ID to use")
     parser.add_argument("--output_file", type=str, default=None)
-    parser.add_argument("--checkpoints", type=str, nargs="+", default=None, help="Custom checkpoint paths")
+    parser.add_argument("--checkpoint_path", type=str, default=None, help="MiniVLA checkpoint path")
     args = parser.parse_args()
 
     # Set GPU device
     os.environ["CUDA_VISIBLE_DEVICES"] = str(args.gpu_id)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
-    log_file = str(Path(__file__).parent / "batch_check_12k.log")
+    log_file = str(Path(__file__).parent / "batch_check_minivla.log")
     logger = setup_logging(log_file)
 
     logger.info(f"Dataset: {args.dataset_root}")
@@ -195,21 +244,18 @@ def main():
     # Dataset stats
     ds_stats = dataset.meta.stats if hasattr(dataset.meta, "stats") else None
 
-    # Check all three models
-    results = {}
-    checkpoints = args.checkpoints if args.checkpoints else DEFAULT_CHECKPOINTS
-
-    for policy_type, ckpt_path in checkpoints.items():
-        result = run_single_policy_check(
-            policy_type=policy_type,
-            checkpoint_path=ckpt_path,
-            sample=sample,
-            config={},
-            device=device,
-            dataset_stats=ds_stats,
-            logger=logger,
-        )
-        results[policy_type] = result
+    # Check minivla only
+    checkpoint_path = args.checkpoint_path or DEFAULT_CHECKPOINTS["minivla"]
+    result = run_single_policy_check(
+        policy_type="minivla",
+        checkpoint_path=checkpoint_path,
+        sample=sample,
+        config={},
+        device=device,
+        dataset_stats=ds_stats,
+        logger=logger,
+    )
+    results = {"minivla": result}
 
     # Summary
     logger.info("--- SUMMARY ---")
