@@ -94,7 +94,8 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str, n_action_ste
     eval_output_dir = Path(cfg.results_dir) / "eval_results" / f"tinyvla_{timestamp}"
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create independent log file for this run (no append)
+    # Create independent log directory and file for this run (no append)
+    Path(cfg.logs_dir).mkdir(parents=True, exist_ok=True)
     eval_log = Path(cfg.logs_dir) / f"tinyvla_eval_{timestamp}.log"
 
     cmd = [
@@ -106,9 +107,10 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str, n_action_ste
         "--env.use_self_mw=true",
         f"--eval.batch_size={cfg.eval_batch_size}",
         f"--eval.n_episodes={cfg.eval_n_episodes}",
-        f"--eval.n_action_steps={n_action_steps}",
+        f"--policy.n_action_steps={n_action_steps}",
         "--policy.device=cuda",
         f"--rename_map={cfg.rename_map}",
+         f"--output_dir={eval_output_dir}",
     ]
 
     print(f"\nRunning: {' '.join(cmd)}")
@@ -174,21 +176,16 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str, n_action_ste
 def _parse_eval_results(eval_output_dir: Path, base_result: Dict) -> Dict:
     """Parse evaluation results from JSON output files.
     
-    Reads aggregated.pc_success and aggregated.pc_grasp_success directly
-    from the eval output JSON. Does NOT use regex on log files.
-    
+    Reads pc_success and pc_grasp_success from eval_info.json.
     The lerobot-eval script writes:
-    - eval_info.json: contains {"aggregated": {"pc_success": ..., "pc_grasp_success": ...}}
+    - eval_info.json: {"overall": {"pc_success": ..., "pc_grasp_success": ...}, "per_task": [...], ...}
     - eval_episode_results.json: per-episode results
     """
-    # Search in output dir and parent dirs for eval output files
-    search_dirs = [eval_output_dir, eval_output_dir.parent, eval_output_dir.parent.parent]
     all_result_files = []
-    for d in search_dirs:
-        if d.exists():
-            all_result_files.extend(d.glob("eval_info.json"))
-            all_result_files.extend(d.glob("eval_episode_results.json"))
-            all_result_files.extend(d.glob("eval_results.json"))
+    for result_file in eval_output_dir.rglob("eval_info.json"):
+        all_result_files.append(result_file)
+    for result_file in eval_output_dir.rglob("eval_episode_results.json"):
+        all_result_files.append(result_file)
     
     all_result_files = sorted(set(all_result_files))
     
@@ -197,10 +194,24 @@ def _parse_eval_results(eval_output_dir: Path, base_result: Dict) -> Dict:
             with open(result_file, "r") as f:
                 data = json.load(f)
             
-            # Look for aggregated metrics (top-level "aggregated" key)
-            aggregated = data.get("aggregated", {})
-            pc_success = aggregated.get("pc_success")
-            pc_grasp_success = aggregated.get("pc_grasp_success")
+            pc_success = None
+            pc_grasp_success = None
+            
+            # Try "overall" key (lerobot-eval structure)
+            overall = data.get("overall", {})
+            pc_success = overall.get("pc_success")
+            pc_grasp_success = overall.get("pc_grasp_success")
+            
+            # Fallback: try "aggregated" key
+            if pc_success is None and pc_grasp_success is None:
+                aggregated = data.get("aggregated", {})
+                pc_success = aggregated.get("pc_success")
+                pc_grasp_success = aggregated.get("pc_grasp_success")
+            
+            # Fallback: try top-level keys directly
+            if pc_success is None and pc_grasp_success is None:
+                pc_success = data.get("pc_success")
+                pc_grasp_success = data.get("pc_grasp_success")
             
             if pc_success is not None or pc_grasp_success is not None:
                 return {

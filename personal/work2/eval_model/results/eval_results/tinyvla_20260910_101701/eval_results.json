@@ -1,0 +1,15 @@
+{
+  "timestamp": "20260910_101701",
+  "completion_time": "2026-09-10 10:36:07",
+  "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_b_disassemble-v3_corner/checkpoints/012000/pretrained_model",
+  "checkpoint_step": 12000,
+  "n_action_steps": 1,
+  "n_episodes": 20,
+  "returncode": 0,
+  "log_file": "/data/zhonglinye/jun/lerobot/personal/work2/eval_model/logs/tinyvla_eval_20260910_101701.log",
+  "output_dir": "/data/zhonglinye/jun/lerobot/personal/work2/eval_model/results/eval_results/tinyvla_20260910_101701",
+  "status": "failed",
+  "error": "No aggregated results found in eval output JSON files",
+  "aggregated": {},
+  "searched_files": []
+}

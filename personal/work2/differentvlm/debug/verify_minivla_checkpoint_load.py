@@ -51,6 +51,14 @@ def create_fresh_model(checkpoint_path: str, device: str):
     from lerobot.policies.minivla.modeling_minivla import MiniVLAPolicy
     model = MiniVLAPolicy(config)
     model.to(device)
+    
+    # Convert to correct dtype to match trained model
+    model_dtype = getattr(config, "dtype", "float32")
+    if model_dtype == "bfloat16":
+        model = model.to(dtype=torch.bfloat16)
+    elif model_dtype == "float16":
+        model = model.to(dtype=torch.float16)
+    
     model.eval()
     return model, config
 
@@ -58,6 +66,14 @@ def create_fresh_model(checkpoint_path: str, device: str):
 def load_trained_model(checkpoint_path: str, device: str):
     """Load MiniVLA model with trained weights using fixed from_pretrained."""
     policy = MiniVLAPolicy.from_pretrained(checkpoint_path)
+    
+    # Ensure correct dtype
+    model_dtype = getattr(policy.config, "dtype", "float32")
+    if model_dtype == "bfloat16":
+        policy = policy.to(dtype=torch.bfloat16)
+    elif model_dtype == "float16":
+        policy = policy.to(dtype=torch.float16)
+    
     policy.to(device)
     policy.eval()
     return policy, policy.config
@@ -70,14 +86,23 @@ def create_dummy_batch(config, device: str, seed: int = 42):
     
     batch_size = 1
     
+    # Determine dtype from config
+    model_dtype = getattr(config, "dtype", "float32")
+    if model_dtype == "bfloat16":
+        torch_dtype = torch.bfloat16
+    elif model_dtype == "float16":
+        torch_dtype = torch.float16
+    else:
+        torch_dtype = torch.float32
+    
     # Create dummy pixel values (DINO + SigLIP)
     # MiniVLA expects "dino" and "siglip" keys from processor
     dino_shape = (batch_size, 3, config.image_size, config.image_size)
     siglip_shape = (batch_size, 3, config.image_size, config.image_size)
     
     batch = {
-        "dino": torch.randn(dino_shape, device=device),
-        "siglip": torch.randn(siglip_shape, device=device),
+        "dino": torch.randn(dino_shape, device=device, dtype=torch_dtype),
+        "siglip": torch.randn(siglip_shape, device=device, dtype=torch_dtype),
         "task": ["test task"],
     }
     
@@ -135,23 +160,41 @@ def verify_weight_summaries(checkpoint_path: str, loaded_model):
     
     state_dict = load_file(str(model_file), device="cpu")
     
+    # Checkpoint keys have "model." prefix, loaded model state_dict also has "model." prefix
+    # Try both with and without "model." prefix
     key_layers = [
-        "vlm.vision_backbone.dino_model.blocks.0.norm1.weight",
-        "vlm.llm.model.layers.0.self_attn.q_proj.weight",
-        "vlm.projector.linear_1.weight",
+        "model.vlm.vision_backbone.dino_model.blocks.0.norm1.weight",
+        "model.vlm.llm.model.layers.0.self_attn.q_proj.weight",
+        "model.vlm.projector.linear_1.weight",
     ]
     
     all_ok = True
     for layer_key in key_layers:
         if layer_key not in state_dict:
-            logger.warning(f"Layer {layer_key} not found in checkpoint")
-            continue
+            # Try without "model." prefix
+            alt_key = layer_key.replace("model.", "", 1)
+            if alt_key in state_dict:
+                layer_key = alt_key
+            else:
+                logger.warning(f"Layer {layer_key} not found in checkpoint")
+                continue
         
         ckpt_weight = state_dict[layer_key]
         
         # Try to get the same weight from loaded model
         try:
-            model_weight = dict(loaded_model.state_dict())[layer_key].cpu()
+            model_state = loaded_model.state_dict()
+            if layer_key not in model_state:
+                # Try with "model." prefix
+                prefixed_key = "model." + layer_key if not layer_key.startswith("model.") else layer_key
+                if prefixed_key in model_state:
+                    model_weight = model_state[prefixed_key].cpu()
+                else:
+                    logger.warning(f"Layer {layer_key} not found in loaded model")
+                    all_ok = False
+                    continue
+            else:
+                model_weight = model_state[layer_key].cpu()
             
             ckpt_mean = float(ckpt_weight.float().mean())
             model_mean = float(model_weight.float().mean())
@@ -178,6 +221,27 @@ def verify_weight_summaries(checkpoint_path: str, loaded_model):
     return all_ok
 
 
+def patch_minivla_bfloat16(policy, logger):
+    """Patch MiniVLA's VQ action tokenizer to handle bfloat16 -> float32 conversion."""
+    try:
+        core = policy.model
+        if hasattr(core, "action_tokenizer"):
+            action_tokenizer = core.action_tokenizer
+            if hasattr(action_tokenizer, "vq_vae"):
+                original_get_action = action_tokenizer.vq_vae.get_action_from_latent
+
+                def patched_get_action(latent):
+                    result = original_get_action(latent)
+                    if result.dtype == torch.bfloat16:
+                        return result.float()
+                    return result
+
+                action_tokenizer.vq_vae.get_action_from_latent = patched_get_action
+                logger.info("Patched MiniVLA vq_vae.get_action_from_latent for bfloat16 compatibility")
+    except Exception as e:
+        logger.warning(f"Failed to patch MiniVLA action tokenizer: {e}")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Verify MiniVLA checkpoint loading")
     parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to pretrained_model directory")
@@ -199,10 +263,12 @@ def main():
     # Step 1: Create fresh model (no weights loaded)
     logger.info("\n[Step 1] Creating freshly initialized model (no weights loaded)...")
     fresh_model, fresh_config = create_fresh_model(checkpoint_path, device)
+    patch_minivla_bfloat16(fresh_model, logger)
     
     # Step 2: Load trained model with fixed from_pretrained
     logger.info("\n[Step 2] Loading trained model with fixed from_pretrained...")
     trained_model, trained_config = load_trained_model(checkpoint_path, device)
+    patch_minivla_bfloat16(trained_model, logger)
     
     # Step 3: Verify weight summaries
     logger.info("\n[Step 3] Verifying weight summaries...")

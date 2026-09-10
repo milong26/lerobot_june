@@ -739,13 +739,49 @@ class MiniVLAPolicy(PreTrainedPolicy):
                 # Filter out non-parameter buffers (e.g., running_mean, running_var in BatchNorm)
                 param_missing = [k for k in missing_keys if k in dict(instance.named_parameters())]
                 buffer_missing = [k for k in missing_keys if k not in dict(instance.named_parameters())]
-                if param_missing:
+                
+                # Handle tied embedding weights: embed_tokens is often tied to lm_head
+                # and may be saved under a different key or omitted from the checkpoint
+                known_tied_keys = {
+                    "model.vlm.llm.model.embed_tokens.weight",
+                    "vlm.llm.model.embed_tokens.weight",
+                    "llm.model.embed_tokens.weight",
+                }
+                actual_param_missing = [
+                    k for k in param_missing
+                    if k not in known_tied_keys
+                ]
+                tied_missing = [
+                    k for k in param_missing
+                    if k in known_tied_keys
+                ]
+                
+                if tied_missing:
+                    logger.warning(
+                        f"[MiniVLA] {len(tied_missing)} tied embedding key(s) missing from checkpoint "
+                        f"(expected if weights are tied to lm_head): {tied_missing}"
+                    )
+                    # Copy from lm_head if available
+                    for tied_key in tied_missing:
+                        # Try to find corresponding lm_head key
+                        lm_head_key = tied_key.replace("embed_tokens.weight", "lm_head.weight")
+                        if lm_head_key in state_dict:
+                            logger.info(
+                                f"[MiniVLA] Copying {lm_head_key} -> {tied_key} (tied weights)"
+                            )
+                            # Find the actual parameter in the model
+                            for name, param in instance.named_parameters():
+                                if name == tied_key:
+                                    param.data.copy_(state_dict[lm_head_key])
+                                    break
+                
+                if actual_param_missing:
                     logger.error(
-                        f"[MiniVLA] CRITICAL: {len(param_missing)} missing parameter keys: "
-                        f"{param_missing[:20]}{'...' if len(param_missing) > 20 else ''}"
+                        f"[MiniVLA] CRITICAL: {len(actual_param_missing)} missing parameter keys: "
+                        f"{actual_param_missing[:20]}{'...' if len(actual_param_missing) > 20 else ''}"
                     )
                     raise RuntimeError(
-                        f"MiniVLA checkpoint loading failed: {len(param_missing)} parameter keys "
+                        f"MiniVLA checkpoint loading failed: {len(actual_param_missing)} parameter keys "
                         f"are missing from the loaded state dict. The checkpoint may be incomplete."
                     )
                 if buffer_missing:
