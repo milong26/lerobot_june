@@ -110,7 +110,8 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str, n_action_ste
         f"--policy.n_action_steps={n_action_steps}",
         "--policy.device=cuda",
         f"--rename_map={cfg.rename_map}",
-         f"--output_dir={eval_output_dir}",
+        f"--output_dir={eval_output_dir}",
+        f"--seed={cfg.eval_seed}",
     ]
 
     print(f"\nRunning: {' '.join(cmd)}")

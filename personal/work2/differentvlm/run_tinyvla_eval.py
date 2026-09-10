@@ -85,10 +85,10 @@ def main():
 
     # Create config
     cfg = VLMExperimentConfig(
-        vlm_name="tinyvla_s",
+        vlm_name="tinyvla_b",
         dataset_name=f"metaworld_{ENV_TASK.replace('-', '_')}",
         selection_vlm_model_id="lesjie/Llava-Pythia-400M",
-        selection_vlm_description="TinyVLA-S (LLaVA-Pythia-400M + Diffusion Action Head)",
+        selection_vlm_description="TinyVLA-B (LLaVA-Pythia-400M + Diffusion Action Head)",
         env_task=ENV_TASK,
         camera_names=CAMERA_NAMES,
         eval_n_episodes=n_episodes,

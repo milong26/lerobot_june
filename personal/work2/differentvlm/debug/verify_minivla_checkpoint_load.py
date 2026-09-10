@@ -110,44 +110,60 @@ def create_dummy_batch(config, device: str, seed: int = 42):
 
 
 def compare_outputs(fresh_model, trained_model, batch, device: str):
-    """Compare outputs between fresh and trained models."""
-    with torch.no_grad():
-        fresh_actions = fresh_model.predict_action_chunk(batch)
-        trained_actions = trained_model.predict_action_chunk(batch)
+    """Compare outputs between fresh and trained models using a simplified test."""
+    print("Running simplified weight comparison test...")
+    sys.stdout.flush()
     
-    # Convert to float32 for comparison
-    if fresh_actions.dtype == torch.bfloat16:
-        fresh_actions = fresh_actions.float()
-    if trained_actions.dtype == torch.bfloat16:
-        trained_actions = trained_actions.float()
+    # Instead of full inference (which is slow), compare a few key layer weights
+    print("  Getting fresh model state_dict...")
+    sys.stdout.flush()
+    fresh_state = fresh_model.state_dict()
     
-    # Compute differences
-    abs_diff = (fresh_actions - trained_actions).abs()
-    max_diff = float(abs_diff.max())
-    mean_diff = float(abs_diff.mean())
+    print("  Getting trained model state_dict...")
+    sys.stdout.flush()
+    trained_state = trained_model.state_dict()
     
-    logger.info(f"\n{'='*60}")
-    logger.info(f"OUTPUT COMPARISON (Fresh vs Trained)")
-    logger.info(f"{'='*60}")
-    logger.info(f"Fresh output shape: {fresh_actions.shape}")
-    logger.info(f"Trained output shape: {trained_actions.shape}")
-    logger.info(f"Fresh output range: [{fresh_actions.min():.4f}, {fresh_actions.max():.4f}]")
-    logger.info(f"Trained output range: [{trained_actions.min():.4f}, {trained_actions.max():.4f}]")
-    logger.info(f"Max absolute difference: {max_diff:.6f}")
-    logger.info(f"Mean absolute difference: {mean_diff:.6f}")
+    # Compare a few key layers
+    test_keys = [
+        "model.vlm.llm.model.layers.0.self_attn.q_proj.weight",
+        "model.vlm.projector.projector.0.weight",  # FusedMLPProjector first linear
+        "model.vq_vae.vq_layer.layers.0._codebook.embed",
+    ]
     
-    # Verify outputs are DIFFERENT (proving weights were loaded)
+    max_diff = 0.0
+    for key in test_keys:
+        print(f"  Checking key: {key}")
+        sys.stdout.flush()
+        
+        if key not in fresh_state or key not in trained_state:
+            # Try with "model." prefix
+            prefixed_key = "model." + key if not key.startswith("model.") else key
+            if prefixed_key in fresh_state and prefixed_key in trained_state:
+                key = prefixed_key
+            else:
+                print(f"    Key not found in either model, skipping")
+                sys.stdout.flush()
+                continue
+        
+        print(f"    Computing difference...")
+        sys.stdout.flush()
+        fresh_w = fresh_state[key].float()
+        trained_w = trained_state[key].float()
+        
+        diff = (fresh_w - trained_w).abs().max().item()
+        max_diff = max(max_diff, diff)
+        
+        print(f"    {key}: max_diff={diff:.6f}")
+        sys.stdout.flush()
+    
+    print(f"Max weight difference across test layers: {max_diff:.6f}")
+    sys.stdout.flush()
+    
     if max_diff < 1e-5:
-        logger.error(
-            f"CRITICAL: Fresh and trained model outputs are nearly identical "
-            f"(max_diff={max_diff:.8f}). This suggests the checkpoint weights were NOT loaded!"
-        )
+        print(f"CRITICAL: Fresh and trained model weights are nearly identical (max_diff={max_diff:.8f}). This suggests the checkpoint weights were NOT loaded!")
         return False
     else:
-        logger.info(
-            f"OK: Fresh and trained model outputs differ significantly "
-            f"(max_diff={max_diff:.6f}), confirming weights were loaded."
-        )
+        print(f"OK: Fresh and trained model weights differ significantly (max_diff={max_diff:.6f}), confirming weights were loaded.")
         return True
 
 
@@ -275,9 +291,12 @@ def main():
     weights_ok = verify_weight_summaries(checkpoint_path, trained_model)
     
     # Step 4: Create dummy batch and compare outputs
-    logger.info("\n[Step 4] Creating dummy batch and comparing outputs...")
+    print(f"\n[Step 4] Creating dummy batch and comparing outputs...")
+    sys.stdout.flush()
     batch = create_dummy_batch(trained_config, device, seed=seed)
     
+    print(f"[Step 4] Batch created. Starting inference comparison...")
+    sys.stdout.flush()
     outputs_different = compare_outputs(fresh_model, trained_model, batch, device)
     
     # Final verdict
