@@ -179,9 +179,9 @@ def verify_weight_summaries(checkpoint_path: str, loaded_model):
     # Checkpoint keys have "model." prefix, loaded model state_dict also has "model." prefix
     # Try both with and without "model." prefix
     key_layers = [
-        "model.vlm.vision_backbone.dino_model.blocks.0.norm1.weight",
         "model.vlm.llm.model.layers.0.self_attn.q_proj.weight",
-        "model.vlm.projector.linear_1.weight",
+        "model.vlm.projector.projector.0.weight",  # FusedMLPProjector first linear
+        "model.vlm.projector.projector.2.weight",  # FusedMLPProjector second linear
     ]
     
     all_ok = True

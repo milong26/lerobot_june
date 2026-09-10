@@ -321,13 +321,15 @@ class MiniVLACore(nn.Module):
         pixel_values: dict[str, torch.Tensor],
         instruction: list[str],
         action: Optional[torch.Tensor] = None,
+        action_is_pad: Optional[torch.Tensor] = None,
     ):
         """
         Training forward pass.
         pixel_values: {"dino": tensor, "siglip": tensor}
         instruction: list of task strings
         action: [B, chunk_size, action_dim] normalized actions (in [-1, 1] range)
-        Returns: CausalLM loss
+        action_is_pad: [B, chunk_size] boolean mask of padded actions
+        Returns: dict with loss and additional metrics
         Mirrors teach_code/MiniVLA/prismatic/vla/datasets/datasets.py (RLDSBatchTransform).
 
         Action token generation logic:
@@ -346,30 +348,64 @@ class MiniVLACore(nn.Module):
             # Validate input shape
             assert action.dim() == 3, f"Expected action shape [B, T, A], got {action.shape}"
 
+            action_dim = action.shape[-1]
+
+            if self.config.is_vq_mode:
+                # Strict VQ dimension validation: no silent zero-padding
+                vq_expected_dim = self.action_tokenizer.vq_vae.input_dim_w
+                vq_expected_h = self.action_tokenizer.vq_vae.input_dim_h
+                required_horizon = self.action_tokenizer.required_future_horizon + 1
+
+                if action_dim != vq_expected_dim:
+                    raise ValueError(
+                        f"VQ action dimension mismatch: dataset action_dim={action_dim}, "
+                        f"VQ input_dim_w={vq_expected_dim}, chunk_size={self.config.chunk_size}, "
+                        f"VQ input_dim_h={vq_expected_h}. "
+                        f"Cannot silently pad or truncate actions. "
+                        f"Use a VQ tokenizer with input_dim_w matching the dataset action_dim, "
+                        f"or switch to a non-VQ action tokenizer (e.g., extra_action_tokenizer)."
+                    )
+
             action_texts = []
-            vq_expected_dim = self.action_tokenizer.vq_vae.input_dim_w
-            
+            valid_action_mask = []
+
             for i in range(batch_size):
                 if self.config.is_vq_mode:
                     # VQ mode: use full action chunk based on required_future_horizon
-                    # Official: action[-required_future_horizon-1:]
-                    # LeRobot action shape: [B, chunk_size, action_dim]
-                    # required_horizon = required_future_horizon + 1 (includes current step)
                     required_horizon = self.action_tokenizer.required_future_horizon + 1
-                    action_tensor = action[i, :required_horizon].cpu().numpy()
-                    
-                    # Pad action dimension to match VQ tokenizer expected dimension
-                    current_dim = action_tensor.shape[-1]
-                    if current_dim < vq_expected_dim:
-                        pad_width = [(0, 0)] * (action_tensor.ndim - 1) + [(0, vq_expected_dim - current_dim)]
-                        action_tensor = np.pad(action_tensor, pad_width, mode='constant', constant_values=0.0)
-                    
-                    action_text = self.action_tokenizer(action_tensor)
+                    action_slice = action[i, :required_horizon].cpu().numpy()
+
+                    # Check if this action chunk has any padding
+                    if action_is_pad is not None:
+                        chunk_is_pad = action_is_pad[i, :required_horizon].cpu().numpy()
+                        is_valid = not chunk_is_pad.any()
+                    else:
+                        is_valid = True
+
+                    valid_action_mask.append(is_valid)
+
+                    if is_valid:
+                        action_text = self.action_tokenizer(action_slice)
+                    else:
+                        # For padded chunks, generate dummy text that will be fully masked
+                        action_text = ""
                 else:
                     # Non-VQ mode: use current action based on action_delta_indices
-                    # action_delta_indices = [0] means action[i, 0]
                     delta_idx = self.config.action_delta_indices[0]
-                    action_text = self.action_tokenizer(action[i, delta_idx].cpu().numpy())
+                    action_slice = action[i, delta_idx].cpu().numpy()
+
+                    # Check if this action is padded
+                    if action_is_pad is not None:
+                        is_valid = not action_is_pad[i, delta_idx].item()
+                    else:
+                        is_valid = True
+
+                    valid_action_mask.append(is_valid)
+
+                    if is_valid:
+                        action_text = self.action_tokenizer(action_slice)
+                    else:
+                        action_text = ""
 
                 action_texts.append(action_text)
 
@@ -378,30 +414,42 @@ class MiniVLACore(nn.Module):
             attention_mask_list = []
 
             for i in range(batch_size):
-                # Build prompt with official template: "What action should the robot take to {instruction}?"
-                prompt = self.tokenizer.build_prompt(instruction[i], action_texts[i])
-                encoded = self.tokenizer.tokenizer(
-                    prompt,
-                    return_tensors="pt",
-                    padding=False,
-                    truncation=False,
-                )
-                input_ids = encoded["input_ids"].squeeze(0)
-                seq_len = len(input_ids)
+                if not valid_action_mask[i] or not action_texts[i]:
+                    # Skip padded actions: mask entire sequence
+                    prompt = self.tokenizer.build_prompt(instruction[i], "")
+                    encoded = self.tokenizer.tokenizer(
+                        prompt,
+                        return_tensors="pt",
+                        padding=False,
+                        truncation=False,
+                    )
+                    input_ids = encoded["input_ids"].squeeze(0)
+                    labels = torch.full_like(input_ids, IGNORE_INDEX)
+                else:
+                    # Build prompt with official template: "What action should the robot take to {instruction}?"
+                    prompt = self.tokenizer.build_prompt(instruction[i], action_texts[i])
+                    encoded = self.tokenizer.tokenizer(
+                        prompt,
+                        return_tensors="pt",
+                        padding=False,
+                        truncation=False,
+                    )
+                    input_ids = encoded["input_ids"].squeeze(0)
+                    seq_len = len(input_ids)
 
-                # Official: labels[: -(num_answer_tokens + 2)] = IGNORE_INDEX
-                # num_answer_tokens = len(action_tokens), 2 = eos tokens
-                # This masks out the instruction portion, only training on action tokens
-                action_tokens = self.tokenizer.tokenizer(action_texts[i])["input_ids"]
-                num_answer_tokens = len(action_tokens)
-                num_end_tokens = 2
+                    # Official: labels[: -(num_answer_tokens + 2)] = IGNORE_INDEX
+                    # num_answer_tokens = len(action_tokens), 2 = eos tokens
+                    # This masks out the instruction portion, only training on action tokens
+                    action_tokens = self.tokenizer.tokenizer(action_texts[i])["input_ids"]
+                    num_answer_tokens = len(action_tokens)
+                    num_end_tokens = 2
 
-                labels = input_ids.clone()
-                labels[: -(num_answer_tokens + num_end_tokens)] = IGNORE_INDEX
+                    labels = input_ids.clone()
+                    labels[: -(num_answer_tokens + num_end_tokens)] = IGNORE_INDEX
 
                 input_ids_list.append(input_ids)
                 labels_list.append(labels)
-                attention_mask_list.append(torch.ones(seq_len, dtype=torch.long))
+                attention_mask_list.append(torch.ones(len(input_ids), dtype=torch.long))
 
             input_ids = nn.utils.rnn.pad_sequence(
                 input_ids_list, batch_first=True, padding_value=self.tokenizer.pad_token_id
@@ -446,7 +494,60 @@ class MiniVLACore(nn.Module):
             labels=labels,
         )
 
-        return outputs
+        result = {"loss": outputs.loss}
+
+        # Compute additional metrics when labels are available
+        # NOTE: outputs.logits shape is [B, seq_len_with_vision, vocab_size]
+        # The labels were modified by VLM to include IGNORE_INDEX for vision tokens
+        # We need to use the logits sequence length to align with the modified labels
+        if labels is not None and outputs.logits is not None and outputs.loss is not None:
+            # Use the logits sequence to determine valid positions
+            # outputs.logits shape: [B, seq_len_with_vision, vocab_size]
+            seq_len = outputs.logits.shape[1]
+            
+            # Reconstruct the full labels with vision token positions set to IGNORE_INDEX
+            # This matches what VLM forward does: [labels[:, :1], vision_labels, labels[:, 1:]]
+            num_patches = self.vlm.num_patches
+            full_labels = torch.full(
+                (labels.shape[0], seq_len),
+                IGNORE_INDEX,
+                dtype=labels.dtype,
+                device=labels.device,
+            )
+            # Copy original labels: [first_token, ..., remaining]
+            # VLM inserts vision patches after first token, so:
+            full_labels[:, :1] = labels[:, :1]  # First token
+            full_labels[:, 1 + num_patches:] = labels[:, 1:]  # Remaining text tokens
+            
+            valid_token_count = (full_labels != IGNORE_INDEX).sum().item()
+            if valid_token_count > 0:
+                # Token cross entropy (already computed as loss)
+                result["token_cross_entropy"] = outputs.loss.item()
+                result["valid_token_count"] = valid_token_count
+
+                # Top-1 token accuracy
+                shift_logits = outputs.logits[..., :-1, :].contiguous()
+                shift_labels = full_labels[..., 1:].contiguous()
+                valid_mask = shift_labels != IGNORE_INDEX
+                if valid_mask.any():
+                    top1_preds = shift_logits.argmax(dim=-1)
+                    top1_correct = (top1_preds == shift_labels) & valid_mask
+                    result["action_token_top1_accuracy"] = top1_correct.sum().item() / valid_mask.sum().item()
+
+                    # Exact action token sequence accuracy (per-sample)
+                    batch_size_actual = full_labels.shape[0]
+                    exact_correct = 0
+                    total_valid_samples = 0
+                    for b in range(batch_size_actual):
+                        sample_mask = valid_mask[b]
+                        if sample_mask.any():
+                            total_valid_samples += 1
+                            if top1_correct[b][sample_mask].all():
+                                exact_correct += 1
+                    if total_valid_samples > 0:
+                        result["exact_action_token_sequence_accuracy"] = exact_correct / total_valid_samples
+
+        return result
 
     @torch.no_grad()
     def predict_action_chunk(
@@ -568,13 +669,6 @@ class MiniVLACore(nn.Module):
             elif actions.ndim == 2:
                 # [B, A] or [T, A] -> [B, 1, A] (take first horizon)
                 actions = actions.unsqueeze(1)
-
-            # Unpad action dimension if VQ-VAE was trained with higher action dim
-            # (e.g., LIBERO 7-dim VQ-VAE used for Meta-World 4-dim actions)
-            vq_action_dim = self.action_tokenizer.vq_vae.input_dim_w
-            actual_action_dim = self._get_action_dim()
-            if vq_action_dim > actual_action_dim:
-                actions = actions[:, :, :actual_action_dim]
         else:
             actions = self.action_tokenizer.decode_token_ids_to_actions(action_token_ids_np)
             actions = torch.from_numpy(actions).float()
@@ -630,52 +724,80 @@ class MiniVLACore(nn.Module):
         )
         return denormalized
 
-    def get_optim_params(self) -> dict:
+    def get_optim_params(self) -> list[dict]:
         """
-        Returns only trainable parameters (vision, projector, Qwen).
+        Returns parameter groups with per-component learning rates.
+        Supports separate LRs for projector, backbone (vision/LLM), and default.
         VQ-VAE is excluded.
+        Returns a list of dicts: [{params: [...], lr: ..., name: ...}, ...]
         """
-        params = []
-        
+        base_lr = self.config.optimizer_lr
+        projector_lr = self.config.projector_lr if self.config.projector_lr > 0 else base_lr
+        backbone_lr = self.config.backbone_lr if self.config.backbone_lr > 0 else base_lr
+
+        param_groups = []
+
+        # Vision backbone parameters
         if not self.config.freeze_vision_backbone:
+            vision_params = []
             for p in self.vlm.vision_backbone.parameters():
                 if isinstance(p, torch.Tensor) and p.requires_grad:
-                    params.append(p)
-                elif not isinstance(p, torch.Tensor):
-                    print(f"[WARNING] vision_backbone non-Tensor: {type(p)} = {repr(p)[:100]}")
+                    vision_params.append(p)
+            if vision_params:
+                param_groups.append({
+                    "params": vision_params,
+                    "lr": backbone_lr,
+                    "name": "vision_backbone",
+                })
 
+        # Projector parameters
+        projector_params = []
         for p in self.vlm.projector.parameters():
             if isinstance(p, torch.Tensor) and p.requires_grad:
-                params.append(p)
-            elif not isinstance(p, torch.Tensor):
-                print(f"[WARNING] projector non-Tensor: {type(p)} = {repr(p)[:100]}")
+                projector_params.append(p)
+        if projector_params:
+            param_groups.append({
+                "params": projector_params,
+                "lr": projector_lr,
+                "name": "projector",
+            })
 
+        # LLM parameters
+        llm_params = []
         if self.config.freeze_llm_backbone:
             if self.config.unfreeze_last_llm_layer:
                 for p in self.vlm.llm.model.layers[-1].parameters():
                     if isinstance(p, torch.Tensor) and p.requires_grad:
-                        params.append(p)
-                    elif not isinstance(p, torch.Tensor):
-                        print(f"[WARNING] llm last_layer non-Tensor: {type(p)} = {repr(p)[:100]}")
+                        llm_params.append(p)
         else:
             for p in self.vlm.llm.parameters():
                 if isinstance(p, torch.Tensor) and p.requires_grad:
-                    params.append(p)
-                elif not isinstance(p, torch.Tensor):
-                    print(f"[WARNING] llm non-Tensor: {type(p)} = {repr(p)[:100]}")
+                    llm_params.append(p)
 
-        # Final validation
-        for i, p in enumerate(params):
-            if not isinstance(p, torch.Tensor):
-                print(f"[ERROR] Parameter {i} is not a Tensor: type={type(p)}, value={repr(p)[:200]}")
-            elif not p.requires_grad:
-                print(f"[WARNING] Parameter {i} does not require grad: shape={p.shape}")
+        if llm_params:
+            param_groups.append({
+                "params": llm_params,
+                "lr": backbone_lr,
+                "name": "llm_backbone",
+            })
 
-        print(f"[DEBUG] Total trainable parameters: {len(params)}")
-        print(f"[DEBUG] First param type: {type(params[0]) if params else 'empty'}")
-        print(f"[DEBUG] Last param type: {type(params[-1]) if params else 'empty'}")
-        
-        return {"params": params}
+        # Print parameter group details for verification
+        print(f"\n{'='*60}")
+        print(f"[OPTIM PARAM GROUPS]")
+        total_params = 0
+        for i, group in enumerate(param_groups):
+            num_params = sum(p.numel() for p in group["params"])
+            total_params += num_params
+            print(
+                f"  Group {i}: {group['name']}, "
+                f"lr={group['lr']:.2e}, "
+                f"num_tensors={len(group['params'])}, "
+                f"total_elements={num_params:,}"
+            )
+        print(f"  Total trainable parameters: {total_params:,}")
+        print(f"{'='*60}\n")
+
+        return param_groups
 
 
 class MiniVLAPolicy(PreTrainedPolicy):
@@ -832,6 +954,8 @@ class MiniVLAPolicy(PreTrainedPolicy):
             if not missing_keys and not unexpected_keys and not shape_mismatches:
                 logger.info("[MiniVLA] All keys matched successfully")
             
+            # Convert model to float32 for maximum compatibility during inference
+            instance = instance.float()
             instance.to(config.device)
             instance.eval()
             return instance
@@ -880,11 +1004,19 @@ class MiniVLAPolicy(PreTrainedPolicy):
             instruction = [""] * batch_size
 
         action = batch.get("action", None)
+        action_is_pad = batch.get("action_is_pad", None)
         outputs = self.model(
             pixel_values=pixel_values,
             instruction=instruction,
             action=action,
+            action_is_pad=action_is_pad,
         )
+
+        # MiniVLACore.forward now returns a dict with loss and metrics
+        if isinstance(outputs, dict):
+            loss = outputs["loss"]
+            metrics = {k: v for k, v in outputs.items() if k != "loss"}
+            return loss, metrics if metrics else None
 
         return outputs.loss, None
 

@@ -560,6 +560,25 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
     if cfg.resume and accelerator.distributed_type == DistributedType.FSDP:
         load_fsdp_optimizer_state(policy, optimizer, cfg.checkpoint_path)
 
+    # Validate TinyVLA training parameters on main process before training starts
+    if is_main_process and hasattr(accelerator.unwrap_model(policy), "validate_training_params"):
+        unwrapped = accelerator.unwrap_model(policy)
+        try:
+            val_result = unwrapped.validate_training_params()
+            logging.info(
+                f"TinyVLA param validation passed: "
+                f"trainable={val_result['trainable_params']:,} / {val_result['total_params']:,}, "
+                f"embed_out_ok={val_result['embed_out_in_optim']}, "
+                f"lora_ok={val_result['lora_in_optim']}, "
+                f"proj_ok={val_result['proj_in_optim']}"
+            )
+            if val_result["warnings"]:
+                for w in val_result["warnings"]:
+                    logging.warning(f"  {w}")
+        except RuntimeError as e:
+            logging.error(str(e))
+            raise
+
     dl_iter = cycle(dataloader)
 
     policy.train()

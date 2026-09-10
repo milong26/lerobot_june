@@ -129,9 +129,17 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     optimizer_betas: tuple[float, float] = field(default_factory=lambda: (0.9, 0.999))
     optimizer_eps: float = 1e-8
 
+    # === Per-component learning rates ===
+    # projector_lr: if > 0, overrides optimizer_lr for projector params
+    # backbone_lr: if > 0, overrides optimizer_lr for vision/LLM backbone params
+    projector_lr: float = 0.0
+    backbone_lr: float = 0.0
+
     # === Scheduler ===
     scheduler_type: str = "constant"
     scheduler_warmup_ratio: float = 0.0
+    # Absolute warmup steps (overrides warmup_ratio when > 0)
+    scheduler_warmup_steps: int = 0
 
     # === Normalization ===
     normalization_mapping: dict[str, NormalizationMode] = field(

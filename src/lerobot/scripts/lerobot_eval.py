@@ -1180,6 +1180,19 @@ def eval_main(cfg: EvalPipelineConfig):
         rename_map=cfg.rename_map,
     )
 
+    # Patch MiniVLA's VQ action tokenizer for bfloat16 compatibility
+    if hasattr(policy, "model") and hasattr(policy.model, "action_tokenizer"):
+        action_tokenizer = policy.model.action_tokenizer
+        if hasattr(action_tokenizer, "vq_vae") and hasattr(action_tokenizer.vq_vae, "get_action_from_latent"):
+            original_get_action = action_tokenizer.vq_vae.get_action_from_latent
+            def patched_get_action(latent):
+                result = original_get_action(latent)
+                if result.dtype == torch.bfloat16:
+                    return result.float()
+                return result
+            action_tokenizer.vq_vae.get_action_from_latent = patched_get_action
+            logging.info("Patched MiniVLA vq_vae.get_action_from_latent for bfloat16 compatibility")
+
     policy.eval()
 
     # The inference device is automatically set to match the detected hardware, overriding any previous device settings from training to ensure compatibility.

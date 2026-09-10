@@ -87,6 +87,7 @@ def run_eval_for_checkpoint(
         f"--eval.batch_size={cfg.eval_batch_size}",
         f"--eval.n_episodes={cfg.eval_n_episodes}",
         "--policy.device=cuda",
+        f"--rename_map={cfg.rename_map}",
     ]
 
     print(f"\nRunning: lerobot-eval ...")

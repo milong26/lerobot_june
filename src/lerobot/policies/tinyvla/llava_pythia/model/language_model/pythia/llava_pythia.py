@@ -321,9 +321,24 @@ class LlavaPythiaForCausalLM(GPTNeoXPreTrainedModel, LlavaMetaForCausalLM):
 
             noise_pred = self.embed_out(noisy_actions, timesteps, global_cond=hidden_states, states=states)
             noise = noise.view(noise.size(0) * noise.size(1), *noise.size()[2:])
+
             loss = torch.nn.functional.mse_loss(noise_pred, noise, reduction='none')
-            loss = (loss * ~is_pad.unsqueeze(-1)).mean()
-            return {'loss': loss}
+            valid_mask = ~is_pad.unsqueeze(-1)
+            action_dim = loss.shape[-1]
+            valid_count = valid_mask.sum()
+            total_valid_elements = valid_count * action_dim
+            denom = total_valid_elements.clamp_min(1)
+            loss = (loss * valid_mask).sum() / denom
+
+            total_elements = valid_mask.numel() * action_dim if valid_mask.numel() > 0 else 1
+            padding_ratio = 1.0 - (total_valid_elements.item() / max(total_elements, 1))
+
+            return {
+                'loss': loss,
+                'diffusion_loss': loss.detach().item(),
+                'valid_action_count': total_valid_elements.item(),
+                'padding_ratio': padding_ratio,
+            }
         else:
             B = hidden_states.size(0)
             Tp = self.num_queries

@@ -57,7 +57,7 @@ RENAME_MAP = '{"observation.images.camera1":"observation.images.top","observatio
 
 PCA_DIM = 32
 
-TINYVLA_TRAIN_STEPS = 12000
+TINYVLA_TRAIN_STEPS = 50000
 TINYVLA_SAVE_FREQ = 2000
 TINYVLA_BATCH_SIZE = 4
 TINYVLA_NUM_WORKERS = 8
@@ -127,7 +127,7 @@ class VLMExperimentConfig:
     gpu_id: int = 0
     selection_num_episodes: int = SELECTION_NUM_EPISODES
     selection_seed: int = SELECTION_SEED
-    selection_mode: str = "v5"
+    selection_mode: str = ""
     train_steps: int = TRAIN_STEPS
     train_save_freq: int = TRAIN_SAVE_FREQ
     train_batch_size: int = TRAIN_BATCH_SIZE

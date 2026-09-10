@@ -372,7 +372,7 @@ class TinyVLAPolicy(PreTrainedPolicy):
         
         # Load config if not provided
         if config is None:
-            config = PreTrainedConfig.from_pretrained(pretrained_name_or_path)
+            config = cls.config_class.from_pretrained(pretrained_name_or_path)
         
         # Create policy instance
         # This builds the model from scratch:
@@ -576,6 +576,70 @@ class TinyVLAPolicy(PreTrainedPolicy):
             info = {}
 
         return loss, info
+
+    def validate_training_params(self) -> dict:
+        """Validate that action head and LoRA parameters are properly configured for training.
+
+        Returns a dict with validation results. Raises RuntimeError if critical issues found.
+        """
+        optim_params = self.get_optim_params()
+        optim_param_ids = set()
+        for group in optim_params:
+            for p in group["params"]:
+                optim_param_ids.add(id(p))
+
+        issues = []
+        warnings = []
+        embed_out_found = False
+        lora_found = False
+        proj_found = False
+
+        for name, param in self.named_parameters():
+            is_embed_out = "embed_out" in name
+            is_lora = "lora" in name.lower()
+            is_proj = "proj_to_action" in name
+
+            if is_embed_out or is_lora or is_proj:
+                if not param.requires_grad:
+                    issues.append(f"CRITICAL: {name} requires_grad=False")
+                if id(param) not in optim_param_ids:
+                    issues.append(f"CRITICAL: {name} not in optimizer param groups")
+
+                if is_embed_out:
+                    embed_out_found = True
+                if is_lora:
+                    lora_found = True
+                if is_proj:
+                    proj_found = True
+
+        if not embed_out_found:
+            issues.append("CRITICAL: No embed_out (action head) parameters found in model")
+        if not lora_found and self.config.lora_enable:
+            warnings.append("No LoRA parameters found despite lora_enable=True")
+        if not proj_found and self.config.action_head_type == "act":
+            warnings.append("No proj_to_action parameters found (expected for 'act' head)")
+
+        trainable = sum(p.numel() for p in self.parameters() if p.requires_grad)
+        total = sum(p.numel() for p in self.parameters())
+
+        result = {
+            "issues": issues,
+            "warnings": warnings,
+            "trainable_params": trainable,
+            "total_params": total,
+            "embed_out_in_optim": embed_out_found and not any("embed_out" in i for i in issues),
+            "lora_in_optim": lora_found and not any("lora" in i.lower() for i in issues),
+            "proj_in_optim": proj_found and not any("proj_to_action" in i for i in issues),
+        }
+
+        if issues:
+            raise RuntimeError(
+                f"TinyVLA training parameter validation failed:\n"
+                + "\n".join(f"  {i}" for i in issues)
+                + f"\nTrainable params: {trainable:,} / {total:,}"
+            )
+
+        return result
 
 
 class TinyVLABPolicy(TinyVLAPolicy):

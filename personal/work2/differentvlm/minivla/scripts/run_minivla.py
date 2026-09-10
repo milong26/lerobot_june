@@ -380,6 +380,17 @@ def run_experiment(
     selection_mode: str = "grid_uniform",
     eval_all: bool = True,
     eval_latest_only: bool = False,
+    train_steps: int = 20000,
+    train_save_freq: int = 2000,
+    env_eval_freq: int = 0,
+    eval_n_episodes: int = 10,
+    action_tokenizer_type: str = "extra_action_tokenizer",
+    official_vla_checkpoint: str = "",
+    resume: bool = False,
+    restart: bool = False,
+    scheduler_warmup_steps: int = 0,
+    projector_lr: float = 0.0,
+    backbone_lr: float = 0.0,
 ):
     """Run the complete MiniVLA experiment pipeline."""
     start_time = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -391,6 +402,17 @@ def run_experiment(
         num_episodes=num_episodes,
         seed=seed,
         selection_mode=selection_mode,
+        train_steps=train_steps,
+        train_save_freq=train_save_freq,
+        env_eval_freq=env_eval_freq,
+        eval_n_episodes=eval_n_episodes,
+        action_tokenizer_type=action_tokenizer_type,
+        official_vla_checkpoint=official_vla_checkpoint,
+        resume=resume,
+        restart=restart,
+        scheduler_warmup_steps=scheduler_warmup_steps,
+        projector_lr=projector_lr,
+        backbone_lr=backbone_lr,
     )
     cfg.ensure_dirs()
 
@@ -529,6 +551,25 @@ def main():
     parser.add_argument("--no-eval", action="store_true", help="Skip evaluation after training")
     parser.add_argument("--eval-latest-only", action="store_true",
                        help="Only evaluate the latest checkpoint (default: evaluate all)")
+    
+    # Training parameters
+    parser.add_argument("--train-steps", type=int, default=20000, help="Total training steps")
+    parser.add_argument("--train-save-freq", type=int, default=2000, help="Checkpoint save frequency")
+    parser.add_argument("--env-eval-freq", type=int, default=0,
+                       help="Environment eval frequency during training (0=disabled, >0=eval every N steps)")
+    parser.add_argument("--eval-n-episodes", type=int, default=10, help="Number of episodes for evaluation")
+    parser.add_argument("--action-tokenizer-type", type=str, default="extra_action_tokenizer",
+                       help="Action tokenizer type (extra_action_tokenizer, libero_vq_action_tokenizer, etc.)")
+    parser.add_argument("--official-vla-checkpoint", type=str, default="",
+                       help="Path to official VLA checkpoint for initialization")
+    parser.add_argument("--resume", action="store_true", help="Resume from existing checkpoint")
+    parser.add_argument("--restart", action="store_true", help="Delete old experiment and start fresh")
+    parser.add_argument("--scheduler-warmup-steps", type=int, default=0, help="Scheduler warmup steps")
+    parser.add_argument("--projector-lr", type=float, default=0.0,
+                       help="Projector learning rate (0.0 = use optimizer_lr)")
+    parser.add_argument("--backbone-lr", type=float, default=0.0,
+                       help="Vision/LLM backbone learning rate (0.0 = use optimizer_lr)")
+    
     args = parser.parse_args()
 
     run_experiment(
@@ -539,6 +580,17 @@ def main():
         selection_mode=args.selection_mode,
         eval_all=not args.no_eval,
         eval_latest_only=args.eval_latest_only,
+        train_steps=args.train_steps,
+        train_save_freq=args.train_save_freq,
+        env_eval_freq=args.env_eval_freq,
+        eval_n_episodes=args.eval_n_episodes,
+        action_tokenizer_type=args.action_tokenizer_type,
+        official_vla_checkpoint=args.official_vla_checkpoint,
+        resume=args.resume,
+        restart=args.restart,
+        scheduler_warmup_steps=args.scheduler_warmup_steps,
+        projector_lr=args.projector_lr,
+        backbone_lr=args.backbone_lr,
     )
 
 

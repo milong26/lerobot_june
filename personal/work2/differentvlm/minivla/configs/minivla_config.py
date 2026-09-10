@@ -52,14 +52,18 @@ TRAIN_BATCH_SIZE = 4
 TRAIN_NUM_WORKERS = 16
 TRAIN_LR = 2e-5
 
-EVAL_N_EPISODES = 200
-EVAL_SEED = 42
-EVAL_BATCH_SIZE = 16
+# Action tokenizer: MetaWorld uses extra_action_tokenizer (non-VQ, supports 4D natively)
+# Do NOT use libero_vq_action_tokenizer for MetaWorld (7D VQ != 4D MetaWorld action)
+ACTION_TOKENIZER_TYPE = "extra_action_tokenizer"
 
-
+# VQ model path (only used when action_tokenizer_type is a VQ type)
 VQ_MODEL_PATH = "Stanford-ILIAD/pretrain_vq"
 
-RENAME_MAP = '{}'
+EVAL_N_EPISODES = 10
+EVAL_SEED = 42
+EVAL_BATCH_SIZE = 4
+
+RENAME_MAP = '{"observation.images.camera1": "observation.images.top", "observation.images.camera2": "observation.images.wrist"}'
 
 
 @dataclass
@@ -122,9 +126,17 @@ class MiniVLAExperimentConfig:
     train_batch_size: int = TRAIN_BATCH_SIZE
     train_num_workers: int = TRAIN_NUM_WORKERS
     train_lr: float = TRAIN_LR
+    action_tokenizer_type: str = ACTION_TOKENIZER_TYPE
+    official_vla_checkpoint: str = ""
+    resume: bool = False
+    restart: bool = False
+    scheduler_warmup_steps: int = 0
+    projector_lr: float = 0.0
+    backbone_lr: float = 0.0
     eval_n_episodes: int = EVAL_N_EPISODES
     eval_seed: int = EVAL_SEED
     eval_batch_size: int = EVAL_BATCH_SIZE
+    env_eval_freq: int = 0  # 0 = disabled, >0 = eval every N steps
     vq_model_path: str = VQ_MODEL_PATH
     rename_map: str = RENAME_MAP
     experiment_dir: Optional[str] = None
@@ -156,6 +168,17 @@ def get_minivla_config(
     num_episodes: int = 112,
     seed: int = 42,
     selection_mode: str = "grid_uniform",
+    train_steps: int = TRAIN_STEPS,
+    train_save_freq: int = TRAIN_SAVE_FREQ,
+    env_eval_freq: int = 0,
+    eval_n_episodes: int = EVAL_N_EPISODES,
+    action_tokenizer_type: str = ACTION_TOKENIZER_TYPE,
+    official_vla_checkpoint: str = "",
+    resume: bool = False,
+    restart: bool = False,
+    scheduler_warmup_steps: int = 0,
+    projector_lr: float = 0.0,
+    backbone_lr: float = 0.0,
 ) -> MiniVLAExperimentConfig:
     ds_config = DATASET_CONFIGS.get(dataset_name, {})
     
@@ -181,14 +204,22 @@ def get_minivla_config(
         selection_num_episodes=num_episodes,
         selection_seed=seed,
         selection_mode=selection_mode,
-        train_steps=TRAIN_STEPS,
-        train_save_freq=TRAIN_SAVE_FREQ,
+        train_steps=train_steps,
+        train_save_freq=train_save_freq,
         train_batch_size=TRAIN_BATCH_SIZE,
         train_num_workers=TRAIN_NUM_WORKERS,
         train_lr=TRAIN_LR,
-        eval_n_episodes=EVAL_N_EPISODES,
+        action_tokenizer_type=action_tokenizer_type,
+        official_vla_checkpoint=official_vla_checkpoint,
+        resume=resume,
+        restart=restart,
+        scheduler_warmup_steps=scheduler_warmup_steps,
+        projector_lr=projector_lr,
+        backbone_lr=backbone_lr,
+        eval_n_episodes=eval_n_episodes,
         eval_seed=EVAL_SEED,
         eval_batch_size=EVAL_BATCH_SIZE,
+        env_eval_freq=env_eval_freq,
         vq_model_path=VQ_MODEL_PATH,
         rename_map=RENAME_MAP,
     )

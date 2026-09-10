@@ -1,0 +1,39 @@
+{
+  "exp_name": "random_1_seed42_disassemblev3corner_minivla_random",
+  "dataset_name": "disassemble-v3_corner",
+  "gpu_id": 0,
+  "start_time": "2026-09-10 15:22:33",
+  "end_time": "2026-09-10 15:22:45",
+  "current_stage": "completed",
+  "failed_stage": null,
+  "config": {
+    "selection_mode": "random",
+    "selection_num_episodes": 1,
+    "selection_seed": 42,
+    "train_steps": 1,
+    "train_batch_size": 4,
+    "train_lr": 2e-05,
+    "eval_n_episodes": 10,
+    "eval_seed": 42,
+    "vq_model_path": "Stanford-ILIAD/pretrain_vq"
+  },
+  "paths": {
+    "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_1_seed42_disassemblev3corner_minivla_random/subsets/random_1_seed42.json",
+    "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_1_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints",
+    "eval_results_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_1_seed42_disassemblev3corner_minivla_random/eval_results"
+  },
+  "stages": {
+    "episode_selection": {
+      "status": "success",
+      "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_1_seed42_disassemblev3corner_minivla_random/subsets/random_1_seed42.json",
+      "time_seconds": 0.0
+    },
+    "training": {
+      "status": "success",
+      "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_1_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints",
+      "time_seconds": 11.3
+    }
+  },
+  "final_metrics": {},
+  "total_time_seconds": 11.3
+}
