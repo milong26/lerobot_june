@@ -322,6 +322,7 @@ class MiniVLACore(nn.Module):
         instruction: list[str],
         action: Optional[torch.Tensor] = None,
         action_is_pad: Optional[torch.Tensor] = None,
+        state: Optional[torch.Tensor] = None,
     ):
         """
         Training forward pass.
@@ -329,8 +330,10 @@ class MiniVLACore(nn.Module):
         instruction: list of task strings
         action: [B, chunk_size, action_dim] normalized actions (in [-1, 1] range)
         action_is_pad: [B, chunk_size] boolean mask of padded actions
+        state: [B, state_dim] normalized proprioceptive state (in [-1, 1] range)
         Returns: dict with loss and additional metrics
         Mirrors teach_code/MiniVLA/prismatic/vla/datasets/datasets.py (RLDSBatchTransform).
+        State handling mirrors official OpenVLA: action_proprio_normalization_type=BOUNDS_Q99.
 
         Action token generation logic:
         - VQ mode: action[i, :required_horizon] where required_horizon = required_future_horizon + 1
@@ -365,6 +368,18 @@ class MiniVLACore(nn.Module):
                         f"Use a VQ tokenizer with input_dim_w matching the dataset action_dim, "
                         f"or switch to a non-VQ action tokenizer (e.g., extra_action_tokenizer)."
                     )
+
+            # Format state as text for prompt (mirrors official OpenVLA proprio handling)
+            state_texts = []
+            if state is not None:
+                # state shape: [B, state_dim] or [B, 1, state_dim]
+                if state.dim() == 3:
+                    state = state.squeeze(1)
+                for i in range(batch_size):
+                    state_vals = state[i].cpu().numpy()
+                    state_texts.append(", ".join([f"{v:.3f}" for v in state_vals]))
+            else:
+                state_texts = [None] * batch_size
 
             action_texts = []
             valid_action_mask = []
@@ -416,7 +431,7 @@ class MiniVLACore(nn.Module):
             for i in range(batch_size):
                 if not valid_action_mask[i] or not action_texts[i]:
                     # Skip padded actions: mask entire sequence
-                    prompt = self.tokenizer.build_prompt(instruction[i], "")
+                    prompt = self.tokenizer.build_prompt(instruction[i], "", state_texts[i])
                     encoded = self.tokenizer.tokenizer(
                         prompt,
                         return_tensors="pt",
@@ -427,7 +442,7 @@ class MiniVLACore(nn.Module):
                     labels = torch.full_like(input_ids, IGNORE_INDEX)
                 else:
                     # Build prompt with official template: "What action should the robot take to {instruction}?"
-                    prompt = self.tokenizer.build_prompt(instruction[i], action_texts[i])
+                    prompt = self.tokenizer.build_prompt(instruction[i], action_texts[i], state_texts[i])
                     encoded = self.tokenizer.tokenizer(
                         prompt,
                         return_tensors="pt",
@@ -461,10 +476,21 @@ class MiniVLACore(nn.Module):
                 attention_mask_list, batch_first=True, padding_value=0
             )
         else:
+            # Inference mode: format state text if available
+            inference_state_texts = []
+            if state is not None:
+                if state.dim() == 3:
+                    state = state.squeeze(1)
+                for i in range(batch_size):
+                    state_vals = state[i].cpu().numpy()
+                    inference_state_texts.append(", ".join([f"{v:.3f}" for v in state_vals]))
+            else:
+                inference_state_texts = [None] * batch_size
+
             input_ids_list = []
             attention_mask_list = []
             for i in range(batch_size):
-                prompt = self.tokenizer.build_inference_prompt(instruction[i])
+                prompt = self.tokenizer.build_inference_prompt(instruction[i], inference_state_texts[i])
                 encoded = self.tokenizer.tokenizer(
                     prompt,
                     return_tensors="pt",
@@ -554,6 +580,7 @@ class MiniVLACore(nn.Module):
         self,
         pixel_values: dict[str, torch.Tensor],
         instruction: list[str],
+        state: Optional[torch.Tensor] = None,
         do_sample: bool = False,
         temperature: float = 0.0,
         max_new_tokens: Optional[int] = None,
@@ -571,6 +598,17 @@ class MiniVLACore(nn.Module):
             batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size
 
+        # Format state as text for prompt (mirrors official OpenVLA proprio handling)
+        state_texts = []
+        if state is not None:
+            if state.dim() == 3:
+                state = state.squeeze(1)
+            for i in range(batch_size):
+                state_vals = state[i].cpu().numpy()
+                state_texts.append(", ".join([f"{v:.3f}" for v in state_vals]))
+        else:
+            state_texts = [None] * batch_size
+
         # Determine number of tokens to generate
         action_dim = self._get_action_dim()
 
@@ -586,7 +624,7 @@ class MiniVLACore(nn.Module):
         # === Build inference prompt ===
         input_ids_list = []
         for i in range(batch_size):
-            prompt = self.tokenizer.build_inference_prompt(instruction[i])
+            prompt = self.tokenizer.build_inference_prompt(instruction[i], state_texts[i])
             encoded = self.tokenizer.tokenizer(
                 prompt,
                 return_tensors="pt",
@@ -1005,11 +1043,13 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
         action = batch.get("action", None)
         action_is_pad = batch.get("action_is_pad", None)
+        state = batch.get("observation.state", None)
         outputs = self.model(
             pixel_values=pixel_values,
             instruction=instruction,
             action=action,
             action_is_pad=action_is_pad,
+            state=state,
         )
 
         # MiniVLACore.forward now returns a dict with loss and metrics
@@ -1028,14 +1068,17 @@ class MiniVLAPolicy(PreTrainedPolicy):
         if "task" in batch:
             instruction = batch["task"]
             if isinstance(instruction, torch.Tensor):
+                batch_size = pixel_values["dino"].shape[0]
                 instruction = [""] * batch_size
         else:
             batch_size = pixel_values["dino"].shape[0]
             instruction = [""] * batch_size
 
+        state = batch.get("observation.state", None)
         return self.model.predict_action_chunk(
             pixel_values=pixel_values,
             instruction=instruction,
+            state=state,
             **kwargs,
         )
 

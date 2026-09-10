@@ -218,6 +218,7 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         f"--eval.n_episodes={cfg.eval_n_episodes}",
         f"--eval.batch_size={cfg.eval_batch_size}",
         f"--env_eval_freq={cfg.env_eval_freq}",
+        f"--env.use_self_mw={cfg.use_self_mw}",
         f"--seed={cfg.selection_seed}",
         f"--job_name=minivla_{cfg.exp_name}",
         f"--output_dir={output_dir}",

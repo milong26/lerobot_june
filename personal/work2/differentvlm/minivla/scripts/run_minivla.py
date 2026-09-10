@@ -384,6 +384,7 @@ def run_experiment(
     train_save_freq: int = 2000,
     env_eval_freq: int = 0,
     eval_n_episodes: int = 10,
+    use_self_mw: bool = True,
     action_tokenizer_type: str = "extra_action_tokenizer",
     official_vla_checkpoint: str = "",
     resume: bool = False,
@@ -406,6 +407,7 @@ def run_experiment(
         train_save_freq=train_save_freq,
         env_eval_freq=env_eval_freq,
         eval_n_episodes=eval_n_episodes,
+        use_self_mw=use_self_mw,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,
         resume=resume,
@@ -558,6 +560,10 @@ def main():
     parser.add_argument("--env-eval-freq", type=int, default=0,
                        help="Environment eval frequency during training (0=disabled, >0=eval every N steps)")
     parser.add_argument("--eval-n-episodes", type=int, default=10, help="Number of episodes for evaluation")
+    parser.add_argument("--use-self-mw", action="store_true", default=True,
+                       help="Use self-collected Meta-World dataset format (dual camera, lerobot naming)")
+    parser.add_argument("--no-use-self-mw", action="store_false", dest="use_self_mw",
+                       help="Disable self-collected Meta-World dataset format")
     parser.add_argument("--action-tokenizer-type", type=str, default="extra_action_tokenizer",
                        help="Action tokenizer type (extra_action_tokenizer, libero_vq_action_tokenizer, etc.)")
     parser.add_argument("--official-vla-checkpoint", type=str, default="",
@@ -584,6 +590,7 @@ def main():
         train_save_freq=args.train_save_freq,
         env_eval_freq=args.env_eval_freq,
         eval_n_episodes=args.eval_n_episodes,
+        use_self_mw=args.use_self_mw,
         action_tokenizer_type=args.action_tokenizer_type,
         official_vla_checkpoint=args.official_vla_checkpoint,
         resume=args.resume,

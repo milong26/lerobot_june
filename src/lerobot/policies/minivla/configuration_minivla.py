@@ -62,12 +62,15 @@ VQ_TOKENIZER_TYPES = {
 def _default_normalization_mapping() -> dict[str, NormalizationMode]:
     """
     Official MiniVLA normalization mapping.
-    ACTION uses QUANTILE normalization (q01/q99) matching official dataset_statistics.json.
+    ACTION and STATE both use QUANTILE normalization (q01/q99) matching official dataset_statistics.json.
     VISUAL uses IDENTITY (no normalization, only DINO/SigLIP transform).
+    Mirrors teach_code/MiniVLA/prismatic/vla/datasets/datasets.py:
+        action_proprio_normalization_type=NormalizationType.BOUNDS_Q99
     """
     return {
         "VISUAL": NormalizationMode.IDENTITY,
         "ACTION": NormalizationMode.QUANTILES,
+        "STATE": NormalizationMode.QUANTILES,
     }
 
 

@@ -137,6 +137,7 @@ class MiniVLAExperimentConfig:
     eval_seed: int = EVAL_SEED
     eval_batch_size: int = EVAL_BATCH_SIZE
     env_eval_freq: int = 0  # 0 = disabled, >0 = eval every N steps
+    use_self_mw: bool = True  # Use self-collected Meta-World dataset format
     vq_model_path: str = VQ_MODEL_PATH
     rename_map: str = RENAME_MAP
     experiment_dir: Optional[str] = None
@@ -172,6 +173,7 @@ def get_minivla_config(
     train_save_freq: int = TRAIN_SAVE_FREQ,
     env_eval_freq: int = 0,
     eval_n_episodes: int = EVAL_N_EPISODES,
+    use_self_mw: bool = True,
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE,
     official_vla_checkpoint: str = "",
     resume: bool = False,
@@ -220,6 +222,7 @@ def get_minivla_config(
         eval_seed=EVAL_SEED,
         eval_batch_size=EVAL_BATCH_SIZE,
         env_eval_freq=env_eval_freq,
+        use_self_mw=use_self_mw,
         vq_model_path=VQ_MODEL_PATH,
         rename_map=RENAME_MAP,
     )

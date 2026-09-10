@@ -254,8 +254,19 @@ class TinyVLAPolicy(PreTrainedPolicy):
         return all_images
 
     def _tokenize_language(self, raw_lang: list[str]) -> tuple[Tensor, Tensor]:
-        """Tokenize language instructions.
-
+        """Tokenize language instructions using official TinyVLA conversation template.
+        
+        Reference: teach_code/TinyVLA/data_utils/datasets.py::datastruct_droid2llava
+                   teach_code/TinyVLA/data_utils/processor.py::preprocess_multimodal & preprocess_v0
+        
+        Official format:
+            System: "A chat between a curious user and an artificial intelligence assistant..."
+            USER: <image>\n{task_instruction}
+            ASSISTANT: (empty, for behavior cloning)
+        
+        This matches the v0 conversation template with SeparatorStyle.TWO:
+            sep=" ", sep2="<|endoftext|>"
+        
         Args:
             raw_lang: List of language instruction strings.
 
@@ -266,7 +277,32 @@ class TinyVLAPolicy(PreTrainedPolicy):
         batch_labels = []
 
         for lang in raw_lang:
-            prompt = f"{DEFAULT_IMAGE_TOKEN}\n{lang}"
+            # Build conversation following official template
+            # datastruct_droid2llava creates:
+            #   {"from": "human", "value": "<image>\n{task}"}
+            #   {"from": "gpt", "value": " "}
+            sources = [{
+                "conversations": [
+                    {"from": "human", "value": f"<image>\n{lang}"},
+                    {"from": "gpt", "value": " "}
+                ]
+            }]
+            
+            # preprocess_multimodal: replace <image> token with formatted version
+            # For official: DEFAULT_IMAGE_TOKEN + '\n' + value (already has this format)
+            # Then replace_token = DEFAULT_IMAGE_TOKEN (no im_start_end by default)
+            
+            # Build prompt following conv_v0 template:
+            # system + sep + USER: <image>\n{lang} + sep + ASSISTANT: + sep2
+            # sep=" ", sep2="<|endoftext|>"
+            prompt = (
+                "A chat between a curious user and an artificial intelligence assistant. "
+                "The assistant gives helpful, detailed, and polite answers to the user's questions. "
+                "USER: <image>\n"
+                f"{lang} "
+                "ASSISTANT: "
+                "<|endoftext|>"
+            )
 
             input_ids = tokenizer_image_token(
                 prompt,
@@ -274,8 +310,11 @@ class TinyVLAPolicy(PreTrainedPolicy):
                 IMAGE_TOKEN_INDEX,
                 return_tensors="pt",
             )
+            
+            # Create labels: mask all tokens except ASSISTANT response
+            # Following preprocess_v0 logic: mask USER part, keep ASSISTANT part
+            # But for behavior cloning, ASSISTANT response is empty, so all labels are IGNORE_INDEX
             labels = input_ids.clone()
-
             labels[:] = IGNORE_INDEX
 
             batch_input_ids.append(input_ids)
@@ -293,13 +332,36 @@ class TinyVLAPolicy(PreTrainedPolicy):
         return padded_input_ids.to(self.config.device), padded_labels.to(self.config.device)
 
     def get_optim_params(self) -> dict:
+        """Get optimizer parameters with dual learning rates (official TinyVLA).
+        
+        Reference: teach_code/TinyVLA/train_tinyvla.py optimizer setup
+        - LoRA parameters: lr = 2e-4 (higher learning rate for adaptation)
+        - Non-LoRA parameters (embed_out, proj_to_action, mm_projector): lr = 2e-5 (lower learning rate)
+        
+        This matches the official configuration where action head uses 10x lower learning rate
+        to prevent aggressive updates in early training stages.
+        """
+        lora_params = []
+        non_lora_params = []
+        
+        for n, p in self.named_parameters():
+            if not p.requires_grad:
+                continue
+            
+            if 'lora' in n.lower():
+                lora_params.append(p)
+            else:
+                non_lora_params.append(p)
+        
         return [
             {
-                "params": [
-                    p for n, p in self.named_parameters()
-                    if p.requires_grad
-                ],
-            }
+                "params": lora_params,
+                "lr": self.config.optimizer_lr,  # 2e-4
+            },
+            {
+                "params": non_lora_params,
+                "lr": self.config.optimizer_non_lora_lr,  # 2e-5
+            },
         ]
 
     def _save_pretrained(self, save_directory: Path, state_dict: dict[str, Tensor] | None = None) -> None:

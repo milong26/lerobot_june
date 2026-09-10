@@ -62,7 +62,7 @@ class TinyVLAConfig(PreTrainedConfig):
         default_factory=lambda: {
             "VISUAL": NormalizationMode.IDENTITY,
             "STATE": NormalizationMode.MEAN_STD,
-            "ACTION": NormalizationMode.MEAN_STD,
+            "ACTION": NormalizationMode.MIN_MAX,
         }
     )
 
@@ -95,8 +95,10 @@ class TinyVLAConfig(PreTrainedConfig):
     pretrain_image_size: int = 320
 
     # Training presets - match official train.sh
-    # learning_rate 2e-4, weight_decay 0., warmup_ratio 0.005, lr_scheduler_type cosine
+    # learning_rate 2e-4 for LoRA, non_lora_lr 2e-5 for action head/mm_projector
+    # weight_decay 0., warmup_ratio 0.005, lr_scheduler_type cosine
     optimizer_lr: float = 2e-4
+    optimizer_non_lora_lr: float = 2e-5
     optimizer_weight_decay: float = 0.0
     optimizer_betas: tuple[float, float] = (0.9, 0.98)
     optimizer_eps: float = 1e-7

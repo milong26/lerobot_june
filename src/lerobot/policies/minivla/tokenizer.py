@@ -122,24 +122,30 @@ class VLATokenizerWrapper:
     def pad_token_id(self) -> int:
         return self.original_pad_token_id
 
-    def build_prompt(self, instruction: str, action_text: str) -> str:
+    def build_prompt(self, instruction: str, action_text: str, state_text: str | None = None) -> str:
         """
         Build training prompt with instruction and action response.
         Mirrors RLDSBatchTransform conversation building.
+        If state_text is provided, appends proprioceptive state to the instruction.
         """
+        if state_text:
+            full_instruction = f"What action should the robot take to {instruction.lower()}? The robot state is: {state_text}"
+        else:
+            full_instruction = f"What action should the robot take to {instruction.lower()}?"
         prompt_builder = QwenPromptBuilder("openvla")
-        prompt_builder.add_turn(
-            "human", f"What action should the robot take to {instruction.lower()}?"
-        )
+        prompt_builder.add_turn("human", full_instruction)
         prompt_builder.add_turn("gpt", action_text)
         return prompt_builder.get_prompt()
 
-    def build_inference_prompt(self, instruction: str) -> str:
+    def build_inference_prompt(self, instruction: str, state_text: str | None = None) -> str:
         """
         Build inference prompt (no action response).
+        If state_text is provided, appends proprioceptive state to the instruction.
         """
+        if state_text:
+            full_instruction = f"What action should the robot take to {instruction.lower()}? The robot state is: {state_text}"
+        else:
+            full_instruction = f"What action should the robot take to {instruction.lower()}?"
         prompt_builder = QwenPromptBuilder("openvla")
-        prompt_builder.add_turn(
-            "human", f"What action should the robot take to {instruction.lower()}?"
-        )
+        prompt_builder.add_turn("human", full_instruction)
         return prompt_builder.get_prompt()
