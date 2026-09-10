@@ -1,0 +1,17 @@
+{
+  "method": "random",
+  "num_episodes": 10,
+  "seed": 100,
+  "selected_episode_indices": [
+    74,
+    89,
+    179,
+    201,
+    221,
+    232,
+    235,
+    361,
+    374,
+    394
+  ]
+}

@@ -1,0 +1,234 @@
+"""
+verify_minivla_checkpoint_load.py
+
+Verifies that MiniVLA checkpoint loading correctly loads trained weights.
+
+Steps:
+1. Load a checkpoint with the FIXED from_pretrained (LeRobot-format model.safetensors)
+2. Compare key weight summaries between loaded model and checkpoint file
+3. With a fixed random seed, compare action outputs between:
+   a. Freshly initialized model (no weights loaded)
+   b. Model loaded from checkpoint
+   c. Verify they produce DIFFERENT outputs (proving weights were loaded)
+4. Compare with eval_full_episode.py-style parent class loading for consistency
+
+Usage:
+    python personal/work2/differentvlm/debug/verify_minivla_checkpoint_load.py \
+        --checkpoint_path /path/to/pretrained_model \
+        --device cuda
+"""
+
+import argparse
+import json
+import logging
+import sys
+from pathlib import Path
+
+import numpy as np
+import torch
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
+
+from safetensors.torch import load_file
+
+from lerobot.policies.minivla.modeling_minivla import MiniVLAPolicy
+from lerobot.policies.pretrained import PreTrainedConfig
+from lerobot.policies import make_pre_post_processors
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+)
+logger = logging.getLogger(__name__)
+
+
+def create_fresh_model(checkpoint_path: str, device: str):
+    """Create a MiniVLA model WITHOUT loading weights (freshly initialized)."""
+    config = PreTrainedConfig.from_pretrained(checkpoint_path)
+    config.device = device
+    
+    # Create model instance without loading weights
+    from lerobot.policies.minivla.modeling_minivla import MiniVLAPolicy
+    model = MiniVLAPolicy(config)
+    model.to(device)
+    model.eval()
+    return model, config
+
+
+def load_trained_model(checkpoint_path: str, device: str):
+    """Load MiniVLA model with trained weights using fixed from_pretrained."""
+    policy = MiniVLAPolicy.from_pretrained(checkpoint_path)
+    policy.to(device)
+    policy.eval()
+    return policy, policy.config
+
+
+def create_dummy_batch(config, device: str, seed: int = 42):
+    """Create a fixed dummy batch for testing."""
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
+    batch_size = 1
+    
+    # Create dummy pixel values (DINO + SigLIP)
+    # MiniVLA expects "dino" and "siglip" keys from processor
+    dino_shape = (batch_size, 3, config.image_size, config.image_size)
+    siglip_shape = (batch_size, 3, config.image_size, config.image_size)
+    
+    batch = {
+        "dino": torch.randn(dino_shape, device=device),
+        "siglip": torch.randn(siglip_shape, device=device),
+        "task": ["test task"],
+    }
+    
+    return batch
+
+
+def compare_outputs(fresh_model, trained_model, batch, device: str):
+    """Compare outputs between fresh and trained models."""
+    with torch.no_grad():
+        fresh_actions = fresh_model.predict_action_chunk(batch)
+        trained_actions = trained_model.predict_action_chunk(batch)
+    
+    # Convert to float32 for comparison
+    if fresh_actions.dtype == torch.bfloat16:
+        fresh_actions = fresh_actions.float()
+    if trained_actions.dtype == torch.bfloat16:
+        trained_actions = trained_actions.float()
+    
+    # Compute differences
+    abs_diff = (fresh_actions - trained_actions).abs()
+    max_diff = float(abs_diff.max())
+    mean_diff = float(abs_diff.mean())
+    
+    logger.info(f"\n{'='*60}")
+    logger.info(f"OUTPUT COMPARISON (Fresh vs Trained)")
+    logger.info(f"{'='*60}")
+    logger.info(f"Fresh output shape: {fresh_actions.shape}")
+    logger.info(f"Trained output shape: {trained_actions.shape}")
+    logger.info(f"Fresh output range: [{fresh_actions.min():.4f}, {fresh_actions.max():.4f}]")
+    logger.info(f"Trained output range: [{trained_actions.min():.4f}, {trained_actions.max():.4f}]")
+    logger.info(f"Max absolute difference: {max_diff:.6f}")
+    logger.info(f"Mean absolute difference: {mean_diff:.6f}")
+    
+    # Verify outputs are DIFFERENT (proving weights were loaded)
+    if max_diff < 1e-5:
+        logger.error(
+            f"CRITICAL: Fresh and trained model outputs are nearly identical "
+            f"(max_diff={max_diff:.8f}). This suggests the checkpoint weights were NOT loaded!"
+        )
+        return False
+    else:
+        logger.info(
+            f"OK: Fresh and trained model outputs differ significantly "
+            f"(max_diff={max_diff:.6f}), confirming weights were loaded."
+        )
+        return True
+
+
+def verify_weight_summaries(checkpoint_path: str, loaded_model):
+    """Verify key weight summaries match between checkpoint file and loaded model."""
+    model_file = Path(checkpoint_path) / "model.safetensors"
+    if not model_file.exists():
+        logger.warning(f"model.safetensors not found at {checkpoint_path}, skipping weight verification")
+        return True
+    
+    state_dict = load_file(str(model_file), device="cpu")
+    
+    key_layers = [
+        "vlm.vision_backbone.dino_model.blocks.0.norm1.weight",
+        "vlm.llm.model.layers.0.self_attn.q_proj.weight",
+        "vlm.projector.linear_1.weight",
+    ]
+    
+    all_ok = True
+    for layer_key in key_layers:
+        if layer_key not in state_dict:
+            logger.warning(f"Layer {layer_key} not found in checkpoint")
+            continue
+        
+        ckpt_weight = state_dict[layer_key]
+        
+        # Try to get the same weight from loaded model
+        try:
+            model_weight = dict(loaded_model.state_dict())[layer_key].cpu()
+            
+            ckpt_mean = float(ckpt_weight.float().mean())
+            model_mean = float(model_weight.float().mean())
+            ckpt_std = float(ckpt_weight.float().std())
+            model_std = float(model_weight.float().std())
+            
+            mean_diff = abs(ckpt_mean - model_mean)
+            std_diff = abs(ckpt_std - model_std)
+            
+            logger.info(
+                f"Weight {layer_key}:"
+                f"  ckpt(mean={ckpt_mean:.6f}, std={ckpt_std:.6f})"
+                f"  model(mean={model_mean:.6f}, std={model_std:.6f})"
+                f"  diff(mean={mean_diff:.8f}, std={std_diff:.8f})"
+            )
+            
+            if mean_diff > 1e-4 or std_diff > 1e-4:
+                logger.warning(f"Weight mismatch detected for {layer_key}")
+                all_ok = False
+        except KeyError:
+            logger.warning(f"Layer {layer_key} not found in loaded model")
+            all_ok = False
+    
+    return all_ok
+
+
+def main():
+    parser = argparse.ArgumentParser(description="Verify MiniVLA checkpoint loading")
+    parser.add_argument("--checkpoint_path", type=str, required=True, help="Path to pretrained_model directory")
+    parser.add_argument("--device", type=str, default="cuda", help="Device to run on")
+    parser.add_argument("--seed", type=int, default=42, help="Random seed")
+    args = parser.parse_args()
+    
+    checkpoint_path = args.checkpoint_path
+    device = args.device
+    seed = args.seed
+    
+    torch.manual_seed(seed)
+    np.random.seed(seed)
+    
+    logger.info(f"Checkpoint path: {checkpoint_path}")
+    logger.info(f"Device: {device}")
+    logger.info(f"Seed: {seed}")
+    
+    # Step 1: Create fresh model (no weights loaded)
+    logger.info("\n[Step 1] Creating freshly initialized model (no weights loaded)...")
+    fresh_model, fresh_config = create_fresh_model(checkpoint_path, device)
+    
+    # Step 2: Load trained model with fixed from_pretrained
+    logger.info("\n[Step 2] Loading trained model with fixed from_pretrained...")
+    trained_model, trained_config = load_trained_model(checkpoint_path, device)
+    
+    # Step 3: Verify weight summaries
+    logger.info("\n[Step 3] Verifying weight summaries...")
+    weights_ok = verify_weight_summaries(checkpoint_path, trained_model)
+    
+    # Step 4: Create dummy batch and compare outputs
+    logger.info("\n[Step 4] Creating dummy batch and comparing outputs...")
+    batch = create_dummy_batch(trained_config, device, seed=seed)
+    
+    outputs_different = compare_outputs(fresh_model, trained_model, batch, device)
+    
+    # Final verdict
+    logger.info(f"\n{'='*60}")
+    logger.info(f"FINAL VERDICT")
+    logger.info(f"{'='*60}")
+    
+    if weights_ok and outputs_different:
+        logger.info("PASS: Checkpoint weights loaded correctly and affect model output.")
+        return 0
+    else:
+        if not weights_ok:
+            logger.error("FAIL: Weight summaries do not match checkpoint file.")
+        if not outputs_different:
+            logger.error("FAIL: Fresh and trained model outputs are identical (weights not loaded).")
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

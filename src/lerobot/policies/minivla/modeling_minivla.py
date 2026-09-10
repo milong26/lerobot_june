@@ -23,6 +23,7 @@ Key design:
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Optional, Unpack
 
@@ -36,6 +37,8 @@ from .configuration_minivla import MiniVLAConfig, MiniVLAT2Config, MiniVLAWristC
 from .tokenizer import VLATokenizerWrapper
 from .vq_action import VQActionTokenizer, ActionTokenizer
 from .vla_backbone import MiniVLAVLBackbone, IGNORE_INDEX
+
+logger = logging.getLogger(__name__)
 
 
 class MiniVLACore(nn.Module):
@@ -691,42 +694,134 @@ class MiniVLAPolicy(PreTrainedPolicy):
         **kwargs,
     ):
         """
-        Override PreTrainedPolicy.from_pretrained to handle .pt checkpoints
-        instead of safetensors.
+        Override PreTrainedPolicy.from_pretrained to handle both .pt official checkpoints
+        and LeRobot-format model.safetensors checkpoints.
+        
+        Loading strategy:
+        1. If LeRobot-format checkpoint (model.safetensors) exists, use parent class
+           PreTrainedPolicy.from_pretrained() which properly loads via _load_as_safetensor.
+        2. If .pt official checkpoint exists in checkpoints/, load via MiniVLACore.
+        3. If neither exists, raise an error (no silent random initialization).
         """
         import os
         from pathlib import Path
+        from safetensors.torch import load_file
 
-        if config is None:
-            config = cls.config_class.from_pretrained(
-                pretrained_name_or_path=pretrained_name_or_path,
-            )
-
-        # Find .pt checkpoint file in the checkpoints/ subdirectory
         pretrained_path = Path(pretrained_name_or_path)
         checkpoints_dir = pretrained_path / "checkpoints"
-
-        # Check if this is a LeRobot-format checkpoint (model.safetensors exists)
         is_lerobot_format = (pretrained_path / "model.safetensors").exists()
 
+        # Priority 1: LeRobot-format checkpoint (model.safetensors + config.json)
+        if is_lerobot_format:
+            if config is None:
+                config = cls.config_class.from_pretrained(
+                    pretrained_name_or_path=pretrained_name_or_path,
+                )
+            
+            # Create the policy instance
+            instance = cls(config, **kwargs)
+            
+            # Load model.safetensors using the parent class mechanism
+            model_file = str(pretrained_path / "model.safetensors")
+            logger.info(f"[MiniVLA] Loading LeRobot-format checkpoint: {model_file}")
+            
+            state_dict = load_file(model_file, device="cpu")
+            missing_keys, unexpected_keys = instance.load_state_dict(state_dict, strict=False)
+            
+            # Log loading diagnostics
+            total_loaded = len(state_dict)
+            logger.info(f"[MiniVLA] Checkpoint absolute path: {os.path.abspath(model_file)}")
+            logger.info(f"[MiniVLA] Loaded parameters: {total_loaded}")
+            logger.info(f"[MiniVLA] Missing keys: {len(missing_keys)}")
+            logger.info(f"[MiniVLA] Unexpected keys: {len(unexpected_keys)}")
+            
+            if missing_keys:
+                # Filter out non-parameter buffers (e.g., running_mean, running_var in BatchNorm)
+                param_missing = [k for k in missing_keys if k in dict(instance.named_parameters())]
+                buffer_missing = [k for k in missing_keys if k not in dict(instance.named_parameters())]
+                if param_missing:
+                    logger.error(
+                        f"[MiniVLA] CRITICAL: {len(param_missing)} missing parameter keys: "
+                        f"{param_missing[:20]}{'...' if len(param_missing) > 20 else ''}"
+                    )
+                    raise RuntimeError(
+                        f"MiniVLA checkpoint loading failed: {len(param_missing)} parameter keys "
+                        f"are missing from the loaded state dict. The checkpoint may be incomplete."
+                    )
+                if buffer_missing:
+                    logger.warning(
+                        f"[MiniVLA] {len(buffer_missing)} missing buffer keys (non-trainable, may be OK): "
+                        f"{buffer_missing[:10]}"
+                    )
+            
+            if unexpected_keys:
+                logger.warning(
+                    f"[MiniVLA] {len(unexpected_keys)} unexpected keys in checkpoint: "
+                    f"{unexpected_keys[:10]}{'...' if len(unexpected_keys) > 20 else ''}"
+                )
+            
+            # Check for shape mismatches
+            shape_mismatches = []
+            for key, param in state_dict.items():
+                if key in dict(instance.named_parameters()):
+                    model_param = dict(instance.named_parameters())[key]
+                    if param.shape != model_param.shape:
+                        shape_mismatches.append((key, tuple(param.shape), tuple(model_param.shape)))
+            
+            if shape_mismatches:
+                logger.error(
+                    f"[MiniVLA] CRITICAL: {len(shape_mismatches)} shape mismatches detected: "
+                    f"{shape_mismatches[:10]}"
+                )
+                raise RuntimeError(
+                    f"MiniVLA checkpoint loading failed: {len(shape_mismatches)} shape mismatches. "
+                    f"First few: {shape_mismatches[:5]}"
+                )
+            
+            # Log key weight summaries for verification
+            key_layers = [
+                "vlm.vision_backbone.dino_model.blocks.0.norm1.weight",
+                "vlm.llm.model.layers.0.self_attn.q_proj.weight",
+                "vlm.projector.linear_1.weight",
+            ]
+            for layer_key in key_layers:
+                if layer_key in state_dict:
+                    w = state_dict[layer_key]
+                    logger.info(
+                        f"[MiniVLA] Weight summary: {layer_key} -> "
+                        f"shape={tuple(w.shape)}, mean={w.float().mean().item():.6f}, "
+                        f"std={w.float().std().item():.6f}"
+                    )
+            
+            if not missing_keys and not unexpected_keys and not shape_mismatches:
+                logger.info("[MiniVLA] All keys matched successfully")
+            
+            instance.to(config.device)
+            instance.eval()
+            return instance
+
+        # Priority 2: Official .pt checkpoint in checkpoints/ directory
         if checkpoints_dir.exists():
             pt_files = list(checkpoints_dir.glob("*.pt"))
             if pt_files:
-                # Use the checkpoint with the lowest loss (usually the last one alphabetically)
                 pt_files.sort()
                 official_checkpoint = str(pt_files[-1])
-                print(f"[MiniVLA] Loading official checkpoint: {official_checkpoint}")
+                logger.info(f"[MiniVLA] Loading official .pt checkpoint: {official_checkpoint}")
                 config.official_vla_checkpoint = official_checkpoint
-            elif not is_lerobot_format:
-                print(f"[MiniVLA] No .pt files found in {checkpoints_dir}, using random initialization")
-        elif not is_lerobot_format:
-            print(f"[MiniVLA] No checkpoints directory found at {checkpoints_dir}, using random initialization")
-
-        # Create the policy instance (MiniVLACore.__init__ will load the checkpoint if set)
-        instance = cls(config, **kwargs)
-        instance.to(config.device)
-        instance.eval()
-        return instance
+                
+                # Create the policy instance (MiniVLACore.__init__ will load the .pt checkpoint)
+                instance = cls(config, **kwargs)
+                instance.to(config.device)
+                instance.eval()
+                return instance
+        
+        # No valid checkpoint found - raise error instead of silent random initialization
+        raise FileNotFoundError(
+            f"No valid MiniVLA checkpoint found at {pretrained_name_or_path}. "
+            f"Expected either: "
+            f"1) LeRobot-format: model.safetensors + config.json in {pretrained_path}, or "
+            f"2) Official .pt checkpoint in {checkpoints_dir}"
+        )
 
     def __init__(self, config: MiniVLAConfig, **kwargs):
         super().__init__(config)

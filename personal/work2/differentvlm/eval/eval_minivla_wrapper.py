@@ -1,5 +1,5 @@
 """
-TinyVLA Evaluation Wrapper for DifferentVLM
+MiniVLA Evaluation Wrapper for DifferentVLM
 
 Calls the existing lerobot-eval flow.
 
@@ -8,32 +8,31 @@ Key changes from previous version:
 - No appending to old logs, no reading from old eval_results.json
 - On non-zero return code, missing results, or JSON parse failure, mark as failed
 - Read aggregated.pc_success and aggregated.pc_grasp_success from eval output JSON
-- Record checkpoint path, checkpoint step, n_action_steps, episode count, return code, and completion time
+- Record checkpoint path, checkpoint step, episode count, return code, and completion time
 """
 
 import sys
 import os
 import json
 import subprocess
-import shutil
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 
 sys.stdout.reconfigure(line_buffering=True)
 
-from differentvlm.configs.vlm_config import VLMExperimentConfig
+from differentvlm.minivla.configs.minivla_config import MiniVLAExperimentConfig
 
 
-def find_best_checkpoint(checkpoint_dir: str) -> Optional[tuple]:
-    """Find the best (latest) checkpoint directory.
+def find_all_checkpoints(checkpoint_dir: str) -> List[tuple]:
+    """Find all checkpoint directories, sorted by step number.
     
     Returns:
-        Tuple of (checkpoint_step, checkpoint_path) or None if not found.
+        List of (step_number, checkpoint_path) tuples.
     """
     cp_root = Path(checkpoint_dir)
     if not cp_root.exists():
-        return None
+        return []
 
     checkpoints = []
     for step_dir in cp_root.iterdir():
@@ -42,73 +41,70 @@ def find_best_checkpoint(checkpoint_dir: str) -> Optional[tuple]:
             if pretrained.exists():
                 checkpoints.append((int(step_dir.name), str(pretrained)))
 
-    if not checkpoints:
-        return None
-
-    checkpoints.sort(key=lambda x: x[0], reverse=True)
-    return checkpoints[0]
+    checkpoints.sort(key=lambda x: x[0])
+    return checkpoints
 
 
-def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str, n_action_steps: int = 1) -> Dict:
+def run_minivla_eval(cfg: MiniVLAExperimentConfig, checkpoint_path: str, step_number: int, n_episodes: int | None = None) -> Dict:
     """
-    Run evaluation with independent output directory per run.
+    Run evaluation for a single checkpoint with independent output directory.
     
     Args:
         cfg: Experiment configuration.
-        checkpoint_dir: Directory containing checkpoint subdirectories.
-        n_action_steps: Number of action steps per model invocation.
+        checkpoint_path: Path to pretrained_model directory.
+        step_number: Training step number of the checkpoint.
+        n_episodes: Override episode count (uses cfg default if None).
     
     Returns:
         Evaluation results dict with status, metrics, and metadata.
     """
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     
+    n_eps = n_episodes if n_episodes is not None else cfg.eval_n_episodes
+    
     print(f"\n{'='*60}")
-    print(f"Running TinyVLA Evaluation")
+    print(f"Running MiniVLA Evaluation")
     print(f"{'='*60}")
-    print(f"Checkpoint dir: {checkpoint_dir}")
-    print(f"N episodes: {cfg.eval_n_episodes}")
-    print(f"N action steps: {n_action_steps}")
+    print(f"Checkpoint: {checkpoint_path} (step {step_number})")
+    print(f"N episodes: {n_eps}")
     print(f"Seed: {cfg.eval_seed}")
     print(f"GPU: {cfg.gpu_id}")
     print(f"Timestamp: {timestamp}")
     print(f"{'='*60}")
-
-    ckpt_info = find_best_checkpoint(checkpoint_dir)
-    if ckpt_info is None:
-        return {
-            "status": "failed",
-            "error": f"No valid checkpoint found in {checkpoint_dir}",
-            "timestamp": timestamp,
-        }
-    
-    checkpoint_step, checkpoint_path = ckpt_info
-    print(f"Using checkpoint: {checkpoint_path} (step {checkpoint_step})")
-    sys.stdout.flush()
 
     os.environ["CUDA_VISIBLE_DEVICES"] = str(cfg.gpu_id)
     os.environ["MUJOCO_GL"] = "egl"
     os.environ["PYOPENGL_PLATFORM"] = "egl"
 
     # Create independent output directory for this run
-    eval_output_dir = Path(cfg.results_dir) / "eval_results" / f"tinyvla_{timestamp}"
+    eval_output_dir = Path(cfg.eval_results_dir) / f"minivla_step{step_number:06d}_{timestamp}"
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create independent log file for this run (no append)
-    eval_log = Path(cfg.logs_dir) / f"tinyvla_eval_{timestamp}.log"
+    # Create independent log file for this run (write mode, not append)
+    eval_log = Path(cfg.logs_dir) / f"minivla_eval_step{step_number:06d}_{timestamp}.log"
+
+    # Extract task name from dataset name
+    dataset_base = cfg.dataset_name
+    for suffix in ["_corner", "_top", "_gripper", "_left", "_right", "_front", "_back", "_view"]:
+        if dataset_base.endswith(suffix):
+            dataset_base = dataset_base[:-len(suffix)]
+            break
+    task_base = dataset_base.replace("_", "-")
+    if "v3" not in task_base and "v2" not in task_base:
+        task_name = f"{task_base}-v3"
+    else:
+        task_name = task_base
 
     cmd = [
         "lerobot-eval",
         f"--policy.path={checkpoint_path}",
         "--env.type=metaworld",
-        f"--env.task={cfg.env_task}",
+        f"--env.task={task_name}",
         f"--env.camera_name={cfg.camera_names}",
         "--env.use_self_mw=true",
         f"--eval.batch_size={cfg.eval_batch_size}",
-        f"--eval.n_episodes={cfg.eval_n_episodes}",
-        f"--eval.n_action_steps={n_action_steps}",
+        f"--eval.n_episodes={n_eps}",
         "--policy.device=cuda",
-        f"--rename_map={cfg.rename_map}",
     ]
 
     print(f"\nRunning: {' '.join(cmd)}")
@@ -132,9 +128,8 @@ def run_tinyvla_eval(cfg: VLMExperimentConfig, checkpoint_dir: str, n_action_ste
         "timestamp": timestamp,
         "completion_time": completion_time,
         "checkpoint_path": str(Path(checkpoint_path).resolve()),
-        "checkpoint_step": checkpoint_step,
-        "n_action_steps": n_action_steps,
-        "n_episodes": cfg.eval_n_episodes,
+        "checkpoint_step": step_number,
+        "n_episodes": n_eps,
         "returncode": result.returncode,
         "log_file": str(eval_log),
         "output_dir": str(eval_output_dir),

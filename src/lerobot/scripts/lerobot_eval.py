@@ -107,7 +107,13 @@ logger = logging.getLogger(__name__)
 
 
 def _get_tinyvla_action_stats(pretrained_path) -> dict | None:
-    """Load action statistics from TinyVLA checkpoint for action scaling."""
+    """Load action statistics from TinyVLA checkpoint for diagnostic logging only.
+
+    NOTE: This function is kept for diagnostic purposes only. The action scaling
+    (_scale_tinyvla_actions) has been DISABLED because the postprocessor already
+    performs unnormalization. Calling _scale_tinyvla_actions would apply a second
+    normalization using dataset min/max, causing incorrect double-scaling.
+    """
     try:
         from safetensors.torch import load_file
         from pathlib import Path
@@ -128,34 +134,15 @@ def _get_tinyvla_action_stats(pretrained_path) -> dict | None:
 
 
 def _scale_tinyvla_actions(action_numpy: np.ndarray, action_stats: dict) -> np.ndarray:
-    """Scale TinyVLA actions from dataset range to [-1, 1] environment range.
+    """DISABLED: Scale TinyVLA actions from dataset range to [-1, 1] environment range.
     
-    TinyVLA is trained on actions that exceed the [-1, 1] range of the MetaWorld environment.
-    This function linearly maps the xyz action range to [-1, 1] to prevent clipping.
+    This function is DISABLED during eval. The postprocessor already performs
+    unnormalization (denormalization), so calling this would apply a second
+    normalization using dataset min/max, causing incorrect double-scaling.
     
-    IMPORTANT: Only scales xyz dimensions (0,1,2), NOT gripper (dimension 3).
-    Gripper range [0, 0.8] is already within [-1, 1], scaling would invert semantics.
+    Kept for reference only. DO NOT call during evaluation.
     """
-    action_min = action_stats["min"].numpy()
-    action_max = action_stats["max"].numpy()
-    
-    scaled = action_numpy.copy()
-    # 只应该在tinyvla的时候才这么做
-    
-    # Only scale xyz dimensions (0, 1, 2), NOT gripper (dimension 3)
-    # Gripper range [0, 0.8] is already within [-1, 1], no scaling needed
-    xyz_dims = min(3, action_numpy.shape[-1])
-    action_range = action_max[:xyz_dims] - action_min[:xyz_dims]
-    # Avoid division by zero
-    action_range = np.where(action_range < 1e-8, 1.0, action_range)
-    
-    # Linear mapping: [action_min, action_max] -> [-1, 1] for xyz only
-    scaled[..., :xyz_dims] = (action_numpy[..., :xyz_dims] - action_min[:xyz_dims]) / action_range * 2 - 1
-    
-    # Clip xyz to [-1, 1], gripper stays as-is (will be clipped by env if needed)
-    scaled[..., :xyz_dims] = np.clip(scaled[..., :xyz_dims], -1.0, 1.0)
-    
-    return scaled
+    return action_numpy.copy()
 
 
 def _env_features_to_dataset_features(env_features: dict) -> dict:
@@ -233,6 +220,7 @@ def rollout(
     recording_private: bool = False,
     predicted_latents_callback: Callable[[PreTrainedPolicy], None] | None = None,
     tinyvla_action_stats: dict | None = None,
+    is_tinyvla: bool = False,
 ) -> dict:
     """Run a batched policy rollout once through a batch of environments.
 
@@ -464,26 +452,35 @@ def rollout(
             action = action_transition[ACTION]
 
             # Convert to CPU / numpy.
-            # 只有tinyvla的时候这么干
             action_numpy: np.ndarray = action.to("cpu").to(dtype=torch.float32).numpy() if getattr(policy, "name", "").startswith("tinyvla") else action.to("cpu").numpy()
             assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
 
-            # Debug: Log TinyVLA raw action values (before scaling)
-            if tinyvla_action_stats is not None and step % 50 == 0:
-                raw_min = action_numpy.min(axis=0)
-                raw_max = action_numpy.max(axis=0)
-                raw_mean = action_numpy.mean(axis=0)
-                # logger.info(f"[DEBUG-TinyVLA] Raw action at step {step}: min={raw_min}, max={raw_max}, mean={raw_mean}")
+            # Diagnostic logging for TinyVLA action pipeline (every 50 steps)
+            if is_tinyvla and step % 50 == 0:
+                logger.info(
+                    f"[TinyVLA DIAG] step={step} | postproc_action: "
+                    f"shape={action_numpy.shape}, min={action_numpy.min(axis=0)}, "
+                    f"max={action_numpy.max(axis=0)}, mean={action_numpy.mean(axis=0)}, "
+                    f"std={action_numpy.std(axis=0)}"
+                )
+                if action_numpy.shape[1] <= 8:
+                    logger.info(f"[TinyVLA DIAG] step={step} | first 3 actions: {action_numpy[:3]}")
 
-            # Scale TinyVLA actions from dataset range to [-1, 1] environment range
-            if tinyvla_action_stats is not None:
-                action_numpy = _scale_tinyvla_actions(action_numpy, tinyvla_action_stats)
-                # Debug: Log scaled action values
-                if step % 50 == 0:
-                    scaled_min = action_numpy.min(axis=0)
-                    scaled_max = action_numpy.max(axis=0)
-                    scaled_mean = action_numpy.mean(axis=0)
-                    # logger.info(f"[DEBUG-TinyVLA] Scaled action at step {step}: min={scaled_min}, max={scaled_max}, mean={scaled_mean}")
+            # Clip action to env action space bounds (per-dimension)
+            env_low = env.action_space.low
+            env_high = env.action_space.high
+            if action_numpy.shape[-1] == env_low.shape[-1]:
+                action_numpy = np.clip(action_numpy, env_low, env_high)
+            else:
+                logger.warning(
+                    f"[TinyVLA DIAG] Action dim {action_numpy.shape[-1]} != env action dim {env_low.shape[-1]}, "
+                    f"skipping clip. This may cause issues."
+                )
+
+            # Verify zero-action invariance: if policy outputs near-zero, postproc+clip should keep it near-zero
+            if is_tinyvla and step == 0:
+                zero_check = np.abs(action_numpy).max()
+                logger.info(f"[TinyVLA DIAG] step=0 | max_abs_action={zero_check:.6f} (should be reasonable for zero-input)")
 
             # Apply the next action.
             observation, reward, terminated, truncated, info = env.step(action_numpy)
@@ -699,7 +696,7 @@ def eval_policy(
     was_training = policy.training
     policy.eval()
 
-    # Load TinyVLA action stats for scaling if applicable
+    # Load TinyVLA action stats for diagnostic logging only (scaling is DISABLED)
     is_tinyvla = getattr(policy, "name", "").startswith("tinyvla")
     tinyvla_action_stats = None
     if is_tinyvla:
@@ -707,9 +704,38 @@ def eval_policy(
         if pretrained_path:
             tinyvla_action_stats = _get_tinyvla_action_stats(str(pretrained_path))
             if tinyvla_action_stats is not None:
-                logger.info(f"TinyVLA action scaling enabled: stats loaded from {pretrained_path}")
+                logger.info(
+                    f"TinyVLA diagnostic mode: action stats loaded from {pretrained_path}. "
+                    f"NOTE: Action scaling (_scale_tinyvla_actions) is DISABLED. "
+                    f"Actions are only unnormalized by postprocessor and clipped to env.action_space bounds."
+                )
             else:
-                logger.warning("TinyVLA detected but action stats not found, actions will not be scaled")
+                logger.warning("TinyVLA detected but action stats not found")
+
+        # Validate diffusion scheduler clip_sample configuration
+        try:
+            model_core = getattr(policy, "model", None)
+            if model_core is not None:
+                base_model = getattr(model_core, "_get_base_model", None)
+                if base_model is not None:
+                    base = base_model()
+                    noise_scheduler = getattr(base, "noise_scheduler", None)
+                    if noise_scheduler is None:
+                        noise_scheduler = getattr(model_core, "noise_scheduler", None)
+                    if noise_scheduler is not None:
+                        clip_sample = getattr(noise_scheduler, "clip_sample", None)
+                        if clip_sample is True:
+                            logger.error(
+                                f"[TinyVLA ERROR] DDIMScheduler clip_sample=True is incompatible with "
+                                f"TinyVLA training. Actions are trained in range exceeding [-1, 1]. "
+                                f"clip_sample=True will clip denoised actions to [-1, 1], destroying "
+                                f"the learned action distribution. "
+                                f"Please set clip_sample=False in the diffusion head configuration."
+                            )
+                        else:
+                            logger.info(f"TinyVLA DDIMScheduler clip_sample={clip_sample} (correct)")
+        except Exception as e:
+            logger.warning(f"Failed to validate TinyVLA clip_sample config: {e}")
 
     # Determine how many batched rollouts we need to get n_episodes. Note that if n_episodes is not evenly
     # divisible by env.num_envs we end up discarding some data in the last batch.
@@ -804,6 +830,7 @@ def eval_policy(
             recording_private=recording_private,
             predicted_latents_callback=collect_predicted_latents if save_predicted_video else None,
             tinyvla_action_stats=tinyvla_action_stats,
+            is_tinyvla=is_tinyvla,
         )
 
         # Figure out where in each rollout sequence the first done condition was encountered (results after
