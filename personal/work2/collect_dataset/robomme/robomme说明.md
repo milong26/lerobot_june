@@ -10,9 +10,10 @@ conda install -c conda-forge ffmpeg=7.1.1 -y
 
 尝试执行采集程序
 nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
-    --task PickXtimes \
-    --num-random-episodes 300 \
-    --num-uniform-episodes 100 \
-    --output-dir personal/work2/dataset_view_robomme/PickXtimes/ \
-    --repo-id work2/robomme_PickXtimes \
-    > personal/work2/collect_dataset/robomme/collect_robomme.log 2>&1 &
+  --task MoveCube \
+  --difficulty easy \
+  --num-random-episodes 300 \
+  --num-uniform-episodes 100 \
+  --output-dir personal/work2/dataset_view_robomme/MoveCube_easy \
+  --repo-id work2/robomme_MoveCube_easy \
+  > logs/movecube_easy.log 2>&1 &

@@ -71,13 +71,9 @@ TMUX_SESSION="${POLICY_TYPE}_${METHOD}_ep${NUM_EPISODES}_s${SEED}_${DATASET_NAME
 # Auto-construct dataset root path from dataset name
 DATASET_ROOT="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}"
 
-mkdir -p "$LOG_DIR" "$SUBSETS_DIR"
-
-# Kill existing session if exists
-tmux kill-session -t $TMUX_SESSION 2>/dev/null || true
-
-# Create runner script
-RUNNER_SCRIPT="$LOG_DIR/${EXP_NAME}_runner.sh"
+# Create a temporary directory for the runner script (not the output directory)
+TEMP_RUNNER_DIR=$(mktemp -d)
+RUNNER_SCRIPT="$TEMP_RUNNER_DIR/${EXP_NAME}_runner.sh"
 cat > "$RUNNER_SCRIPT" << RUNNER_EOF
 #!/bin/bash
 
@@ -138,7 +134,8 @@ TRAIN_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/tinyvla/t
 SELECT_SCRIPT="/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/tinyvla/select_episodes.py"
 DATASET_ROOT="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/\${DATASET_NAME}"
 
-mkdir -p "\$LOG_DIR" "\$SUBSETS_DIR"
+# DON'T create OUTPUT_BASE_DIR here - train_tinyvla.sh will handle it
+# select_episodes only needs subsets dir, which train_tinyvla.sh creates
 
 echo \$\$ > "\$PID_FILE"
 echo "Start time: \$(date '+%Y-%m-%d %H:%M:%S')" > "\$TIME_FILE"

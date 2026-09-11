@@ -30,6 +30,13 @@ import torch
 
 import robomme.robomme_env  # noqa: F401 - registers RoboMME gym envs
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from robomme_task_config import (
+    TASK_CONFIG_ADAPTERS,
+    apply_task_configuration,
+    extract_task_configuration,
+    generate_uniform_configurations,
+    get_uniform_spec,
+)
 
 TASK_DESCRIPTIONS = {
     "BinFill": "Fill the target bin with the correct number of cubes",
@@ -50,15 +57,6 @@ TASK_DESCRIPTIONS = {
     "RouteStick": "Route the stick through the required waypoints",
 }
 
-TASK_SPAWN_CONFIGS = {
-    "PickXtimes": {
-        "cube_region_center": [-0.1, 0.0],
-        "cube_region_half_size": 0.2,
-        "z": 0.02,
-    },
-}
-
-GRID_RESOLUTION = {"x": 5, "y": 5}
 MAX_PERTURB_RETRIES = 4
 EXTRA_FRAMES_AFTER_SUCCESS = 10
 MAX_CONSECUTIVE_FAILURES = 50
@@ -96,7 +94,7 @@ def create_raw_env(task, seed, difficulty=None):
     return gym.make(task, **kwargs)
 
 
-def _resize_rgb(rgb, image_size):
+def _resize_rgb(rgb, image_size=256):
     from PIL import Image
 
     arr = _to_numpy(rgb)
@@ -184,47 +182,6 @@ class ExpertTrajectoryRecorder(gym.Wrapper):
         return obs, reward, terminated, truncated, info
 
 
-def _actor_pose(actor):
-    pose = getattr(actor, "pose", None)
-    if pose is None and hasattr(actor, "get_pose"):
-        pose = actor.get_pose()
-    if pose is None:
-        return None
-    p = _to_numpy(pose.p).reshape(-1)
-    q = _to_numpy(pose.q).reshape(-1)
-    return {"position": p.tolist(), "quaternion": q.tolist()}
-
-
-def get_object_positions_from_env(env, task):
-    """Prefer task semantic actors; fall back to scene actors."""
-    u = env.unwrapped
-    out = {}
-
-    if task == "PickXtimes":
-        for i, actor in enumerate(getattr(u, "all_cubes", []) or []):
-            state = _actor_pose(actor)
-            if state is not None:
-                out[f"cube_{i}"] = state
-        target = getattr(u, "target", None)
-        if target is not None:
-            state = _actor_pose(target)
-            if state is not None:
-                out["target"] = state
-        if out:
-            return out
-
-    scene = getattr(u, "scene", None)
-    actors = getattr(scene, "actors", None) if scene is not None else None
-    if actors:
-        for i, actor in enumerate(actors):
-            state = _actor_pose(actor)
-            if state is None:
-                continue
-            name = getattr(actor, "name", None) or f"actor_{i}"
-            out[str(name)] = state
-    return out
-
-
 def _patch_planner_screw_to_rrt(planner):
     """Use RoboMME official dataset-generation fallback: 3x screw -> 3x RRT."""
     original_screw = planner.move_to_pose_with_screw
@@ -294,41 +251,19 @@ def _evaluate(env):
     return _to_bool(result.get("success", False)), _to_bool(result.get("fail", False)), result
 
 
-def _apply_pickxtimes_position(env, point):
-    """Current uniform hook: move the task's target cube to one valid grid point."""
-    if point is None:
-        return False
-    u = env.unwrapped
-    actor = getattr(u, "target_cube", None)
-    if actor is None:
-        cubes = getattr(u, "all_cubes", []) or []
-        actor = cubes[0] if cubes else None
-    if actor is None:
-        return False
-
-    pose = getattr(actor, "pose", None)
-    if pose is None:
-        return False
-    p = _to_numpy(pose.p).reshape(-1).copy()
-    q = _to_numpy(pose.q).reshape(-1).copy()
-    p[:3] = np.asarray(point, dtype=np.float32)[:3]
-    try:
-        import sapien
-
-        actor.set_pose(sapien.Pose(p=p, q=q))
-        return True
-    except Exception:
-        return False
-
-
 def run_episode_with_planner(
     raw_env,
     task,
     image_size=256,
     extra_frames=10,
-    uniform_point=None,
+    uniform_config=None,
 ):
-    """Run RoboMME's own expert solver and return the real successful trajectory."""
+    """
+    Run RoboMME's own expert solver and return the real successful trajectory.
+
+    If uniform_config is provided, it is injected AFTER reset and BEFORE planner
+    creation via apply_task_configuration().
+    """
     from robomme.env_record_wrapper import FailsafeTimeout
     from robomme.robomme_env.utils.SceneGenerationError import SceneGenerationError
     from robomme.robomme_env.utils.planner_fail_safe import ScrewPlanFailure
@@ -336,12 +271,17 @@ def run_episode_with_planner(
     env = ExpertTrajectoryRecorder(raw_env, image_size=image_size)
     try:
         env.reset()
-        if uniform_point is not None:
-            if task != "PickXtimes":
-                raise NotImplementedError(f"Uniform pose injection is not implemented for task={task}")
-            _apply_pickxtimes_position(env, uniform_point)
 
-        initial_objects = get_object_positions_from_env(env, task)
+        # Extract initial configuration AFTER reset, BEFORE any planner action
+        initial_configuration = extract_task_configuration(env, task)
+
+        # If uniform config provided, inject it now
+        if uniform_config is not None:
+            applied = apply_task_configuration(env, task, uniform_config)
+            # Re-read configuration after injection to capture actual injected state
+            if applied:
+                initial_configuration = extract_task_configuration(env, task)
+
         difficulty = getattr(env.unwrapped, "difficulty", None)
         planner = _make_planner(env, task)
 
@@ -350,7 +290,7 @@ def run_episode_with_planner(
             return [], {
                 "success": False,
                 "num_frames": 0,
-                "object_positions": initial_objects,
+                "initial_configuration": initial_configuration,
                 "difficulty": difficulty,
                 "reason": "no_task_list",
             }
@@ -406,7 +346,7 @@ def run_episode_with_planner(
         return list(env.steps), {
             "success": bool(episode_success),
             "num_frames": len(env.steps),
-            "object_positions": initial_objects,
+            "initial_configuration": initial_configuration,
             "difficulty": str(difficulty) if difficulty is not None else None,
             "tail_frames": tail_recorded,
             "reason": failure_reason,
@@ -416,7 +356,7 @@ def run_episode_with_planner(
         return [], {
             "success": False,
             "num_frames": 0,
-            "object_positions": {},
+            "initial_configuration": {},
             "difficulty": None,
             "reason": "scene_generation_error",
         }
@@ -509,18 +449,9 @@ def create_dataset(
     )
 
 
-def generate_grid_points(task_config, resolution):
-    center = task_config["cube_region_center"]
-    half = task_config["cube_region_half_size"]
-    z = task_config.get("z", 0.02)
-    xs = np.linspace(center[0] - half, center[0] + half, resolution["x"])
-    ys = np.linspace(center[1] - half, center[1] + half, resolution["y"])
-    return [[float(x), float(y), float(z)] for x in xs for y in ys]
-
-
 def phase_random(args, dataset, task, start_ep_idx=0):
     print(f"\n{'=' * 60}")
-    print(f"阶段1: 随机采集 ({args.num_random_episodes} 个 episode)")
+    print(f"Phase 1: Random collection ({args.num_random_episodes} episodes)")
     print("=" * 60)
 
     infos = []
@@ -533,7 +464,7 @@ def phase_random(args, dataset, task, start_ep_idx=0):
         started = time.time()
         raw_env = None
         try:
-            raw_env = create_raw_env(task, seed)
+            raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
             steps, ep_info = run_episode_with_planner(
                 raw_env,
                 task,
@@ -582,37 +513,52 @@ def phase_random(args, dataset, task, start_ep_idx=0):
 
         seed += 1
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
-            print(f"警告: 连续失败 {MAX_CONSECUTIVE_FAILURES} 次，继续增加 seed。")
+            print(f"Warning: {MAX_CONSECUTIVE_FAILURES} consecutive failures, continuing.")
             consecutive_failures = 0
 
-    print(f"阶段1 完成: 成功 {success_count}/{args.num_random_episodes}")
+    print(f"Phase 1 complete: {success_count}/{args.num_random_episodes} successful")
     return infos
 
 
 def phase_uniform(args, dataset, task, start_ep_idx=0):
     print(f"\n{'=' * 60}")
-    print(f"阶段2: 均匀采样采集 ({args.num_uniform_episodes} 个 episode)")
+    print(f"Phase 2: Uniform sampling ({args.num_uniform_episodes} episodes)")
     print("=" * 60)
 
     if args.num_uniform_episodes <= 0:
         return []
-    if task not in TASK_SPAWN_CONFIGS:
-        raise NotImplementedError(
-            f"Uniform spatial adapter is not implemented for {task}. "
-            "Random expert collection is available for all RoboMME tasks."
-        )
 
-    grid_points = generate_grid_points(TASK_SPAWN_CONFIGS[task], GRID_RESOLUTION)
+    task_description = TASK_DESCRIPTIONS.get(task, task)
     rng = np.random.RandomState(456)
-    rng.shuffle(grid_points)
+    fallback_seed = max(args.seed_start + args.num_random_episodes, 10000)
+
+    # Get uniform spec for this task
+    raw_env = create_raw_env(task, args.seed_start, difficulty=args.difficulty)
+    try:
+        raw_env.reset()
+        uniform_spec = get_uniform_spec(raw_env, task)
+    finally:
+        raw_env.close()
+
+    if uniform_spec is None:
+        print(f"  No uniform spec for task={task}, falling back to random collection.")
+        return _phase_fallback_random(args, dataset, task, start_ep_idx, fallback_seed, task_description)
+
+    print(f"  Uniform spec: {uniform_spec['num_objects']} objects, "
+          f"grid {uniform_spec['grid_resolution']['x']}x{uniform_spec['grid_resolution']['y']}")
+
+    # Generate uniform configurations
+    uniform_configs = generate_uniform_configurations(
+        uniform_spec, args.num_uniform_episodes, rng
+    )
+    print(f"  Generated {len(uniform_configs)} uniform configurations")
+
     infos = []
     success_count = 0
     config_idx = 0
-    fallback_seed = max(args.seed_start + args.num_random_episodes, 10000)
-    task_description = TASK_DESCRIPTIONS.get(task, task)
 
     while success_count < args.num_uniform_episodes:
-        point = grid_points[config_idx] if config_idx < len(grid_points) else None
+        uniform_cfg = uniform_configs[config_idx] if config_idx < len(uniform_configs) else None
         config_idx += 1
 
         success_this_config = False
@@ -620,25 +566,19 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
             seed = int(rng.randint(0, 1_000_000))
             candidate = None
             method = "fallback_random"
-            if point is not None:
-                candidate = np.asarray(point, dtype=np.float32).copy()
-                if retry > 0:
-                    candidate[:2] += rng.normal(0.0, 0.01, size=2)
-                    cfg = TASK_SPAWN_CONFIGS[task]
-                    c, h = cfg["cube_region_center"], cfg["cube_region_half_size"]
-                    candidate[0] = np.clip(candidate[0], c[0] - h, c[0] + h)
-                    candidate[1] = np.clip(candidate[1], c[1] - h, c[1] + h)
+            if uniform_cfg is not None:
+                candidate = uniform_cfg
                 method = "uniform_grid" if retry == 0 else "uniform_perturbed"
 
             raw_env = None
             try:
-                raw_env = create_raw_env(task, seed)
+                raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
                 steps, ep_info = run_episode_with_planner(
                     raw_env,
                     task,
                     image_size=args.image_size,
                     extra_frames=args.extra_frames_after_success,
-                    uniform_point=candidate,
+                    uniform_config=candidate,
                 )
                 if not ep_info["success"]:
                     continue
@@ -650,7 +590,7 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
                 ep_info["seed"] = seed
                 ep_info["episode_idx"] = start_ep_idx + success_count
                 ep_info["_sampling_method"] = method
-                ep_info["uniform_point"] = candidate.tolist() if candidate is not None else None
+                ep_info["uniform_config"] = candidate
                 infos.append(ep_info)
                 success_count += 1
                 success_this_config = True
@@ -673,12 +613,11 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
         if success_this_config:
             continue
 
-        while success_count < args.num_uniform_episodes and (
-            point is None or config_idx >= len(grid_points)
-        ):
+        # If all configs exhausted or failed, fall back to random
+        while success_count < args.num_uniform_episodes:
             raw_env = None
             try:
-                raw_env = create_raw_env(task, fallback_seed)
+                raw_env = create_raw_env(task, fallback_seed, difficulty=args.difficulty)
                 steps, ep_info = run_episode_with_planner(
                     raw_env,
                     task,
@@ -709,10 +648,52 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
                     except Exception:
                         pass
                 fallback_seed += 1
-            if point is not None and config_idx < len(grid_points):
-                break
+            break
 
-    print(f"阶段2 完成: 成功 {success_count}/{args.num_uniform_episodes}")
+    print(f"Phase 2 complete: {success_count}/{args.num_uniform_episodes} successful")
+    return infos
+
+
+def _phase_fallback_random(args, dataset, task, start_ep_idx, fallback_seed, task_description):
+    """Fallback random collection when uniform spec is not available."""
+    infos = []
+    success_count = 0
+    while success_count < args.num_uniform_episodes:
+        raw_env = None
+        try:
+            raw_env = create_raw_env(task, fallback_seed, difficulty=args.difficulty)
+            steps, ep_info = run_episode_with_planner(
+                raw_env,
+                task,
+                image_size=args.image_size,
+                extra_frames=args.extra_frames_after_success,
+            )
+            if ep_info["success"]:
+                frames = steps_to_frames(steps, task_description)
+                if frames:
+                    commit_successful_episode(dataset, frames)
+                    ep_info["seed"] = fallback_seed
+                    ep_info["episode_idx"] = start_ep_idx + success_count
+                    ep_info["_sampling_method"] = "fallback_random"
+                    infos.append(ep_info)
+                    success_count += 1
+                    print(
+                        f"  [U] Episode {start_ep_idx + success_count:4d} | "
+                        f"Frames: {len(frames):4d} | fallback_random | seed={fallback_seed}"
+                    )
+        except Exception as exc:
+            if dataset.has_pending_frames():
+                dataset.clear_episode_buffer(delete_images=True)
+            print(f"  [U] FALLBACK ERROR (seed={fallback_seed}): {type(exc).__name__}: {exc}")
+        finally:
+            if raw_env is not None:
+                try:
+                    raw_env.close()
+                except Exception:
+                    pass
+            fallback_seed += 1
+
+    print(f"Phase 2 complete (fallback): {success_count}/{args.num_uniform_episodes} successful")
     return infos
 
 
@@ -729,14 +710,64 @@ def save_episode_metadata(output_dir, all_episode_infos, task_name):
             "difficulty": info.get("difficulty"),
             "sampling_method": info.get("_sampling_method"),
             "tail_frames": int(info.get("tail_frames", 0)),
-            "object_positions": info.get("object_positions", {}),
+            "initial_configuration": info.get("initial_configuration", {}),
         }
-        if info.get("uniform_point") is not None:
-            ep["uniform_point"] = info["uniform_point"]
+        if info.get("uniform_config") is not None:
+            ep["uniform_config"] = info["uniform_config"]
         metadata["episodes"].append(ep)
 
     path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Episode 初始环境信息已保存到: {path}")
+    print(f"Episode initial states saved to: {path}")
+
+
+def inspect_config(args):
+    """Inspect mode: extract and print task configurations without collecting data."""
+    task = args.task
+    num_seeds = args.inspect_seeds
+    print(f"\n{'=' * 60}")
+    print(f"Inspect mode: task={task}, seeds=0..{num_seeds - 1}")
+    print("=" * 60)
+
+    if task not in TASK_CONFIG_ADAPTERS:
+        print(f"ERROR: No adapter for task={task}")
+        sys.exit(1)
+
+    for seed in range(num_seeds):
+        print(f"\n--- Seed {seed} ---")
+        raw_env = None
+        try:
+            raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
+            raw_env.reset()
+            config = extract_task_configuration(raw_env, task)
+
+            print(f"  Difficulty: {config['task_config'].get('difficulty')}")
+            print(f"  Movable objects ({len(config['movable_objects'])}):")
+            for obj in config["movable_objects"]:
+                print(f"    - {obj['name']}: pos={obj['pose']['position'] if obj['pose'] else 'N/A'}")
+            print(f"  Randomized targets ({len(config['randomized_targets'])}):")
+            for tgt in config["randomized_targets"]:
+                print(f"    - {tgt['name']}: pos={tgt['pose']['position'] if tgt['pose'] else 'N/A'}")
+            print(f"  Articulations ({len(config['articulations'])}):")
+            for art in config["articulations"]:
+                print(f"    - {art.get('name', 'unknown')}")
+            print(f"  Task config: {json.dumps(config['task_config'], indent=4, default=str)}")
+
+            # Check uniform spec
+            uniform_spec = get_uniform_spec(raw_env, task)
+            if uniform_spec:
+                print(f"  Uniform spec: {uniform_spec['num_objects']} objects, "
+                      f"grid {uniform_spec['grid_resolution']['x']}x{uniform_spec['grid_resolution']['y']}")
+            else:
+                print("  Uniform spec: None (task does not support uniform spatial sampling)")
+
+        except Exception as exc:
+            print(f"  ERROR: {type(exc).__name__}: {exc}")
+        finally:
+            if raw_env is not None:
+                try:
+                    raw_env.close()
+                except Exception:
+                    pass
 
 
 def main():
@@ -756,7 +787,18 @@ def main():
     parser.add_argument("--image-writer-threads", type=int, default=8)
     parser.add_argument("--batch-encoding-size", type=int, default=1)
     parser.add_argument("--vcodec", type=str, default=None)
+    parser.add_argument("--inspect-config-only", action="store_true", default=False,
+                        help="Only inspect task configuration, do not collect data")
+    parser.add_argument("--inspect-seeds", type=int, default=3,
+                        help="Number of seeds to inspect in inspect mode")
+    parser.add_argument("--difficulty", type=str, default=None, choices=["easy", "medium", "hard"],
+                        help="Fix difficulty level for all episodes. If not set, difficulty is derived from seed %% 3.")
     args = parser.parse_args()
+
+    # Inspect mode
+    if args.inspect_config_only:
+        inspect_config(args)
+        return
 
     if args.output_dir is None:
         args.output_dir = f"personal/work2/dataset_view_robomme/{args.task}"
@@ -770,6 +812,7 @@ def main():
     print("RoboMME Expert Dataset Collector")
     print("=" * 80)
     print(f"Task: {args.task}")
+    print(f"Difficulty: {args.difficulty or 'auto (seed % 3)'}")
     print(f"Random: {args.num_random_episodes}, Uniform: {args.num_uniform_episodes}")
     print(f"Output: {args.output_dir}")
     print(f"Seed start: {args.seed_start}")

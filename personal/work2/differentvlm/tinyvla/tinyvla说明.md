@@ -113,9 +113,9 @@ action head的类型是DROID Diffusion，训练时：给真实动作逐步加噪
 
 # train
 运行
-bash personal/work2/differentvlm/tinyvla/launch_tinyvla-s.sh --gpu-id 1 --num-episodes 200 --dataset-name disassemble-v3_corner --method random --seed 42
+bash personal/work2/differentvlm/tinyvla/launch_tinyvla-s.sh --gpu-id 1 --num-episodes 200 --dataset-name disassemble-v3_corner --method random --seed 42 
 等价于
---method random
+
 
 bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
 tmux: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by tmux)
