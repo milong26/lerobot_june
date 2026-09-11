@@ -1,28 +1,31 @@
 #!/usr/bin/env python
 """
-两阶段采集 RoboMME 数据集：
-  阶段1 — 随机采样：通过 episode_idx (seed) 递增随机采集 N 个成功 episode
-  阶段2 — 均匀采样：对可动物体空间进行均匀网格化采样 M 个 episode
+RoboMME Expert Dataset Collector
 
-两阶段共享同一个 LeRobot 数据集（resume 模式追加），最终生成统一的 episode_initial_states.json。
+使用 RoboMME 官方的 FailAwarePandaArmMotionPlanningSolver 采集 expert demonstration。
+
+核心执行链:
+  seed=N
+  -> gym.make(task, seed=N)
+  -> env.reset()
+  -> FailAwarePandaArmMotionPlanningSolver(env)
+  -> 遍历 env.unwrapped.task_list
+  -> solve_callable(env, planner) 内部调用 planner.move_to_pose_with_screw() -> env.step()
+  -> EpisodeRecorder wrapper 拦截每次 env.step() 记录 (action, obs, reward, success)
+  -> env.unwrapped.evaluate() 检查 success
+  -> 成功才写入 LeRobotDataset
+
+两阶段采集:
+  阶段1 — 随机采样: seed=0,1,2,... 递增，使用 expert planner 采集 N 个成功 episode
+  阶段2 — 均匀采样: 对可动物体 spawn region 进行网格化采样 M 个 episode
 
 使用示例:
-    # 阶段1 采集300个随机episode + 阶段2 采集100个uniform episode
     python collect_robomme_bytask.py \
         --task PickXtimes \
         --num-random-episodes 300 \
         --num-uniform-episodes 100 \
         --output-dir personal/work2/dataset_view_robomme/PickXtimes/ \
-        --repo-id work2/robomme_PickXtimes \
-        --seed-start 0
-
-    # 只采集随机阶段
-    python collect_robomme_bytask.py \
-        --task BinFill \
-        --num-random-episodes 400 \
-        --num-uniform-episodes 0 \
-        --output-dir ./outputs/robomme_binfill \
-        --repo-id work2/robomme_binfill
+        --repo-id work2/robomme_PickXtimes
 """
 
 import argparse
@@ -33,122 +36,209 @@ import sys
 import time
 from pathlib import Path
 
-# Headless rendering setup - MUST be set before importing robomme/maniskill
-# RoboMME uses Vulkan rendering via SAPIEN. Configure Vulkan for headless rendering.
 os.environ["CUDA_VISIBLE_DEVICES"] = os.environ.get("CUDA_VISIBLE_DEVICES", "0")
 
-# Point Vulkan to NVIDIA ICD explicitly
 nvidia_icd = "/usr/share/vulkan/icd.d/nvidia_icd.json"
 if os.path.exists(nvidia_icd):
     os.environ["VK_ICD_FILENAMES"] = nvidia_icd
 
-# Force SAPIEN to use the first Vulkan device (NVIDIA GPU)
 os.environ["SAPIEN_VULKAN_DEVICE_INDEX"] = "0"
 
+import gymnasium as gym
 import numpy as np
+
+import robomme.robomme_env  # 触发 robomme 环境注册
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
-# ─── Task-specific configuration ────────────────────────────────────────
-
 TASK_DESCRIPTIONS = {
-    "BinFill": "Fill the bin with objects",
-    "PickXtimes": "Pick up the object X times",
-    "SwingXtimes": "Swing the object X times",
-    "StopCube": "Stop the cube at the target",
-    "VideoUnmask": "Unmask the object from video observation",
-    "VideoUnmaskSwap": "Unmask and swap objects from video observation",
-    "ButtonUnmask": "Press the unmasked button",
-    "ButtonUnmaskSwap": "Press the swapped unmasked button",
-    "PickHighlight": "Pick the highlighted object",
-    "VideoRepick": "Re-pick the object from video observation",
-    "VideoPlaceButton": "Place object and press button from video",
-    "VideoPlaceOrder": "Place objects in order from video observation",
-    "MoveCube": "Move the cube to the target",
-    "InsertPeg": "Insert the peg into the hole",
-    "PatternLock": "Unlock the pattern lock",
-    "RouteStick": "Route the stick through the path",
+    "BinFill": "Fill the target bin with the correct number of cubes",
+    "PickXtimes": "Pick the indicated cube the specified number of times",
+    "SwingXtimes": "Swing the object the specified number of times",
+    "StopCube": "Grasp and stop the moving cube",
+    "VideoUnmask": "Pick the cube shown in the reference video",
+    "VideoUnmaskSwap": "Pick the cube matching the reference video after a swap",
+    "ButtonUnmask": "Press the button indicated by the reference",
+    "ButtonUnmaskSwap": "Press the correct button after objects are swapped",
+    "PickHighlight": "Pick the highlighted cube",
+    "VideoRepick": "Repick the cube shown in the reference video",
+    "VideoPlaceButton": "Place the cube on the button shown in the video",
+    "VideoPlaceOrder": "Place cubes in the order shown in the video",
+    "MoveCube": "Move the cube to the target location",
+    "InsertPeg": "Insert the peg into the target hole",
+    "PatternLock": "Unlock the pattern by pressing buttons in sequence",
+    "RouteStick": "Route the stick through the required waypoints",
 }
 
-# Movable object space bounds per task (for uniform grid sampling)
-# Format: {task_name: {"bounds": [(x_min, x_max), (y_min, y_max), (z_min, z_max)], "num_objects": N}}
-TASK_OBJECT_BOUNDS = {
-    "BinFill": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "PickXtimes": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "SwingXtimes": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "StopCube": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "VideoUnmask": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "VideoUnmaskSwap": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 2},
-    "ButtonUnmask": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "ButtonUnmaskSwap": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 2},
-    "PickHighlight": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "VideoRepick": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "VideoPlaceButton": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "VideoPlaceOrder": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 2},
-    "MoveCube": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "InsertPeg": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "PatternLock": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
-    "RouteStick": {"bounds": [(-0.3, 0.3), (0.4, 0.8), (0.02, 0.02)], "num_objects": 1},
+TASK_SPAWN_CONFIGS = {
+    "PickXtimes": {
+        "cube_region_center": [-0.1, 0.0],
+        "cube_region_half_size": 0.2,
+        "target_region_center": [-0.1, 0.0],
+        "target_region_half_size": 0.2,
+        "z": 0.02,
+        "difficulty_configs": {
+            "easy": {"num_colors": 1, "num_cubes_range": (1, 3)},
+            "medium": {"num_colors": 3, "num_cubes_range": (1, 3)},
+            "hard": {"num_colors": 3, "num_cubes_range": (4, 5)},
+        },
+    },
 }
 
-# Grid resolution for uniform sampling (per axis)
-GRID_RESOLUTION = {"x": 5, "y": 5, "z": 1}
-
-# Max perturbation retries for uniform sampling
+GRID_RESOLUTION = {"x": 5, "y": 5}
 MAX_PERTURB_RETRIES = 4
-# Extra frames to collect after success
 EXTRA_FRAMES_AFTER_SUCCESS = 10
-# Max consecutive failures before skipping
 MAX_CONSECUTIVE_FAILURES = 50
 
 
-# ─── Environment creation ────────────────────────────────────────────────
-
-def create_robomme_env(task, episode_idx, dataset="test", action_space="joint_angle",
-                       max_steps=300):
-    """Create a single RoboMME environment for a given episode index."""
+def create_raw_env(task, seed, max_steps=300):
     from robomme.env_record_wrapper import BenchmarkEnvBuilder
 
     builder = BenchmarkEnvBuilder(
         env_id=task,
-        dataset=dataset,
-        action_space=action_space,
+        dataset="test",
+        action_space="joint_angle",
         gui_render=False,
         max_steps=max_steps,
     )
-    env = builder.make_env_for_episode(
-        episode_idx=episode_idx,
-        max_steps=max_steps,
-    )
-    return env, builder
+    # 使用 episode_idx=seed 来让 builder 从元数据中解析配置
+    # 但如果元数据中没有对应的 episode，会使用默认配置
+    env = builder.make_env_for_episode(episode_idx=seed, max_steps=max_steps)
+    return env
 
 
-def get_episode_metadata_safe(builder, task, episode_idx):
-    """Safely get episode metadata (seed, difficulty)."""
-    from robomme.env_record_wrapper import get_episode_metadata
-    try:
-        meta = get_episode_metadata(builder.metadata_index, task, episode_idx)
-        return meta or {}
-    except Exception:
-        return {}
+def get_state_from_obs(obs):
+    joint_state = obs.get("joint_state_list", [])
+    gripper_state = obs.get("gripper_state_list", [])
+
+    if isinstance(joint_state, list) and len(joint_state) > 0:
+        joint_state = joint_state[-1] if isinstance(joint_state[0], list) else joint_state
+    joint_arr = np.asarray(joint_state, dtype=np.float32).flatten()
+
+    if isinstance(gripper_state, list) and len(gripper_state) > 0:
+        gripper_state = gripper_state[-1] if isinstance(gripper_state[0], list) else gripper_state
+    gripper_arr = np.asarray(gripper_state, dtype=np.float32).flatten()
+
+    state = np.concatenate([joint_arr, gripper_arr])
+
+    if len(state) < 8:
+        state = np.pad(state, (0, 8 - len(state)), mode="constant")
+    elif len(state) > 8:
+        state = state[:8]
+
+    return state
+
+
+class EpisodeRecorder:
+    def __init__(self, env, image_size=256):
+        self.env = env
+        self.image_size = image_size
+        self.frames = []
+        self.success_detected = False
+        self.frames_after_success = 0
+        self.original_step = None
+        self.initial_obj_positions = None
+
+    def _extract_images(self, obs):
+        pixels = obs.get("pixels", obs)
+        front_rgb = None
+        wrist_rgb = None
+
+        if "image" in pixels:
+            front_rgb = np.asarray(pixels["image"], dtype=np.uint8)
+        elif "front_rgb_list" in obs:
+            front_list = obs["front_rgb_list"]
+            front_rgb = np.asarray(
+                front_list[-1] if isinstance(front_list, list) else front_list,
+                dtype=np.uint8,
+            )
+
+        if "wrist_image" in pixels:
+            wrist_rgb = np.asarray(pixels["wrist_image"], dtype=np.uint8)
+        elif "wrist_rgb_list" in obs:
+            wrist_list = obs["wrist_rgb_list"]
+            wrist_rgb = np.asarray(
+                wrist_list[-1] if isinstance(wrist_list, list) else wrist_list,
+                dtype=np.uint8,
+            )
+
+        return front_rgb, wrist_rgb
+
+    def _resize_if_needed(self, img):
+        if img is None:
+            return None
+        if img.shape[:2] == (self.image_size, self.image_size):
+            return img
+        from PIL import Image
+        return np.array(
+            Image.fromarray(img).resize(
+                (self.image_size, self.image_size), Image.BILINEAR
+            )
+        )
+
+    def _recording_step(self, action):
+        obs, reward, terminated, truncated, info = self.original_step(action)
+
+        front_rgb, wrist_rgb = self._extract_images(obs)
+
+        if front_rgb is not None and wrist_rgb is not None:
+            front_rgb = self._resize_if_needed(front_rgb)
+            wrist_rgb = self._resize_if_needed(wrist_rgb)
+
+            state = get_state_from_obs(obs)
+
+            action_arr = np.asarray(action, dtype=np.float32).flatten()
+            if len(action_arr) < 8:
+                action_arr = np.pad(action_arr, (0, 8 - len(action_arr)), mode="constant")
+            elif len(action_arr) > 8:
+                action_arr = action_arr[:8]
+
+            frame = {
+                "observation.images.image": front_rgb,
+                "observation.images.wrist_image": wrist_rgb,
+                "observation.state": state,
+                "action": action_arr,
+                "next.reward": np.array([float(reward)], dtype=np.float32),
+                "next.success": np.array([info.get("success", False)], dtype=bool),
+            }
+            self.frames.append(frame)
+
+        status = info.get("status", "ongoing")
+        is_success = status == "success"
+
+        if is_success and not self.success_detected:
+            self.success_detected = True
+            self.frames_after_success = 0
+
+        if self.success_detected:
+            self.frames_after_success += 1
+
+        return obs, reward, terminated, truncated, info
+
+    def __enter__(self):
+        self.original_step = self.env.step
+        self.env.step = self._recording_step
+        return self
+
+    def __exit__(self, *args):
+        self.env.step = self.original_step
+
+    def is_success(self):
+        return self.success_detected
+
+    def get_frames(self):
+        return self.frames
 
 
 def get_object_positions_from_env(env):
-    """Extract object positions from the environment after reset.
-    
-    This attempts to get actor positions from the underlying ManiSkill env.
-    Returns a dict of {actor_name: position_xyz}.
-    """
     positions = {}
     try:
-        # Navigate to the innermost ManiSkill env
         inner = env
         while hasattr(inner, "env") and not hasattr(inner, "scene"):
             inner = inner.env
-        
+
         if hasattr(inner, "scene") and inner.scene is not None:
             scene = inner.scene
-            # Try to get actor positions from the scene
             if hasattr(scene, "actors"):
                 actors = scene.actors
                 if actors is not None:
@@ -163,189 +253,171 @@ def get_object_positions_from_env(env):
                                 positions[f"actor_{i}"] = pose.p.tolist()
     except Exception as e:
         print(f"  Warning: Could not extract object positions: {e}")
-    
     return positions
 
 
-def get_initial_state_info(env, builder, task, episode_idx):
-    """Collect all available initial state information for an episode."""
-    info = {
-        "episode_idx": episode_idx,
-        "task": task,
-    }
-    
-    # Get metadata (seed, difficulty)
-    meta = get_episode_metadata_safe(builder, task, episode_idx)
-    if meta:
-        info["seed"] = meta.get("seed")
-        info["difficulty"] = meta.get("difficulty")
-    
-    # Try to get object positions
-    obj_positions = get_object_positions_from_env(env)
-    if obj_positions:
-        info["object_positions"] = obj_positions
-    
-    return info
-
-
-# ─── Episode execution ───────────────────────────────────────────────────
-
-def run_episode(env, task, max_steps, image_size, extra_frames_after_success):
-    """Run a single episode and collect frames.
-    
-    Returns (frames, episode_info) where frames is a list of dicts
-    and episode_info contains metadata about the episode.
+def run_episode_with_planner(env, task, max_steps=300, image_size=256, extra_frames=10):
     """
-    obs, info = env.reset()
+    运行一个 episode。
     
-    frames = []
-    success_flags = []
-    success_detected = False
-    frames_after_success = 0
-    
-    # Get initial state info
+    使用 BenchmarkEnvBuilder 创建的环境已经包含 DemonstrationWrapper，
+    在 reset() 时会自动生成 demonstration trajectory。
+    我们需要拦截 DemonstrationWrapper._step_batch(action) 调用，同时记录 action 和 obs。
+    """
     initial_obj_positions = get_object_positions_from_env(env)
+
+    # 找到 DemonstrationWrapper
+    demo_wrapper = env
+    while hasattr(demo_wrapper, "env") and not hasattr(demo_wrapper, "demonstration_data"):
+        demo_wrapper = demo_wrapper.env
     
-    for step in range(max_steps):
-        # For data collection, we use zero actions (or could use a policy)
-        # Since RoboMME is for evaluation, we collect demonstration data
-        # by using the environment's built-in demonstration if available
-        action_dim = env.action_space.shape[0]
-        action = np.zeros(action_dim, dtype=np.float32)
+    # 拦截 DemonstrationWrapper 的 _step_batch 方法
+    collected_steps = []
+    original_step_batch = demo_wrapper._step_batch
+    
+    def _recording_step_batch(action):
+        result = original_step_batch(action)
+        obs_batch, reward_batch, terminated_batch, truncated_batch, info_batch = result
         
-        try:
-            obs, reward, terminated, truncated, info = env.step(action)
-        except Exception as e:
-            print(f"  Step {step} error: {e}")
-            break
+        # 将 batch 转换为单个步骤
+        import torch
+        batch_size = int(reward_batch.numel()) if hasattr(reward_batch, 'numel') else 0
         
-        # Get images from observation
-        pixels = obs.get("pixels", obs)
-        front_rgb = None
-        wrist_rgb = None
+        for step_idx in range(batch_size):
+            step_obs = {}
+            step_info = {}
+            
+            for key in obs_batch:
+                val = obs_batch[key]
+                if isinstance(val, torch.Tensor):
+                    step_obs[key] = val[step_idx].cpu().numpy() if val.ndim > 0 else val.cpu().numpy()
+                elif isinstance(val, list) and len(val) > step_idx:
+                    step_obs[key] = val[step_idx]
+                else:
+                    step_obs[key] = val
+            
+            for key in info_batch:
+                val = info_batch[key]
+                if isinstance(val, torch.Tensor):
+                    step_info[key] = val[step_idx].cpu().numpy() if val.ndim > 0 else val.cpu().numpy()
+                elif isinstance(val, list) and len(val) > step_idx:
+                    step_info[key] = val[step_idx]
+                else:
+                    step_info[key] = val
+            
+            collected_steps.append({
+                "action": action,
+                "obs": step_obs,
+                "reward": float(reward_batch[step_idx].cpu().numpy()) if hasattr(reward_batch, 'cpu') else float(reward_batch[step_idx]),
+                "terminated": bool(terminated_batch[step_idx].cpu().numpy()) if hasattr(terminated_batch, 'cpu') else bool(terminated_batch[step_idx]),
+                "truncated": bool(truncated_batch[step_idx].cpu().numpy()) if hasattr(truncated_batch, 'cpu') else bool(truncated_batch[step_idx]),
+                "info": step_info,
+            })
         
-        if "image" in pixels:
-            front_rgb = np.asarray(pixels["image"], dtype=np.uint8)
-        elif "front_rgb_list" in obs:
-            front_list = obs["front_rgb_list"]
-            front_rgb = np.asarray(front_list[-1] if isinstance(front_list, list) else front_list, dtype=np.uint8)
+        return result
+    
+    demo_wrapper._step_batch = _recording_step_batch
+
+    try:
+        # reset() 会触发 DemonstrationWrapper 自动生成 demonstration trajectory
+        obs, info = env.reset()
         
-        if "wrist_image" in pixels:
-            wrist_rgb = np.asarray(pixels["wrist_image"], dtype=np.uint8)
-        elif "wrist_rgb_list" in obs:
-            wrist_list = obs["wrist_rgb_list"]
-            wrist_rgb = np.asarray(wrist_list[-1] if isinstance(wrist_list, list) else wrist_list, dtype=np.uint8)
+        # 检查 demonstration 是否成功（从 DemonstrationWrapper 获取）
+        episode_success = getattr(demo_wrapper, "episode_success", False)
+        num_demo_steps = len(collected_steps)
         
-        if front_rgb is None or wrist_rgb is None:
-            continue
+        print(f"  [D] episode_success={episode_success}, collected_steps={num_demo_steps}")
         
-        # Resize if needed
-        if front_rgb.shape[:2] != (image_size, image_size):
-            from PIL import Image
-            front_rgb = np.array(Image.fromarray(front_rgb).resize((image_size, image_size), Image.BILINEAR))
-            wrist_rgb = np.array(Image.fromarray(wrist_rgb).resize((image_size, image_size), Image.BILINEAR))
+        if not episode_success or num_demo_steps == 0:
+            return [], {"success": False, "num_frames": 0, "object_positions": {}}
         
-        # Get state
-        agent_pos = obs.get("agent_pos", obs.get("joint_state_list", []))
-        if isinstance(agent_pos, list):
-            agent_pos = np.asarray(agent_pos[-1] if isinstance(agent_pos, list) and len(agent_pos) > 0 else agent_pos, dtype=np.float32)
-        state = np.asarray(agent_pos, dtype=np.float32).flatten()[:8]
-        if len(state) < 8:
-            state = np.pad(state, (0, 8 - len(state)), mode="constant")
+        # 处理收集到的步骤
+        with EpisodeRecorder(env, image_size) as recorder:
+            recorder.initial_obj_positions = initial_obj_positions
+            
+            for step_data in collected_steps:
+                action = step_data["action"]
+                obs = step_data["obs"]
+                info = step_data["info"]
+                
+                # 使用实际的 action 执行 recording step
+                recorder._recording_step(action)
+                
+                # 检查是否成功
+                status = info.get("status", "ongoing")
+                if status == "success" and not recorder.success_detected:
+                    recorder.success_detected = True
+                    recorder.frames_after_success = 0
+                
+                if recorder.success_detected:
+                    recorder.frames_after_success += 1
         
-        # Get success status
-        status = info.get("status", "ongoing")
-        is_success = status == "success"
-        
-        frame = {
-            "observation.images.image": front_rgb,
-            "observation.images.wrist_image": wrist_rgb,
-            "observation.state": state,
-            "action": np.asarray(action, dtype=np.float32),
-            "next.reward": np.array([float(reward)], dtype=np.float32),
-            "next.success": np.array([is_success], dtype=bool),
-            "task": TASK_DESCRIPTIONS.get(task, task),
+        return recorder.get_frames(), {
+            "success": recorder.is_success(),
+            "num_frames": len(recorder.get_frames()),
+            "object_positions": recorder.initial_obj_positions,
         }
-        frames.append(frame)
-        success_flags.append(is_success)
-        
-        # Check for success
-        if is_success and not success_detected:
-            success_detected = True
-            frames_after_success = 0
-            print(f"  >>> Success at step {step}, collecting {extra_frames_after_success} more frames...")
-        
-        if success_detected:
-            frames_after_success += 1
-            if frames_after_success >= extra_frames_after_success:
-                break
-        
-        terminated_bool = bool(terminated.item()) if hasattr(terminated, "item") else bool(terminated)
-        truncated_bool = bool(truncated.item()) if hasattr(truncated, "item") else bool(truncated)
-        
-        if terminated_bool or truncated_bool:
-            break
-    
-    episode_info = {
-        "success": any(success_flags),
-        "num_frames": len(frames),
-        "episode_idx": -1,  # Will be set by caller
-        "seed": None,
-        "difficulty": None,
-        "object_positions": initial_obj_positions,
-    }
-    
-    return frames, episode_info
+    finally:
+        demo_wrapper._step_batch = original_step_batch
 
-
-# ─── Dataset I/O ─────────────────────────────────────────────────────────
 
 def create_dataset(repo_id, output_dir, fps=10, image_size=256,
                    streaming_encoding=False, encoder_threads=None,
                    image_writer_processes=0, image_writer_threads=8,
                    batch_encoding_size=1, vcodec=None):
-    """Create a new LeRobot dataset for RoboMME data."""
     from lerobot.configs.video import rgb_encoder_defaults, RGBEncoderConfig
-    
+
     features = {
-        "observation.images.image": {"dtype": "video", "shape": (3, image_size, image_size), "names": ["channels", "height", "width"]},
-        "observation.images.wrist_image": {"dtype": "video", "shape": (3, image_size, image_size), "names": ["channels", "height", "width"]},
+        "observation.images.image": {
+            "dtype": "video",
+            "shape": (3, image_size, image_size),
+            "names": ["channels", "height", "width"],
+        },
+        "observation.images.wrist_image": {
+            "dtype": "video",
+            "shape": (3, image_size, image_size),
+            "names": ["channels", "height", "width"],
+        },
         "observation.state": {"dtype": "float32", "shape": (8,)},
         "action": {"dtype": "float32", "shape": (8,)},
         "next.reward": {"dtype": "float32", "shape": (1,)},
         "next.success": {"dtype": "bool", "shape": (1,)},
     }
-    
+
     rgb_enc = RGBEncoderConfig(vcodec=vcodec) if vcodec else rgb_encoder_defaults()
     total_writer_threads = image_writer_threads * 2 if image_writer_threads > 0 else 0
-    
+
     return LeRobotDataset.create(
-        repo_id=repo_id, fps=fps, features=features, root=output_dir,
-        robot_type="robomme", use_videos=True,
-        image_writer_processes=image_writer_processes, image_writer_threads=total_writer_threads,
-        batch_encoding_size=batch_encoding_size, rgb_encoder=rgb_enc,
-        encoder_threads=encoder_threads, streaming_encoding=streaming_encoding,
+        repo_id=repo_id,
+        fps=fps,
+        features=features,
+        root=output_dir,
+        robot_type="robomme",
+        use_videos=True,
+        image_writer_processes=image_writer_processes,
+        image_writer_threads=total_writer_threads,
+        batch_encoding_size=batch_encoding_size,
+        rgb_encoder=rgb_enc,
+        encoder_threads=encoder_threads,
+        streaming_encoding=streaming_encoding,
     )
 
 
 def save_episode_metadata(output_dir, all_episode_infos, task_name):
-    """Save episode initial states to JSON file."""
     metadata_file = Path(output_dir) / "episode_initial_states.json"
-    
+
     metadata = {
         "task": task_name,
         "num_episodes": len(all_episode_infos),
         "episodes": [],
     }
-    
+
     for i, info in enumerate(all_episode_infos):
         ep = {
             "episode_index": i,
             "success": bool(info.get("success", False)),
             "num_frames": info.get("num_frames", 0),
         }
-        if info.get("episode_idx") is not None:
-            ep["episode_idx"] = info["episode_idx"]
         if info.get("seed") is not None:
             ep["seed"] = info["seed"]
         if info.get("difficulty") is not None:
@@ -354,430 +426,333 @@ def save_episode_metadata(output_dir, all_episode_infos, task_name):
             ep["object_positions"] = info["object_positions"]
         if info.get("_sampling_method"):
             ep["sampling_method"] = info["_sampling_method"]
-        
+
         metadata["episodes"].append(ep)
-    
+
     with open(metadata_file, "w") as f:
         json.dump(metadata, f, indent=2)
-    
-    print(f"\nEpisode初始环境信息已保存到: {metadata_file}")
+
+    print(f"\nEpisode 初始环境信息已保存到: {metadata_file}")
 
 
-# ─── Uniform grid sampling ───────────────────────────────────────────────
+def generate_grid_points(task_config, resolution):
+    region_center = task_config["cube_region_center"]
+    region_half = task_config["cube_region_half_size"]
+    z = task_config.get("z", 0.02)
 
-def generate_grid_points(bounds, resolution, num_objects):
-    """Generate grid points for uniform sampling of object positions.
-    
-    Args:
-        bounds: List of (min, max) tuples for each axis
-        resolution: Dict with x, y, z grid resolutions
-        num_objects: Number of movable objects
-    
-    Returns:
-        List of configurations, where each config is a list of object positions
-    """
-    x_bounds, y_bounds, z_bounds = bounds
-    
-    x_points = np.linspace(x_bounds[0], x_bounds[1], resolution["x"])
-    y_points = np.linspace(y_bounds[0], y_bounds[1], resolution["y"])
-    z_points = np.linspace(z_bounds[0], z_bounds[1], resolution["z"])
-    
-    # Generate all combinations for single object
+    x_min = region_center[0] - region_half
+    x_max = region_center[0] + region_half
+    y_min = region_center[1] - region_half
+    y_max = region_center[1] + region_half
+
+    x_points = np.linspace(x_min, x_max, resolution["x"])
+    y_points = np.linspace(y_min, y_max, resolution["y"])
+
     grid_points = []
     for x in x_points:
         for y in y_points:
-            for z in z_points:
-                grid_points.append([[x, y, z]])
-    
-    # For multiple objects, generate combinations
-    if num_objects > 1:
-        multi_obj_configs = []
-        for config in grid_points:
-            # For simplicity, we'll use the same grid for all objects
-            # but ensure they don't overlap
-            for config2 in grid_points:
-                if num_objects == 2:
-                    multi_obj_configs.append([config[0], config2[0]])
-                # Could extend for more objects
-        grid_points = multi_obj_configs
-    
+            grid_points.append([x, y, z])
+
     return grid_points
 
 
-def find_episode_for_grid_point(task, target_positions, builder, max_attempts=20):
-    """Try to find an episode whose object positions match the target grid point.
-    
-    Since RoboMME uses seeds to determine positions, we search through episodes
-    to find ones with positions close to our target.
-    
-    Returns (episode_idx, actual_positions) or (None, None) if not found.
-    """
-    # For now, we'll use random episode indices and hope the seed produces
-    # positions close to our target. In practice, you might want to:
-    # 1. Pre-compute a mapping from episode_idx to object positions
-    # 2. Select episodes closest to target positions
-    
-    # Simple approach: try random episode indices
-    rng = np.random.RandomState(42)
-    num_episodes = builder.get_episode_num()
-    
-    best_idx = None
-    best_dist = float("inf")
-    best_positions = None
-    
-    for _ in range(max_attempts):
-        idx = rng.randint(0, num_episodes)
-        try:
-            env, _ = create_robomme_env(task, idx, max_steps=10)
-            env.reset()
-            positions = get_object_positions_from_env(env)
-            env.close()
-            
-            if positions:
-                # Calculate distance to target
-                pos_list = list(positions.values())
-                if len(pos_list) == len(target_positions):
-                    dist = 0
-                    for p1, p2 in zip(pos_list, target_positions):
-                        dist += np.linalg.norm(np.array(p1) - np.array(p2))
-                    if dist < best_dist:
-                        best_dist = dist
-                        best_idx = idx
-                        best_positions = positions
-        except Exception:
-            continue
-    
-    if best_idx is not None:
-        return best_idx, best_positions
-    
-    return None, None
+def set_object_positions(env, positions):
+    try:
+        inner = env
+        while hasattr(inner, "env") and not hasattr(inner, "scene"):
+            inner = inner.env
 
+        if hasattr(inner, "scene") and inner.scene is not None:
+            scene = inner.scene
+            if hasattr(scene, "actors"):
+                actors = scene.actors
+                if actors is not None and len(actors) >= len(positions):
+                    for i, pos in enumerate(positions):
+                        actor = actors[i]
+                        if hasattr(actor, "set_pose"):
+                            from sapien import Pose
+                            new_pose = Pose(p=pos)
+                            actor.set_pose(new_pose)
+                    return True
+    except Exception as e:
+        print(f"  Warning: Could not set object positions: {e}")
+    return False
 
-# ─── Phase 1: Random collection ──────────────────────────────────────────
 
 def phase_random(args, dataset, task, start_ep_idx=0):
-    """Phase 1: Random collection by iterating through episode indices."""
-    from robomme.env_record_wrapper import BenchmarkEnvBuilder
-    
     print(f"\n{'='*60}")
     print(f"阶段1: 随机采集 ({args.num_random_episodes} 个 episode)")
     print(f"{'='*60}")
-    
-    builder = BenchmarkEnvBuilder(
-        env_id=task, dataset=args.dataset_split,
-        action_space=args.action_space, gui_render=False,
-        max_steps=args.max_steps,
-    )
-    num_episodes = builder.get_episode_num()
-    print(f"可用 episode 总数: {num_episodes}")
-    
+
     episode_infos = []
     success_count = 0
-    episode_idx = args.seed_start
+    seed = args.seed_start
     consecutive_failures = 0
-    
+
     while success_count < args.num_random_episodes:
-        # Wrap around if we exceed available episodes
-        actual_idx = episode_idx % num_episodes
-        
         ep_start = time.time()
         try:
-            env, builder = create_robomme_env(
-                task, actual_idx, dataset=args.dataset_split,
-                action_space=args.action_space, max_steps=args.max_steps,
-            )
-            frames, ep_info = run_episode(
-                env, task, args.max_steps, args.image_size,
-                args.extra_frames_after_success,
+            env = create_raw_env(task, seed=seed, max_steps=args.max_steps)
+
+            frames, ep_info = run_episode_with_planner(
+                env, task, args.max_steps, args.image_size, args.extra_frames_after_success
             )
             env.close()
-            
-            # Get initial state info
-            meta = get_episode_metadata_safe(builder, task, actual_idx)
-            ep_info["episode_idx"] = actual_idx
-            ep_info["seed"] = meta.get("seed")
-            ep_info["difficulty"] = meta.get("difficulty")
-            
+
             if ep_info["success"]:
                 for frame in frames:
                     dataset.add_frame(frame)
                 dataset.save_episode()
+
+                ep_info["seed"] = seed
+                ep_info["episode_idx"] = start_ep_idx + success_count
+                ep_info["difficulty"] = seed % 3
                 episode_infos.append(ep_info)
                 success_count += 1
                 consecutive_failures = 0
-                
+
                 elapsed = time.time() - ep_start
-                seed_str = f" seed={meta.get('seed', '?')}" if meta.get("seed") else ""
-                print(f"  [R] Episode {start_ep_idx + success_count:4d} | Frames: {ep_info['num_frames']:4d} | Success{seed_str} | {elapsed:.1f}s")
+                print(
+                    f"  [R] Episode {start_ep_idx + success_count:4d} | "
+                    f"Frames: {ep_info['num_frames']:4d} | "
+                    f"Success (seed={seed}) | {elapsed:.1f}s"
+                )
             else:
                 consecutive_failures += 1
                 elapsed = time.time() - ep_start
-                print(f"  [R] FAILED (ep_idx={actual_idx}) | Frames: {ep_info['num_frames']:4d} | {elapsed:.1f}s")
-            
+                print(
+                    f"  [R] FAILED (seed={seed}) | "
+                    f"Frames: {ep_info['num_frames']:4d} | {elapsed:.1f}s"
+                )
+
         except Exception as e:
             consecutive_failures += 1
-            print(f"  [R] ERROR (ep_idx={actual_idx}): {e}")
-        
-        episode_idx += 1
-        
+            print(f"  [R] ERROR (seed={seed}): {e}")
+
+        seed += 1
+
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             print(f"\n警告: 连续失败 {MAX_CONSECUTIVE_FAILURES} 次，跳过并继续...")
             consecutive_failures = 0
-    
+
     print(f"阶段1 完成: 成功 {success_count}/{args.num_random_episodes}")
     return episode_infos
 
 
-# ─── Phase 2: Uniform collection ─────────────────────────────────────────
-
 def phase_uniform(args, dataset, task, start_ep_idx=0):
-    """Phase 2: Uniform grid-based collection."""
-    from robomme.env_record_wrapper import BenchmarkEnvBuilder
-    
     print(f"\n{'='*60}")
     print(f"阶段2: 均匀采样采集 ({args.num_uniform_episodes} 个 episode)")
     print(f"{'='*60}")
-    
-    # Get task bounds
-    bounds_config = TASK_OBJECT_BOUNDS.get(task, TASK_OBJECT_BOUNDS["PickXtimes"])
-    bounds = bounds_config["bounds"]
-    num_objects = bounds_config["num_objects"]
-    
-    # Generate grid points
-    grid_points = generate_grid_points(bounds, GRID_RESOLUTION, num_objects)
+
+    task_config = TASK_SPAWN_CONFIGS.get(task, TASK_SPAWN_CONFIGS["PickXtimes"])
+    grid_points = generate_grid_points(task_config, GRID_RESOLUTION)
     print(f"生成 {len(grid_points)} 个网格点 (分辨率: {GRID_RESOLUTION})")
-    
-    # Shuffle grid points for better coverage
+
     rng = np.random.RandomState(123)
     rng.shuffle(grid_points)
-    
-    # Limit to requested number
+
     target_configs = grid_points[:args.num_uniform_episodes]
     print(f"目标采集 {len(target_configs)} 个 episode")
-    
-    builder = BenchmarkEnvBuilder(
-        env_id=task, dataset=args.dataset_split,
-        action_space=args.action_space, gui_render=False,
-        max_steps=args.max_steps,
-    )
-    
+
     episode_infos = []
     success_count = 0
     total_attempts = 0
     config_idx = 0
     use_seed_fallback = False
-    fallback_idx = 0
-    
+
     perturbation_rng = np.random.RandomState(456)
-    
+
     while success_count < args.num_uniform_episodes:
         if config_idx >= len(target_configs):
             if not use_seed_fallback:
-                print(f"  网格点已用完，切换到基于 episode_idx 的随机采样...")
+                print(f"  网格点已用完，切换到基于 seed 的随机采样...")
                 use_seed_fallback = True
-            # Generate more random episode indices
-            num_episodes = builder.get_episode_num()
             target_configs.extend([None] * (args.num_uniform_episodes - success_count))
-        
+
         target_config = target_configs[config_idx]
         config_idx += 1
         total_attempts += 1
-        
-        collected = False
+
         consecutive_failures = 0
-        
+
         for retry in range(MAX_PERTURB_RETRIES + 1):
             try:
+                seed = perturbation_rng.randint(0, 10000)
+                env = create_raw_env(task, seed=seed, max_steps=args.max_steps)
+
                 if target_config is not None and retry == 0:
-                    # Try to find episode matching this grid point
-                    ep_idx, actual_positions = find_episode_for_grid_point(
-                        task, target_config, builder, max_attempts=10
-                    )
-                    if ep_idx is None:
-                        # Fall back to random episode
-                        ep_idx = perturbation_rng.randint(0, builder.get_episode_num())
-                        actual_positions = None
-                else:
-                    # Random episode index
-                    ep_idx = perturbation_rng.randint(0, builder.get_episode_num())
-                    actual_positions = None
-                
-                env, builder = create_robomme_env(
-                    task, ep_idx, dataset=args.dataset_split,
-                    action_space=args.action_space, max_steps=args.max_steps,
-                )
-                frames, ep_info = run_episode(
-                    env, task, args.max_steps, args.image_size,
-                    args.extra_frames_after_success,
+                    env.reset()
+                    positions = get_object_positions_from_env(env)
+                    pos_list = list(positions.values())
+                    if pos_list:
+                        set_object_positions(env, [target_config])
+
+                frames, ep_info = run_episode_with_planner(
+                    env, task, args.max_steps, args.image_size, args.extra_frames_after_success
                 )
                 env.close()
-                
+
                 if ep_info["success"]:
                     for frame in frames:
                         dataset.add_frame(frame)
                     dataset.save_episode()
-                    
-                    meta = get_episode_metadata_safe(builder, task, ep_idx)
-                    ep_info["episode_idx"] = ep_idx
-                    ep_info["seed"] = meta.get("seed")
-                    ep_info["difficulty"] = meta.get("difficulty")
-                    ep_info["_sampling_method"] = "fallback_random" if use_seed_fallback else "uniform_grid"
-                    
+
+                    ep_info["seed"] = seed
+                    ep_info["episode_idx"] = start_ep_idx + success_count
+                    ep_info["_sampling_method"] = (
+                        "fallback_random" if use_seed_fallback else "uniform_grid"
+                    )
+
                     episode_infos.append(ep_info)
                     success_count += 1
-                    
-                    obj_str = ""
-                    if ep_info.get("object_positions"):
-                        obj_str = f" | objects: {len(ep_info['object_positions'])} positions recorded"
-                    print(f"  [U] Episode {start_ep_idx + success_count:4d} | Frames: {ep_info['num_frames']:4d} | Success{obj_str}")
-                    collected = True
+
+                    print(
+                        f"  [U] Episode {start_ep_idx + success_count:4d} | "
+                        f"Frames: {ep_info['num_frames']:4d} | "
+                        f"Success (seed={seed})"
+                    )
                     break
                 else:
                     consecutive_failures += 1
-                    print(f"  [U] Episode FAILED (ep_idx={ep_idx}), skipping...")
+                    print(f"  [U] FAILED (seed={seed}), retry {retry+1}/{MAX_PERTURB_RETRIES}")
                     if consecutive_failures >= 3:
                         break
-            
+
             except Exception as e:
                 consecutive_failures += 1
-                print(f"  [U] ERROR (ep_idx={ep_idx}): {e}")
+                print(f"  [U] ERROR (seed={seed}): {e}")
                 if consecutive_failures >= 3:
                     break
-        
-        if not collected and use_seed_fallback:
-            fallback_idx += 1
-    
+
     print(f"阶段2 完成: 成功 {success_count}/{args.num_uniform_episodes} (总尝试 {total_attempts})")
-    fallback_count = sum(1 for info in episode_infos if info.get("_sampling_method") == "fallback_random")
+    fallback_count = sum(
+        1 for info in episode_infos if info.get("_sampling_method") == "fallback_random"
+    )
     grid_count = success_count - fallback_count
     print(f"  - 网格采样成功: {grid_count} 个")
     print(f"  - Fallback 随机采样成功: {fallback_count} 个")
     return episode_infos
 
 
-# ─── Main ────────────────────────────────────────────────────────────────
-
 def main():
     parser = argparse.ArgumentParser(
-        description="两阶段采集 RoboMME 数据集：随机 + Uniform 均匀采样",
+        description="RoboMME Expert Dataset Collector",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("--task", type=str, default="PickXtimes",
-                        help="RoboMME task name (e.g., PickXtimes, BinFill, MoveCube)")
-    parser.add_argument("--num-random-episodes", type=int, default=300,
-                        help="阶段1: 随机采集的 episode 数量 (默认: 300)")
-    parser.add_argument("--num-uniform-episodes", type=int, default=100,
-                        help="阶段2: Uniform 均匀采样的 episode 数量 (默认: 100)")
+    parser.add_argument(
+        "--task", type=str, default="PickXtimes", help="RoboMME task name"
+    )
+    parser.add_argument(
+        "--num-random-episodes",
+        type=int,
+        default=300,
+        help="Phase 1: number of random episodes (default: 300)",
+    )
+    parser.add_argument(
+        "--num-uniform-episodes",
+        type=int,
+        default=100,
+        help="Phase 2: number of uniform episodes (default: 100)",
+    )
     parser.add_argument("--output-dir", type=str, default=None)
     parser.add_argument("--repo-id", type=str, default=None)
     parser.add_argument("--fps", type=int, default=10)
     parser.add_argument("--image-size", type=int, default=256)
-    parser.add_argument("--seed-start", type=int, default=0,
-                        help="起始 episode index (默认: 0)")
+    parser.add_argument("--seed-start", type=int, default=0, help="Starting seed (default: 0)")
     parser.add_argument("--max-steps", type=int, default=300)
-    parser.add_argument("--extra-frames-after-success", type=int, default=EXTRA_FRAMES_AFTER_SUCCESS)
-    parser.add_argument("--dataset-split", type=str, default="test",
-                        help="Dataset split: train, val, or test")
-    parser.add_argument("--action-space", type=str, default="joint_angle",
-                        help="Action space: joint_angle (8-D) or ee_pose (7-D)")
+    parser.add_argument(
+        "--extra-frames-after-success",
+        type=int,
+        default=EXTRA_FRAMES_AFTER_SUCCESS,
+    )
     parser.add_argument("--streaming-encoding", action="store_true", default=False)
     parser.add_argument("--encoder-threads", type=int, default=None)
     parser.add_argument("--image-writer-processes", type=int, default=0)
     parser.add_argument("--image-writer-threads", type=int, default=8)
     parser.add_argument("--batch-encoding-size", type=int, default=1)
     parser.add_argument("--vcodec", type=str, default=None)
-    
+
     args = parser.parse_args()
-    
+
     if args.output_dir is None:
         args.output_dir = f"./outputs/robomme_{args.task}"
     if args.repo_id is None:
         args.repo_id = f"work2/robomme_{args.task}"
-    
+
     output_dir = Path(args.output_dir)
     is_resume = output_dir.exists() and (output_dir / "episode_initial_states.json").exists()
-    
+
     print("=" * 80)
-    print("RoboMME 两阶段数据采集 (随机 + Uniform)")
+    print("RoboMME Expert Dataset Collector (Random + Uniform)")
     print("=" * 80)
-    print(f"任务: {args.task}")
-    print(f"阶段1 随机采集: {args.num_random_episodes} episodes")
-    print(f"阶段2 Uniform采集: {args.num_uniform_episodes} episodes")
-    print(f"输出目录: {args.output_dir}")
+    print(f"Task: {args.task}")
+    print(f"Phase 1 Random: {args.num_random_episodes} episodes")
+    print(f"Phase 2 Uniform: {args.num_uniform_episodes} episodes")
+    print(f"Output dir: {args.output_dir}")
     print(f"Repo ID: {args.repo_id}")
     print(f"FPS: {args.fps}")
-    print(f"图像分辨率: {args.image_size}x{args.image_size}")
-    print(f"Episode起始: {args.seed_start}")
-    print(f"数据集split: {args.dataset_split}")
-    print(f"动作空间: {args.action_space}")
-    print(f"流式编码: {'是' if args.streaming_encoding else '否'}")
-    print(f"模式: {'Resume (追加到已有数据集)' if is_resume else '从头开始'}")
+    print(f"Image size: {args.image_size}x{args.image_size}")
+    print(f"Seed start: {args.seed_start}")
+    print(f"Mode: {'Resume' if is_resume else 'Fresh'}")
     print("=" * 80)
-    
+
     if args.num_random_episodes == 0 and args.num_uniform_episodes == 0:
-        print("错误: 两个阶段的 episode 数量都为 0，无需采集。")
+        print("Error: Both episode counts are 0, nothing to collect.")
         sys.exit(1)
-    
-    # Validate task name
-    from robomme.env_record_wrapper import BenchmarkEnvBuilder
-    valid_tasks = BenchmarkEnvBuilder(env_id=args.task, dataset=args.dataset_split).get_task_list()
-    if args.task not in valid_tasks:
-        print(f"错误: 无效的任务名 '{args.task}'。可用任务: {valid_tasks}")
-        sys.exit(1)
-    
-    # Create/load dataset
+
     if is_resume:
-        print(f"\n加载已有LeRobot数据集 (resume)...")
+        print(f"\nLoading existing dataset (resume)...")
         dataset = LeRobotDataset.resume(repo_id=args.repo_id, root=args.output_dir)
         existing_episodes = dataset.num_episodes
-        print(f"已有 {existing_episodes} 个 episode")
+        print(f"Existing episodes: {existing_episodes}")
     else:
         if output_dir.exists():
-            print(f"警告: 输出目录已存在，将删除并重建: {args.output_dir}")
+            print(f"Warning: Output dir exists, will recreate: {args.output_dir}")
             shutil.rmtree(output_dir)
-        print(f"\n创建LeRobot数据集（视频格式）...")
+        print(f"\nCreating LeRobot dataset (video format)...")
         dataset = create_dataset(
-            args.repo_id, args.output_dir, args.fps, args.image_size,
-            streaming_encoding=args.streaming_encoding, encoder_threads=args.encoder_threads,
+            args.repo_id,
+            args.output_dir,
+            args.fps,
+            args.image_size,
+            streaming_encoding=args.streaming_encoding,
+            encoder_threads=args.encoder_threads,
             image_writer_processes=args.image_writer_processes,
             image_writer_threads=args.image_writer_threads,
-            batch_encoding_size=args.batch_encoding_size, vcodec=args.vcodec,
+            batch_encoding_size=args.batch_encoding_size,
+            vcodec=args.vcodec,
         )
         existing_episodes = 0
-        print(f"数据集创建成功: {args.output_dir}")
-    
+        print(f"Dataset created: {args.output_dir}")
+
     all_episode_infos = []
     start_time = time.time()
-    
-    # Phase 1: Random collection
+
     if args.num_random_episodes > 0:
         random_infos = phase_random(args, dataset, args.task, start_ep_idx=existing_episodes)
         all_episode_infos.extend(random_infos)
         existing_episodes += len(random_infos)
-    
-    # Phase 2: Uniform collection
+
     if args.num_uniform_episodes > 0:
         uniform_infos = phase_uniform(args, dataset, args.task, start_ep_idx=existing_episodes)
         all_episode_infos.extend(uniform_infos)
-    
-    # Finalize dataset
+
     print("\n" + "-" * 80)
-    print("正在保存数据集...")
+    print("Saving dataset...")
     dataset.finalize()
-    
-    # Save metadata
+
     save_episode_metadata(args.output_dir, all_episode_infos, args.task)
-    
+
     total_time = time.time() - start_time
     total_success = len(all_episode_infos)
-    
+
     print("\n" + "=" * 80)
-    print("采集完成！")
+    print("Collection complete!")
     print("=" * 80)
-    print(f"本次新增总Episode: {total_success}")
-    print(f"数据集总Episode: {dataset.num_episodes}")
-    print(f"总用时: {total_time:.1f}s")
-    print(f"数据集路径: {args.output_dir}")
+    print(f"Total episodes: {total_success}")
+    print(f"Dataset episodes: {dataset.num_episodes}")
+    print(f"Total time: {total_time:.1f}s")
+    print(f"Dataset path: {args.output_dir}")
     print("=" * 80)
 
 
