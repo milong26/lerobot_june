@@ -441,6 +441,29 @@ def set_object_positions(env, positions):
     return False
 
 
+def steps_to_frames(steps, task_description, image_size=256):
+    """将 StepRecorder 收集的 steps 转换为 LeRobotDataset frames。"""
+    frames = []
+    for step in steps:
+        front_rgb = step["front_rgb"]
+        wrist_rgb = step["wrist_rgb"]
+        
+        if front_rgb is None or wrist_rgb is None:
+            continue
+        
+        frame = {
+            "observation.images.image": front_rgb,
+            "observation.images.wrist_image": wrist_rgb,
+            "observation.state": step["state"],
+            "action": step["action"],
+            "next.reward": np.array([step["reward"]], dtype=np.float32),
+            "next.success": np.array([step["info"].get("success", False)], dtype=bool),
+            "task": task_description,
+        }
+        frames.append(frame)
+    return frames
+
+
 def phase_random(args, dataset, task, start_ep_idx=0):
     print(f"\n{'='*60}")
     print(f"阶段1: 随机采集 ({args.num_random_episodes} 个 episode)")
@@ -450,18 +473,21 @@ def phase_random(args, dataset, task, start_ep_idx=0):
     success_count = 0
     seed = args.seed_start
     consecutive_failures = 0
+    task_description = TASK_DESCRIPTIONS.get(task, task)
 
     while success_count < args.num_random_episodes:
         ep_start = time.time()
         try:
             env = create_raw_env(task, seed=seed, max_steps=args.max_steps)
 
-            frames, ep_info = run_episode_with_planner(
+            steps, ep_info = run_episode_with_planner(
                 env, task, args.max_steps, args.image_size, args.extra_frames_after_success
             )
             env.close()
 
             if ep_info["success"]:
+                frames = steps_to_frames(steps, task_description, args.image_size)
+                
                 for frame in frames:
                     dataset.add_frame(frame)
                 dataset.save_episode()
@@ -521,6 +547,7 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
     total_attempts = 0
     config_idx = 0
     use_seed_fallback = False
+    task_description = TASK_DESCRIPTIONS.get(task, task)
 
     perturbation_rng = np.random.RandomState(456)
 
@@ -549,12 +576,14 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
                     if pos_list:
                         set_object_positions(env, [target_config])
 
-                frames, ep_info = run_episode_with_planner(
+                steps, ep_info = run_episode_with_planner(
                     env, task, args.max_steps, args.image_size, args.extra_frames_after_success
                 )
                 env.close()
 
                 if ep_info["success"]:
+                    frames = steps_to_frames(steps, task_description, args.image_size)
+                    
                     for frame in frames:
                         dataset.add_frame(frame)
                     dataset.save_episode()
