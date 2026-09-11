@@ -1,0 +1,114 @@
+Device: cuda
+Policy type: tinyvla_b
+Checkpoint: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_b_disassemble-v3_corner/checkpoints/010000/pretrained_model
+Dataset root: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode index: 0
+Log file: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/action_pipeline_debug.log
+
+--- LOADING DATASET SAMPLE ---
+Dataset loaded: 83 frames, 1 episode(s)
+Features: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'observation.environment_state', 'action', 'next.reward', 'next.success', 'timestamp', 'frame_index', 'episode_index', 'index', 'task_index']
+Action feature: {'dtype': 'float32', 'shape': (4,), 'names': {'axes': ['x', 'y', 'z', 'gripper']}}
+Loaded frame index 41 from episode 0
+Sample keys: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'observation.environment_state', 'action', 'next.reward', 'next.success', 'timestamp', 'frame_index', 'episode_index', 'index', 'task_index', 'task']
+Dataset stats keys: ['next.success', 'action', 'timestamp', 'index', 'next.reward', 'task_index', 'episode_index', 'observation.images.top', 'observation.images.wrist', 'observation.environment_state', 'observation.state', 'frame_index']
+
+Loading policy type 'tinyvla_b' from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_b_disassemble-v3_corner/checkpoints/010000/pretrained_model
+Preprocessor loaded: DataProcessorPipeline, steps=4
+Postprocessor loaded: DataProcessorPipeline, steps=2
+Policy loaded: TinyVLABPolicy
+
+--- TinyVLA ACTION PIPELINE DEBUG ---
+
+--- RAW DATASET SAMPLE ---
+  [RAW] raw_action
+    shape : [4]
+    dtype : float32
+    min   : -0.932129
+    max   : 0.127097
+    mean  : -0.197414
+    std   : 0.427014
+  [RAW] raw_state
+    shape : [4]
+    dtype : float32
+    min   : 0.116733
+    max   : 0.996692
+    mean  : 0.487972
+    std   : 0.377215
+  [RAW] Image keys: ['observation.images.top', 'observation.images.wrist']
+  [RAW] raw_image_observation.images.top
+    shape : [3, 480, 480]
+    dtype : float32
+    min   : 0.000000
+    max   : 1.000000
+    mean  : 0.396375
+    std   : 0.143546
+  [RAW] raw_image_observation.images.wrist
+    shape : [3, 480, 480]
+    dtype : float32
+    min   : 0.000000
+    max   : 1.000000
+    mean  : 0.412476
+    std   : 0.156809
+  [RAW] Task: Pick a nut out of a peg
+
+--- PREPROCESSOR (TinyVLA) ---
+  Preprocessor output keys: ['action', 'next.reward', 'next.done', 'next.truncated', 'info', 'task', 'observation.state', 'observation.images.top', 'observation.images.wrist']
+  [PRE] preprocessed_action_normalized
+    shape : [1, 4]
+    dtype : float32
+    min   : -1.567457
+    max   : -0.308908
+    mean  : -0.929477
+    std   : 0.610741
+  [PRE] preprocessed_state
+    shape : [1, 4]
+    dtype : float32
+    min   : -0.144310
+    max   : 1.364689
+    mean  : 0.451731
+    std   : 0.613151
+
+--- POLICY predict_action_chunk (TinyVLA) ---
+  [PRED] model_prediction_action
+    shape : [1, 16, 4]
+    dtype : float32
+    min   : -0.972656
+    max   : 1.000000
+    mean  : -0.011856
+    std   : 0.597374
+    chunk_length: 16
+
+--- POSTPROCESSOR (TinyVLA) ---
+  [FINAL] final_action_unnormalized
+    shape : [1, 16, 4]
+    dtype : float32
+    min   : -0.554688
+    max   : 0.781250
+    mean  : 0.259712
+    std   : 0.389654
+
+--- TinyVLA ACTION HEAD INFO ---
+  action_head_type : droid_diffusion
+  chunk_size       : 16
+  n_action_steps   : 16
+  action_dim       : 4
+  normalization    : {'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>, 'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>}
+
+--- PREDICTION vs REAL ACTION COMPARISON ---
+  Real action (current frame)     : [0.015375935472548008, 0.12709705531597137, -0.9321286082267761, 0.0]
+  Predicted action (step 0)       : [0.02392578125, 0.0859375, -0.5390625, 0.40625]
+  Absolute error per dim          : [0.008549845777451992, 0.041159555315971375, 0.3930661082267761, 0.40625]
+  Max absolute error              : 0.406250
+  Mean absolute error             : 0.212256
+
+  Full predicted chunk (16 steps):
+    min   : -0.554688
+    max   : 0.781250
+    mean  : 0.259712
+    std   : 0.389654
+
+Results saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/action_pipeline_debug_results.json
+Log saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/action_pipeline_debug.log
+
+--- DONE ---

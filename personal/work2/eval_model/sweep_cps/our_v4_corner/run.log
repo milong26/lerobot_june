@@ -1,0 +1,14 @@
+============================================================
+MetaWorld Checkpoint Sweep
+============================================================
+Model root: personal/work2/duibi/ours_v4_112_seed42_corner/dynamicgrid_v4_112_seed42
+Camera: corner,gripperPOV
+Label: our_v4_corner
+GPU: 1
+Episodes/checkpoint: 200
+Batch size: 4
+Max step: 12000
+Output: personal/work2/eval_model/sweep_cps/our_v4_corner
+Available checkpoints: 002000 004000 006000 008000 010000 012000
+Total checkpoints: 6
+[START] step=002000 checkpoint=personal/work2/duibi/ours_v4_112_seed42_corner/dynamicgrid_v4_112_seed42/checkpoints/002000/pretrained_model

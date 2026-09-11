@@ -1,0 +1,9 @@
+Action Space Alignment Verification Tool
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode: 0
+Device: cuda
+Output: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/action_space_alignment_results.json
+Found existing results at /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/action_space_alignment_results.json
+Skipping already-completed models: ['tinyvla_s', 'tinyvla_b', 'minivla']
+All requested models already completed. Nothing to run.
+Existing results: ['tinyvla_s', 'tinyvla_b', 'minivla']

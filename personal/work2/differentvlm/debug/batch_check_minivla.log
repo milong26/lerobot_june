@@ -1,0 +1,11 @@
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode: 0
+GPU ID: 1
+Device: cuda
+Dataset loaded: 54067 frames, 400 episodes
+Loaded frame 41 from episode 0
+--- Checking: minivla ---
+Loading minivla from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_112_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/012000/pretrained_model
+Policy loaded: MiniVLAPolicy, dtype=bfloat16
+Raw action: shape=torch.Size([4]), min=-0.9321, max=0.1271
+Preprocessed action: shape=torch.Size([1, 4]), min=-1.0000, max=-0.8412

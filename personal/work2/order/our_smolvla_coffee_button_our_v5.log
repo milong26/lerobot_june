@@ -1,0 +1,26 @@
+nohup: 忽略输入
+[2026年 09月 08日 星期二 01:03:16 CST] 开始等待4小时...
+[2026年 09月 08日 星期二 05:03:16 CST] 等待结束，开始监控GPU3显存使用情况...
+[2026年 09月 08日 星期二 05:03:16 CST] GPU3当前显存使用: 22016MiB
+[2026年 09月 08日 星期二 05:03:16 CST] GPU3显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 05:13:16 CST] GPU3当前显存使用: 22016MiB
+[2026年 09月 08日 星期二 05:13:16 CST] GPU3显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 05:23:16 CST] GPU3当前显存使用: 22016MiB
+[2026年 09月 08日 星期二 05:23:16 CST] GPU3显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 05:33:16 CST] GPU3当前显存使用: 22016MiB
+[2026年 09月 08日 星期二 05:33:16 CST] GPU3显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 05:43:16 CST] GPU3当前显存使用: 4MiB
+[2026年 09月 08日 星期二 05:43:16 CST] GPU3显存使用(4MiB)已小于5000MiB，开始执行任务...
+
+CondaError: Run 'conda init' before 'conda activate'
+
+Launched experiment: our_v5_50_seed42
+tmux session: our_v5_50_s42_coffee-button-v3_corner
+Output dir: /data/zhonglinye/jun/lerobot/personal/work2/duibi/our_v5_50_seed42_coffee-button-v3_corner
+Dataset: coffee-button-v3_corner
+Mode: full
+
+Monitor with: tmux attach -t our_v5_50_s42_coffee-button-v3_corner
+Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/duibi/our_v5_50_seed42_coffee-button-v3_corner/logs/our_v5_50_seed42.log
+[2026年 09月 08日 星期二 05:43:17 CST] 任务执行完毕，停止监控。
+[2026年 09月 08日 星期二 05:43:17 CST] 监控脚本执行完成。

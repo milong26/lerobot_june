@@ -1,0 +1,61 @@
+INFO 2026-09-11 15:56:44 regation.py:371 ================================================================================
+INFO 2026-09-11 15:56:44 regation.py:372 TinyVLA Temporal Aggregation Evaluation
+INFO 2026-09-11 15:56:44 regation.py:373 ================================================================================
+INFO 2026-09-11 15:56:44 regation.py:374 Policy path: personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model
+INFO 2026-09-11 15:56:44 regation.py:375 Device: cuda
+INFO 2026-09-11 15:56:44 regation.py:376 Environment: metaworld - disassemble-v3
+INFO 2026-09-11 15:56:44 regation.py:377 Cameras: corner,gripperPOV
+INFO 2026-09-11 15:56:44 regation.py:378 Batch size: 8
+INFO 2026-09-11 15:56:44 regation.py:379 Episodes: 50
+INFO 2026-09-11 15:56:44 regation.py:380 Chunk size: 16
+INFO 2026-09-11 15:56:44 regation.py:381 Aggregation decay: 0.01
+INFO 2026-09-11 15:56:44 regation.py:382 ================================================================================
+The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+Creating Meta-World envs | task_groups=['disassemble-v3'] | n_envs(per task)=8
+Building vec env | group=disassemble-v3 | task_id=0 | task=disassemble-v3
+[DEBUG] Loaded config from: personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'model_name_or_path', 'action_head_type', 'action_dim', 'state_dim', 'concat', 'lora_enable', 'lora_r', 'lora_alpha', 'lora_dropout', 'lora_module', 'lora_bias', 'freeze_vision_tower', 'freeze_backbone', 'tokenizer_max_length', 'num_inference_timesteps', 'pretrain_image_size', 'optimizer_lr', 'optimizer_non_lora_lr', 'optimizer_weight_decay', 'optimizer_betas', 'optimizer_eps', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: tinyvla_s
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'model_name_or_path', 'action_head_type', 'action_dim', 'state_dim', 'concat', 'lora_enable', 'lora_r', 'lora_alpha', 'lora_dropout', 'lora_module', 'lora_bias', 'freeze_vision_tower', 'freeze_backbone', 'tokenizer_max_length', 'num_inference_timesteps', 'pretrain_image_size', 'optimizer_lr', 'optimizer_non_lora_lr', 'optimizer_weight_decay', 'optimizer_betas', 'optimizer_eps', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr']
+[DEBUG] Removed invalid keys: set()
+[DEBUG factory] policy_cls: <class 'lerobot.policies.tinyvla.modeling_tinyvla.TinyVLAPolicy'>
+[DEBUG factory] policy_cls.__init__ signature: <function TinyVLAPolicy.__init__ at 0x708b9078aac0>
+[DEBUG factory] kwargs keys: ['config', 'pretrained_name_or_path', 'revision']
+Loading weights:   0%|          | 0/470 [00:00<?, ?it/s]Loading weights: 100%|██████████| 470/470 [00:00<00:00, 5167.63it/s]
+[1mLlavaPythiaForCausalLM LOAD REPORT[0m from: lesjie/Llava-Pythia-400M
+Key              | Status     |  | 
+-----------------+------------+--+-
+embed_out.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+INFO 2026-09-11 15:56:51 _tinyvla.py:460 Loaded model weights from personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model/model.safetensors
+INFO 2026-09-11 15:56:51 _tinyvla.py:461 State dict contains 336 LoRA keys
+INFO 2026-09-11 15:56:51 _tinyvla.py:467 All keys matched successfully
+########################################
+########################################
+Adding LoRA adapters...
+trainable params: 31,457,280 || all params: 380,423,168 || trainable%: 8.2690
+number of parameters: 7.281920e+07
+Evaluating with temporal aggregation:   0%|          | 0/7 [00:00<?, ?it/s]`use_return_dict` is deprecated! Use `return_dict` instead!
+Evaluating with temporal aggregation:  14%|█▍        | 1/7 [03:46<22:39, 226.53s/it]Evaluating with temporal aggregation:  29%|██▊       | 2/7 [07:15<17:59, 215.94s/it]Evaluating with temporal aggregation:  43%|████▎     | 3/7 [10:42<14:07, 211.94s/it]Evaluating with temporal aggregation:  57%|█████▋    | 4/7 [14:09<10:30, 210.06s/it]Evaluating with temporal aggregation:  71%|███████▏  | 5/7 [17:35<06:57, 208.78s/it]Evaluating with temporal aggregation:  86%|████████▌ | 6/7 [21:05<03:29, 209.04s/it]Evaluating with temporal aggregation: 100%|██████████| 7/7 [24:36<00:00, 209.60s/it]Evaluating with temporal aggregation: 100%|██████████| 7/7 [24:36<00:00, 210.89s/it]
+INFO 2026-09-11 16:21:28 regation.py:304 ================================================================================
+INFO 2026-09-11 16:21:28 regation.py:305 Temporal Aggregation Evaluation Results
+INFO 2026-09-11 16:21:28 regation.py:306 ================================================================================
+INFO 2026-09-11 16:21:28 regation.py:307 Success rate: 0.00%
+INFO 2026-09-11 16:21:28 regation.py:308 Avg sum reward: 194.2835
+INFO 2026-09-11 16:21:28 regation.py:309 Avg max reward: 0.9693
+INFO 2026-09-11 16:21:28 regation.py:310 Mean action diff (||a_t - a_{t-1}||): 0.2646
+INFO 2026-09-11 16:21:28 regation.py:311 Mean gripper flips: 1.21
+INFO 2026-09-11 16:21:28 regation.py:312 Total episodes: 56
+INFO 2026-09-11 16:21:28 regation.py:313 ================================================================================
+INFO 2026-09-11 16:21:28 regation.py:450 End of eval

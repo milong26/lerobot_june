@@ -1,0 +1,857 @@
+INFO 2026-08-03 08:50:54 ot_train.py:264 {'batch_size': 16,
+ 'checkpoint_path': None,
+ 'cudnn_deterministic': False,
+ 'dataloader_multiprocessing_context': 'spawn',
+ 'dataset': {'depth_output_unit': 'mm',
+             'episodes': None,
+             'eval_split': 0.0,
+             'image_transforms': {'enable': False,
+                                  'max_num_transforms': 3,
+                                  'random_order': False,
+                                  'tfs': {'affine': {'kwargs': {'degrees': [-5.0,
+                                                                            5.0],
+                                                                'translate': [0.05,
+                                                                              0.05]},
+                                                     'type': 'RandomAffine',
+                                                     'weight': 1.0},
+                                          'brightness': {'kwargs': {'brightness': [0.8,
+                                                                                   1.2]},
+                                                         'type': 'ColorJitter',
+                                                         'weight': 1.0},
+                                          'contrast': {'kwargs': {'contrast': [0.8,
+                                                                               1.2]},
+                                                       'type': 'ColorJitter',
+                                                       'weight': 1.0},
+                                          'hue': {'kwargs': {'hue': [-0.05,
+                                                                     0.05]},
+                                                  'type': 'ColorJitter',
+                                                  'weight': 1.0},
+                                          'saturation': {'kwargs': {'saturation': [0.5,
+                                                                                   1.5]},
+                                                         'type': 'ColorJitter',
+                                                         'weight': 1.0},
+                                          'sharpness': {'kwargs': {'sharpness': [0.5,
+                                                                                 1.5]},
+                                                        'type': 'SharpnessJitter',
+                                                        'weight': 1.0}}},
+             'repo_id': 'ep10/all',
+             'return_uint8': False,
+             'revision': None,
+             'root': 'personal/work1/ep10_all',
+             'streaming': False,
+             'use_imagenet_stats': True,
+             'video_backend': 'torchcodec'},
+ 'env': None,
+ 'env_eval_freq': 20000,
+ 'eval': {'batch_size': 44,
+          'n_episodes': 50,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'eval_steps': 0,
+ 'half_img_resolu': True,
+ 'job': {'detach': False,
+         'image': 'huggingface/lerobot-gpu:latest',
+         'tags': [],
+         'target': None,
+         'timeout': '2d'},
+ 'job_name': 'tinyvla_ep10_half_16step',
+ 'log_freq': 200,
+ 'max_eval_samples': 0,
+ 'num_workers': 4,
+ 'optimizer': {'betas': [0.9, 0.98],
+               'eps': 1e-07,
+               'grad_clip_norm': 10.0,
+               'lr': 0.0001,
+               'type': 'adamw',
+               'weight_decay': 1e-10},
+ 'output_dir': 'outputs/tinyvla_ep10_half_16step',
+ 'peft': None,
+ 'persistent_workers': True,
+ 'policy': {'action_dim': 10,
+            'action_head_type': 'droid_diffusion',
+            'chunk_size': 16,
+            'device': 'cuda',
+            'freeze_backbone': False,
+            'freeze_vision_tower': True,
+            'input_features': {},
+            'license': None,
+            'lora_alpha': 256,
+            'lora_dropout': 0.05,
+            'lora_enable': True,
+            'lora_r': 64,
+            'model_name_or_path': 'lesjie/Llava-Pythia-400M',
+            'n_action_steps': 16,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_inference_timesteps': 10,
+            'optimizer_betas': [0.9, 0.98],
+            'optimizer_eps': 1e-07,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {},
+            'pretrain_image_size': 320,
+            'pretrained_path': None,
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 10000,
+            'scheduler_warmup_steps': 100,
+            'state_dim': 7,
+            'tags': None,
+            'tokenizer_max_length': 2048,
+            'type': 'tinyvla',
+            'use_amp': False,
+            'use_peft': False},
+ 'prefetch_factor': 4,
+ 'remove_features': [],
+ 'rename_map': {},
+ 'resume': False,
+ 'reward_model': None,
+ 'sample_weighting': None,
+ 'save_checkpoint': True,
+ 'save_checkpoint_to_hub': False,
+ 'save_freq': 20000,
+ 'scheduler': {'decay_lr': 2.5e-06,
+               'num_decay_steps': 10000,
+               'num_warmup_steps': 100,
+               'peak_lr': 0.0001,
+               'type': 'cosine_decay_with_warmup'},
+ 'seed': 1000,
+ 'steps': 26000,
+ 'tolerance_s': 0.0001,
+ 'use_policy_training_preset': True,
+ 'wandb': {'add_tags': True,
+           'disable_artifact': False,
+           'enable': True,
+           'entity': None,
+           'mode': None,
+           'notes': None,
+           'project': 'lerobot',
+           'run_id': None}}
+INFO 2026-08-03 08:50:57 db_utils.py:121 Logs will be synced with wandb.
+INFO 2026-08-03 08:50:57 db_utils.py:122 Track this run --> https://wandb.ai/myfishwaken-self/lerobot/runs/4md19kpt
+INFO 2026-08-03 08:50:57 ot_train.py:290 Creating dataset
+INFO 2026-08-03 08:50:58 ot_train.py:316 Creating policy
+The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+Loading weights:   0%|          | 0/470 [00:00<?, ?it/s]Loading weights: 100%|██████████| 470/470 [00:00<00:00, 5082.30it/s]
+[1mLlavaPythiaForCausalLM LOAD REPORT[0m from: lesjie/Llava-Pythia-400M
+Key              | Status     |  | 
+-----------------+------------+--+-
+embed_out.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+Loading weights:   0%|          | 0/470 [00:00<?, ?it/s]Loading weights:   0%|          | 0/470 [00:00<?, ?it/s]Loading weights: 100%|██████████| 470/470 [00:00<00:00, 5448.91it/s]
+[1mLlavaPythiaForCausalLM LOAD REPORT[0m from: lesjie/Llava-Pythia-400M
+Key              | Status     |  | 
+-----------------+------------+--+-
+embed_out.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+Loading weights: 100%|██████████| 470/470 [00:00<00:00, 5469.36it/s]
+[1mLlavaPythiaForCausalLM LOAD REPORT[0m from: lesjie/Llava-Pythia-400M
+Key              | Status     |  | 
+-----------------+------------+--+-
+embed_out.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+number of parameters: 7.282381e+07
+########################################
+number of parameters: 7.282381e+07
+########################################
+number of parameters: 7.282381e+07
+########################################
+trainable params: 31,457,280 || all params: 453,246,982 || trainable%: 6.9404
+trainable params: 31,457,280 || all params: 453,246,982 || trainable%: 6.9404
+trainable params: 31,457,280 || all params: 453,246,982 || trainable%: 6.9404
+INFO 2026-08-03 08:51:00 ot_train.py:400 Creating optimizer and scheduler
+INFO 2026-08-03 08:51:00 ot_train.py:432 Output dir: outputs/tinyvla_ep10_half_16step
+INFO 2026-08-03 08:51:00 ot_train.py:439 cfg.steps=26000 (26K)
+INFO 2026-08-03 08:51:00 ot_train.py:440 dataset.num_frames=41277 (41K)
+INFO 2026-08-03 08:51:00 ot_train.py:441 dataset.num_episodes=90
+INFO 2026-08-03 08:51:00 ot_train.py:444 Effective batch size: 16 x 3 = 48
+INFO 2026-08-03 08:51:00 ot_train.py:445 num_learnable_params=31457280 (31M)
+INFO 2026-08-03 08:51:00 ot_train.py:446 num_total_params=453246982 (453M)
+Training:   0%|          | 0/26000 [00:00<?, ?step/s]INFO 2026-08-03 08:51:00 ot_train.py:595 Start offline training on a fixed dataset, with effective batch size: 48
+`use_return_dict` is deprecated! Use `return_dict` instead!
+`use_return_dict` is deprecated! Use `return_dict` instead!
+`use_return_dict` is deprecated! Use `return_dict` instead!
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-train", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 806, in main
+    train()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+    response = fn(cfg, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 610, in train
+    train_tracker, _ = update_policy(
+                       ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 170, in update_policy
+    loss, output_dict = policy.forward(batch)
+                        ^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1699, in forward
+    else self._run_ddp_forward(*inputs, **kwargs)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1524, in _run_ddp_forward
+    return self.module(*inputs, **kwargs)  # type: ignore[index]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 943, in forward
+    return model_forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 931, in __call__
+    return convert_to_fp32(self.model_forward(*args, **kwargs))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/amp/autocast_mode.py", line 44, in decorate_autocast
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/modeling_tinyvla.py", line 420, in forward
+    output = self.model(**kwargs)
+             ^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/peft_model.py", line 1923, in forward
+    return self.base_model(
+           ^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/tuners_utils.py", line 311, in forward
+    return self.model.forward(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]: Traceback (most recent call last):
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-train", line 6, in <module>
+[rank2]:     sys.exit(main())
+[rank2]:              ^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 806, in main
+[rank2]:     train()
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+[rank2]:     response = fn(cfg, *args, **kwargs)
+[rank2]:                ^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 610, in train
+[rank2]:     train_tracker, _ = update_policy(
+[rank2]:                        ^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 170, in update_policy
+[rank2]:     loss, output_dict = policy.forward(batch)
+[rank2]:                         ^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1699, in forward
+[rank2]:     else self._run_ddp_forward(*inputs, **kwargs)
+[rank2]:          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1524, in _run_ddp_forward
+[rank2]:     return self.module(*inputs, **kwargs)  # type: ignore[index]
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 943, in forward
+[rank2]:     return model_forward(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 931, in __call__
+[rank2]:     return convert_to_fp32(self.model_forward(*args, **kwargs))
+[rank2]:                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/amp/autocast_mode.py", line 44, in decorate_autocast
+[rank2]:     return func(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/modeling_tinyvla.py", line 420, in forward
+[rank2]:     output = self.model(**kwargs)
+[rank2]:              ^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/peft_model.py", line 1923, in forward
+[rank2]:     return self.base_model(
+[rank2]:            ^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/tuners_utils.py", line 311, in forward
+[rank2]:     return self.model.forward(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 144, in forward
+[rank2]:     input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+[rank2]:                                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/llava_arch.py", line 83, in prepare_inputs_labels_for_multimodal
+[rank2]:     image_features = self.get_image_fusion_embedding(visual_concat=visual_concat, images=images, images_r=images_r, images_top=images_top, states=states)
+[rank2]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 78, in get_image_fusion_embedding
+[rank2]:     image_features_r = self.encode_images(images_r)
+[rank2]:                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 62, in encode_images
+[rank2]:     image_features = self.get_model().get_vision_tower()(images)
+[rank2]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/multimodal_encoder/clip_encoder.py", line 42, in forward
+[rank2]:     image_forward_outs = self.vision_model(images.to(device=self.device, dtype=self.dtype),
+[rank2]:                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/generic.py", line 952, in wrapper
+[rank2]:     output = func(self, *args, **kwargs)
+[rank2]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/output_capturing.py", line 248, in wrapper
+[rank2]:     outputs = func(self, *args, **kwargs)
+[rank2]:               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 680, in forward
+[rank2]:     encoder_outputs: BaseModelOutput = self.encoder(
+[rank2]:                                        ^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 500, in forward
+[rank2]:     hidden_states = encoder_layer(
+[rank2]:                     ^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/modeling_layers.py", line 93, in __call__
+[rank2]:     return super().__call__(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1885, in _call_impl
+[rank2]:     return inner()
+[rank2]:            ^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1833, in inner
+[rank2]:     result = forward_call(*args, **kwargs)
+[rank2]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 382, in forward
+[rank2]:     hidden_states = self.mlp(hidden_states)
+[rank2]:                     ^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 351, in forward
+[rank2]:     hidden_states = self.fc2(hidden_states)
+[rank2]:                     ^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/lora/layer.py", line 807, in forward
+[rank2]:     result = result + lora_B(lora_A(dropout(x))) * scaling
+[rank2]:                                     ^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank2]:     return self._call_impl(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank2]:     return forward_call(*args, **kwargs)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/dropout.py", line 73, in forward
+[rank2]:     return F.dropout(input, self.p, self.training, self.inplace)
+[rank2]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/functional.py", line 1443, in dropout
+[rank2]:     _VF.dropout_(input, p, training) if inplace else _VF.dropout(input, p, training)
+[rank2]:                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank2]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 146.00 MiB. GPU 2 has a total capacity of 23.56 GiB of which 32.81 MiB is free. Including non-PyTorch memory, this process has 23.52 GiB memory in use. Of the allocated memory 23.02 GiB is allocated by PyTorch, and 73.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 144, in forward
+    input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+                                                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/llava_arch.py", line 83, in prepare_inputs_labels_for_multimodal
+    image_features = self.get_image_fusion_embedding(visual_concat=visual_concat, images=images, images_r=images_r, images_top=images_top, states=states)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 78, in get_image_fusion_embedding
+    image_features_r = self.encode_images(images_r)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 62, in encode_images
+    image_features = self.get_model().get_vision_tower()(images)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/multimodal_encoder/clip_encoder.py", line 42, in forward
+    image_forward_outs = self.vision_model(images.to(device=self.device, dtype=self.dtype),
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/generic.py", line 952, in wrapper
+    output = func(self, *args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/output_capturing.py", line 248, in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]: Traceback (most recent call last):
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-train", line 6, in <module>
+[rank1]:     sys.exit(main())
+[rank1]:              ^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 806, in main
+[rank1]:     train()
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+[rank1]:     response = fn(cfg, *args, **kwargs)
+[rank1]:                ^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 610, in train
+[rank1]:     train_tracker, _ = update_policy(
+[rank1]:                        ^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 170, in update_policy
+[rank1]:     loss, output_dict = policy.forward(batch)
+[rank1]:                         ^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1699, in forward
+[rank1]:     else self._run_ddp_forward(*inputs, **kwargs)
+[rank1]:          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1524, in _run_ddp_forward
+[rank1]:     return self.module(*inputs, **kwargs)  # type: ignore[index]
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 943, in forward
+[rank1]:     return model_forward(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 931, in __call__
+[rank1]:     return convert_to_fp32(self.model_forward(*args, **kwargs))
+[rank1]:                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/amp/autocast_mode.py", line 44, in decorate_autocast
+[rank1]:     return func(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/modeling_tinyvla.py", line 420, in forward
+[rank1]:     output = self.model(**kwargs)
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/peft_model.py", line 1923, in forward
+[rank1]:     return self.base_model(
+[rank1]:            ^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/tuners_utils.py", line 311, in forward
+[rank1]:     return self.model.forward(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 144, in forward
+[rank1]:     input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+[rank1]:                                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/llava_arch.py", line 83, in prepare_inputs_labels_for_multimodal
+[rank1]:     image_features = self.get_image_fusion_embedding(visual_concat=visual_concat, images=images, images_r=images_r, images_top=images_top, states=states)
+[rank1]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 78, in get_image_fusion_embedding
+[rank1]:     image_features_r = self.encode_images(images_r)
+[rank1]:                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 62, in encode_images
+[rank1]:     image_features = self.get_model().get_vision_tower()(images)
+[rank1]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/multimodal_encoder/clip_encoder.py", line 42, in forward
+[rank1]:     image_forward_outs = self.vision_model(images.to(device=self.device, dtype=self.dtype),
+[rank1]:                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/generic.py", line 952, in wrapper
+[rank1]:     output = func(self, *args, **kwargs)
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/output_capturing.py", line 248, in wrapper
+[rank1]:     outputs = func(self, *args, **kwargs)
+[rank1]:               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 680, in forward
+[rank1]:     encoder_outputs: BaseModelOutput = self.encoder(
+[rank1]:                                        ^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 500, in forward
+[rank1]:     hidden_states = encoder_layer(
+[rank1]:                     ^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/modeling_layers.py", line 93, in __call__
+[rank1]:     return super().__call__(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1885, in _call_impl
+[rank1]:     return inner()
+[rank1]:            ^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1833, in inner
+[rank1]:     result = forward_call(*args, **kwargs)
+[rank1]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 382, in forward
+[rank1]:     hidden_states = self.mlp(hidden_states)
+[rank1]:                     ^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 351, in forward
+[rank1]:     hidden_states = self.fc2(hidden_states)
+[rank1]:                     ^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/lora/layer.py", line 807, in forward
+[rank1]:     result = result + lora_B(lora_A(dropout(x))) * scaling
+[rank1]:                                     ^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank1]:     return self._call_impl(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank1]:     return forward_call(*args, **kwargs)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/dropout.py", line 73, in forward
+[rank1]:     return F.dropout(input, self.p, self.training, self.inplace)
+[rank1]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/functional.py", line 1443, in dropout
+[rank1]:     _VF.dropout_(input, p, training) if inplace else _VF.dropout(input, p, training)
+[rank1]:                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank1]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 146.00 MiB. GPU 1 has a total capacity of 23.56 GiB of which 32.81 MiB is free. Including non-PyTorch memory, this process has 23.52 GiB memory in use. Of the allocated memory 23.02 GiB is allocated by PyTorch, and 73.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 680, in forward
+    encoder_outputs: BaseModelOutput = self.encoder(
+                                       ^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 500, in forward
+    hidden_states = encoder_layer(
+                    ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/modeling_layers.py", line 93, in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1885, in _call_impl
+    return inner()
+           ^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1833, in inner
+    result = forward_call(*args, **kwargs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 382, in forward
+    hidden_states = self.mlp(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 351, in forward
+    hidden_states = self.fc2(hidden_states)
+                    ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/lora/layer.py", line 807, in forward
+    result = result + lora_B(lora_A(dropout(x))) * scaling
+                                    ^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/dropout.py", line 73, in forward
+    return F.dropout(input, self.p, self.training, self.inplace)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/functional.py", line 1443, in dropout
+    _VF.dropout_(input, p, training) if inplace else _VF.dropout(input, p, training)
+                                                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 146.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 32.81 MiB is free. Including non-PyTorch memory, this process has 23.52 GiB memory in use. Of the allocated memory 23.02 GiB is allocated by PyTorch, and 73.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+[rank0]: Traceback (most recent call last):
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-train", line 6, in <module>
+[rank0]:     sys.exit(main())
+[rank0]:              ^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 806, in main
+[rank0]:     train()
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+[rank0]:     response = fn(cfg, *args, **kwargs)
+[rank0]:                ^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 610, in train
+[rank0]:     train_tracker, _ = update_policy(
+[rank0]:                        ^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 170, in update_policy
+[rank0]:     loss, output_dict = policy.forward(batch)
+[rank0]:                         ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1699, in forward
+[rank0]:     else self._run_ddp_forward(*inputs, **kwargs)
+[rank0]:          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/parallel/distributed.py", line 1524, in _run_ddp_forward
+[rank0]:     return self.module(*inputs, **kwargs)  # type: ignore[index]
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 943, in forward
+[rank0]:     return model_forward(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/utils/operations.py", line 931, in __call__
+[rank0]:     return convert_to_fp32(self.model_forward(*args, **kwargs))
+[rank0]:                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/amp/autocast_mode.py", line 44, in decorate_autocast
+[rank0]:     return func(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/modeling_tinyvla.py", line 420, in forward
+[rank0]:     output = self.model(**kwargs)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/peft_model.py", line 1923, in forward
+[rank0]:     return self.base_model(
+[rank0]:            ^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/tuners_utils.py", line 311, in forward
+[rank0]:     return self.model.forward(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 144, in forward
+[rank0]:     input_ids, attention_mask, past_key_values, inputs_embeds, labels = self.prepare_inputs_labels_for_multimodal(
+[rank0]:                                                                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/llava_arch.py", line 83, in prepare_inputs_labels_for_multimodal
+[rank0]:     image_features = self.get_image_fusion_embedding(visual_concat=visual_concat, images=images, images_r=images_r, images_top=images_top, states=states)
+[rank0]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 78, in get_image_fusion_embedding
+[rank0]:     image_features_r = self.encode_images(images_r)
+[rank0]:                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py", line 62, in encode_images
+[rank0]:     image_features = self.get_model().get_vision_tower()(images)
+[rank0]:                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/tinyvla/llava_pythia/model/multimodal_encoder/clip_encoder.py", line 42, in forward
+[rank0]:     image_forward_outs = self.vision_model(images.to(device=self.device, dtype=self.dtype),
+[rank0]:                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/generic.py", line 952, in wrapper
+[rank0]:     output = func(self, *args, **kwargs)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/utils/output_capturing.py", line 248, in wrapper
+[rank0]:     outputs = func(self, *args, **kwargs)
+[rank0]:               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 680, in forward
+[rank0]:     encoder_outputs: BaseModelOutput = self.encoder(
+[rank0]:                                        ^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 500, in forward
+[rank0]:     hidden_states = encoder_layer(
+[rank0]:                     ^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/modeling_layers.py", line 93, in __call__
+[rank0]:     return super().__call__(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1885, in _call_impl
+[rank0]:     return inner()
+[rank0]:            ^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1833, in inner
+[rank0]:     result = forward_call(*args, **kwargs)
+[rank0]:              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 382, in forward
+[rank0]:     hidden_states = self.mlp(hidden_states)
+[rank0]:                     ^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/transformers/models/clip/modeling_clip.py", line 351, in forward
+[rank0]:     hidden_states = self.fc2(hidden_states)
+[rank0]:                     ^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/peft/tuners/lora/layer.py", line 807, in forward
+[rank0]:     result = result + lora_B(lora_A(dropout(x))) * scaling
+[rank0]:                                     ^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+[rank0]:     return self._call_impl(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+[rank0]:     return forward_call(*args, **kwargs)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/dropout.py", line 73, in forward
+[rank0]:     return F.dropout(input, self.p, self.training, self.inplace)
+[rank0]:            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]:   File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/functional.py", line 1443, in dropout
+[rank0]:     _VF.dropout_(input, p, training) if inplace else _VF.dropout(input, p, training)
+[rank0]:                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[rank0]: torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 146.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 32.81 MiB is free. Including non-PyTorch memory, this process has 23.52 GiB memory in use. Of the allocated memory 23.02 GiB is allocated by PyTorch, and 73.92 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)
+W0803 08:51:32.673000 1936405 site-packages/torch/distributed/elastic/multiprocessing/api.py:1012] Sending process 1936516 closing signal SIGTERM
+W0803 08:51:32.675000 1936405 site-packages/torch/distributed/elastic/multiprocessing/api.py:1012] Sending process 1936518 closing signal SIGTERM
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 20 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+E0803 08:51:33.190000 1936405 site-packages/torch/distributed/elastic/multiprocessing/api.py:986] failed (exitcode: 1) local_rank: 1 (pid: 1936517) of binary: /data/zhonglinye/application/miniconda3/envs/lb_server/bin/python3.12
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/accelerate", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/commands/accelerate_cli.py", line 50, in main
+    args.func(args)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/commands/launch.py", line 1398, in launch_command
+    multi_gpu_launcher(args)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/accelerate/commands/launch.py", line 1023, in multi_gpu_launcher
+    distrib_run.run(args)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/distributed/run.py", line 981, in run
+    elastic_launch(
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 170, in __call__
+    return launch_agent(self._config, self._entrypoint, list(args))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/distributed/launcher/api.py", line 317, in launch_agent
+    raise ChildFailedError(
+torch.distributed.elastic.multiprocessing.errors.ChildFailedError: 
+============================================================
+/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-train FAILED
+------------------------------------------------------------
+Failures:
+[1]:
+  time      : 2026-08-03_08:51:33
+  host      : siat-SYS-4029GP-TRT
+  rank      : 0 (local_rank: 0)
+  exitcode  : -15 (pid: 1936516)
+  error_file: <N/A>
+  traceback : Signal 15 (SIGTERM) received by PID 1936516
+[2]:
+  time      : 2026-08-03_08:51:33
+  host      : siat-SYS-4029GP-TRT
+  rank      : 2 (local_rank: 2)
+  exitcode  : 1 (pid: 1936518)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+------------------------------------------------------------
+Root Cause (first observed failure):
+[0]:
+  time      : 2026-08-03_08:51:32
+  host      : siat-SYS-4029GP-TRT
+  rank      : 1 (local_rank: 1)
+  exitcode  : 1 (pid: 1936517)
+  error_file: <N/A>
+  traceback : To enable traceback see: https://pytorch.org/docs/stable/elastic/errors.html
+============================================================

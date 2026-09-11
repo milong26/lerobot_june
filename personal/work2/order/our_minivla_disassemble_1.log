@@ -1,0 +1,33 @@
+nohup: 忽略输入
+[2026年 09月 08日 星期二 00:29:43 CST] 开始等待2小时...
+[2026年 09月 08日 星期二 02:29:43 CST] 等待结束，开始监控GPU1显存使用情况...
+[2026年 09月 08日 星期二 02:29:43 CST] GPU1当前显存使用: 16296MiB
+[2026年 09月 08日 星期二 02:29:43 CST] GPU1显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 02:39:43 CST] GPU1当前显存使用: 16296MiB
+[2026年 09月 08日 星期二 02:39:43 CST] GPU1显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 02:49:43 CST] GPU1当前显存使用: 3267MiB
+[2026年 09月 08日 星期二 02:49:43 CST] GPU1显存使用(3267MiB)已小于5000MiB，开始执行任务...
+
+CondaError: Run 'conda init' before 'conda activate'
+
+personal/work2/differentvlm/minivla/scripts/run_tmux_minivla.sh: 行 1: za#!/bin/bash: 没有那个文件或目录
+  MiniVLA Experiment Launcher
+  GPU:            1
+  Dataset:        disassemble-v3_corner
+  Num Episodes:   112
+  Seed:           42
+  Selection Mode: our_v5
+  Tmux Session:   minivla_disassemble-v3_corner_gpu1
+  Log File:       /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/logs/disassemble-v3_corner_gpu1/experiment.log
+  Project Root:   /data/zhonglinye/jun/lerobot
+
+Starting experiment in tmux session: minivla_disassemble-v3_corner_gpu1
+To attach: tmux attach -t minivla_disassemble-v3_corner_gpu1
+To detach: Ctrl+B, then D
+To kill:   tmux kill-session -t minivla_disassemble-v3_corner_gpu1
+
+Experiment started successfully!
+Monitor with: tmux attach -t minivla_disassemble-v3_corner_gpu1
+Or watch log: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/logs/disassemble-v3_corner_gpu1/experiment.log
+[2026年 09月 08日 星期二 02:49:45 CST] 任务执行完毕，停止监控。
+[2026年 09月 08日 星期二 02:49:45 CST] 监控脚本执行完成。

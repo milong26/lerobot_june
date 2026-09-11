@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/data/zhonglinye/jun/lerobot/test_eval_batch.py", line 17, in <module>
+    policy = make_policy(Path("outputs/act_mw_pick-place-v3/checkpoints/020000/training_state"), device="cuda")
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: make_policy() got an unexpected keyword argument 'device'

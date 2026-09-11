@@ -1,0 +1,257 @@
+TinyVLA Consistency Verification Tool
+Policy type: tinyvla_s
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode: 0
+Device: cuda
+
+######################################################################
+# Full TinyVLA Consistency Verification: tinyvla_s
+######################################################################
+Dataset loaded: 54067 frames, 400 episodes
+Loading tinyvla_s from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Policy loaded: TinyVLAPolicy, dtype=float32
+
+======================================================================
+  1. IMAGE PROCESSOR CONSISTENCY CHECK
+======================================================================
+[Image Size]
+  Vision config image_size: 336
+  Policy image_size: 336
+  Config pretrain_image_size: 320
+
+[Image Normalization]
+  Mean: [0.48145467042922974, 0.45782750844955444, 0.40821072459220886]
+  Std:  [0.2686295509338379, 0.2613025903701782, 0.27577710151672363]
+  vs CLIP default - mean diff: 0.00000001, std diff: 0.00000001
+
+[Resize Method]
+  Method: bilinear (F.interpolate with mode='bilinear')
+  align_corners: False
+
+[Camera Order]
+  Image features: {'observation.images.top': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 480, 480)), 'observation.images.wrist': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 480, 480))}
+  Image keys are sorted alphabetically in predict_action_chunk
+  Sorted order: ['observation.images.top', 'observation.images.wrist']
+
+[Multi-Camera Concatenation]
+  Concat style: token_cat
+  token_cat: concatenate image tokens along sequence dimension
+  channel_cat: concatenate along channel dimension (not implemented for multi-cam)
+
+[Actual Image Processing Verification]
+  Image keys in sample: ['observation.images.top', 'observation.images.wrist']
+  observation.images.top:
+    Original shape: torch.Size([1, 3, 480, 480])
+    Original range: [0.0000, 1.0000]
+    After resize+normalize shape: torch.Size([1, 3, 336, 336])
+    After resize+normalize range: [-1.7923, 2.1459]
+    After resize+normalize mean: -0.2147, std: 0.5364
+  observation.images.wrist:
+    Original shape: torch.Size([1, 3, 480, 480])
+    Original range: [0.0000, 1.0000]
+    After resize+normalize shape: torch.Size([1, 3, 336, 336])
+    After resize+normalize range: [-1.7923, 1.9303]
+    After resize+normalize mean: -0.1434, std: 0.5294
+
+[Preprocessor Image Handling]
+  TinyVLA preprocessor does NOT include custom image processing step
+  Image processing happens INSIDE policy._process_images()
+  This means: dataset images -> preprocessor (no image transform) -> policy._process_images()
+
+[Training vs Eval Image Source]
+  Training: dataset[OBS_IMAGE.*] -> batch -> policy._process_images()
+  Eval:     dataset[OBS_IMAGE.*] -> preprocessor -> batch -> policy._process_images()
+  => Both use the SAME _process_images() method: CONSISTENT
+
+  OK: No image processor consistency issues found
+
+======================================================================
+  2. INSTRUCTION PROCESSING CONSISTENCY CHECK
+======================================================================
+[Tokenizer]
+  Tokenizer type: GPTNeoXTokenizer
+  Model max length: 2048
+  Padding side: right
+  Pad token ID: 1
+
+[Prompt Template]
+  Training prompt format: '<image_token>\n<language_instruction>'
+  Eval prompt format:   '<image_token>\n<language_instruction>'
+  => Both use the SAME prompt template: CONSISTENT
+
+[Actual Tokenization Verification]
+  Task from dataset: 'Pick a nut out of a peg'
+  Full prompt: '<image>
+Pick a nut out of a peg'
+  Input IDs shape: torch.Size([9])
+  Input IDs: [-200, 187, 36942, 247, 5825, 562, 273, 247, 47997]
+  Labels: [-100, -100, -100, -100, -100, -100, -100, -100, -100]
+  Image token index: -200
+  IGNORE_INDEX: -100
+
+[Eval Tokenization]
+  In predict_action_chunk, raw_lang comes from batch.get('task', ...)
+  Then calls _tokenize_language(raw_lang)
+  => Uses the SAME _tokenize_language method: CONSISTENT
+
+[Task Field in Dataset]
+  'task' field found in dataset sample
+  Task value: 'Pick a nut out of a peg'
+
+[Training vs Eval Task Source]
+  Training: batch.get('task') -> _tokenize_language() -> input_ids + labels (all IGNORE)
+  Eval:     batch.get('task') -> _tokenize_language() -> input_ids + labels (all IGNORE)
+  => Both use the SAME tokenization pipeline: CONSISTENT
+  NOTE: labels are all IGNORE_INDEX in both cases (no language loss)
+
+  OK: No instruction processing consistency issues found
+
+======================================================================
+  3. STATE NORMALIZATION CONSISTENCY CHECK
+======================================================================
+[Normalization Mode]
+  Full normalization mapping: {'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>, 'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>}
+  STATE normalization mode: NormalizationMode.MEAN_STD
+  => State will be normalized using (x - mean) / std
+
+[Dataset Stats]
+  Dataset stats available: ['next.success', 'action', 'timestamp', 'index', 'next.reward', 'task_index', 'episode_index', 'observation.images.top', 'observation.images.wrist', 'observation.environment_state', 'observation.state', 'frame_index']
+  State stats keys: ['min', 'max', 'mean', 'std', 'count', 'q01', 'q10', 'q50', 'q90', 'q99']
+  State mean (first 5): [0.13800567465414693, 0.6451309091934544, 0.1249482570935769, 0.6699325606100972]
+  State std  (first 5): [0.06150043725839339, 0.09080027855251112, 0.05693053628157622, 0.23943877254501855]
+  State dim: 4
+
+[State Dimension]
+  Config state_dim: 4
+  Dataset state dim: 4
+
+[Preprocessor Normalization]
+  TinyVLA preprocessor uses NormalizerProcessorStep
+  Features: {'observation.images.top': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 480, 480)), 'observation.images.wrist': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 480, 480)), 'observation.state': PolicyFeature(type=<FeatureType.STATE: 'STATE'>, shape=(4,))}
+  Norm map: {'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>, 'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>}
+  Stats source: dataset_stats (from LeRobotDataset.meta.stats)
+
+[Training vs Eval State Normalization]
+  Training:
+    raw_state -> NormalizerProcessorStep(mean/std from dataset) -> normalized_state -> model
+  Eval:
+    raw_state -> NormalizerProcessorStep(mean/std from dataset) -> normalized_state -> model
+  => Both use the SAME dataset stats for normalization: CONSISTENT
+  => Stats come from LeRobotDataset.meta.stats, NOT recomputed at eval time
+
+[Actual State Normalization Verification]
+  Raw state shape: torch.Size([4])
+  Raw state range: [0.005246, 1.000000]
+  Raw state mean: 0.400241, std: 0.431226
+  Preprocessed state shape: torch.Size([1, 4])
+  Preprocessed state range: [-2.691449, 1.378505]
+  Preprocessed state mean: -0.560409, std: 2.164924
+
+  Expected after MEAN_STD normalization: mean~0, std~1 (across full dataset)
+  Actual (single sample): mean=-0.5604, std=2.1649
+  NOTE: Single sample stats won't match global mean=0, std=1
+  The normalization is correct if: normalized = (raw - dataset_mean) / dataset_std
+
+  Normalization formula verification:
+    Expected (raw - mean) / std: [-2.158677577972412, -2.6914494037628174, 1.2299853563308716, 1.3785046339035034]
+    Actual preprocessed:         [-2.158677101135254, -2.6914491653442383, 1.2299851179122925, 1.3785045146942139]
+    Difference:                  [4.76837158203125e-07, 2.384185791015625e-07, 2.384185791015625e-07, 1.1920928955078125e-07]
+    Max diff: 0.00000048
+  OK: Normalization formula is correctly applied
+
+  OK: No state normalization consistency issues found
+
+======================================================================
+  4. DIFFUSION ACTION HEAD DECODE CONSISTENCY CHECK
+======================================================================
+[Action Head Type]
+  Action head type: droid_diffusion
+
+[Diffusion Head Configuration]
+  Noise scheduler type: DDIMScheduler
+  num_train_timesteps: 100
+  beta_schedule: squaredcos_cap_v2
+  clip_sample: True
+  set_alpha_to_one: True
+  steps_offset: 0
+  prediction_type: epsilon
+  num_inference_timesteps: 10
+  UNet type: ConditionalUnet1D
+  UNet input_dim: N/A
+  UNet global_cond_dim: N/A
+  UNet state_dim: N/A
+
+[Action Normalization Stats]
+  ACTION normalization mode: NormalizationMode.MEAN_STD
+  Action stats keys: ['min', 'max', 'mean', 'std', 'count', 'q01', 'q10', 'q50', 'q90', 'q99']
+  Action mean: [0.14447343104746693, 0.39580566771064557, 0.0669124578904274, 0.5566134229276223]
+  Action std: [0.4179151627906609, 0.8160687158839546, 0.6373644142538906, 0.36806480791846413]
+  Action min: [-0.8964769244194031, -0.0898125171661377, -1.6804183721542358, 0.0]
+  Action max: [2.0505282878875732, 3.4976677894592285, 1.0, 0.800000011920929]
+
+[Postprocessor Unnormalization]
+  Postprocessor uses UnnormalizerProcessorStep
+  Features: {'action': PolicyFeature(type=<FeatureType.ACTION: 'ACTION'>, shape=(4,))}
+  Norm map: {'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>, 'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>, 'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>}
+  Stats source: dataset_stats (same as preprocessor)
+
+[Training vs Eval Action Flow]
+  Training:
+    raw_action -> Normalizer(mean/std) -> normalized_action -> diffusion_loss
+  Eval (inference):
+    noise -> DDIM_denoise(num_steps=10) -> normalized_action -> Unnormalizer(mean/std) -> robot_action
+  => Normalization uses SAME stats: CONSISTENT
+  => Inverse process (unnormalization) is linear: (x * std + mean)
+
+[Full Pipeline Verification]
+  Raw action shape: torch.Size([4])
+  Raw action: [1.316188097000122, 3.1590182781219482, -0.6071893572807312, 0.0]
+  Preprocessed (normalized) action shape: torch.Size([1, 4])
+  Preprocessed (normalized) action: [2.8037140369415283, 3.38600492477417, -1.0576395988464355, -1.512270212173462]
+  Normalized action range: 4.8983
+  WARNING: Normalized action range is large, may indicate stats mismatch
+
+  Running policy inference...
+  Policy raw output shape: torch.Size([1, 16, 4])
+  Policy raw output: [0.58984375, 0.9609375, -0.185546875, -0.9921875]
+  Policy raw output range: [-1.0000, 1.0000]
+  Postprocessed action shape: torch.Size([1, 16, 4])
+  Postprocessed action: [0.390625, 1.1796875, -0.05126953125, 0.189453125]
+  Postprocessed action range: [-0.1582, 1.2109]
+
+  Raw vs Postprocessed (first step):
+    Raw:      [0.58984375, 0.9609375, -0.185546875, -0.9921875]
+    Final:    [0.390625, 1.1796875, -0.05126953125, 0.189453125]
+    Diff:     [-0.19921875, 0.21875, 0.13427734375, 1.181640625]
+
+  Unnormalization verification:
+    Expected (raw * std + mean): [0.3909780979156494, 1.1799967288970947, -0.05134851485490799, 0.19142413139343262]
+    Actual postprocessed:        [0.390625, 1.1796875, -0.05126953125, 0.189453125]
+    Difference:                  [0.00035309791564941406, 0.00030922889709472656, 7.89836049079895e-05, 0.001971006393432617]
+  WARNING: Unnormalization mismatch (max diff: 0.001971)
+
+[DDIM Inference Steps Verification]
+  num_inference_timesteps: 10
+  This controls the number of denoising steps during inference
+  Training uses all 100 timesteps (num_train_timesteps)
+  Eval uses only 10 timesteps (DDIM acceleration)
+  => This is EXPECTED behavior, not a consistency issue
+  => Fewer steps = faster but potentially less accurate predictions
+
+[Critical Diagnosis: Raw vs Final Action]
+  Raw output:     mean=0.0788, std=0.7095
+  Final output:   mean=0.3961, std=0.3759
+  OK: Both raw and final outputs are in reasonable ranges
+
+  ISSUES FOUND: 2
+    - Normalized action range (4.90) is unusually large
+    - Unnormalization mismatch: max diff = 0.001971
+
+======================================================================
+OVERALL: FOUND 2 CONSISTENCY ISSUES
+======================================================================
+  1. Normalized action range (4.90) is unusually large
+  2. Unnormalization mismatch: max diff = 0.001971
+
+Results saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/tinyvla_alignment_results.json
+Log saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/tinyvla_alignment_verify.log

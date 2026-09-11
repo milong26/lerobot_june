@@ -1,0 +1,150 @@
+WARNING 2026-09-07 15:14:47 figs/eval.py:69 No job name provided, using 'metaworld_tinyvla_s' as job name.
+INFO 2026-09-07 15:14:47 bot_eval.py:935 {'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'disassemble-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 8,
+          'n_episodes': 200,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_tinyvla_s',
+ 'output_dir': PosixPath('outputs/eval/2026-09-07/15-14-47_metaworld_tinyvla_s'),
+ 'policy': {'action_dim': 4,
+            'action_head_type': 'droid_diffusion',
+            'chunk_size': 16,
+            'concat': 'token_cat',
+            'device': 'cuda',
+            'freeze_backbone': True,
+            'freeze_vision_tower': True,
+            'input_features': {'observation.images.top': {'shape': (3,
+                                                                    480,
+                                                                    480),
+                                                          'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.wrist': {'shape': (3,
+                                                                      480,
+                                                                      480),
+                                                            'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (4,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'lora_alpha': 256,
+            'lora_bias': 'none',
+            'lora_dropout': 0.05,
+            'lora_enable': True,
+            'lora_module': 'vit llm',
+            'lora_r': 64,
+            'model_name_or_path': 'lesjie/Llava-Pythia-400M',
+            'n_action_steps': 16,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_inference_timesteps': 10,
+            'optimizer_betas': (0.9, 0.98),
+            'optimizer_eps': 1e-07,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0002,
+            'optimizer_weight_decay': 0.0,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pretrain_image_size': 320,
+            'pretrained_path': PosixPath('personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 10000,
+            'scheduler_warmup_steps': 100,
+            'state_dim': 4,
+            'tags': None,
+            'tokenizer_max_length': 2048,
+            'use_amp': False,
+            'use_peft': False},
+ 'rename_map': {'observation.images.top': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-09-07 15:14:47 bot_eval.py:944 Output dir: outputs/eval/2026-09-07/15-14-47_metaworld_tinyvla_s
+INFO 2026-09-07 15:14:47 bot_eval.py:946 Making environment (batch_size=8, async=True).
+INFO 2026-09-07 15:14:49 bot_eval.py:954 Making policy.
+[transformers] The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+[transformers] LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+Creating Meta-World envs | task_groups=['disassemble-v3'] | n_envs(per task)=8
+Building vec env | group=disassemble-v3 | task_id=0 | task=disassemble-v3
+Loading weights:   0%|          | 0/470 [00:00<?, ?it/s]Loading weights:  95%|█████████▌| 448/470 [00:00<00:00, 4470.70it/s]Loading weights: 100%|██████████| 470/470 [00:00<00:00, 4476.04it/s]
+[transformers] [1mLlavaPythiaForCausalLM LOAD REPORT[0m from: lesjie/Llava-Pythia-400M
+Key              | Status     |  | 
+-----------------+------------+--+-
+embed_out.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+[transformers] LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+INFO 2026-09-07 15:15:42 _tinyvla.py:397 Loaded model weights from personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model/model.safetensors
+########################################
+########################################
+Adding LoRA adapters...
+trainable params: 31,457,280 || all params: 380,423,168 || trainable%: 8.2690
+number of parameters: 7.281920e+07
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/200 episodes):   0%|          | 0/25 [00:00<?, ?it/s][transformers] `use_return_dict` is deprecated! Use `return_dict` instead!
+Evaluating tasks:   0%|          | 0/1 [01:08<?, ?it/s]
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-eval", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1393, in main
+    eval_main()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+    response = fn(cfg, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 985, in eval_main
+    info = eval_policy_all(
+           ^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1272, in eval_policy_all
+    tg, tid, metrics = task_runner(task_group, task_id, env)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1145, in run_one
+    metrics = eval_one(
+              ^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1071, in eval_one
+    task_result = eval_policy(
+                  ^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 666, in eval_policy
+    rollout_data = rollout(
+                   ^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 408, in rollout
+    action_numpy: np.ndarray = action.to("cpu").numpy()
+                               ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: Got unsupported ScalarType BFloat16
+Evaluating (0/200 episodes):   0%|          | 0/25 [01:08<?, ?it/s]

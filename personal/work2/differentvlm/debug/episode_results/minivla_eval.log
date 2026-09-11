@@ -1,0 +1,28 @@
+Model: minivla
+Checkpoint: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_112_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/012000/pretrained_model
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode: 0
+Device: cuda
+Output: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/episode_results
+
+=== Evaluating minivla on episode 0 ===
+Loading minivla from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_112_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/012000/pretrained_model
+Policy loaded: MiniVLAPolicy, dtype=bfloat16
+Episode has 83 frames
+Patched MiniVLA vq_vae.get_action_from_latent for bfloat16 compatibility
+  Processed 10/83 frames
+  Processed 20/83 frames
+  Processed 30/83 frames
+  Processed 40/83 frames
+  Processed 50/83 frames
+  Processed 60/83 frames
+  Processed 70/83 frames
+  Processed 80/83 frames
+
+--- Summary ---
+  Max error:  1.8853
+  Mean error: 1.0238
+  Median:     0.7531
+  Min error:  0.1437
+
+Results saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/episode_results/minivla_episode_0.json

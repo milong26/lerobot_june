@@ -8,12 +8,12 @@ RoboMME Expert Dataset Collector
   seed=N
   -> gym.make(task, seed=N)
   -> env.reset()
+  -> RobommeRecordWrapper 拦截 env.step()
   -> FailAwarePandaArmMotionPlanningSolver(env)
   -> 遍历 env.unwrapped.task_list
   -> solve_callable(env, planner) 内部调用 planner.move_to_pose_with_screw() -> env.step()
-  -> EpisodeRecorder wrapper 拦截每次 env.step() 记录 (action, obs, reward, success)
   -> env.unwrapped.evaluate() 检查 success
-  -> 成功才写入 LeRobotDataset
+  -> 成功轨迹写入 LeRobotDataset
 
 两阶段采集:
   阶段1 — 随机采样: seed=0,1,2,... 递增，使用 expert planner 采集 N 个成功 episode
@@ -92,22 +92,23 @@ MAX_CONSECUTIVE_FAILURES = 50
 
 
 def create_raw_env(task, seed, max_steps=300):
-    from robomme.env_record_wrapper import BenchmarkEnvBuilder
-
-    builder = BenchmarkEnvBuilder(
-        env_id=task,
-        dataset="test",
-        action_space="joint_angle",
-        gui_render=False,
-        max_steps=max_steps,
+    """创建原始 RoboMME 环境，使用 gym.make 而不是 BenchmarkEnvBuilder。
+    
+    这样 seed=0,1,2,... 是真正独立的随机环境，不受官方 test split 限制。
+    """
+    env = gym.make(
+        task,
+        obs_mode="rgb+depth+segmentation",
+        control_mode="pd_joint_pos",
+        render_mode="rgb_array",
+        reward_mode="dense",
+        seed=seed,
     )
-    # 使用 episode_idx=seed 来让 builder 从元数据中解析配置
-    # 但如果元数据中没有对应的 episode，会使用默认配置
-    env = builder.make_env_for_episode(episode_idx=seed, max_steps=max_steps)
     return env
 
 
 def get_state_from_obs(obs):
+    """从 RoboMME observation 提取 LeRobot state 格式 (joint + gripper, 8维)。"""
     joint_state = obs.get("joint_state_list", [])
     gripper_state = obs.get("gripper_state_list", [])
 
@@ -129,90 +130,77 @@ def get_state_from_obs(obs):
     return state
 
 
-class EpisodeRecorder:
-    def __init__(self, env, image_size=256):
-        self.env = env
-        self.image_size = image_size
-        self.frames = []
-        self.success_detected = False
-        self.frames_after_success = 0
-        self.original_step = None
-        self.initial_obj_positions = None
+def extract_images_from_obs(obs, image_size=256):
+    """从 RoboMME observation 提取 front/wrist 图像。"""
+    front_rgb = None
+    wrist_rgb = None
 
-    def _extract_images(self, obs):
-        pixels = obs.get("pixels", obs)
-        front_rgb = None
-        wrist_rgb = None
+    if "front_rgb_list" in obs:
+        front_list = obs["front_rgb_list"]
+        front_rgb = np.asarray(
+            front_list[-1] if isinstance(front_list, list) else front_list,
+            dtype=np.uint8,
+        )
 
-        if "image" in pixels:
-            front_rgb = np.asarray(pixels["image"], dtype=np.uint8)
-        elif "front_rgb_list" in obs:
-            front_list = obs["front_rgb_list"]
-            front_rgb = np.asarray(
-                front_list[-1] if isinstance(front_list, list) else front_list,
-                dtype=np.uint8,
-            )
+    if "wrist_rgb_list" in obs:
+        wrist_list = obs["wrist_rgb_list"]
+        wrist_rgb = np.asarray(
+            wrist_list[-1] if isinstance(wrist_list, list) else wrist_list,
+            dtype=np.uint8,
+        )
 
-        if "wrist_image" in pixels:
-            wrist_rgb = np.asarray(pixels["wrist_image"], dtype=np.uint8)
-        elif "wrist_rgb_list" in obs:
-            wrist_list = obs["wrist_rgb_list"]
-            wrist_rgb = np.asarray(
-                wrist_list[-1] if isinstance(wrist_list, list) else wrist_list,
-                dtype=np.uint8,
-            )
-
-        return front_rgb, wrist_rgb
-
-    def _resize_if_needed(self, img):
-        if img is None:
-            return None
-        if img.shape[:2] == (self.image_size, self.image_size):
-            return img
+    if front_rgb is not None and front_rgb.shape[:2] != (image_size, image_size):
         from PIL import Image
-        return np.array(
-            Image.fromarray(img).resize(
-                (self.image_size, self.image_size), Image.BILINEAR
+        front_rgb = np.array(
+            Image.fromarray(front_rgb).resize(
+                (image_size, image_size), Image.BILINEAR
             )
         )
 
+    if wrist_rgb is not None and wrist_rgb.shape[:2] != (image_size, image_size):
+        from PIL import Image
+        wrist_rgb = np.array(
+            Image.fromarray(wrist_rgb).resize(
+                (image_size, image_size), Image.BILINEAR
+            )
+        )
+
+    return front_rgb, wrist_rgb
+
+
+class StepRecorder:
+    """轻量级 wrapper，拦截 env.step() 记录 (action, obs, info)。
+    
+    用于在 planner 执行过程中收集完整的 trajectory 数据。
+    """
+    def __init__(self, env, image_size=256):
+        self.env = env
+        self.image_size = image_size
+        self.steps = []
+        self.original_step = None
+        self.initial_obj_positions = None
+
     def _recording_step(self, action):
         obs, reward, terminated, truncated, info = self.original_step(action)
+        
+        front_rgb, wrist_rgb = extract_images_from_obs(obs, self.image_size)
+        state = get_state_from_obs(obs)
+        
+        action_arr = np.asarray(action, dtype=np.float32).flatten()
+        if len(action_arr) < 8:
+            action_arr = np.pad(action_arr, (0, 8 - len(action_arr)), mode="constant")
+        elif len(action_arr) > 8:
+            action_arr = action_arr[:8]
 
-        front_rgb, wrist_rgb = self._extract_images(obs)
-
-        if front_rgb is not None and wrist_rgb is not None:
-            front_rgb = self._resize_if_needed(front_rgb)
-            wrist_rgb = self._resize_if_needed(wrist_rgb)
-
-            state = get_state_from_obs(obs)
-
-            action_arr = np.asarray(action, dtype=np.float32).flatten()
-            if len(action_arr) < 8:
-                action_arr = np.pad(action_arr, (0, 8 - len(action_arr)), mode="constant")
-            elif len(action_arr) > 8:
-                action_arr = action_arr[:8]
-
-            frame = {
-                "observation.images.image": front_rgb,
-                "observation.images.wrist_image": wrist_rgb,
-                "observation.state": state,
-                "action": action_arr,
-                "next.reward": np.array([float(reward)], dtype=np.float32),
-                "next.success": np.array([info.get("success", False)], dtype=bool),
-            }
-            self.frames.append(frame)
-
-        status = info.get("status", "ongoing")
-        is_success = status == "success"
-
-        if is_success and not self.success_detected:
-            self.success_detected = True
-            self.frames_after_success = 0
-
-        if self.success_detected:
-            self.frames_after_success += 1
-
+        self.steps.append({
+            "front_rgb": front_rgb,
+            "wrist_rgb": wrist_rgb,
+            "state": state,
+            "action": action_arr,
+            "reward": float(reward),
+            "info": info,
+        })
+        
         return obs, reward, terminated, truncated, info
 
     def __enter__(self):
@@ -223,11 +211,8 @@ class EpisodeRecorder:
     def __exit__(self, *args):
         self.env.step = self.original_step
 
-    def is_success(self):
-        return self.success_detected
-
-    def get_frames(self):
-        return self.frames
+    def get_steps(self):
+        return self.steps
 
 
 def get_object_positions_from_env(env):
@@ -257,108 +242,85 @@ def get_object_positions_from_env(env):
 
 
 def run_episode_with_planner(env, task, max_steps=300, image_size=256, extra_frames=10):
+    """运行一个 episode，使用 RoboMME 官方 expert planner。
+    
+    核心流程:
+      env.reset()
+      -> 记录初始物体状态
+      -> 创建 FailAwarePandaArmMotionPlanningSolver
+      -> 遍历 env.unwrapped.task_list
+      -> task_entry["solve"](env, planner)
+      -> env.unwrapped.evaluate() 检查 success
+      -> StepRecorder 自动截获 planner 内部 env.step(action)
     """
-    运行一个 episode。
-    
-    使用 BenchmarkEnvBuilder 创建的环境已经包含 DemonstrationWrapper，
-    在 reset() 时会自动生成 demonstration trajectory。
-    我们需要拦截 DemonstrationWrapper._step_batch(action) 调用，同时记录 action 和 obs。
-    """
-    initial_obj_positions = get_object_positions_from_env(env)
-
-    # 找到 DemonstrationWrapper
-    demo_wrapper = env
-    while hasattr(demo_wrapper, "env") and not hasattr(demo_wrapper, "demonstration_data"):
-        demo_wrapper = demo_wrapper.env
-    
-    # 拦截 DemonstrationWrapper 的 _step_batch 方法
-    collected_steps = []
-    original_step_batch = demo_wrapper._step_batch
-    
-    def _recording_step_batch(action):
-        result = original_step_batch(action)
-        obs_batch, reward_batch, terminated_batch, truncated_batch, info_batch = result
-        
-        # 将 batch 转换为单个步骤
-        import torch
-        batch_size = int(reward_batch.numel()) if hasattr(reward_batch, 'numel') else 0
-        
-        for step_idx in range(batch_size):
-            step_obs = {}
-            step_info = {}
-            
-            for key in obs_batch:
-                val = obs_batch[key]
-                if isinstance(val, torch.Tensor):
-                    step_obs[key] = val[step_idx].cpu().numpy() if val.ndim > 0 else val.cpu().numpy()
-                elif isinstance(val, list) and len(val) > step_idx:
-                    step_obs[key] = val[step_idx]
-                else:
-                    step_obs[key] = val
-            
-            for key in info_batch:
-                val = info_batch[key]
-                if isinstance(val, torch.Tensor):
-                    step_info[key] = val[step_idx].cpu().numpy() if val.ndim > 0 else val.cpu().numpy()
-                elif isinstance(val, list) and len(val) > step_idx:
-                    step_info[key] = val[step_idx]
-                else:
-                    step_info[key] = val
-            
-            collected_steps.append({
-                "action": action,
-                "obs": step_obs,
-                "reward": float(reward_batch[step_idx].cpu().numpy()) if hasattr(reward_batch, 'cpu') else float(reward_batch[step_idx]),
-                "terminated": bool(terminated_batch[step_idx].cpu().numpy()) if hasattr(terminated_batch, 'cpu') else bool(terminated_batch[step_idx]),
-                "truncated": bool(truncated_batch[step_idx].cpu().numpy()) if hasattr(truncated_batch, 'cpu') else bool(truncated_batch[step_idx]),
-                "info": step_info,
-            })
-        
-        return result
-    
-    demo_wrapper._step_batch = _recording_step_batch
+    from mani_skill.examples.motionplanning.panda.motionplanner import (
+        PandaArmMotionPlanningSolver,
+    )
 
     try:
-        # reset() 会触发 DemonstrationWrapper 自动生成 demonstration trajectory
-        obs, info = env.reset()
+        from robomme.robomme_env.utils.planner_fail_safe import (
+            FailAwarePandaArmMotionPlanningSolver,
+            ScrewPlanFailure,
+        )
+    except Exception:
+        FailAwarePandaArmMotionPlanningSolver = PandaArmMotionPlanningSolver
+        ScrewPlanFailure = RuntimeError
+
+    obs, info = env.reset()
+    initial_obj_positions = get_object_positions_from_env(env)
+
+    planner = FailAwarePandaArmMotionPlanningSolver(
+        env,
+        debug=False,
+        vis=False,
+        base_pose=env.unwrapped.agent.robot.pose,
+        visualize_target_grasp_pose=False,
+        print_env_info=False,
+    )
+
+    task_list = getattr(env.unwrapped, "task_list", [])
+    if not task_list:
+        print("  Warning: No task_list found in environment")
+        return [], {"success": False, "num_frames": 0, "object_positions": {}}
+
+    with StepRecorder(env, image_size) as recorder:
+        recorder.initial_obj_positions = initial_obj_positions
+
+        for task_idx, task_entry in enumerate(task_list):
+            solve_callable = task_entry.get("solve")
+            if not callable(solve_callable):
+                continue
+
+            try:
+                solve_callable(env, planner)
+            except ScrewPlanFailure:
+                print(f"  Task {task_idx} failed with ScrewPlanFailure")
+                break
+            except Exception as e:
+                print(f"  Task {task_idx} error: {e}")
+                break
+
+    steps = recorder.get_steps()
+    
+    # 检查 success
+    success = False
+    if steps:
+        last_info = steps[-1]["info"]
+        status = last_info.get("status", "ongoing")
+        success = status == "success"
         
-        # 检查 demonstration 是否成功（从 DemonstrationWrapper 获取）
-        episode_success = getattr(demo_wrapper, "episode_success", False)
-        num_demo_steps = len(collected_steps)
-        
-        print(f"  [D] episode_success={episode_success}, collected_steps={num_demo_steps}")
-        
-        if not episode_success or num_demo_steps == 0:
-            return [], {"success": False, "num_frames": 0, "object_positions": {}}
-        
-        # 处理收集到的步骤
-        with EpisodeRecorder(env, image_size) as recorder:
-            recorder.initial_obj_positions = initial_obj_positions
-            
-            for step_data in collected_steps:
-                action = step_data["action"]
-                obs = step_data["obs"]
-                info = step_data["info"]
-                
-                # 使用实际的 action 执行 recording step
-                recorder._recording_step(action)
-                
-                # 检查是否成功
-                status = info.get("status", "ongoing")
-                if status == "success" and not recorder.success_detected:
-                    recorder.success_detected = True
-                    recorder.frames_after_success = 0
-                
-                if recorder.success_detected:
-                    recorder.frames_after_success += 1
-        
-        return recorder.get_frames(), {
-            "success": recorder.is_success(),
-            "num_frames": len(recorder.get_frames()),
-            "object_positions": recorder.initial_obj_positions,
-        }
-    finally:
-        demo_wrapper._step_batch = original_step_batch
+        # 或者使用 env.unwrapped.evaluate()
+        try:
+            eval_result = env.unwrapped.evaluate(solve_complete_eval=True)
+            success = bool(eval_result.get("success", False))
+        except Exception:
+            pass
+
+    return steps, {
+        "success": success,
+        "num_frames": len(steps),
+        "object_positions": initial_obj_positions,
+    }
 
 
 def create_dataset(repo_id, output_dir, fps=10, image_size=256,

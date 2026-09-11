@@ -1,0 +1,134 @@
+nohup: 忽略输入
+WARNING 2026-07-22 11:38:18 figs/eval.py:69 No job name provided, using 'metaworld_act' as job name.
+INFO 2026-07-22 11:38:18 bot_eval.py:635 {'env': {'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'agent_pos': {'shape': (4,),
+                                    'type': <FeatureType.STATE: 'STATE'>},
+                      'environment_state': {'shape': (39,),
+                                            'type': <FeatureType.ENV: 'ENV'>},
+                      'pixels/top': {'shape': (480, 480, 3),
+                                     'type': <FeatureType.VISUAL: 'VISUAL'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'environment_state': 'observation.environment_state',
+                          'pixels/top': 'observation.image',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'pick-place-v3'},
+ 'eval': {'batch_size': 1,
+          'n_episodes': 50,
+          'save_dataset': True,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_act',
+ 'output_dir': PosixPath('outputs/eval/2026-07-22/11-38-18_metaworld_act'),
+ 'policy': {'chunk_size': 100,
+            'device': 'cuda',
+            'dim_feedforward': 3200,
+            'dim_model': 512,
+            'dropout': 0.1,
+            'feedforward_activation': 'relu',
+            'input_features': {'observation.environment_state': {'shape': (39,),
+                                                                 'type': <FeatureType.ENV: 'ENV'>},
+                               'observation.image': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (4,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'kl_weight': 10.0,
+            'latent_dim': 32,
+            'license': None,
+            'n_action_steps': 100,
+            'n_decoder_layers': 1,
+            'n_encoder_layers': 4,
+            'n_heads': 8,
+            'n_obs_steps': 1,
+            'n_vae_encoder_layers': 4,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.MEAN_STD: 'MEAN_STD'>},
+            'optimizer_lr': 1e-05,
+            'optimizer_lr_backbone': 1e-05,
+            'optimizer_weight_decay': 0.0001,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pre_norm': False,
+            'pretrained_backbone_weights': 'ResNet18_Weights.IMAGENET1K_V1',
+            'pretrained_path': PosixPath('outputs/act_mw_pick-place-v3/checkpoints/020000/pretrained_model'),
+            'private': None,
+            'push_to_hub': False,
+            'replace_final_stride_with_dilation': 0,
+            'repo_id': None,
+            'tags': None,
+            'temporal_ensemble_coeff': None,
+            'use_amp': False,
+            'use_peft': False,
+            'use_vae': True,
+            'vision_backbone': 'resnet18'},
+ 'rename_map': {},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-07-22 11:38:18 bot_eval.py:644 Output dir: outputs/eval/2026-07-22/11-38-18_metaworld_act
+INFO 2026-07-22 11:38:18 bot_eval.py:646 Making environment (batch_size=1, async=True).
+INFO 2026-07-22 11:38:19 tesupport.py:24 No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+INFO 2026-07-22 11:38:19 bot_eval.py:654 Making policy.
+Creating Meta-World envs | task_groups=['pick-place-v3'] | n_envs(per task)=1
+Building vec env | group=pick-place-v3 | task_id=0 | task=pick-place-v3
+Loading weights from local directory
+Stepping through eval batches:   0%|          | 0/50 [00:00<?, ?it/s]
+Running rollout with at most 500 steps:   0%|          | 0/500 [00:00<?, ?it/s][AStepping through eval batches:   0%|          | 0/50 [00:01<?, ?it/s]
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-eval", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 965, in main
+    eval_main()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+    response = fn(cfg, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 682, in eval_main
+    info = eval_policy_all(
+           ^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 899, in eval_policy_all
+    tg, tid, metrics = task_runner(task_group, task_id, env)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 801, in run_one
+    metrics = eval_one(
+              ^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 751, in eval_one
+    task_result = eval_policy(
+                  ^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 361, in eval_policy
+    rollout_data = rollout(
+                   ^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 193, in rollout
+    action = policy.select_action(observation)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/act/modeling_act.py", line 118, in select_action
+    actions = self.predict_action_chunk(batch)[:, : self.config.n_action_steps]
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/utils/_contextlib.py", line 124, in decorate_context
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/act/modeling_act.py", line 134, in predict_action_chunk
+    actions = self.model(batch)[0]
+              ^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1779, in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/torch/nn/modules/module.py", line 1790, in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/act/modeling_act.py", line 468, in forward
+    encoder_in_tokens.append(self.encoder_env_state_input_proj(batch[OBS_ENV_STATE]))
+                                                               ~~~~~^^^^^^^^^^^^^^^
+KeyError: 'observation.environment_state'
+
+                                                                               [A

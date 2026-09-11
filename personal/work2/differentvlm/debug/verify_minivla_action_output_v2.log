@@ -1,0 +1,135 @@
+2026-09-10 13:34:38,676 INFO verify_minivla_action_accuracy.py:195 ================================================================================
+2026-09-10 13:34:38,676 INFO verify_minivla_action_accuracy.py:196 MiniVLA Action Accuracy Verification
+2026-09-10 13:34:38,676 INFO verify_minivla_action_accuracy.py:197 ================================================================================
+2026-09-10 13:34:38,677 INFO verify_minivla_action_accuracy.py:200 
+[Step 1] 加载数据集 sample...
+2026-09-10 13:34:38,854 INFO verify_minivla_action_accuracy.py:58 数据集加载: 83 frames, 1 episodes
+2026-09-10 13:34:38,854 INFO verify_minivla_action_accuracy.py:59 Features: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'observation.environment_state', 'action', 'next.reward', 'next.success', 'timestamp', 'frame_index', 'episode_index', 'index', 'task_index']
+2026-09-10 13:34:38,854 INFO verify_minivla_action_accuracy.py:60 Action feature: {'dtype': 'float32', 'shape': (4,), 'names': {'axes': ['x', 'y', 'z', 'gripper']}}
+2026-09-10 13:34:39,037 INFO verify_minivla_action_accuracy.py:69 加载 frame index 41 from episode 0
+2026-09-10 13:34:39,038 INFO verify_minivla_action_accuracy.py:70 Sample keys: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'observation.environment_state', 'action', 'next.reward', 'next.success', 'timestamp', 'frame_index', 'episode_index', 'index', 'task_index', 'task']
+2026-09-10 13:34:39,039 INFO verify_minivla_action_accuracy.py:73 Action shape: torch.Size([4])
+2026-09-10 13:34:39,042 INFO verify_minivla_action_accuracy.py:74 Action values: tensor([ 0.0154,  0.1271, -0.9321,  0.0000])
+2026-09-10 13:34:39,042 INFO verify_minivla_action_accuracy.py:216 真实 action shape: (4,)
+2026-09-10 13:34:39,042 INFO verify_minivla_action_accuracy.py:217 真实 action values: [ 0.01537594  0.12709706 -0.9321286   0.        ]
+2026-09-10 13:34:39,042 INFO verify_minivla_action_accuracy.py:220 
+[Step 2] 加载 Policy 和 Processors...
+2026-09-10 13:34:39,043 INFO verify_minivla_action_accuracy.py:81 
+加载 MiniVLA checkpoint: personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model
+2026-09-10 13:34:39,742 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-09-10 13:34:39,961 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B/060db6499f32faf8b98477b0a26969ef7d8b9987/config.json "HTTP/1.1 200 OK"
+2026-09-10 13:34:40,250 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/tokenizer_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-09-10 13:34:40,383 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B/060db6499f32faf8b98477b0a26969ef7d8b9987/tokenizer_config.json "HTTP/1.1 200 OK"
+2026-09-10 13:34:40,715 INFO _client.py:1025 HTTP Request: GET https://hf-mirror.com/api/models/Qwen/Qwen2.5-0.5B/tree/main/additional_chat_templates?recursive=false&expand=false "HTTP/1.1 404 Not Found"
+2026-09-10 13:34:41,009 INFO _client.py:1025 HTTP Request: GET https://hf-mirror.com/api/models/Qwen/Qwen2.5-0.5B/tree/main?recursive=true&expand=false "HTTP/1.1 200 OK"
+2026-09-10 13:34:41,859 INFO _client.py:1025 HTTP Request: GET https://hf-mirror.com/api/models/Qwen/Qwen2.5-0.5B "HTTP/1.1 200 OK"
+2026-09-10 13:34:46,140 INFO _builder.py:219 Loading pretrained weights from Hugging Face hub (timm/vit_large_patch14_reg4_dinov2.lvd142m)
+2026-09-10 13:34:46,435 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/timm/vit_large_patch14_reg4_dinov2.lvd142m/resolve/main/model.safetensors "HTTP/1.1 302 Found"
+2026-09-10 13:34:46,437 INFO _hub.py:244 [timm/vit_large_patch14_reg4_dinov2.lvd142m] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2026-09-10 13:34:46,451 INFO pos_embed.py:60 Resized position embedding: (37, 37) to (16, 16).
+2026-09-10 13:34:51,639 INFO _builder.py:219 Loading pretrained weights from Hugging Face hub (timm/vit_so400m_patch14_siglip_224.v2_webli)
+2026-09-10 13:34:52,213 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/timm/vit_so400m_patch14_siglip_224.v2_webli/resolve/main/model.safetensors "HTTP/1.1 302 Found"
+2026-09-10 13:34:52,215 INFO _hub.py:244 [timm/vit_so400m_patch14_siglip_224.v2_webli] Safe alternative available for 'pytorch_model.bin' (as 'model.safetensors'). Loading weights using safetensors.
+2026-09-10 13:34:52,768 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-09-10 13:34:52,890 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B/060db6499f32faf8b98477b0a26969ef7d8b9987/config.json "HTTP/1.1 200 OK"
+2026-09-10 13:34:53,366 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-09-10 13:34:53,603 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B/060db6499f32faf8b98477b0a26969ef7d8b9987/config.json "HTTP/1.1 200 OK"
+2026-09-10 13:34:53,907 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/config.json "HTTP/1.1 307 Temporary Redirect"
+2026-09-10 13:34:54,021 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B/060db6499f32faf8b98477b0a26969ef7d8b9987/config.json "HTTP/1.1 200 OK"
+[DEBUG] Loaded config from: personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'vision_backbone_id', 'llm_backbone_id', 'official_vla_checkpoint', 'base_vlm_checkpoint', 'num_extra_tokens', 'image_size', 'image_resize_strategy', 'arch_specifier', 'image_sequence_len', 'use_wrist_image', 'primary_image_key', 'wrist_image_key', 'action_tokenizer_type', 'chunk_size', 'n_action_steps', 'vqvae_n_embed', 'vqvae_groups', 'n_latent_dims', 'vq_model_path', 'official_dataset_statistics_path', 'action_unnorm_key', '_resolved_action_tokenizer_type', 'enable_gradient_checkpointing', 'enable_mixed_precision_training', 'reduce_in_full_precision', 'freeze_vision_backbone', 'freeze_llm_backbone', 'unfreeze_last_llm_layer', 'dtype', 'optimizer_lr', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'optimizer_betas', 'optimizer_eps', 'scheduler_type', 'scheduler_warmup_ratio', 'normalization_mapping']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: minivla
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'vision_backbone_id', 'llm_backbone_id', 'official_vla_checkpoint', 'base_vlm_checkpoint', 'num_extra_tokens', 'image_size', 'image_resize_strategy', 'arch_specifier', 'image_sequence_len', 'use_wrist_image', 'primary_image_key', 'wrist_image_key', 'action_tokenizer_type', 'chunk_size', 'n_action_steps', 'vqvae_n_embed', 'vqvae_groups', 'n_latent_dims', 'vq_model_path', 'official_dataset_statistics_path', 'action_unnorm_key', '_resolved_action_tokenizer_type', 'enable_gradient_checkpointing', 'enable_mixed_precision_training', 'reduce_in_full_precision', 'freeze_vision_backbone', 'freeze_llm_backbone', 'unfreeze_last_llm_layer', 'dtype', 'optimizer_lr', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'optimizer_betas', 'optimizer_eps', 'scheduler_type', 'scheduler_warmup_ratio', 'normalization_mapping']
+[DEBUG] Removed invalid keys: set()
+[DEBUG] Loaded config from: personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'vision_backbone_id', 'llm_backbone_id', 'official_vla_checkpoint', 'base_vlm_checkpoint', 'num_extra_tokens', 'image_size', 'image_resize_strategy', 'arch_specifier', 'image_sequence_len', 'use_wrist_image', 'primary_image_key', 'wrist_image_key', 'action_tokenizer_type', 'chunk_size', 'n_action_steps', 'vqvae_n_embed', 'vqvae_groups', 'n_latent_dims', 'vq_model_path', 'official_dataset_statistics_path', 'action_unnorm_key', '_resolved_action_tokenizer_type', 'enable_gradient_checkpointing', 'enable_mixed_precision_training', 'reduce_in_full_precision', 'freeze_vision_backbone', 'freeze_llm_backbone', 'unfreeze_last_llm_layer', 'dtype', 'optimizer_lr', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'optimizer_betas', 'optimizer_eps', 'scheduler_type', 'scheduler_warmup_ratio', 'normalization_mapping']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: minivla
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'vision_backbone_id', 'llm_backbone_id', 'official_vla_checkpoint', 'base_vlm_checkpoint', 'num_extra_tokens', 'image_size', 'image_resize_strategy', 'arch_specifier', 'image_sequence_len', 'use_wrist_image', 'primary_image_key', 'wrist_image_key', 'action_tokenizer_type', 'chunk_size', 'n_action_steps', 'vqvae_n_embed', 'vqvae_groups', 'n_latent_dims', 'vq_model_path', 'official_dataset_statistics_path', 'action_unnorm_key', '_resolved_action_tokenizer_type', 'enable_gradient_checkpointing', 'enable_mixed_precision_training', 'reduce_in_full_precision', 'freeze_vision_backbone', 'freeze_llm_backbone', 'unfreeze_last_llm_layer', 'dtype', 'optimizer_lr', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'optimizer_betas', 'optimizer_eps', 'scheduler_type', 'scheduler_warmup_ratio', 'normalization_mapping']
+[DEBUG] Removed invalid keys: set()
+Loading weights:   0%|          | 0/290 [00:00<?, ?it/s]Loading weights: 100%|██████████| 290/290 [00:00<00:00, 4982.15it/s]
+2026-09-10 13:34:54,509 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/generation_config.json "HTTP/1.1 307 Temporary Redirect"
+2026-09-10 13:34:54,629 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/api/resolve-cache/models/Qwen/Qwen2.5-0.5B/060db6499f32faf8b98477b0a26969ef7d8b9987/generation_config.json "HTTP/1.1 200 OK"
+2026-09-10 13:34:55,264 INFO _client.py:1025 HTTP Request: HEAD https://hf-mirror.com/Qwen/Qwen2.5-0.5B/resolve/main/custom_generate/generate.py "HTTP/1.1 404 Not Found"
+2026-09-10 13:34:55,270 INFO modeling_minivla.py:726 [MiniVLA] Loading LeRobot-format checkpoint: personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model/model.safetensors
+2026-09-10 13:34:55,907 INFO modeling_minivla.py:733 [MiniVLA] Checkpoint absolute path: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model/model.safetensors
+2026-09-10 13:34:55,908 INFO modeling_minivla.py:734 [MiniVLA] Loaded parameters: 1021
+2026-09-10 13:34:55,908 INFO modeling_minivla.py:735 [MiniVLA] Missing keys: 1
+2026-09-10 13:34:55,908 INFO modeling_minivla.py:736 [MiniVLA] Unexpected keys: 0
+2026-09-10 13:34:55,914 WARNING modeling_minivla.py:760 [MiniVLA] 1 tied embedding key(s) missing from checkpoint (expected if weights are tied to lm_head): ['model.vlm.llm.model.embed_tokens.weight']
+2026-09-10 13:35:03,075 INFO verify_minivla_action_accuracy.py:96 Policy 加载完成: MiniVLAPolicy
+2026-09-10 13:35:03,076 INFO verify_minivla_action_accuracy.py:97 Model dtype: float32
+2026-09-10 13:35:12,928 INFO verify_minivla_action_accuracy.py:110 Preprocessor: DataProcessorPipeline, steps=5
+2026-09-10 13:35:12,928 INFO verify_minivla_action_accuracy.py:111 Postprocessor: DataProcessorPipeline, steps=2
+2026-09-10 13:35:12,928 INFO verify_minivla_action_accuracy.py:115   Postprocessor step 0: UnnormalizerProcessorStep
+2026-09-10 13:35:12,929 INFO verify_minivla_action_accuracy.py:118     _tensor_stats keys: ['action', 'episode_index', 'frame_index', 'index', 'next.reward', 'next.success', 'observation.images.top', 'observation.images.wrist', 'observation.state', 'task_index', 'timestamp']
+2026-09-10 13:35:12,929 INFO verify_minivla_action_accuracy.py:121     action stats keys: ['count', 'max', 'mean', 'min', 'q01', 'q10', 'q50', 'q90', 'q99', 'std']
+2026-09-10 13:35:12,929 INFO verify_minivla_action_accuracy.py:126     action q01: [-1.1459810e-01 -2.8853105e-02 -9.9020338e-01 -1.0000000e-10]
+2026-09-10 13:35:12,929 INFO verify_minivla_action_accuracy.py:131     action q99: [1.5223695 2.7345288 0.9999862 0.7999976]
+2026-09-10 13:35:12,929 INFO verify_minivla_action_accuracy.py:115   Postprocessor step 1: DeviceProcessorStep
+2026-09-10 13:35:12,929 INFO verify_minivla_action_accuracy.py:135     (no _tensor_stats attribute)
+2026-09-10 13:35:12,930 INFO verify_minivla_action_accuracy.py:156 已修复 MiniVLA vq_vae.get_action_from_latent 的 bfloat16 兼容性
+2026-09-10 13:35:12,930 INFO verify_minivla_action_accuracy.py:231 VQ mode: True
+2026-09-10 13:35:12,930 INFO verify_minivla_action_accuracy.py:232 Action tokenizer: libero_vq_action_tokenizer
+2026-09-10 13:35:12,930 INFO verify_minivla_action_accuracy.py:243 Action shape: (4,)
+2026-09-10 13:35:12,930 INFO verify_minivla_action_accuracy.py:248 
+[Step 3] 预处理 observation...
+2026-09-10 13:35:12,935 INFO verify_minivla_action_accuracy.py:268 Batch keys: ['observation.images.top', 'observation.images.wrist', 'observation.state', 'task', 'action']
+2026-09-10 13:35:12,935 INFO verify_minivla_action_accuracy.py:271   observation.images.top: shape=torch.Size([1, 3, 480, 480]), dtype=torch.float32
+2026-09-10 13:35:12,935 INFO verify_minivla_action_accuracy.py:271   observation.images.wrist: shape=torch.Size([1, 3, 480, 480]), dtype=torch.float32
+2026-09-10 13:35:12,935 INFO verify_minivla_action_accuracy.py:271   observation.state: shape=torch.Size([1, 4]), dtype=torch.float32
+2026-09-10 13:35:12,935 INFO verify_minivla_action_accuracy.py:271   action: shape=torch.Size([1, 1, 4]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:275 Preprocessed batch keys: ['action', 'next.reward', 'next.done', 'next.truncated', 'info', 'task', 'observation.images.top', 'observation.images.wrist', 'observation.state', 'dino', 'siglip']
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:278   action: shape=torch.Size([1, 1, 4]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:278   observation.images.top: shape=torch.Size([1, 3, 480, 480]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:278   observation.images.wrist: shape=torch.Size([1, 3, 480, 480]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:278   observation.state: shape=torch.Size([1, 4]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:278   dino: shape=torch.Size([1, 3, 224, 224]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:278   siglip: shape=torch.Size([1, 3, 224, 224]), dtype=torch.float32
+2026-09-10 13:35:13,029 INFO verify_minivla_action_accuracy.py:281 
+[Step 4] 模型推理...
+2026-09-10 13:35:13,882 INFO verify_minivla_action_accuracy.py:288 模型原始输出 shape: torch.Size([1, 8, 4])
+2026-09-10 13:35:13,883 INFO verify_minivla_action_accuracy.py:289 模型原始输出 dtype: torch.float32
+2026-09-10 13:35:13,883 INFO verify_minivla_action_accuracy.py:176 [model_raw_prediction] shape=(1, 8, 4), min=-1.231271, max=-0.172321, mean=-0.603922, std=0.311327
+2026-09-10 13:35:13,883 INFO verify_minivla_action_accuracy.py:293 
+[Step 5] 应用 postprocessor（反归一化）...
+2026-09-10 13:35:13,886 INFO verify_minivla_action_accuracy.py:176 [final_prediction_after_postprocess] shape=(1, 8, 4), min=-1.220340, max=0.559707, mean=-0.005014, std=0.568199
+2026-09-10 13:35:13,886 INFO verify_minivla_action_accuracy.py:309 
+[Step 6] 对比真实 action 和预测 action...
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:324 预测 action (反归一化后): [ 0.41343677  0.5597073  -1.22034     0.31610197]
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:325 真实 action (原始值): [ 0.01537594  0.12709706 -0.9321286   0.        ]
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:332 
+误差分析 (反归一化后 vs 原始真实 action):
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:333   每维绝对误差: [0.39806083 0.4326102  0.2882114  0.31610197]
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:334   最大绝对误差: 0.432610
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:335   平均绝对误差: 0.358746
+2026-09-10 13:35:13,887 INFO verify_minivla_action_accuracy.py:338 
+[Step 6b] 将真实 action 归一化后与模型原始输出对比...
+2026-09-10 13:35:13,888 INFO verify_minivla_action_accuracy.py:366 归一化统计: q01=[-1.1459810e-01 -2.8853105e-02 -9.9020338e-01 -1.0000000e-10], q99=[1.5223695 2.7345288 0.9999862 0.7999976]
+2026-09-10 13:35:13,888 INFO verify_minivla_action_accuracy.py:371 真实 action (归一化后): [-0.8412014  -0.887131   -0.94163895 -1.        ]
+2026-09-10 13:35:13,888 INFO verify_minivla_action_accuracy.py:372 模型原始输出 (mean): -0.603922
+2026-09-10 13:35:13,888 INFO verify_minivla_action_accuracy.py:385 
+误差分析 (归一化后对比):
+2026-09-10 13:35:13,888 INFO verify_minivla_action_accuracy.py:386   每维绝对误差: [0.4863392  0.31310207 0.28963208 0.7902573 ]
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:387   最大绝对误差: 0.790257
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:388   平均绝对误差: 0.469833
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:399 
+[Step 7] 结果判断...
+2026-09-10 13:35:13,889 WARNING verify_minivla_action_accuracy.py:407 ⚠️  模型可能加载有问题，或者后处理流程有问题
+2026-09-10 13:35:13,889 WARNING verify_minivla_action_accuracy.py:408    平均绝对误差 0.4698 在 0.2-0.5 之间，需要检查
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:414 
+================================================================================
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:415 诊断摘要:
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:416 ================================================================================
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:417 Checkpoint: personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:418 Episode: 0, Frame: None
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:419 VQ Mode: True
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:420 Action Tokenizer: libero_vq_action_tokenizer
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:421 Real Action: [ 0.01537594  0.12709706 -0.9321286   0.        ]
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:422 Predicted Action (raw): -0.6039 (mean)
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:423 Predicted Action (final): -0.0050 (mean)
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:424 Max Absolute Error: 0.790257
+2026-09-10 13:35:13,889 INFO verify_minivla_action_accuracy.py:425 Mean Absolute Error: 0.469833
+2026-09-10 13:35:13,890 INFO verify_minivla_action_accuracy.py:464 
+结果已保存到: personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/verification_results/action_accuracy_ep0_frameNone.json

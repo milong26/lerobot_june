@@ -1,0 +1,265 @@
+TinyVLA Diffusion Action Head Symmetry Diagnostic
+Policy type: tinyvla_s
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Device: cuda
+
+######################################################################
+# TinyVLA Diffusion Action Head Symmetry Diagnostic: tinyvla_s
+######################################################################
+Dataset loaded: 54067 frames, 400 episodes
+Loading tinyvla_s from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Policy loaded: TinyVLAPolicy, dtype=float32
+
+======================================================================
+  1. SCHEDULER CONFIGURATION CONSISTENCY
+======================================================================
+[Scheduler Type]
+  Class: DDIMScheduler
+
+[Scheduler Config]
+  num_train_timesteps: 100
+  beta_schedule:       squaredcos_cap_v2
+  prediction_type:     epsilon
+  clip_sample:         True
+  clip_sample_value:   N/A
+  set_alpha_to_one:    True
+  steps_offset:        0
+  trained_betas:       None
+
+[Inference Config]
+  num_inference_timesteps: 10
+
+[Critical: Prediction Type]
+  Training target: epsilon (noise)
+  Training loss: MSE(noise_pred, noise)
+  Inference: scheduler.step() uses epsilon prediction
+  => CONSISTENT
+
+[Critical: Clip Sample]
+  clip_sample: True
+  => During inference, samples are clipped to [-1, 1] at each step
+  => If normalized actions exceed [-1, 1], they will be clipped
+  => This could cause action distribution shrinkage!
+  Dataset action min: [-0.89647692 -0.08981252 -1.68041837  0.        ]
+  Dataset action max: [2.05052829 3.49766779 1.         0.80000001]
+  WARNING: Dataset action range exceeds [-1, 1]!
+  => clip_sample=True will clip actions during inference
+  => This will shrink the action distribution!
+
+[Critical: Beta Schedule]
+  beta_schedule: squaredcos_cap_v2
+  => squaredcos_cap_v2: common for diffusion policy
+  betas range: [0.000631, 0.999000]
+  betas mean: 0.078789
+  alphas_cumprod[0]: 0.999369
+  alphas_cumprod[-1]: 0.000000
+  alphas_cumprod[50]: 0.478265
+
+  ISSUES FOUND: 1
+    - clip_sample=True but action range [-1.6804183721542358, 3.4976677894592285] exceeds [-1, 1]
+
+======================================================================
+  2. TRAINING ACTION FLOW (via policy.forward API)
+======================================================================
+[Raw Action from Dataset (Single Step)]
+  Shape: torch.Size([1, 4])
+  Mean: 0.967004, Std: 1.667337
+  Min: -0.607189, Max: 3.159018
+
+[Action After Preprocessor (Normalized)]
+  Shape: torch.Size([1, 4])
+  Mean: 0.904952, Std: 2.546609
+  Min: -1.512270, Max: 3.386005
+
+[Normalization Formula Verification]
+  Expected (raw - mean) / std: [[2.8037140369415283, 3.38600492477417, -1.0576395988464355, -1.512270212173462]]
+  Actual preprocessed:         [[2.8037140369415283, 3.38600492477417, -1.0576395988464355, -1.512270212173462]]
+  Max diff: 0.00000000
+  OK: Normalization formula correct
+
+[Building Training Batch with delta_timestamps]
+  chunk_size: 16
+  fps: 80
+  delta_timestamps: {'action': 16, 'observation.images.top': 1, 'observation.images.wrist': 1, 'observation.state': 1}
+  Chunked dataset loaded: 54067 frames
+  Batch built: {'action': torch.Size([2, 16, 4]), 'next.reward': torch.Size([2]), 'action_is_pad': torch.Size([2, 16]), 'observation.images.top_is_pad': torch.Size([2, 1]), 'observation.images.wrist_is_pad': torch.Size([2, 1]), 'observation.state_is_pad': torch.Size([2, 1]), 'index': torch.Size([2, 1]), 'task_index': torch.Size([2, 1]), 'episode_index': torch.Size([2]), 'timestamp': torch.Size([2]), 'observation.images.top': torch.Size([2, 1, 3, 480, 480]), 'observation.images.wrist': torch.Size([2, 1, 3, 480, 480]), 'observation.state': torch.Size([2, 1, 4]), 'observation.environment_state': torch.Size([2, 1, 39]), 'task': 'list'}
+
+[Chunked Action from Training Batch]
+  Shape: torch.Size([2, 16, 4])
+  Mean: 0.578367, Std: 1.840732
+  Min: -1.512270, Max: 3.386005
+
+[Calling policy.forward() API]
+
+[HOOK] noise_scheduler.add_noise called
+  arg[0] shape=torch.Size([2, 16, 4]), dtype=torch.bfloat16, mean=0.5774, std=1.8416
+  arg[1] shape=torch.Size([2, 16, 4]), dtype=torch.bfloat16, mean=-0.0099, std=1.0596
+  arg[2] shape=torch.Size([2]), dtype=torch.int64, mean=44.5000, std=43.1335
+  => output shape=torch.Size([2, 16, 4]), dtype=torch.bfloat16, mean=0.3488, std=1.5607
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([2, 16, 4]), dtype=torch.bfloat16, mean=0.3488, std=1.5607
+  arg[1] shape=torch.Size([2]), dtype=torch.int64, mean=44.5000, std=43.1335
+  kwarg[global_cond] shape=torch.Size([2, 1153, 512]), dtype=torch.bfloat16, mean=0.1727, std=14.4099
+  kwarg[states] shape=torch.Size([2, 4]), dtype=torch.bfloat16, mean=-0.5596, std=1.9936
+  => output shape=torch.Size([2, 16, 4]), dtype=torch.bfloat16, mean=-0.0090, std=1.0145
+
+[policy.forward() Output]
+  Loss: 0.052246
+  Info keys: []
+
+[Loss Analysis]
+  Expected loss for random model: ~1.0 (MSE of N(0,1) noise)
+  Actual loss: 0.052246
+  OK: Loss is low, model may be well-trained
+
+[Hook Analysis]
+  Total calls traced: 2
+  add_noise calls: 1
+    Noisy action shape: torch.Size([2, 16, 4])
+    Noisy action mean: 0.3488
+    Noisy action std: 1.5607
+  embed_out (UNet) calls: 1
+    UNet output shape: torch.Size([2, 16, 4])
+    UNet output mean: -0.0090
+    UNet output std: 1.0145
+
+[Multi-Frame Normalized Action Distribution (via preprocessor API)]
+  Analyzed 100 action vectors
+  Overall mean: [ 0.6355196   0.90846634 -0.00661207 -0.6863294 ]
+  Overall std:  [1.4935205 1.5285442 1.0412041 1.0550016]
+
+[Distribution Quality Check]
+  Expected for MEAN_STD normalization: mean~0, std~1
+  Actual: mean=0.2128, std=1.4390
+  OK: Overall mean is close to 0
+  OK: Overall std is close to 1
+
+  OK: No training action flow issues found
+
+======================================================================
+  3. INFERENCE ACTION FLOW (via policy.predict_action_chunk API)
+======================================================================
+[Calling policy.predict_action_chunk() API]
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.0314, std=0.9289
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=90.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.0042, std=0.9590
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.0524, std=0.8929
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=80.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.0275, std=0.9575
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.0757, std=0.8356
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=70.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.0661, std=0.9553
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.1012, std=0.7675
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=60.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.1179, std=0.9830
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.1255, std=0.6825
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=50.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.1807, std=1.0315
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.1513, std=0.5840
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=40.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.2339, std=1.0797
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.1849, std=0.4896
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=30.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.2662, std=1.1111
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.2256, std=0.4195
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=20.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.2809, std=1.0914
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.2702, std=0.4003
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=10.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.2948, std=1.0590
+
+[HOOK] base_model.embed_out (UNet) called
+  arg[0] shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=-0.3153, std=0.4460
+  arg[1] shape=torch.Size([]), dtype=torch.int64, mean=0.0000, std=nan
+  kwarg[global_cond] shape=torch.Size([1, 1160, 512]), dtype=torch.bfloat16, mean=0.1712, std=14.3593
+  kwarg[states] shape=torch.Size([1, 4]), dtype=torch.bfloat16, mean=-0.5605, std=2.1610
+  => output shape=torch.Size([1, 16, 4]), dtype=torch.bfloat16, mean=0.0459, std=0.2622
+  Policy raw output shape: torch.Size([1, 16, 4])
+  Policy raw output dtype: torch.bfloat16
+  Policy raw output (fp32):
+    Shape: torch.Size([1, 16, 4])
+    First step: [0.09814453125, 0.55078125, -0.64453125, -0.8828125]
+    Mean: -0.316399
+    Std:  0.450187
+    Min:  -0.996094
+    Max:  0.550781
+
+[Raw Output Distribution Analysis]
+  Mean: -0.219604
+  Std:  0.662034
+  Range: [-0.882812, 0.550781]
+  OK: Model output has reasonable distribution
+
+[Calling postprocessor() API]
+  Postprocessed action shape: torch.Size([1, 16, 4])
+  Postprocessed first step: [0.185546875, 0.84375, -0.34375, 0.23046875]
+  Postprocessed mean: 0.168583
+  Postprocessed std:  0.258963
+
+[Unnormalization Verification]
+  Expected (raw * std + mean): [0.18548952043056488, 0.8452810049057007, -0.3438888192176819, 0.231681227684021]
+  Actual postprocessed:        [0.185546875, 0.84375, -0.34375, 0.23046875]
+  Max diff: 0.00153100
+  WARNING: Unnormalization mismatch!
+
+[Training vs Inference Action Distribution Comparison]
+  Training normalized action:
+    Mean: 0.904952, Std: 2.546609
+    Range: [-1.512270, 3.386005]
+  Inference normalized action (first step):
+    Mean: -0.219604, Std: 0.662034
+    Range: [-0.882812, 0.550781]
+
+  ISSUES FOUND: 1
+    - Unnormalization mismatch (max diff: 0.00153100)
+
+======================================================================
+  OVERALL DIAGNOSIS
+======================================================================
+  FOUND 2 ISSUES:
+    1. clip_sample=True but action range [-1.6804183721542358, 3.4976677894592285] exceeds [-1, 1]
+    2. Unnormalization mismatch (max diff: 0.00153100)
+
+======================================================================
+  RECOMMENDATIONS
+======================================================================
+
+Results saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/diffusion_head_symmetry_results.json
+Log saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/diffusion_head_symmetry.log

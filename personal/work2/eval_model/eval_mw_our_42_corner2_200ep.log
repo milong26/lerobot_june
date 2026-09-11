@@ -1,0 +1,49 @@
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/parsers/decoding.py", line 177, in decode_dataclass
+    instance = origin(**init_args)
+               ^^^^^^^^^^^^^^^^^^^
+  File "<string>", line 11, in __init__
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/eval.py", line 51, in __post_init__
+    self.policy = PreTrainedConfig.from_pretrained(
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/policies.py", line 194, in from_pretrained
+    config_file = hf_hub_download(
+                  ^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/huggingface_hub/utils/_validators.py", line 84, in _inner_fn
+    validate_repo_id(arg_value)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/huggingface_hub/utils/_validators.py", line 132, in validate_repo_id
+    raise HFValidationError(
+huggingface_hub.errors.HFValidationError: Repo id must be in the form 'repo_name' or 'namespace/repo_name': 'personal/work2/duibi/ours_112_seed42_corner2/dynamicanchor_112_seed42/checkpoints/016000/pretrained_model'. Use `repo_type` argument if needed.
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-eval", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1388, in main
+    eval_main()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 315, in wrapper_inner
+    cfg = draccus.parse(
+          ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/argparsing.py", line 220, in parse
+    return parser.parse_args(args)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/argparsing.py", line 108, in parse_args
+    args, _ = self.parse_known_args(args, namespace, is_parse_args=True)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/argparsing.py", line 145, in parse_known_args
+    parsed_t = self._postprocessing(parsed_args)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/argparsing.py", line 189, in _postprocessing
+    cfg = decoding.decode(self.config_class, deflat_d)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/parsers/registry_utils.py", line 81, in wrapper
+    return base_func(*args, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/parsers/decoding.py", line 66, in decode
+    return get_decoding_fn(cls)(raw_value, ())  # type: ignore
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/draccus/parsers/decoding.py", line 179, in decode_dataclass
+    raise ParsingError(f"Couldn't instantiate class {stringify_type(cls)} using the given arguments.") from e
+draccus.utils.ParsingError: Couldn't instantiate class EvalPipelineConfig using the given arguments.

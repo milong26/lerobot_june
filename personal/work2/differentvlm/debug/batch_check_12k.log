@@ -1,0 +1,34 @@
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode: 0
+GPU ID: 1
+Device: cuda
+Dataset loaded: 54067 frames, 400 episodes
+Loaded frame 41 from episode 0
+--- Checking: tinyvla_s ---
+Loading tinyvla_s from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Policy loaded: TinyVLAPolicy
+Raw action: shape=torch.Size([4]), min=-0.9321, max=0.1271
+Preprocessed action: shape=torch.Size([1, 4]), min=-1.5675, max=-0.3089
+Model prediction: shape=torch.Size([1, 16, 4]), min=-1.0000, max=0.5547
+Final action: shape=torch.Size([1, 16, 4]), min=-0.5703, max=0.7539
+
+Prediction vs Real:
+  Real:     [0.015375935472548008, 0.12709705531597137, -0.9321286082267761, 0.0]
+  Predicted: [0.0087890625, 0.333984375, 0.275390625, 0.26171875]
+  Max error:  1.2075
+  Mean error: 0.4207
+--- Checking: tinyvla_b ---
+Loading tinyvla_b from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_b_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Policy loaded: TinyVLABPolicy
+Raw action: shape=torch.Size([4]), min=-0.9321, max=0.1271
+Preprocessed action: shape=torch.Size([1, 4]), min=-1.5675, max=-0.3089
+Model prediction: shape=torch.Size([1, 16, 4]), min=-1.0000, max=0.6836
+Final action: shape=torch.Size([1, 16, 4]), min=-0.5664, max=0.8047
+
+Prediction vs Real:
+  Real:     [0.015375935472548008, 0.12709705531597137, -0.9321286082267761, 0.0]
+  Predicted: [-0.0419921875, 0.2490234375, 0.205078125, 0.1875]
+  Max error:  1.1372
+  Mean error: 0.3760
+--- Checking: minivla ---
+Loading minivla from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_112_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/012000/pretrained_model

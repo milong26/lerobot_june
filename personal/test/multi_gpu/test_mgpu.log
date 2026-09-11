@@ -1,0 +1,268 @@
+nohup: 忽略输入
+
+================================================================================
+SmolVLA 多GPU安全测试
+================================================================================
+
+检测到 5 个GPU:
+  GPU 0: NVIDIA GeForce RTX 3090
+  GPU 1: NVIDIA GeForce RTX 3090
+  GPU 2: NVIDIA GeForce RTX 3090
+  GPU 3: NVIDIA GeForce RTX 3090
+  GPU 4: NVIDIA GeForce RTX 3090
+
+✓ Accelerate配置已创建: /data/zhonglinye/jun/lerobot/accelerate_tmp/accelerate_config.yaml
+
+✓ LD_LIBRARY_PATH 已设置为: /data/zhonglinye/application/miniconda3/envs/lb_server/lib:/lib:/lib:
+
+================================================================================
+开始多GPU安全测试
+使用GPU: 0,2,3
+进程数: 3
+超时时间: 300秒
+================================================================================
+
+执行命令:
+accelerate launch --config_file /data/zhonglinye/jun/lerobot/accelerate_tmp/accelerate_config.yaml -m lerobot.scripts.lerobot_train --dataset.repo_id=ep10/all --dataset.root=personal/work1/ep10_all --dataset.episodes=[0] --policy.path=lerobot/smolvla_base --policy.device=cuda --policy.push_to_hub=false --output_dir=outputs/test_smolvla_multigpu_safe_20260722_172910 --job_name=smolvla_multigpu_safety_test --steps=5 --batch_size=4 --eval_freq=-1 --log_freq=1 --save_freq=-1 --seed=42 --num_workers=0 --rename_map={"observation.images.side":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"} --wandb.enable=false
+
+环境变量 CUDA_VISIBLE_DEVICES=0,2,3
+
+INFO 2026-07-22 17:29:25 ot_train.py:213 {'batch_size': 4,
+ 'checkpoint_path': None,
+ 'cudnn_deterministic': False,
+ 'dataset': {'episodes': [0],
+             'image_transforms': {'enable': False,
+                                  'max_num_transforms': 3,
+                                  'random_order': False,
+                                  'tfs': {'affine': {'kwargs': {'degrees': [-5.0,
+                                                                            5.0],
+                                                                'translate': [0.05,
+                                                                              0.05]},
+                                                     'type': 'RandomAffine',
+                                                     'weight': 1.0},
+                                          'brightness': {'kwargs': {'brightness': [0.8,
+                                                                                   1.2]},
+                                                         'type': 'ColorJitter',
+                                                         'weight': 1.0},
+                                          'contrast': {'kwargs': {'contrast': [0.8,
+                                                                               1.2]},
+                                                       'type': 'ColorJitter',
+                                                       'weight': 1.0},
+                                          'hue': {'kwargs': {'hue': [-0.05,
+                                                                     0.05]},
+                                                  'type': 'ColorJitter',
+                                                  'weight': 1.0},
+                                          'saturation': {'kwargs': {'saturation': [0.5,
+                                                                                   1.5]},
+                                                         'type': 'ColorJitter',
+                                                         'weight': 1.0},
+                                          'sharpness': {'kwargs': {'sharpness': [0.5,
+                                                                                 1.5]},
+                                                        'type': 'SharpnessJitter',
+                                                        'weight': 1.0}}},
+             'repo_id': 'ep10/all',
+             'return_uint8': False,
+             'revision': None,
+             'root': 'personal/work1/ep10_all',
+             'streaming': False,
+             'use_imagenet_stats': True,
+             'video_backend': 'torchcodec'},
+ 'env': None,
+ 'eval': {'batch_size': 44,
+          'n_episodes': 50,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'eval_freq': -1,
+ 'job_name': 'smolvla_multigpu_safety_test',
+ 'log_freq': 1,
+ 'num_workers': 0,
+ 'optimizer': {'betas': [0.9, 0.95],
+               'eps': 1e-08,
+               'grad_clip_norm': 10.0,
+               'lr': 0.0001,
+               'type': 'adamw',
+               'weight_decay': 1e-10},
+ 'output_dir': 'outputs/test_smolvla_multigpu_safe_20260722_172910',
+ 'peft': None,
+ 'persistent_workers': True,
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': [3,
+                                                                        256,
+                                                                        256],
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': [3,
+                                                                        256,
+                                                                        256],
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': [3,
+                                                                        256,
+                                                                        256],
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': [6],
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': [0.9, 0.95],
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': [6],
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': 'lerobot/smolvla_base',
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': [512, 512],
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': True,
+            'type': 'smolvla',
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'prefetch_factor': 4,
+ 'remove_features': [],
+ 'rename_map': {'observation.images.side': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'resume': False,
+ 'reward_model': None,
+ 'sample_weighting': None,
+ 'save_checkpoint': True,
+ 'save_freq': -1,
+ 'scheduler': {'decay_lr': 2.5e-06,
+               'num_decay_steps': 30000,
+               'num_warmup_steps': 1000,
+               'peak_lr': 0.0001,
+               'type': 'cosine_decay_with_warmup'},
+ 'seed': 42,
+ 'steps': 5,
+ 'tolerance_s': 0.0001,
+ 'use_policy_training_preset': True,
+ 'wandb': {'add_tags': True,
+           'disable_artifact': False,
+           'enable': False,
+           'entity': None,
+           'mode': None,
+           'notes': None,
+           'project': 'lerobot',
+           'run_id': None}}
+INFO 2026-07-22 17:29:25 ot_train.py:221 Logs will be saved locally.
+INFO 2026-07-22 17:29:25 ot_train.py:237 Creating dataset
+INFO 2026-07-22 17:29:25 ot_train.py:271 Creating policy
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+`torch_dtype` is deprecated! Use `dtype` instead!
+
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+`torch_dtype` is deprecated! Use `dtype` instead!
+
+Loading weights:  30%|███       | 149/489 [00:00<00:00, 1454.89it/s]Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+`torch_dtype` is deprecated! Use `dtype` instead!
+
+Loading weights:  83%|████████▎ | 408/489 [00:00<00:00, 2112.93it/s]
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]
+Loading weights: 100%|██████████| 489/489 [00:00<00:00, 2162.97it/s]
+
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]
+Loading weights:  25%|██▍       | 121/489 [00:00<00:00, 1200.40it/s]
+Loading weights:  25%|██▍       | 122/489 [00:00<00:00, 1210.01it/s]
+Loading weights:  59%|█████▊    | 287/489 [00:00<00:00, 1469.12it/s]
+Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1868.71it/s]
+
+Loading weights:  62%|██████▏   | 303/489 [00:00<00:00, 1555.45it/s]
+Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1960.12it/s]
+Reducing the number of VLM layers to 16 ...
+Reducing the number of VLM layers to 16 ...
+Reducing the number of VLM layers to 16 ...
+INFO 2026-07-22 17:29:33 ot_train.py:349 Creating optimizer and scheduler
+INFO 2026-07-22 17:29:33 hedulers.py:111 Auto-scaling LR scheduler: num_training_steps (5) < num_decay_steps (30000). Scaling warmup: 1000 → 0, decay: 30000 → 5 (scale factor: 0.000)
+INFO 2026-07-22 17:29:33 ot_train.py:376 Output dir: outputs/test_smolvla_multigpu_safe_20260722_172910
+INFO 2026-07-22 17:29:33 ot_train.py:383 cfg.steps=5 (5)
+INFO 2026-07-22 17:29:33 ot_train.py:384 dataset.num_frames=464 (464)
+INFO 2026-07-22 17:29:33 ot_train.py:385 dataset.num_episodes=1
+INFO 2026-07-22 17:29:33 ot_train.py:388 Effective batch size: 4 x 3 = 12
+INFO 2026-07-22 17:29:33 ot_train.py:389 num_learnable_params=99880992 (100M)
+INFO 2026-07-22 17:29:33 ot_train.py:390 num_total_params=450046176 (450M)
+
+Training:   0%|          | 0/5 [00:00<?, ?step/s]INFO 2026-07-22 17:29:33 ot_train.py:460 Start offline training on a fixed dataset, with effective batch size: 12
+[rank0]:[W722 17:29:34.480890815 reducer.cpp:1502] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+[rank2]:[W722 17:29:34.483363475 reducer.cpp:1502] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+[rank1]:[W722 17:29:34.487817304 reducer.cpp:1502] Warning: find_unused_parameters=True was specified in DDP constructor, but did not find any unused parameters in the forward pass. This flag results in an extra traversal of the autograd graph every iteration,  which can adversely affect performance. If your model indeed never has any unused parameters in the forward pass, consider turning this flag off. Note that this warning may be a false positive if your model has flow control causing later iterations to have unused parameters. (function operator())
+
+Training:  20%|██        | 1/5 [00:01<00:06,  1.65s/step]INFO 2026-07-22 17:29:34 ot_train.py:497 step:1 smpl:12 ep:0 epch:0.03 loss:0.651 grdn:8.999 lr:9.1e-05 updt_s:0.907 data_s:0.738
+INFO 2026-07-22 17:29:34 ot_train.py:511 Checkpoint policy after step 1
+
+Training:  40%|████      | 2/5 [00:03<00:05,  1.84s/step]INFO 2026-07-22 17:29:36 ot_train.py:497 step:2 smpl:24 ep:0 epch:0.05 loss:0.323 grdn:17.342 lr:6.6e-05 updt_s:0.171 data_s:0.059
+INFO 2026-07-22 17:29:36 ot_train.py:511 Checkpoint policy after step 2
+
+Training:  60%|██████    | 3/5 [00:05<00:03,  1.88s/step]INFO 2026-07-22 17:29:38 ot_train.py:497 step:3 smpl:36 ep:0 epch:0.08 loss:0.563 grdn:12.018 lr:3.6e-05 updt_s:0.185 data_s:0.054
+INFO 2026-07-22 17:29:38 ot_train.py:511 Checkpoint policy after step 3
+
+Training:  80%|████████  | 4/5 [00:07<00:01,  1.91s/step]INFO 2026-07-22 17:29:40 ot_train.py:497 step:4 smpl:48 ep:0 epch:0.10 loss:0.861 grdn:18.747 lr:1.2e-05 updt_s:0.176 data_s:0.051
+INFO 2026-07-22 17:29:40 ot_train.py:511 Checkpoint policy after step 4
+
+Training: 100%|██████████| 5/5 [00:09<00:00,  1.91s/step]INFO 2026-07-22 17:29:42 ot_train.py:497 step:5 smpl:60 ep:0 epch:0.13 loss:1.095 grdn:13.934 lr:2.5e-06 updt_s:0.171 data_s:0.053
+INFO 2026-07-22 17:29:42 ot_train.py:511 Checkpoint policy after step 5
+
+Training: 100%|██████████| 5/5 [00:11<00:00,  2.23s/step]
+INFO 2026-07-22 17:29:44 ot_train.py:585 End of training
+
+================================================================================
+✅ 测试成功完成！
+================================================================================
+
+✓ 日志已保存到: outputs/test_smolvla_multigpu_safe_20260722_172910/test_log.txt
+
+🎉 多GPU环境验证通过！可以安全进行正式训练。
+
+正式训练命令示例:
+
+nohup env CUDA_VISIBLE_DEVICES=0,2,3 HF_HUB_OFFLINE=1 \
+accelerate launch \
+  --multi_gpu \
+  --num_processes=3 \
+  $(which lerobot-train) \
+  --dataset.repo_id=ep10/all \
+  --dataset.root=personal/work1/ep10_all \
+  --policy.path=lerobot/smolvla_base \
+  --output_dir=outputs/test_smolvla_ep10 \
+  --job_name=smolvla_ep10 \
+  --policy.device=cuda \
+  --policy.push_to_hub=false \
+  --wandb.enable=true \
+  --steps=1000 \
+  --batch_size=32 \
+  --rename_map='{"observation.images.side":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \
+  > train_log/test_smolvla_ep10.log 2>&1 &
+

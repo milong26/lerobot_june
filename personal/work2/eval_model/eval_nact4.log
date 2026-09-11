@@ -1,0 +1,150 @@
+WARNING 2026-09-11 15:42:06 figs/eval.py:69 No job name provided, using 'metaworld_tinyvla_s' as job name.
+INFO 2026-09-11 15:42:06 ot_eval.py:1146 {'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'disassemble-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 8,
+          'n_episodes': 50,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_tinyvla_s',
+ 'output_dir': PosixPath('outputs/eval/2026-09-11/15-42-06_metaworld_tinyvla_s'),
+ 'policy': {'action_dim': 4,
+            'action_head_type': 'droid_diffusion',
+            'chunk_size': 16,
+            'concat': 'token_cat',
+            'device': 'cuda',
+            'freeze_backbone': True,
+            'freeze_vision_tower': True,
+            'input_features': {'observation.images.top': {'shape': (3,
+                                                                    480,
+                                                                    480),
+                                                          'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.wrist': {'shape': (3,
+                                                                      480,
+                                                                      480),
+                                                            'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (4,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'lora_alpha': 256,
+            'lora_bias': 'none',
+            'lora_dropout': 0.05,
+            'lora_enable': True,
+            'lora_module': 'vit llm',
+            'lora_r': 64,
+            'model_name_or_path': 'lesjie/Llava-Pythia-400M',
+            'n_action_steps': 4,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MIN_MAX: 'MIN_MAX'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_inference_timesteps': 10,
+            'optimizer_betas': (0.9, 0.98),
+            'optimizer_eps': 1e-07,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0002,
+            'optimizer_non_lora_lr': 2e-05,
+            'optimizer_weight_decay': 0.0,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pretrain_image_size': 320,
+            'pretrained_path': PosixPath('personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 50000,
+            'scheduler_warmup_steps': 250,
+            'state_dim': 4,
+            'tags': None,
+            'tokenizer_max_length': 2048,
+            'use_amp': False,
+            'use_peft': False},
+ 'rename_map': {'observation.images.top': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-09-11 15:42:06 ot_eval.py:1157 Set CUDA_VISIBLE_DEVICES=0 for policy and environment subprocesses
+INFO 2026-09-11 15:42:06 ot_eval.py:1166 Output dir: outputs/eval/2026-09-11/15-42-06_metaworld_tinyvla_s
+INFO 2026-09-11 15:42:06 ot_eval.py:1168 Making environment (batch_size=8, async=True).
+INFO 2026-09-11 15:42:06 ot_eval.py:1176 Making policy.
+The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is ignored.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+[DEBUG] Loaded config from: personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'model_name_or_path', 'action_head_type', 'action_dim', 'state_dim', 'concat', 'lora_enable', 'lora_r', 'lora_alpha', 'lora_dropout', 'lora_module', 'lora_bias', 'freeze_vision_tower', 'freeze_backbone', 'tokenizer_max_length', 'num_inference_timesteps', 'pretrain_image_size', 'optimizer_lr', 'optimizer_non_lora_lr', 'optimizer_weight_decay', 'optimizer_betas', 'optimizer_eps', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: tinyvla_s
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'model_name_or_path', 'action_head_type', 'action_dim', 'state_dim', 'concat', 'lora_enable', 'lora_r', 'lora_alpha', 'lora_dropout', 'lora_module', 'lora_bias', 'freeze_vision_tower', 'freeze_backbone', 'tokenizer_max_length', 'num_inference_timesteps', 'pretrain_image_size', 'optimizer_lr', 'optimizer_non_lora_lr', 'optimizer_weight_decay', 'optimizer_betas', 'optimizer_eps', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr']
+[DEBUG] Removed invalid keys: set()
+Creating Meta-World envs | task_groups=['disassemble-v3'] | n_envs(per task)=8
+Building vec env | group=disassemble-v3 | task_id=0 | task=disassemble-v3
+[DEBUG factory] policy_cls: <class 'lerobot.policies.tinyvla.modeling_tinyvla.TinyVLAPolicy'>
+[DEBUG factory] policy_cls.__init__ signature: <function TinyVLAPolicy.__init__ at 0x7d88affa2c00>
+[DEBUG factory] kwargs keys: ['config', 'pretrained_name_or_path', 'revision']
+Loading weights:   0%|          | 0/470 [00:00<?, ?it/s]Loading weights: 100%|██████████| 470/470 [00:00<00:00, 4728.55it/s]
+[1mLlavaPythiaForCausalLM LOAD REPORT[0m from: lesjie/Llava-Pythia-400M
+Key              | Status     |  | 
+-----------------+------------+--+-
+embed_out.weight | UNEXPECTED |  | 
+
+Notes:
+- UNEXPECTED:	can be ignored when loading from different task/architecture; not ok if you expect identical arch.
+LlavaPythiaForCausalLM has generative capabilities, as `prepare_inputs_for_generation` is explicitly defined. However, it doesn't directly inherit from `GenerationMixin`. From 👉v4.50👈 onwards, `PreTrainedModel` will NOT inherit from `GenerationMixin`, and this model will lose the ability to call `generate` and other related functions.
+  - If you're using `trust_remote_code=True`, you can get rid of this warning by loading the model with an auto class. See https://huggingface.co/docs/transformers/en/model_doc/auto#auto-classes
+  - If you are the owner of the model architecture code, please modify your model class such that it inherits from `GenerationMixin` (after `PreTrainedModel`, otherwise you'll get an exception).
+  - If you are not the owner of the model architecture class, please contact the model code owner to update it.
+INFO 2026-09-11 15:42:11 _tinyvla.py:460 Loaded model weights from personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model/model.safetensors
+INFO 2026-09-11 15:42:11 _tinyvla.py:461 State dict contains 336 LoRA keys
+INFO 2026-09-11 15:42:11 _tinyvla.py:467 All keys matched successfully
+########################################
+########################################
+Adding LoRA adapters...
+trainable params: 31,457,280 || all params: 380,423,168 || trainable%: 8.2690
+number of parameters: 7.281920e+07
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]INFO 2026-09-11 15:42:12 bot_eval.py:744 TinyVLA diagnostic mode: action stats loaded from personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model. NOTE: Action scaling (_scale_tinyvla_actions) is DISABLED. Actions are only unnormalized by postprocessor and clipped to env.action_space bounds.
+Evaluating (0/50 episodes):   0%|          | 0/7 [00:00<?, ?it/s]`use_return_dict` is deprecated! Use `return_dict` instead!
+Evaluating (8/50 episodes, success: 0/8, rate: 0.0%):   0%|          | 0/7 [01:34<?, ?it/s]Evaluating (8/50 episodes, success: 0/8, rate: 0.0%):  14%|█▍        | 1/7 [01:34<09:27, 94.53s/it]Evaluating (16/50 episodes, success: 0/16, rate: 0.0%):  14%|█▍        | 1/7 [02:43<09:27, 94.53s/it]Evaluating (16/50 episodes, success: 0/16, rate: 0.0%):  29%|██▊       | 2/7 [02:43<06:37, 79.50s/it]Evaluating (24/50 episodes, success: 0/24, rate: 0.0%):  29%|██▊       | 2/7 [03:53<06:37, 79.50s/it]Evaluating (24/50 episodes, success: 0/24, rate: 0.0%):  43%|████▎     | 3/7 [03:53<05:00, 75.10s/it]Evaluating (32/50 episodes, success: 0/32, rate: 0.0%):  43%|████▎     | 3/7 [05:04<05:00, 75.10s/it]Evaluating (32/50 episodes, success: 0/32, rate: 0.0%):  57%|█████▋    | 4/7 [05:04<03:40, 73.37s/it]Evaluating (40/50 episodes, success: 0/40, rate: 0.0%):  57%|█████▋    | 4/7 [06:15<03:40, 73.37s/it]Evaluating (40/50 episodes, success: 0/40, rate: 0.0%):  71%|███████▏  | 5/7 [06:15<02:25, 72.73s/it]Evaluating (48/50 episodes, success: 0/48, rate: 0.0%):  71%|███████▏  | 5/7 [07:29<02:25, 72.73s/it]Evaluating (48/50 episodes, success: 0/48, rate: 0.0%):  86%|████████▌ | 6/7 [07:29<01:13, 73.01s/it]Evaluating (50/50 episodes, success: 0/56, rate: 0.0%):  86%|████████▌ | 6/7 [08:41<01:13, 73.01s/it]Evaluating (50/50 episodes, success: 0/56, rate: 0.0%): 100%|██████████| 7/7 [08:41<00:00, 72.68s/it]Evaluating (50/50 episodes, success: 0/56, rate: 0.0%): 100%|██████████| 7/7 [08:41<00:00, 74.46s/it]
+INFO 2026-09-11 15:50:53 ot_eval.py:1092 Saved per-episode eval results to outputs/eval/2026-09-11/15-42-06_metaworld_tinyvla_s/eval_results/disassemble-v3_0/eval_episode_results.json
+Task 1/1: disassemble-v3 (episodes: 50, success: 0):   0%|          | 0/1 [08:41<?, ?it/s]Task 1/1: disassemble-v3 (episodes: 50, success: 0): 100%|██████████| 1/1 [08:41<00:00, 521.27s/it]Task 1/1: disassemble-v3 (episodes: 50, success: 0): 100%|██████████| 1/1 [08:41<00:00, 521.95s/it]
+INFO 2026-09-11 15:50:53 ot_eval.py:1655 Saved per-episode eval results to outputs/eval/2026-09-11/15-42-06_metaworld_tinyvla_s/eval_results/eval_episode_results.json
+INFO 2026-09-11 15:50:53 ot_eval.py:1240 Overall Aggregated Metrics:
+INFO 2026-09-11 15:50:53 ot_eval.py:1241 {'avg_sum_reward': 196.6762911993854, 'avg_max_reward': 0.9977220046382065, 'pc_success': 0.0, 'pc_grasp_success': 0.0, 'success@5mm': None, 'coffee_success_5mm_count': None, 'n_episodes': 50, 'eval_s': 521.9501700401306, 'eval_ep_s': 10.439003410339355, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-09-11 15:50:53 ot_eval.py:1245 
+Aggregated Metrics for per_task:
+INFO 2026-09-11 15:50:53 ot_eval.py:1246 [{'task_group': 'disassemble-v3', 'task_id': 0, 'metrics': {'sum_rewards': [208.9701245363323, 103.91756674767504, 208.1249784477835, 207.61674627351277, 206.90920391891896, 210.51398511950407, 206.9488718762731, 184.62677298749261, 204.69699353308238, 203.24408904050077, 207.0195985840216, 211.2217388709736, 207.64430517897992, 159.83738386751472, 206.5286964141086, 208.58202407354756, 208.938208342295, 124.8001543686341, 210.20132732784674, 191.47941714158185, 210.2639567297714, 207.91382106421582, 199.8394279224268, 210.06515466512457, 208.7117041865232, 208.20071185145554, 208.9986217546422, 211.4416947176522, 183.22984927047634, 207.46456777558598, 208.17271177538828, 212.98953765085872, 207.63598086231778, 193.7605407670147, 143.24177852363175, 176.1787650871031, 207.09562279161347, 208.35038922265136, 207.27832568646417, 207.5751440083152, 191.15906725106714, 143.40674446191045, 211.58153671768144, 172.00886387510974, 210.88712376912815, 207.33866895711057, 207.83154899300303, 181.05437461093277, 191.1339388855385, 207.1821994839749], 'max_rewards': [1.0392627280265487, 0.5197087247369294, 1.037033633629462, 1.0376355994203292, 1.0372036932763942, 1.037268241664929, 1.0375570986535867, 0.9709241138948065, 1.0295703927008362, 1.0212819716991721, 1.0381355337602762, 1.0378542297663178, 1.038253750610555, 0.8060359079058705, 1.0193659554798153, 1.037178891214487, 1.0382007127110802, 1.3402084655283035, 1.0372224005138837, 0.941214846728494, 1.0371945334699864, 1.0295954915410297, 0.9990580798952117, 1.0371846667945075, 1.037331374417398, 1.0375556571727553, 1.0377509529897957, 1.0372668788172017, 0.9207109581241872, 1.0374569192674303, 1.038145393672113, 1.0405674186955396, 1.0371753208166807, 0.9514994497894731, 0.7230845292644542, 0.8794982302746274, 1.0372153575780254, 1.0371822980523333, 1.0403603996575017, 1.0372014970614452, 0.957120693911109, 0.7186353277133993, 1.037231577964226, 0.8626959342592718, 1.0371718656038458, 1.0127078563652832, 1.037165738250936, 0.9024907831255934, 0.9582056026534006, 1.2285225527894859], 'successes': [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False], 'grasp_successes': [False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False], 'video_paths': [], 'predicted_video_paths': [], 'success_at_5mm': [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None], 'obj_to_targets': [0.15533623099327087, 0.230468288064003, 0.15817545354366302, 0.17850902676582336, 0.1817932426929474, 0.21522803604602814, 0.2225925177335739, 0.17785969376564026, 0.24207919836044312, 0.23344925045967102, 0.20042486488819122, 0.15984119474887848, 0.16681034862995148, 0.15680457651615143, 0.20435121655464172, 0.1820298582315445, 0.23079870641231537, 0.20377658307552338, 0.21928773820400238, 0.18818800151348114, 0.18231259286403656, 0.24408866465091705, 0.2427116483449936, 0.24565249681472778, 0.21952156722545624, 0.1614171266555786, 0.2306792289018631, 0.18461430072784424, 0.22038540244102478, 0.2256939858198166, 0.24382728338241577, 0.21301361918449402, 0.20089314877986908, 0.17206422984600067, 0.2286001294851303, 0.20776024460792542, 0.1759675145149231, 0.17164289951324463, 0.24392357468605042, 0.18669353425502777, 0.24200177192687988, 0.19347985088825226, 0.2550264894962311, 0.16474299132823944, 0.23065058887004852, 0.18542461097240448, 0.17532391846179962, 0.21249593794345856, 0.2162414789199829, 0.231853187084198]}}]
+INFO 2026-09-11 15:50:53 ot_eval.py:1245 
+Aggregated Metrics for per_group:
+INFO 2026-09-11 15:50:53 ot_eval.py:1246 {'disassemble-v3': {'avg_sum_reward': 196.6762911993854, 'avg_max_reward': 0.9977220046382065, 'pc_success': 0.0, 'pc_grasp_success': 0.0, 'success@5mm': None, 'coffee_success_5mm_count': None, 'n_episodes': 50, 'video_paths': [], 'predicted_video_paths': []}}
+INFO 2026-09-11 15:50:53 ot_eval.py:1245 
+Aggregated Metrics for overall:
+INFO 2026-09-11 15:50:53 ot_eval.py:1246 {'avg_sum_reward': 196.6762911993854, 'avg_max_reward': 0.9977220046382065, 'pc_success': 0.0, 'pc_grasp_success': 0.0, 'success@5mm': None, 'coffee_success_5mm_count': None, 'n_episodes': 50, 'eval_s': 521.9501700401306, 'eval_ep_s': 10.439003410339355, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-09-11 15:50:53 ot_eval.py:1254 End of eval

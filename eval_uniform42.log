@@ -1,0 +1,130 @@
+nohup: 忽略输入
+WARNING 2026-08-26 09:00:37 figs/eval.py:69 No job name provided, using 'metaworld_smolvla' as job name.
+INFO 2026-08-26 09:00:37 bot_eval.py:850 {'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'agent_pos': {'shape': (4,),
+                                    'type': <FeatureType.STATE: 'STATE'>},
+                      'pixels/top': {'shape': (480, 480, 3),
+                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'pixels/wrist': {'shape': (480, 480, 3),
+                                       'type': <FeatureType.VISUAL: 'VISUAL'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'pixels/wrist': 'observation.images.wrist',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'metaworld-pick-place-v3',
+         'use_self_mw': False},
+ 'eval': {'batch_size': 32,
+          'n_episodes': 200,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_smolvla',
+ 'output_dir': PosixPath('outputs/eval/2026-08-26/09-00-37_metaworld_smolvla'),
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (6,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': (0.9, 0.95),
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': PosixPath('personal/work2/duibi/uniform_42/uniform_112_seed42/checkpoints/002000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': (512, 512),
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'rename_map': {'observation.pixels/top': 'observation.images.camera1',
+                'observation.pixels/wrist': 'observation.images.camera2'},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-08-26 09:00:37 bot_eval.py:859 Output dir: outputs/eval/2026-08-26/09-00-37_metaworld_smolvla
+INFO 2026-08-26 09:00:37 bot_eval.py:861 Making environment (batch_size=32, async=True).
+INFO 2026-08-26 09:00:40 tesupport.py:24 No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+INFO 2026-08-26 09:00:42 bot_eval.py:869 Making policy.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Creating Meta-World envs | task_groups=['metaworld-pick-place-v3'] | n_envs(per task)=32
+Building vec env | group=metaworld-pick-place-v3 | task_id=0 | task=metaworld-pick-place-v3
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:   0%|          | 1/489 [00:05<44:55,  5.52s/it]Loading weights:   0%|          | 2/489 [00:05<20:29,  2.52s/it]Loading weights:   1%|          | 3/489 [00:06<11:49,  1.46s/it]Loading weights:   3%|▎         | 15/489 [00:06<01:21,  5.78it/s]Loading weights:   4%|▍         | 20/489 [00:06<01:10,  6.69it/s]Loading weights:   5%|▍         | 24/489 [00:08<01:32,  5.04it/s]Loading weights:   7%|▋         | 32/489 [00:08<00:54,  8.42it/s]Loading weights:   7%|▋         | 36/489 [00:08<00:56,  8.00it/s]Loading weights:   8%|▊         | 39/489 [00:09<01:08,  6.61it/s]Loading weights:   8%|▊         | 41/489 [00:09<01:00,  7.41it/s]Loading weights:   9%|▉         | 43/489 [00:10<01:04,  6.95it/s]Loading weights:  10%|▉         | 47/489 [00:10<01:08,  6.45it/s]Loading weights:  10%|█         | 51/489 [00:11<01:00,  7.27it/s]Loading weights:  12%|█▏        | 57/489 [00:11<00:49,  8.74it/s]Loading weights:  12%|█▏        | 59/489 [00:12<00:56,  7.65it/s]Loading weights:  12%|█▏        | 60/489 [00:12<00:55,  7.78it/s]Loading weights:  13%|█▎        | 65/489 [00:12<00:34, 12.20it/s]Loading weights:  14%|█▍        | 68/489 [00:13<00:54,  7.67it/s]Loading weights:  14%|█▍        | 70/489 [00:13<00:47,  8.76it/s]Loading weights:  15%|█▌        | 74/489 [00:13<00:52,  7.95it/s]Loading weights:  16%|█▌        | 77/489 [00:13<00:45,  9.10it/s]Loading weights:  16%|█▌        | 79/489 [00:14<01:18,  5.25it/s]Loading weights:  18%|█▊        | 86/489 [00:15<00:46,  8.60it/s]Loading weights:  18%|█▊        | 88/489 [00:16<01:25,  4.67it/s]Loading weights:  19%|█▉        | 95/489 [00:17<01:07,  5.82it/s]Loading weights:  21%|██▏       | 104/489 [00:18<00:47,  8.07it/s]Loading weights:  22%|██▏       | 106/489 [00:18<00:48,  7.86it/s]Loading weights:  23%|██▎       | 114/489 [00:18<00:34, 10.75it/s]Loading weights:  24%|██▎       | 116/489 [00:18<00:33, 11.04it/s]Loading weights:  25%|██▌       | 123/489 [00:19<00:22, 16.05it/s]Loading weights:  26%|██▌       | 126/489 [00:19<00:25, 14.03it/s]Loading weights:  26%|██▋       | 129/489 [00:19<00:28, 12.66it/s]Loading weights:  27%|██▋       | 131/489 [00:20<00:49,  7.24it/s]Loading weights:  28%|██▊       | 136/489 [00:21<00:49,  7.12it/s]Loading weights:  28%|██▊       | 138/489 [00:21<00:45,  7.72it/s]Loading weights:  29%|██▉       | 141/489 [00:22<01:08,  5.09it/s]Loading weights:  30%|██▉       | 146/489 [00:22<00:53,  6.47it/s]Loading weights:  31%|███       | 150/489 [00:23<00:59,  5.67it/s]Loading weights:  32%|███▏      | 155/489 [00:24<00:45,  7.27it/s]Loading weights:  32%|███▏      | 158/489 [00:24<00:53,  6.16it/s]Loading weights:  33%|███▎      | 159/489 [00:25<00:51,  6.39it/s]Loading weights:  34%|███▍      | 167/489 [00:25<00:29, 10.97it/s]Loading weights:  35%|███▌      | 173/489 [00:25<00:26, 12.08it/s]Loading weights:  36%|███▌      | 177/489 [00:25<00:23, 13.48it/s]Loading weights:  37%|███▋      | 179/489 [00:26<00:35,  8.77it/s]Loading weights:  38%|███▊      | 185/489 [00:26<00:29, 10.48it/s]Loading weights:  39%|███▉      | 190/489 [00:27<00:27, 10.72it/s]Loading weights:  40%|███▉      | 195/489 [00:28<00:31,  9.43it/s]Loading weights:  42%|████▏     | 203/489 [00:28<00:25, 11.36it/s]Loading weights:  43%|████▎     | 210/489 [00:29<00:22, 12.55it/s]Loading weights:  43%|████▎     | 212/489 [00:29<00:28,  9.80it/s]Loading weights:  45%|████▍     | 218/489 [00:29<00:22, 12.24it/s]Loading weights:  45%|████▌     | 221/489 [00:30<00:31,  8.42it/s]Loading weights:  47%|████▋     | 232/489 [00:30<00:16, 15.46it/s]Loading weights:  48%|████▊     | 236/489 [00:30<00:14, 17.73it/s]Loading weights:  49%|████▉     | 240/489 [00:31<00:19, 13.01it/s]Loading weights:  50%|█████     | 246/489 [00:31<00:14, 17.04it/s]Loading weights:  52%|█████▏    | 252/489 [00:31<00:11, 19.86it/s]Loading weights:  52%|█████▏    | 256/489 [00:32<00:18, 12.73it/s]Loading weights:  53%|█████▎    | 259/489 [00:32<00:16, 13.87it/s]Loading weights:  54%|█████▍    | 266/489 [00:32<00:11, 18.70it/s]Loading weights:  55%|█████▌    | 269/489 [00:33<00:17, 12.59it/s]Loading weights:  56%|█████▌    | 273/489 [00:33<00:14, 14.70it/s]Loading weights:  56%|█████▋    | 276/489 [00:33<00:13, 15.29it/s]Loading weights:  57%|█████▋    | 279/489 [00:34<00:18, 11.63it/s]Loading weights:  58%|█████▊    | 284/489 [00:34<00:13, 14.98it/s]Loading weights:  59%|█████▊    | 287/489 [00:34<00:20,  9.93it/s]Loading weights:  60%|█████▉    | 291/489 [00:35<00:18, 10.60it/s]Loading weights:  60%|█████▉    | 293/489 [00:35<00:17, 11.22it/s]Loading weights:  62%|██████▏   | 301/489 [00:35<00:13, 13.75it/s]Loading weights:  65%|██████▍   | 317/489 [00:36<00:07, 24.55it/s]Loading weights:  65%|██████▌   | 320/489 [00:36<00:07, 23.89it/s]Loading weights:  68%|██████▊   | 333/489 [00:36<00:05, 29.03it/s]Loading weights:  71%|███████▏  | 349/489 [00:37<00:05, 27.50it/s]Loading weights:  72%|███████▏  | 352/489 [00:37<00:06, 22.41it/s]Loading weights:  75%|███████▍  | 365/489 [00:37<00:04, 25.04it/s]Loading weights:  75%|███████▌  | 368/489 [00:38<00:05, 22.98it/s]Loading weights:  77%|███████▋  | 375/489 [00:38<00:06, 16.97it/s]Loading weights:  78%|███████▊  | 383/489 [00:39<00:05, 20.78it/s]Loading weights:  80%|████████  | 392/489 [00:39<00:03, 27.98it/s]Loading weights:  81%|████████  | 397/489 [00:40<00:05, 15.47it/s]Loading weights:  83%|████████▎ | 405/489 [00:40<00:04, 19.39it/s]Loading weights:  84%|████████▍ | 413/489 [00:40<00:03, 20.77it/s]Loading weights:  88%|████████▊ | 429/489 [00:40<00:01, 30.84it/s]Loading weights:  89%|████████▉ | 437/489 [00:41<00:01, 32.30it/s]Loading weights:  91%|█████████▏| 447/489 [00:41<00:01, 35.56it/s]Loading weights:  95%|█████████▍| 463/489 [00:41<00:00, 36.13it/s]Loading weights:  98%|█████████▊| 477/489 [00:42<00:00, 30.28it/s]Loading weights: 100%|██████████| 489/489 [00:42<00:00, 11.56it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+INFO 2026-08-26 10:06:28 bot_eval.py:796 Saved per-episode eval results to outputs/eval/2026-08-26/09-00-37_metaworld_smolvla/eval_results/metaworld-pick-place-v3_0/eval_episode_results.json
+INFO 2026-08-26 10:06:34 ot_eval.py:1289 Saved per-episode eval results to outputs/eval/2026-08-26/09-00-37_metaworld_smolvla/eval_results/eval_episode_results.json
+INFO 2026-08-26 10:06:34 bot_eval.py:928 Overall Aggregated Metrics:
+INFO 2026-08-26 10:06:34 bot_eval.py:929 {'avg_sum_reward': 527.8176980551144, 'avg_max_reward': 3.1794552767422433, 'pc_success': 22.5, 'pc_grasp_success': 70.5, 'n_episodes': 200, 'eval_s': 3637.5009167194366, 'eval_ep_s': 18.187504599094392, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-08-26 10:06:34 bot_eval.py:933 
+Aggregated Metrics for per_task:
+INFO 2026-08-26 10:06:34 bot_eval.py:934 [{'task_group': 'metaworld-pick-place-v3', 'task_id': 0, 'metrics': {'sum_rewards': [6.753018472417735, 1184.9307180864123, 149.16857896446066, 5.424888619007419, 8.676015355177812, 1719.2030605367504, 1350.3959304730283, 48.20121657109446, 65.86629403201101, 133.88070753679955, 991.2524457840126, 1352.753462895937, 107.66281314125297, 78.19100375771964, 1617.109481466379, 2175.8297699605946, 71.45946303465179, 232.75759395679654, 31.853913758602012, 1511.1940288741225, 1511.300117736356, 7.785237543433759, 1085.3790021021305, 44.69963646402142, 5.367064578379976, 1049.630043776607, 7.3662313948266425, 1133.4972168358863, 8.905814701221859, 29.52567441851452, 62.402745037705046, 4.792947166085307, 9.510510075876013, 130.898232634506, 1159.5135629423091, 147.40942535135787, 5.626404386434764, 5.2185719614058925, 4.916208156415796, 1186.1060220739992, 2689.060870640302, 1418.9170833717224, 1130.0033463762716, 5.903777313060489, 1473.8383827839577, 1172.0611476947179, 6.768915075638743, 7.664852342981403, 8.586153590912009, 7.055982991644743, 1505.8122663535696, 4.845133441289931, 163.5292112869044, 1188.7225649510278, 14.256392607787063, 6.909803479269176, 1321.4298851651863, 1348.6079032100345, 1343.176126488458, 12.373702583086523, 3.8359965744200775, 290.80025870816274, 8.091181047363207, 1155.2153060359403, 1375.6549928535965, 932.2658347362492, 5.736631354720995, 115.5124788008905, 11.268561811377712, 6.192911878304756, 7.159405080582857, 10.105027604936788, 1532.8162576143131, 1632.8013472352043, 667.8035917719762, 97.75930317424721, 20.69918722578077, 149.57317308621788, 61.627258940686154, 93.39430541534159, 4.895196049567969, 1461.4531615855258, 7.58593181861637, 1918.1290354708394, 1483.105015504113, 7.512066773568679, 8.038281474243902, 55.61104273262332, 5.920206190353408, 274.89560814505285, 1143.266992305958, 123.960206060524, 6.84577609736748, 147.591804749366, 68.13859696482548, 7.775422276150928, 1489.0336516130658, 419.54162200440686, 42.93219940239724, 5.257516066844284, 1209.0886599567125, 4.412577512142889, 89.5335669199527, 8.531162887710455, 6.098084366886019, 1645.146128521559, 5.68950000751187, 21.488477797765306, 8.576095971230306, 1119.8590327846418, 4.337677894033799, 2089.769858880884, 767.6989135683946, 2730.3629267509195, 1243.0662873776082, 5.747407152327693, 8.623944407602696, 6.414936814075103, 1922.9674625608625, 1054.1300404769258, 6.852201163736063, 567.9448307245234, 1054.1219384669084, 9.192962385503693, 933.4477293315775, 36.70603171801049, 162.07032595804617, 44.90493855769535, 1637.2726858667768, 1186.7457810137398, 8.397937389276805, 5.810562320423968, 62.44162553686866, 9.049606493061123, 82.30771754390099, 1231.42375497239, 129.72852298401503, 5.771798453818396, 1070.470634983671, 4.733780054616756, 5.669829314481235, 7.096436856589274, 866.596652393752, 186.28709352334712, 124.652928501465, 1662.448246528233, 95.39518937154119, 1068.5704432747311, 18.973472402029934, 53.1353745876114, 2074.4665414947603, 99.05136447824415, 1239.0667944943634, 187.33179992753003, 1048.3522628113633, 754.3394873611572, 6.589655230019934, 1073.4779309666478, 985.7794782712257, 1839.2946470246798, 506.34463411731826, 1183.057244373649, 103.56602095914009, 1065.392743811403, 305.5082561822782, 39.655167023652005, 69.67214556168715, 5.8990389703729305, 4.8428769875134, 74.95834805516377, 6.648802859497226, 6.36166840943155, 194.31941251129106, 4.067002220855581, 6.325333030931219, 1011.9821630124494, 79.18977962935716, 1282.5487894318157, 55.11296002257156, 115.51178302582191, 103.97349590970066, 14.446080879164766, 7.52193596464301, 1054.1932677305174, 6.219497772013755, 7.405385799351368, 2187.877799528578, 6.011608761521147, 64.0254391252534, 7.016982418875417, 483.74601599152095, 1623.434871497423, 6.2074296207567805, 1051.8629417152567, 6.281156536179985, 118.77107517948595, 1207.1124514386763, 9.727568058203541, 2661.1176014569155, 1086.3681775023304], 'max_rewards': [0.12579925509281908, 3.3534538745880127, 6.308691096996762, 0.3703910547648956, 0.12311601229167048, 6.1198131083391525, 4.5408400250789756, 0.2425035413731003, 6.223162642002019, 6.257472221417499, 3.7281580991111847, 5.038307619219129, 6.2454979520631975, 6.043689840779532, 5.87774193862673, 5.8573808670043945, 6.562942028045654, 6.198014024002521, 0.2511661631863566, 6.449131450942274, 3.3714455593065096, 0.3047097111148624, 3.792931816919066, 0.2490110145451025, 0.1219237775622015, 3.7000892162323, 0.16402624307087058, 4.611924171447754, 0.13513675303261835, 0.21087937320415376, 0.418320472423711, 0.05241432607904526, 0.11727768472906076, 6.263318307325758, 3.650611639022827, 6.744484234807307, 0.12052207283779545, 0.10958480435025107, 0.12558957177886357, 5.889003502197134, 6.641458114306042, 3.2691056728363037, 2.6836791038513184, 0.11762129399942961, 6.536789360973007, 5.099582709294527, 0.11910255538808368, 0.11156305448872961, 0.2683740244373116, 0.12342049878229272, 5.788400650024414, 0.1303832328298982, 6.2539903347621575, 3.9209203720092773, 0.183272102047322, 0.34484035274312813, 6.1683329582756965, 3.837524099102557, 5.056551003676273, 0.3517920761297572, 0.10953495655173555, 3.761211981507324, 0.08708235401536055, 5.4315988056372975, 4.861514703175385, 3.8910019870329045, 0.09637683940525522, 6.715198516845703, 0.17454399990454605, 0.04202481003365352, 0.13949563553845598, 0.1803916350586608, 5.667698195714007, 4.516597320092558, 6.0098928200593695, 6.6324212973654815, 0.24718070909616804, 6.664052486419678, 2.0177897300673906, 6.70256233215332, 0.12390868216339879, 5.597773889651661, 0.11648038468122093, 6.198383744590581, 5.628446102142334, 0.13364772330068544, 0.13563756445211325, 3.3552642414436296, 0.08989890302878374, 3.5363564550559294, 3.764653283614906, 6.288531512888715, 0.12840401849787544, 6.272107654945045, 6.74354362487793, 0.1496075629319791, 3.507433852525906, 5.649330139160156, 3.365948306814865, 0.1154459065803263, 5.584661960601807, 0.12098356355764686, 6.273000552115154, 0.1331011133175074, 0.11542121393183559, 5.467763900756836, 0.11676262034617618, 0.17590519608018315, 0.11577445076539024, 5.561802427225406, 0.121833815656029, 6.284100109689729, 6.719213485717773, 6.405653329651889, 5.899738493873846, 0.11704708788378894, 0.17841682818837837, 0.26911785084752965, 4.497820448401456, 2.7552667405435396, 0.13327669487835117, 4.516879558563232, 4.853193189535179, 0.10828857093654118, 4.058840348968941, 1.8816808387941375, 6.714358941265363, 2.4362596455402925, 4.068665171866506, 3.5133070549882706, 0.10558864578255024, 0.12569298994739844, 6.594120025634766, 0.13599785981630577, 6.1252404881468845, 5.30877695524621, 6.711100133372132, 0.12197764971373035, 3.63861823388107, 0.10241571595962215, 0.10952381209028372, 0.3254991197196658, 4.516451939142715, 3.82464667714585, 6.169519415581922, 6.23759755062756, 6.572719097137451, 4.172881675602936, 0.2283316605629653, 6.531276124908942, 6.448163060360392, 6.275246967318595, 6.088505268096924, 4.757004626049905, 3.445082187652588, 2.5788639678751637, 0.15423117547189175, 3.0997609864694833, 3.332093500936387, 4.512821214640585, 4.6562752936100065, 3.4706444167690202, 6.288280852326053, 5.558224195149321, 5.209853478606143, 0.258865084147099, 6.177487485398359, 0.11131070791276847, 0.11514636587155341, 6.772598743438721, 0.11821093269528114, 0.11925917952550581, 6.785167887086929, 0.11471606739415974, 0.11505524921034499, 4.200663911171489, 6.2100238074044, 6.280914695191248, 6.511558989055114, 6.829311905493599, 4.081634687642622, 0.14110844194073116, 0.10863087848364278, 3.9139759768759257, 0.12287477397886089, 0.11290626600179057, 6.114391326904297, 0.10195946245565717, 6.714292526245117, 0.2746251803941474, 4.4775303465633085, 6.603620830157003, 0.10286610516718536, 3.9278595374099257, 0.2124558437513051, 4.326618804720874, 2.874518850702404, 0.118083406256514, 6.626684671548849, 3.5568089485168457], 'successes': [False, False, True, True, False, False, False, False, True, True, False, False, True, True, False, False, True, True, False, False, False, True, False, False, False, False, False, False, False, False, False, False, False, True, False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, False, False, True, False, False, False, True, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, True, False, True, False, True, False, False, False, False, False, False, False, False, False, False, False, True, False, True, True, False, False, False, True, False, False, False, True, False, False, False, False, False, False, False, False, False, True, False, False, False, False, True, False, False, False, False, False, False, False, False, True, False, False, False, False, False, True, False, True, False, True, False, False, False, False, True, False, False, True, False, True, False, False, True, False, True, False, False, False, False, False, False, False, False, False, False, True, False, False, False, True, False, False, True, False, False, True, False, False, False, True, True, True, True, False, False, False, False, False, False, False, False, True, True, False, False, False, False, True, False, False, False, False, False], 'grasp_successes': [False, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, False, True, True, False, False, True, True, True, False, False, False, True, True, True, True, False, True, True, False, False, True, False, True, False, True, True, False, True, True, True, True, True, False, True, False, True, True, True, False, True, True, False, False, True, True, True, True, True, True, True, True, True, False, True, False, True, True, False, False, True, False, True, True, True, False, True, True, False, True, True, True, False, True, False, True, False, False, True, False, False, False, True, False, True, True, True, True, False, False, True, True, True, False, True, True, False, True, True, True, True, True, True, False, False, True, False, True, True, True, False, True, False, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, False, False, True, False, False, True, False, False, True, True, True, True, True, True, False, False, True, False, False, True, False, True, True, True, True, False, True, True, True, True, False, True, True], 'video_paths': [], 'predicted_video_paths': []}}]
+INFO 2026-08-26 10:06:34 bot_eval.py:933 
+Aggregated Metrics for per_group:
+INFO 2026-08-26 10:06:34 bot_eval.py:934 {'metaworld-pick-place-v3': {'avg_sum_reward': 527.8176980551144, 'avg_max_reward': 3.1794552767422433, 'pc_success': 22.5, 'pc_grasp_success': 70.5, 'n_episodes': 200, 'video_paths': [], 'predicted_video_paths': []}}
+INFO 2026-08-26 10:06:34 bot_eval.py:933 
+Aggregated Metrics for overall:
+INFO 2026-08-26 10:06:34 bot_eval.py:934 {'avg_sum_reward': 527.8176980551144, 'avg_max_reward': 3.1794552767422433, 'pc_success': 22.5, 'pc_grasp_success': 70.5, 'n_episodes': 200, 'eval_s': 3637.5009167194366, 'eval_ep_s': 18.187504599094392, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-08-26 10:06:34 bot_eval.py:942 End of eval

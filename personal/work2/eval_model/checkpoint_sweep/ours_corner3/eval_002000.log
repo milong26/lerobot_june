@@ -1,0 +1,132 @@
+WARNING 2026-08-31 20:00:36 figs/eval.py:69 No job name provided, using 'metaworld_smolvla' as job name.
+INFO 2026-08-31 20:00:36 bot_eval.py:930 {'env': {'camera_name': 'corner3,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'pick-place-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 4,
+          'n_episodes': 50,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_smolvla',
+ 'output_dir': PosixPath('outputs/eval/2026-08-31/20-00-36_metaworld_smolvla'),
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (6,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': (0.9, 0.95),
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': PosixPath('personal/work2/duibi/ours_112_seed42_corner3/dynamicanchor_112_seed42/checkpoints/002000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': (512, 512),
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'rename_map': {},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-08-31 20:00:36 bot_eval.py:939 Output dir: outputs/eval/2026-08-31/20-00-36_metaworld_smolvla
+INFO 2026-08-31 20:00:36 bot_eval.py:941 Making environment (batch_size=4, async=True).
+INFO 2026-08-31 20:00:36 tesupport.py:24 No OpenGL_accelerate module loaded: No module named 'OpenGL_accelerate'
+INFO 2026-08-31 20:00:36 bot_eval.py:949 Making policy.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Creating Meta-World envs | task_groups=['pick-place-v3'] | n_envs(per task)=4
+Building vec env | group=pick-place-v3 | task_id=0 | task=pick-place-v3
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  12%|█▏        | 60/489 [00:00<00:00, 599.83it/s]Loading weights:  34%|███▍      | 167/489 [00:00<00:00, 856.31it/s]Loading weights:  55%|█████▌    | 271/489 [00:00<00:00, 938.85it/s]Loading weights:  98%|█████████▊| 477/489 [00:00<00:00, 1363.30it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1188.05it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/50 episodes):   0%|          | 0/13 [00:00<?, ?it/s]Evaluating (4/50 episodes, success: 1/4):   0%|          | 0/13 [01:46<?, ?it/s]Evaluating (4/50 episodes, success: 1/4):   8%|▊         | 1/13 [01:46<21:12, 106.06s/it]Evaluating (8/50 episodes, success: 1/4):   8%|▊         | 1/13 [03:11<21:12, 106.06s/it]Evaluating (8/50 episodes, success: 1/4):  15%|█▌        | 2/13 [03:11<17:16, 94.22s/it] Evaluating (12/50 episodes, success: 1/4):  15%|█▌        | 2/13 [04:36<17:16, 94.22s/it]Evaluating (12/50 episodes, success: 1/4):  23%|██▎       | 3/13 [04:36<14:59, 90.00s/it]Evaluating (16/50 episodes, success: 2/4):  23%|██▎       | 3/13 [05:53<14:59, 90.00s/it]Evaluating (16/50 episodes, success: 2/4):  31%|███       | 4/13 [05:53<12:40, 84.54s/it]Evaluating (20/50 episodes, success: 0/4):  31%|███       | 4/13 [06:45<12:40, 84.54s/it]Evaluating (20/50 episodes, success: 0/4):  38%|███▊      | 5/13 [06:45<09:44, 73.05s/it]Evaluating (24/50 episodes, success: 0/4):  38%|███▊      | 5/13 [08:04<09:44, 73.05s/it]Evaluating (24/50 episodes, success: 0/4):  46%|████▌     | 6/13 [08:04<08:45, 75.01s/it]Evaluating (28/50 episodes, success: 0/4):  46%|████▌     | 6/13 [09:32<08:45, 75.01s/it]Evaluating (28/50 episodes, success: 0/4):  54%|█████▍    | 7/13 [09:32<07:54, 79.09s/it]Evaluating (32/50 episodes, success: 1/4):  54%|█████▍    | 7/13 [10:58<07:54, 79.09s/it]Evaluating (32/50 episodes, success: 1/4):  62%|██████▏   | 8/13 [10:58<06:46, 81.32s/it]Evaluating (36/50 episodes, success: 1/4):  62%|██████▏   | 8/13 [12:23<06:46, 81.32s/it]Evaluating (36/50 episodes, success: 1/4):  69%|██████▉   | 9/13 [12:23<05:30, 82.52s/it]Evaluating (40/50 episodes, success: 3/4):  69%|██████▉   | 9/13 [13:49<05:30, 82.52s/it]Evaluating (40/50 episodes, success: 3/4):  77%|███████▋  | 10/13 [13:49<04:10, 83.48s/it]Evaluating (44/50 episodes, success: 0/4):  77%|███████▋  | 10/13 [15:13<04:10, 83.48s/it]Evaluating (44/50 episodes, success: 0/4):  85%|████████▍ | 11/13 [15:13<02:47, 83.90s/it]Evaluating (48/50 episodes, success: 1/4):  85%|████████▍ | 11/13 [16:41<02:47, 83.90s/it]Evaluating (48/50 episodes, success: 1/4):  92%|█████████▏| 12/13 [16:41<01:25, 85.03s/it]Evaluating (50/50 episodes, success: 0/4):  92%|█████████▏| 12/13 [18:06<01:25, 85.03s/it]Evaluating (50/50 episodes, success: 0/4): 100%|██████████| 13/13 [18:06<00:00, 85.08s/it]Evaluating (50/50 episodes, success: 0/4): 100%|██████████| 13/13 [18:06<00:00, 83.59s/it]
+INFO 2026-08-31 20:19:16 bot_eval.py:876 Saved per-episode eval results to outputs/eval/2026-08-31/20-00-36_metaworld_smolvla/eval_results/pick-place-v3_0/eval_episode_results.json
+Task 1/1: pick-place-v3 (episodes: 50, success: 11):   0%|          | 0/1 [18:06<?, ?it/s]Task 1/1: pick-place-v3 (episodes: 50, success: 11): 100%|██████████| 1/1 [18:06<00:00, 1086.69s/it]Task 1/1: pick-place-v3 (episodes: 50, success: 11): 100%|██████████| 1/1 [18:07<00:00, 1087.38s/it]
+INFO 2026-08-31 20:19:17 ot_eval.py:1380 Saved per-episode eval results to outputs/eval/2026-08-31/20-00-36_metaworld_smolvla/eval_results/eval_episode_results.json
+INFO 2026-08-31 20:19:17 bot_eval.py:999 Overall Aggregated Metrics:
+INFO 2026-08-31 20:19:17 ot_eval.py:1000 {'avg_sum_reward': 317.91879829097905, 'avg_max_reward': 2.5925023739415893, 'pc_success': 22.0, 'pc_grasp_success': 50.0, 'n_episodes': 50, 'eval_s': 1087.3880558013916, 'eval_ep_s': 21.747761187553404, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-08-31 20:19:17 ot_eval.py:1004 
+Aggregated Metrics for per_task:
+INFO 2026-08-31 20:19:17 ot_eval.py:1005 [{'task_group': 'pick-place-v3', 'task_id': 0, 'metrics': {'sum_rewards': [1473.689800576005, 37.018814047561115, 9.277855733770814, 45.950995980833376, 7.743131556478291, 7.044677675087276, 483.02115341638773, 155.23263780482162, 1236.8812141021274, 843.7258625236959, 7.183802087710259, 149.10091963368825, 118.36479567532322, 58.65106308145008, 8.74688267973848, 7.390081899492781, 7.68643646015167, 5.769749872208109, 6.901046877757004, 7.677038170276286, 1416.981242869263, 820.2208045309276, 1637.4011934880243, 9.328631693827404, 8.737216470819353, 18.583366107331624, 2018.6815430896534, 6.249559345601984, 6.922320281085801, 1824.0036900413852, 6.721398420846798, 90.66829688153638, 8.482946151950891, 92.57445405436647, 7.169619186762054, 8.677382033397215, 7.472214133987201, 137.79653911342413, 67.33054507461148, 67.79221926231223, 8.571246688587888, 9.741309345095976, 1100.694307005374, 5.984347399850697, 7.023415996750364, 80.28805441915759, 8.672234195930518, 8.56211033617939, 8.438786907615478, 1719.110960168731], 'max_rewards': [4.192718267059591, 0.17050350076697116, 0.15488089422031742, 6.467892646789551, 0.1192470536389871, 0.1257762690945129, 5.8623125203148385, 6.816567960535109, 4.1876062615416325, 6.718117713928223, 0.11862943798117966, 2.263891121754041, 6.260666141791122, 6.510132312774658, 0.1535129002242697, 0.1354803347731703, 0.12508277962074318, 0.12221645452729982, 0.11650415180747256, 0.051233526998807816, 5.190099544779485, 3.346601155880007, 6.104365073956513, 0.14348218578830055, 0.11251919431002266, 0.19872968011468942, 6.655058073119938, 0.09866468851796878, 0.1131386220348845, 6.657558107088974, 0.04557976025180539, 6.632941722869873, 0.11177031878748413, 6.781872272491455, 0.09972244912934698, 0.07717434307505061, 0.11673804985160564, 6.775419211495591, 6.641417026519775, 6.868777751922607, 0.0723120078167459, 0.18341207640102028, 2.5404007836041607, 0.12125345641773422, 0.12510797562671117, 6.372781934209782, 0.1165402693932359, 0.09699305604958133, 0.04321937094776542, 6.508496284484863], 'successes': [False, False, False, True, False, False, False, True, False, True, False, False, True, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, True, False, True, False, False, False, True, True, True, False, False, False, False, False, True, False, False, False, False], 'grasp_successes': [True, True, False, True, False, False, True, True, True, True, False, True, True, True, False, False, False, False, False, False, True, True, True, False, False, True, True, False, False, True, False, True, False, True, False, False, False, True, True, True, False, True, True, False, False, True, False, False, False, True], 'video_paths': [], 'predicted_video_paths': []}}]
+INFO 2026-08-31 20:19:17 ot_eval.py:1004 
+Aggregated Metrics for per_group:
+INFO 2026-08-31 20:19:17 ot_eval.py:1005 {'pick-place-v3': {'avg_sum_reward': 317.91879829097905, 'avg_max_reward': 2.5925023739415893, 'pc_success': 22.0, 'pc_grasp_success': 50.0, 'n_episodes': 50, 'video_paths': [], 'predicted_video_paths': []}}
+INFO 2026-08-31 20:19:17 ot_eval.py:1004 
+Aggregated Metrics for overall:
+INFO 2026-08-31 20:19:17 ot_eval.py:1005 {'avg_sum_reward': 317.91879829097905, 'avg_max_reward': 2.5925023739415893, 'pc_success': 22.0, 'pc_grasp_success': 50.0, 'n_episodes': 50, 'eval_s': 1087.3880558013916, 'eval_ep_s': 21.747761187553404, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-08-31 20:19:17 ot_eval.py:1013 End of eval

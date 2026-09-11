@@ -1,0 +1,27 @@
+Model: tinyvla_s
+Checkpoint: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Episode: 0
+Device: cuda
+Output: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/episode_results
+
+=== Evaluating tinyvla_s on episode 0 ===
+Loading tinyvla_s from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Policy loaded: TinyVLAPolicy, dtype=float32
+Episode has 83 frames
+  Processed 10/83 frames
+  Processed 20/83 frames
+  Processed 30/83 frames
+  Processed 40/83 frames
+  Processed 50/83 frames
+  Processed 60/83 frames
+  Processed 70/83 frames
+  Processed 80/83 frames
+
+--- Summary ---
+  Max error:  2.4860
+  Mean error: 1.0468
+  Median:     1.0981
+  Min error:  0.0322
+
+Results saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/episode_results/tinyvla_s_episode_0.json

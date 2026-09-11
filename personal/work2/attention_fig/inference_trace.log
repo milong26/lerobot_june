@@ -1,0 +1,382 @@
+nohup: 忽略输入
+`torch_dtype` is deprecated! Use `dtype` instead!
+# Processing camera group: corner,gripperPOV
+# Models: ['random_corner_16k', 'uniform_corner_16k', 'ours_corner_16k']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  27%|██▋       | 131/489 [00:00<00:00, 1236.75it/s]Loading weights:  52%|█████▏    | 255/489 [00:00<00:00, 998.09it/s] Loading weights:  77%|███████▋  | 375/489 [00:00<00:00, 1039.63it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1237.58it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  camera1 (top) shape=torch.Size([1, 1, 3, 480, 480]) dtype=torch.float32 min=0.0000 max=1.0000
+  camera2 (wrist) shape=torch.Size([1, 1, 3, 480, 480]) dtype=torch.float32 min=0.0000 max=1.0000
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+
+  Camera group 'corner,gripperPOV' reference input signature:
+    camera1_raw_sha256: 8ce905612bb9def9...
+    camera2_raw_sha256: b92683fbf52aa33a...
+    state_sha256: 376ad397079b3f96...
+    language_tokens_sha256: 8a7ef22f61b29941...
+    noise_sha256: 86e681c6f819505c...
+
+================================================================================
+Model: random_corner_16k
+Method: random
+Camera: corner,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_42_corner/random_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  12%|█▏        | 60/489 [00:00<00:00, 591.61it/s]Loading weights:  34%|███▍      | 168/489 [00:00<00:00, 864.25it/s]Loading weights:  60%|██████    | 295/489 [00:00<00:00, 1042.34it/s]Loading weights:  91%|█████████ | 443/489 [00:00<00:00, 1213.13it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1118.54it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for random_corner_16k
+    ✓ camera1 SHA256: 8ce905612bb9def9 | 8ce905612bb9def9
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/random_corner_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/random_corner_16k/seed_10042/metadata.json
+
+================================================================================
+Model: uniform_corner_16k
+Method: uniform
+Camera: corner,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/uniform_42_corner/uniform_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:   4%|▍         | 20/489 [00:00<00:02, 198.92it/s]Loading weights:  30%|██▉       | 145/489 [00:00<00:00, 813.84it/s]Loading weights:  48%|████▊     | 235/489 [00:00<00:00, 839.13it/s]Loading weights:  69%|██████▉   | 337/489 [00:00<00:00, 908.72it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 982.77it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for uniform_corner_16k
+    ✓ camera1 SHA256: 8ce905612bb9def9 | 8ce905612bb9def9
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/uniform_corner_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/uniform_corner_16k/seed_10042/metadata.json
+
+================================================================================
+Model: ours_corner_16k
+Method: ours
+Camera: corner,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_112_seed42_corner/dynamicanchor_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  22%|██▏       | 106/489 [00:00<00:00, 998.15it/s]Loading weights:  42%|████▏     | 206/489 [00:00<00:00, 961.60it/s]Loading weights:  62%|██████▏   | 303/489 [00:00<00:00, 956.80it/s]Loading weights:  96%|█████████▋| 471/489 [00:00<00:00, 1234.12it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1158.16it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for ours_corner_16k
+    ✓ camera1 SHA256: 8ce905612bb9def9 | 8ce905612bb9def9
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/ours_corner_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/ours_corner_16k/seed_10042/metadata.json
+# Processing camera group: corner2,gripperPOV
+# Models: ['random_corner2_16k', 'uniform_corner2_16k']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  20%|█▉        | 96/489 [00:00<00:00, 941.75it/s]Loading weights:  39%|███▉      | 191/489 [00:00<00:00, 925.88it/s]Loading weights:  58%|█████▊    | 284/489 [00:00<00:00, 924.92it/s]Loading weights:  95%|█████████▌| 466/489 [00:00<00:00, 1266.71it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1190.52it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  camera1 (top) shape=torch.Size([1, 1, 3, 480, 480]) dtype=torch.float32 min=0.0000 max=1.0000
+  camera2 (wrist) shape=torch.Size([1, 1, 3, 480, 480]) dtype=torch.float32 min=0.0000 max=1.0000
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+
+  Camera group 'corner2,gripperPOV' reference input signature:
+    camera1_raw_sha256: b88227b808c7313e...
+    camera2_raw_sha256: b92683fbf52aa33a...
+    state_sha256: 376ad397079b3f96...
+    language_tokens_sha256: 8a7ef22f61b29941...
+    noise_sha256: 86e681c6f819505c...
+
+================================================================================
+Model: random_corner2_16k
+Method: random
+Camera: corner2,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_42_corner2/random_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  18%|█▊        | 90/489 [00:00<00:00, 884.20it/s]Loading weights:  40%|████      | 196/489 [00:00<00:00, 982.19it/s]Loading weights:  60%|██████    | 295/489 [00:00<00:00, 965.01it/s]Loading weights:  93%|█████████▎| 457/489 [00:00<00:00, 1197.11it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1136.92it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for random_corner2_16k
+    ✓ camera1 SHA256: b88227b808c7313e | b88227b808c7313e
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/random_corner2_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/random_corner2_16k/seed_10042/metadata.json
+
+================================================================================
+Model: uniform_corner2_16k
+Method: uniform
+Camera: corner2,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/uniform_42_corner2/uniform_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  13%|█▎        | 64/489 [00:00<00:00, 633.15it/s]Loading weights:  35%|███▍      | 169/489 [00:00<00:00, 865.70it/s]Loading weights:  52%|█████▏    | 256/489 [00:00<00:00, 756.80it/s]Loading weights:  94%|█████████▍| 460/489 [00:00<00:00, 1218.90it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1095.75it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for uniform_corner2_16k
+    ✓ camera1 SHA256: b88227b808c7313e | b88227b808c7313e
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/uniform_corner2_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/uniform_corner2_16k/seed_10042/metadata.json
+# Processing camera group: corner3,gripperPOV
+# Models: ['random_corner3_16k', 'uniform_corner3_16k', 'ours_corner3_16k']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  16%|█▌        | 77/489 [00:00<00:00, 739.07it/s]Loading weights:  31%|███       | 151/489 [00:00<00:00, 649.43it/s]Loading weights:  44%|████▍     | 217/489 [00:00<00:00, 630.02it/s]Loading weights:  59%|█████▉    | 290/489 [00:00<00:00, 656.74it/s]Loading weights:  88%|████████▊ | 431/489 [00:00<00:00, 905.31it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 836.05it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  camera1 (top) shape=torch.Size([1, 1, 3, 480, 480]) dtype=torch.float32 min=0.0000 max=1.0000
+  camera2 (wrist) shape=torch.Size([1, 1, 3, 480, 480]) dtype=torch.float32 min=0.0000 max=1.0000
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+
+  Camera group 'corner3,gripperPOV' reference input signature:
+    camera1_raw_sha256: c063c5f68f381ba0...
+    camera2_raw_sha256: b92683fbf52aa33a...
+    state_sha256: 376ad397079b3f96...
+    language_tokens_sha256: 8a7ef22f61b29941...
+    noise_sha256: 86e681c6f819505c...
+
+================================================================================
+Model: random_corner3_16k
+Method: random
+Camera: corner3,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_42_corner3/random_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  18%|█▊        | 88/489 [00:00<00:00, 856.44it/s]Loading weights:  36%|███▌      | 174/489 [00:00<00:00, 831.78it/s]Loading weights:  53%|█████▎    | 258/489 [00:00<00:00, 785.96it/s]Loading weights:  80%|███████▉  | 389/489 [00:00<00:00, 965.33it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1023.54it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for random_corner3_16k
+    ✓ camera1 SHA256: c063c5f68f381ba0 | c063c5f68f381ba0
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/random_corner3_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/random_corner3_16k/seed_10042/metadata.json
+
+================================================================================
+Model: uniform_corner3_16k
+Method: uniform
+Camera: corner3,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/uniform_42_corner3/uniform_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  21%|██        | 103/489 [00:00<00:00, 1028.95it/s]Loading weights:  42%|████▏     | 206/489 [00:00<00:00, 1010.85it/s]Loading weights:  66%|██████▋   | 324/489 [00:00<00:00, 1057.26it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1251.02it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for uniform_corner3_16k
+    ✓ camera1 SHA256: c063c5f68f381ba0 | c063c5f68f381ba0
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/uniform_corner3_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/uniform_corner3_16k/seed_10042/metadata.json
+
+================================================================================
+Model: ours_corner3_16k
+Method: ours
+Camera: corner3,gripperPOV
+Path: /data/zhonglinye/jun/lerobot/personal/work2/duibi/ours_112_seed42_corner3/dynamicanchor_112_seed42/checkpoints/016000/pretrained_model
+Seed: 10042
+Mode: inference_trace
+Query mode: mean_suffix
+================================================================================
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  21%|██▏       | 104/489 [00:00<00:00, 1027.15it/s]Loading weights:  43%|████▎     | 209/489 [00:00<00:00, 1033.62it/s]Loading weights:  70%|██████▉   | 341/489 [00:00<00:00, 1158.10it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1244.89it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+  policy.config.image_features: {'observation.images.camera1': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera2': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256)), 'observation.images.camera3': PolicyFeature(type=<FeatureType.VISUAL: 'VISUAL'>, shape=(3, 256, 256))}
+  Task: pick-place-v3
+  Language instruction: Pick and place a puck to a goal
+  Using shared observation (cloned from camera group reference)
+  Language tensor shape: torch.Size([1, 48])
+  Non-padding language tokens: 10
+  policy.config.tokenizer_max_length: 48
+  policy.config.pad_language_to: max_length
+  Validating input consistency against reference...
+    Camera group input comparison for ours_corner3_16k
+    ✓ camera1 SHA256: c063c5f68f381ba0 | c063c5f68f381ba0
+    ✓ camera2 SHA256: b92683fbf52aa33a | b92683fbf52aa33a
+    ✓ state SHA256: 376ad397079b3f96 | 376ad397079b3f96
+    ✓ language SHA256: 8a7ef22f61b29941 | 8a7ef22f61b29941
+    ✓ noise SHA256: 86e681c6f819505c | 86e681c6f819505c
+  ✓ All inputs identical to reference
+  Running sanity check (sample_actions vs sample_actions_with_trace)...
+Sanity check result:
+  max_abs_diff: 0.0
+  mean_abs_diff: 0.0
+  passed: True
+  Sanity check: max_abs_diff=0.00e+00, mean_abs_diff=0.00e+00
+  Saved trace.pt to personal/work2/attention_fig/result_inference_trace/ours_corner3_16k/seed_10042/trace.pt
+  Captured 30 attention rows
+  Saved metadata.json to personal/work2/attention_fig/result_inference_trace/ours_corner3_16k/seed_10042/metadata.json
+Traceback (most recent call last):
+  File "/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/plot_attention.py", line 2790, in <module>
+    main()
+  File "/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/plot_attention.py", line 2730, in main
+    generate_inference_trace_summary_plots(
+  File "/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/plot_attention.py", line 2066, in generate_inference_trace_summary_plots
+    _plot_pairwise_action_divergence(
+  File "/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/plot_attention.py", line 2219, in _plot_pairwise_action_divergence
+    "v_t_l2": float(v_t_l2[step_idx]),
+              ^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: only length-1 arrays can be converted to Python scalars

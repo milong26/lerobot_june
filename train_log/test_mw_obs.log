@@ -1,0 +1,6 @@
+nohup: 忽略输入
+Traceback (most recent call last):
+  File "<string>", line 7, in <module>
+KeyError: 'metaworld'
+Creating Meta-World envs | task_groups=['pick-place-v3'] | n_envs(per task)=1
+Building vec env | group=pick-place-v3 | task_id=0 | task=pick-place-v3

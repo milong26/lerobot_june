@@ -1,0 +1,21 @@
+nohup: 忽略输入
+/data/zhonglinye/jun/lerobot/personal/work2/attention_fig/plot_attention.py:2143: UserWarning: No artists with labels found to put in legend.  Note that artists whose label start with an underscore are ignored when legend() is called with no argument.
+  ax.legend(fontsize=8)
+================================================================================
+Loading from cache (skip inference)
+================================================================================
+  WARNING: no cached attention rows found, using empty list
+  Loaded trace.pt for random_corner_16k (personal/work2/attention_fig/result_inference_trace/random_corner_16k/seed_10042/trace.pt)
+  Loaded trace.pt for uniform_corner_16k (personal/work2/attention_fig/result_inference_trace/uniform_corner_16k/seed_10042/trace.pt)
+  Loaded trace.pt for ours_corner_16k (personal/work2/attention_fig/result_inference_trace/ours_corner_16k/seed_10042/trace.pt)
+  Loaded trace.pt for random_corner2_16k (personal/work2/attention_fig/result_inference_trace/random_corner2_16k/seed_10042/trace.pt)
+  Loaded trace.pt for uniform_corner2_16k (personal/work2/attention_fig/result_inference_trace/uniform_corner2_16k/seed_10042/trace.pt)
+  Loaded trace.pt for random_corner3_16k (personal/work2/attention_fig/result_inference_trace/random_corner3_16k/seed_10042/trace.pt)
+  Loaded trace.pt for uniform_corner3_16k (personal/work2/attention_fig/result_inference_trace/uniform_corner3_16k/seed_10042/trace.pt)
+  Loaded trace.pt for ours_corner3_16k (personal/work2/attention_fig/result_inference_trace/ours_corner3_16k/seed_10042/trace.pt)
+
+  Loaded traces for 8 models from cache
+
+================================================================================
+DONE
+================================================================================

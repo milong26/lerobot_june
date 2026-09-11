@@ -1,0 +1,36 @@
+nohup: 忽略输入
+[2026年 09月 08日 星期二 00:46:06 CST] 开始等待1小时...
+[2026年 09月 08日 星期二 01:46:06 CST] 等待结束，开始监控GPU0显存使用情况...
+[2026年 09月 08日 星期二 01:46:06 CST] GPU0当前显存使用: 14538MiB
+[2026年 09月 08日 星期二 01:46:06 CST] GPU0显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 01:56:06 CST] GPU0当前显存使用: 14538MiB
+[2026年 09月 08日 星期二 01:56:06 CST] GPU0显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 02:06:06 CST] GPU0当前显存使用: 7534MiB
+[2026年 09月 08日 星期二 02:06:07 CST] GPU0显存仍大于等于5000MiB，10分钟后再次检查...
+[2026年 09月 08日 星期二 02:16:07 CST] GPU0当前显存使用: 4MiB
+[2026年 09月 08日 星期二 02:16:07 CST] GPU0显存使用(4MiB)已小于5000MiB，开始执行任务...
+
+CondaError: Run 'conda init' before 'conda activate'
+
+==============================================
+  TinyVLA Experiment Launcher
+==============================================
+  Policy Type:    tinyvla_b
+  Dataset:        disassemble-v3_corner
+  GPU:            0
+  Num Episodes:   300
+  Selection Mode: random
+  Tmux Session:   tinyvla_tinyvla_b_random_disassemble-v3_corner
+  Log File:       /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_random_disassemble-v3_corner/logs/experiment.log
+  Project Root:   /data/zhonglinye/jun/lerobot
+==============================================
+
+Starting experiment in tmux session: tinyvla_tinyvla_b_random_disassemble-v3_corner
+To attach: tmux attach -t tinyvla_tinyvla_b_random_disassemble-v3_corner
+To detach: Ctrl+B, then D
+To kill:   tmux kill-session -t tinyvla_tinyvla_b_random_disassemble-v3_corner
+
+Experiment started successfully.
+Monitor progress: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_b_random_disassemble-v3_corner/logs/experiment.log
+[2026年 09月 08日 星期二 02:16:08 CST] 任务执行完毕，停止监控。
+[2026年 09月 08日 星期二 02:16:08 CST] 监控脚本执行完成。

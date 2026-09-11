@@ -1,0 +1,227 @@
+[2026-09-09 10:19:00] INFO: ============================================================
+[2026-09-09 10:19:00] INFO: DemInf Episode Selection (Official State-Based, RSS 2025)
+[2026-09-09 10:19:00] INFO: ============================================================
+[2026-09-09 10:19:00] INFO: Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/coffee-button-v3_corner
+[2026-09-09 10:19:00] INFO: Output: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner
+[2026-09-09 10:19:00] INFO: Target episodes: 10
+[2026-09-09 10:19:00] INFO: Seed: 42
+[2026-09-09 10:19:00] INFO: Device: cuda
+[2026-09-09 10:19:00] INFO: 
+--- Step 1: Reading dataset structure ---
+[2026-09-09 10:19:00] INFO: Found observation.state with shape [4]
+[2026-09-09 10:19:00] INFO: Found observation.environment_state with shape [39]
+[2026-09-09 10:19:00] INFO: Found action with shape [4]
+[2026-09-09 10:19:00] INFO: Total episodes: 400
+[2026-09-09 10:19:00] INFO: Total frames: 17979
+[2026-09-09 10:19:00] INFO: 
+--- Step 2: Building verified global episode index ---
+[2026-09-09 10:19:08] INFO: LeRobotDataset: 400 episodes, 17979 frames
+[2026-09-09 10:19:12] INFO: Built episode index: 400 episodes with data
+[2026-09-09 10:19:12] INFO: Timesteps per episode: min=36, max=54, mean=44.9, total=17979
+[2026-09-09 10:19:17] INFO: Episode index validation passed: 400 episodes verified
+[2026-09-09 10:19:17] INFO: 
+--- Step 3: Dropping terminal transitions ---
+[2026-09-09 10:19:17] INFO: Dropped terminal transitions from 400 episodes
+[2026-09-09 10:19:17] INFO: 
+--- Step 4: Extracting state/action arrays ---
+[2026-09-09 10:19:22] INFO: Collected 17579 valid timesteps from 400 episodes
+[2026-09-09 10:19:22] INFO: State shape: (17579, 39), Action shape: (17579, 4)
+[2026-09-09 10:19:22] INFO: state_source=observation.environment_state, state_dim=39
+[2026-09-09 10:19:22] INFO: action_dim=4
+[2026-09-09 10:19:22] INFO: Total timesteps: 17579
+[2026-09-09 10:19:22] INFO: 
+--- Step 5: Checking action type ---
+[2026-09-09 10:19:22] INFO: Action axes are [x, y, z, gripper] - these are delta/relative control commands
+[2026-09-09 10:19:22] INFO: Relative action: True (evidence: Action axes are ['x', 'y', 'z', 'gripper'] - delta/relative control commands)
+[2026-09-09 10:19:22] INFO: 
+--- Step 6: Fitting DemInf normalization ---
+[2026-09-09 10:19:22] INFO: Action gripper range [-1.0000, -1.0000]; bounds normalization will always be applied (official NormalizationType.BOUNDS)
+[2026-09-09 10:19:22] INFO: Saved normalization stats to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/normalization_stats.npz
+[2026-09-09 10:19:22] INFO: Saved normalization stats JSON to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/normalization_stats.json
+[2026-09-09 10:19:22] INFO: Normalized states: mean~0.0513, std~0.6582
+[2026-09-09 10:19:22] INFO: Normalized actions: mean~0.0000, std~0.8660
+[2026-09-09 10:19:22] INFO: 
+--- Step 7: Training/loading state VAE ---
+[2026-09-09 10:19:22] INFO: Training state VAE: input_dim=39, latent_dim=12, beta=0.05, steps=50000, batch_size=256, lr=0.0001, weight_decay=0.0, total_samples=17579, starting from step=0
+[2026-09-09 10:19:24] INFO: [state] Step 1/50000 | Train: total=17.5141 recon=17.4986 kl=0.3092
+[2026-09-09 10:19:33] INFO: [state] Step 1000/50000 | Train: total=1.9130 recon=1.2229 kl=13.8018
+[2026-09-09 10:19:42] INFO: [state] Step 2000/50000 | Train: total=0.7489 recon=0.1861 kl=11.2545
+[2026-09-09 10:19:50] INFO: [state] Step 3000/50000 | Train: total=0.6812 recon=0.1555 kl=10.5147
+[2026-09-09 10:19:59] INFO: [state] Step 4000/50000 | Train: total=0.6505 recon=0.1396 kl=10.2185
+[2026-09-09 10:20:08] INFO: [state] Step 5000/50000 | Train: total=0.6376 recon=0.1325 kl=10.1028
+[2026-09-09 10:20:16] INFO: [state] Step 6000/50000 | Train: total=0.6268 recon=0.1255 kl=10.0273
+[2026-09-09 10:20:25] INFO: [state] Step 7000/50000 | Train: total=0.6193 recon=0.1202 kl=9.9806
+[2026-09-09 10:20:34] INFO: [state] Step 8000/50000 | Train: total=0.6151 recon=0.1175 kl=9.9528
+[2026-09-09 10:20:43] INFO: [state] Step 9000/50000 | Train: total=0.6118 recon=0.1155 kl=9.9268
+[2026-09-09 10:20:53] INFO: [state] Step 10000/50000 | Train: total=0.6091 recon=0.1141 kl=9.8995
+[2026-09-09 10:20:53] INFO: Saved state VAE checkpoint at step 10000
+[2026-09-09 10:21:05] INFO: [state] Step 11000/50000 | Train: total=0.6070 recon=0.1129 kl=9.8813
+[2026-09-09 10:21:13] INFO: [state] Step 12000/50000 | Train: total=0.6044 recon=0.1120 kl=9.8476
+[2026-09-09 10:21:23] INFO: [state] Step 13000/50000 | Train: total=0.6023 recon=0.1113 kl=9.8200
+[2026-09-09 10:21:31] INFO: [state] Step 14000/50000 | Train: total=0.6002 recon=0.1108 kl=9.7863
+[2026-09-09 10:21:40] INFO: [state] Step 15000/50000 | Train: total=0.5979 recon=0.1102 kl=9.7536
+[2026-09-09 10:21:48] INFO: [state] Step 16000/50000 | Train: total=0.5960 recon=0.1098 kl=9.7248
+[2026-09-09 10:21:57] INFO: [state] Step 17000/50000 | Train: total=0.5942 recon=0.1095 kl=9.6952
+[2026-09-09 10:22:06] INFO: [state] Step 18000/50000 | Train: total=0.5920 recon=0.1093 kl=9.6531
+[2026-09-09 10:22:15] INFO: [state] Step 19000/50000 | Train: total=0.5906 recon=0.1092 kl=9.6270
+[2026-09-09 10:22:26] INFO: [state] Step 20000/50000 | Train: total=0.5879 recon=0.1082 kl=9.5933
+[2026-09-09 10:22:26] INFO: Saved state VAE checkpoint at step 20000
+[2026-09-09 10:22:36] INFO: [state] Step 21000/50000 | Train: total=0.5858 recon=0.1079 kl=9.5571
+[2026-09-09 10:22:44] INFO: [state] Step 22000/50000 | Train: total=0.5842 recon=0.1074 kl=9.5365
+[2026-09-09 10:22:53] INFO: [state] Step 23000/50000 | Train: total=0.5828 recon=0.1070 kl=9.5161
+[2026-09-09 10:23:02] INFO: [state] Step 24000/50000 | Train: total=0.5812 recon=0.1065 kl=9.4950
+[2026-09-09 10:23:12] INFO: [state] Step 25000/50000 | Train: total=0.5801 recon=0.1062 kl=9.4777
+[2026-09-09 10:23:23] INFO: [state] Step 26000/50000 | Train: total=0.5791 recon=0.1058 kl=9.4658
+[2026-09-09 10:23:31] INFO: [state] Step 27000/50000 | Train: total=0.5781 recon=0.1053 kl=9.4562
+[2026-09-09 10:23:41] INFO: [state] Step 28000/50000 | Train: total=0.5771 recon=0.1047 kl=9.4482
+[2026-09-09 10:23:50] INFO: [state] Step 29000/50000 | Train: total=0.5763 recon=0.1044 kl=9.4389
+[2026-09-09 10:23:58] INFO: [state] Step 30000/50000 | Train: total=0.5759 recon=0.1040 kl=9.4384
+[2026-09-09 10:23:58] INFO: Saved state VAE checkpoint at step 30000
+[2026-09-09 10:24:07] INFO: [state] Step 31000/50000 | Train: total=0.5747 recon=0.1034 kl=9.4257
+[2026-09-09 10:24:15] INFO: [state] Step 32000/50000 | Train: total=0.5740 recon=0.1031 kl=9.4178
+[2026-09-09 10:24:24] INFO: [state] Step 33000/50000 | Train: total=0.5739 recon=0.1030 kl=9.4185
+[2026-09-09 10:24:32] INFO: [state] Step 34000/50000 | Train: total=0.5728 recon=0.1023 kl=9.4112
+[2026-09-09 10:24:41] INFO: [state] Step 35000/50000 | Train: total=0.5725 recon=0.1021 kl=9.4082
+[2026-09-09 10:24:49] INFO: [state] Step 36000/50000 | Train: total=0.5718 recon=0.1018 kl=9.4008
+[2026-09-09 10:24:58] INFO: [state] Step 37000/50000 | Train: total=0.5715 recon=0.1016 kl=9.3985
+[2026-09-09 10:25:06] INFO: [state] Step 38000/50000 | Train: total=0.5709 recon=0.1013 kl=9.3920
+[2026-09-09 10:25:14] INFO: [state] Step 39000/50000 | Train: total=0.5705 recon=0.1011 kl=9.3870
+[2026-09-09 10:25:23] INFO: [state] Step 40000/50000 | Train: total=0.5702 recon=0.1009 kl=9.3862
+[2026-09-09 10:25:23] INFO: Saved state VAE checkpoint at step 40000
+[2026-09-09 10:25:33] INFO: [state] Step 41000/50000 | Train: total=0.5699 recon=0.1003 kl=9.3924
+[2026-09-09 10:25:41] INFO: [state] Step 42000/50000 | Train: total=0.5693 recon=0.1003 kl=9.3791
+[2026-09-09 10:25:50] INFO: [state] Step 43000/50000 | Train: total=0.5689 recon=0.0999 kl=9.3801
+[2026-09-09 10:25:58] INFO: [state] Step 44000/50000 | Train: total=0.5687 recon=0.1000 kl=9.3752
+[2026-09-09 10:26:06] INFO: [state] Step 45000/50000 | Train: total=0.5682 recon=0.0996 kl=9.3734
+[2026-09-09 10:26:14] INFO: [state] Step 46000/50000 | Train: total=0.5680 recon=0.0994 kl=9.3709
+[2026-09-09 10:26:22] INFO: [state] Step 47000/50000 | Train: total=0.5679 recon=0.0993 kl=9.3725
+[2026-09-09 10:26:31] INFO: [state] Step 48000/50000 | Train: total=0.5673 recon=0.0989 kl=9.3675
+[2026-09-09 10:26:40] INFO: [state] Step 49000/50000 | Train: total=0.5675 recon=0.0991 kl=9.3665
+[2026-09-09 10:26:48] INFO: [state] Step 50000/50000 | Train: total=0.5668 recon=0.0989 kl=9.3572
+[2026-09-09 10:26:48] INFO: Saved state VAE checkpoint at step 50000
+[2026-09-09 10:26:49] INFO: Saved final state VAE checkpoint at step 50000
+[2026-09-09 10:26:49] INFO: state VAE training complete at step 50000
+[2026-09-09 10:26:49] INFO: State VAE trained: final checkpoint at /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/checkpoints/state_vae.pt
+[2026-09-09 10:26:49] INFO: 
+--- Step 8: Training/loading action VAE ---
+[2026-09-09 10:26:49] INFO: Training action VAE: input_dim=4, latent_dim=6, beta=0.05, steps=50000, batch_size=256, lr=0.0001, weight_decay=0.0, total_samples=17579, starting from step=0
+[2026-09-09 10:26:49] INFO: [action] Step 1/50000 | Train: total=3.3455 recon=3.3441 kl=0.0291
+[2026-09-09 10:26:57] INFO: [action] Step 1000/50000 | Train: total=0.4438 recon=0.2664 kl=3.5486
+[2026-09-09 10:27:08] INFO: [action] Step 2000/50000 | Train: total=0.2278 recon=0.0670 kl=3.2150
+[2026-09-09 10:27:17] INFO: [action] Step 3000/50000 | Train: total=0.2062 recon=0.0578 kl=2.9698
+[2026-09-09 10:27:25] INFO: [action] Step 4000/50000 | Train: total=0.1936 recon=0.0512 kl=2.8481
+[2026-09-09 10:27:35] INFO: [action] Step 5000/50000 | Train: total=0.1886 recon=0.0489 kl=2.7948
+[2026-09-09 10:27:46] INFO: [action] Step 6000/50000 | Train: total=0.1851 recon=0.0472 kl=2.7591
+[2026-09-09 10:27:54] INFO: [action] Step 7000/50000 | Train: total=0.1831 recon=0.0462 kl=2.7369
+[2026-09-09 10:28:02] INFO: [action] Step 8000/50000 | Train: total=0.1813 recon=0.0455 kl=2.7170
+[2026-09-09 10:28:10] INFO: [action] Step 9000/50000 | Train: total=0.1803 recon=0.0448 kl=2.7091
+[2026-09-09 10:28:18] INFO: [action] Step 10000/50000 | Train: total=0.1793 recon=0.0443 kl=2.7014
+[2026-09-09 10:28:18] INFO: Saved action VAE checkpoint at step 10000
+[2026-09-09 10:28:26] INFO: [action] Step 11000/50000 | Train: total=0.1787 recon=0.0441 kl=2.6908
+[2026-09-09 10:28:35] INFO: [action] Step 12000/50000 | Train: total=0.1781 recon=0.0437 kl=2.6875
+[2026-09-09 10:28:43] INFO: [action] Step 13000/50000 | Train: total=0.1778 recon=0.0434 kl=2.6872
+[2026-09-09 10:28:51] INFO: [action] Step 14000/50000 | Train: total=0.1771 recon=0.0430 kl=2.6819
+[2026-09-09 10:29:00] INFO: [action] Step 15000/50000 | Train: total=0.1766 recon=0.0427 kl=2.6779
+[2026-09-09 10:29:09] INFO: [action] Step 16000/50000 | Train: total=0.1767 recon=0.0428 kl=2.6789
+[2026-09-09 10:29:17] INFO: [action] Step 17000/50000 | Train: total=0.1763 recon=0.0424 kl=2.6777
+[2026-09-09 10:29:25] INFO: [action] Step 18000/50000 | Train: total=0.1765 recon=0.0426 kl=2.6786
+[2026-09-09 10:29:35] INFO: [action] Step 19000/50000 | Train: total=0.1763 recon=0.0423 kl=2.6800
+[2026-09-09 10:29:43] INFO: [action] Step 20000/50000 | Train: total=0.1758 recon=0.0422 kl=2.6722
+[2026-09-09 10:29:43] INFO: Saved action VAE checkpoint at step 20000
+[2026-09-09 10:29:52] INFO: [action] Step 21000/50000 | Train: total=0.1757 recon=0.0420 kl=2.6741
+[2026-09-09 10:30:02] INFO: [action] Step 22000/50000 | Train: total=0.1753 recon=0.0419 kl=2.6689
+[2026-09-09 10:30:11] INFO: [action] Step 23000/50000 | Train: total=0.1754 recon=0.0418 kl=2.6718
+[2026-09-09 10:30:19] INFO: [action] Step 24000/50000 | Train: total=0.1752 recon=0.0418 kl=2.6685
+[2026-09-09 10:30:27] INFO: [action] Step 25000/50000 | Train: total=0.1754 recon=0.0415 kl=2.6765
+[2026-09-09 10:30:36] INFO: [action] Step 26000/50000 | Train: total=0.1754 recon=0.0417 kl=2.6747
+[2026-09-09 10:30:44] INFO: [action] Step 27000/50000 | Train: total=0.1751 recon=0.0416 kl=2.6712
+[2026-09-09 10:30:53] INFO: [action] Step 28000/50000 | Train: total=0.1751 recon=0.0415 kl=2.6708
+[2026-09-09 10:31:02] INFO: [action] Step 29000/50000 | Train: total=0.1751 recon=0.0413 kl=2.6753
+[2026-09-09 10:31:10] INFO: [action] Step 30000/50000 | Train: total=0.1747 recon=0.0412 kl=2.6699
+[2026-09-09 10:31:10] INFO: Saved action VAE checkpoint at step 30000
+[2026-09-09 10:31:19] INFO: [action] Step 31000/50000 | Train: total=0.1747 recon=0.0412 kl=2.6698
+[2026-09-09 10:31:27] INFO: [action] Step 32000/50000 | Train: total=0.1744 recon=0.0410 kl=2.6676
+[2026-09-09 10:31:36] INFO: [action] Step 33000/50000 | Train: total=0.1750 recon=0.0412 kl=2.6772
+[2026-09-09 10:31:44] INFO: [action] Step 34000/50000 | Train: total=0.1747 recon=0.0412 kl=2.6683
+[2026-09-09 10:31:53] INFO: [action] Step 35000/50000 | Train: total=0.1746 recon=0.0408 kl=2.6759
+[2026-09-09 10:32:04] INFO: [action] Step 36000/50000 | Train: total=0.1746 recon=0.0410 kl=2.6710
+[2026-09-09 10:32:15] INFO: [action] Step 37000/50000 | Train: total=0.1745 recon=0.0408 kl=2.6722
+[2026-09-09 10:32:22] INFO: [action] Step 38000/50000 | Train: total=0.1745 recon=0.0409 kl=2.6732
+[2026-09-09 10:32:31] INFO: [action] Step 39000/50000 | Train: total=0.1746 recon=0.0410 kl=2.6728
+[2026-09-09 10:32:40] INFO: [action] Step 40000/50000 | Train: total=0.1743 recon=0.0407 kl=2.6707
+[2026-09-09 10:32:40] INFO: Saved action VAE checkpoint at step 40000
+[2026-09-09 10:32:49] INFO: [action] Step 41000/50000 | Train: total=0.1745 recon=0.0409 kl=2.6720
+[2026-09-09 10:32:57] INFO: [action] Step 42000/50000 | Train: total=0.1743 recon=0.0408 kl=2.6693
+[2026-09-09 10:33:05] INFO: [action] Step 43000/50000 | Train: total=0.1746 recon=0.0406 kl=2.6793
+[2026-09-09 10:33:13] INFO: [action] Step 44000/50000 | Train: total=0.1740 recon=0.0407 kl=2.6658
+[2026-09-09 10:33:22] INFO: [action] Step 45000/50000 | Train: total=0.1741 recon=0.0407 kl=2.6681
+[2026-09-09 10:33:31] INFO: [action] Step 46000/50000 | Train: total=0.1740 recon=0.0405 kl=2.6705
+[2026-09-09 10:33:39] INFO: [action] Step 47000/50000 | Train: total=0.1743 recon=0.0407 kl=2.6722
+[2026-09-09 10:33:47] INFO: [action] Step 48000/50000 | Train: total=0.1739 recon=0.0404 kl=2.6702
+[2026-09-09 10:33:56] INFO: [action] Step 49000/50000 | Train: total=0.1740 recon=0.0401 kl=2.6770
+[2026-09-09 10:34:05] INFO: [action] Step 50000/50000 | Train: total=0.1743 recon=0.0407 kl=2.6715
+[2026-09-09 10:34:05] INFO: Saved action VAE checkpoint at step 50000
+[2026-09-09 10:34:07] INFO: Saved final action VAE checkpoint at step 50000
+[2026-09-09 10:34:07] INFO: action VAE training complete at step 50000
+[2026-09-09 10:34:07] INFO: Action VAE trained: final checkpoint at /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/checkpoints/action_vae.pt
+[2026-09-09 10:34:07] INFO: 
+--- Step 9: Building latent cache fingerprint ---
+[2026-09-09 10:34:07] INFO: Git commit: 45df540a28308e80979d7c57cfec0109af71ff29
+[2026-09-09 10:34:07] INFO: Cache fingerprint: 37532a98aba38c7e9b25fbc0b3d98d67
+[2026-09-09 10:34:07] INFO: 
+--- Step 10: Checking latent cache ---
+[2026-09-09 10:34:07] INFO: 
+--- Step 11: Encoding all timesteps ---
+[2026-09-09 10:34:07] INFO: Encoded 17579 timesteps: z_s=(17579, 12), z_a=(17579, 6)
+[2026-09-09 10:34:07] INFO: Latent source: freshly encoded | z_s=(17579, 12), z_a=(17579, 6)
+[2026-09-09 10:34:07] INFO: Saved latent cache to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/latents.npz with manifest /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/latents_manifest.json
+[2026-09-09 10:34:07] INFO: 
+--- Step 12-16: Official quality inference scoring ---
+[2026-09-09 10:34:07] INFO: Built 68 quality batches: repeat=4, batch_size=1024, total_transitions=17579, effective_discard_fraction=0.0
+[2026-09-09 10:34:13] INFO: Score clipping: p1.0=-8.7145, p99.0=-5.3396
+[2026-09-09 10:34:15] INFO: Episode scores: 400 episodes, total timestep scores=69632, score range=[-0.7753, 0.4937]
+[2026-09-09 10:34:16] INFO: Saved episode scores to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/episode_scores.csv
+[2026-09-09 10:34:16] INFO: Saved timestep scores to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/timestep_scores.csv
+[2026-09-09 10:34:16] INFO: 
+--- Step 17: Selecting top episodes ---
+[2026-09-09 10:34:18] INFO: Selected 10 episodes: [29, 37, 38, 60, 170, 186, 217, 239, 370, 373]...[186, 217, 239, 370, 373]
+[2026-09-09 10:34:18] INFO: 
+--- Step 18: Saving outputs ---
+[2026-09-09 10:34:18] INFO: Saved subset JSON to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/subsets/deminf_10_seed42.json
+[2026-09-09 10:34:18] INFO: Saved score rankings to /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/score_rankings.csv
+[2026-09-09 10:34:18] INFO: 
+============================================================
+[2026-09-09 10:34:18] INFO: DemInf Selection Summary
+[2026-09-09 10:34:18] INFO: ============================================================
+[2026-09-09 10:34:18] INFO: Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/coffee-button-v3_corner
+[2026-09-09 10:34:18] INFO: Total episodes: 400
+[2026-09-09 10:34:18] INFO: Total timesteps: 17579
+[2026-09-09 10:34:18] INFO: State source: observation.environment_state
+[2026-09-09 10:34:18] INFO: State dimension: 39
+[2026-09-09 10:34:18] INFO: Action dimension: 4
+[2026-09-09 10:34:18] INFO: State latent dim: 12
+[2026-09-09 10:34:18] INFO: Action latent dim: 6
+[2026-09-09 10:34:18] INFO: VAE steps: 50000
+[2026-09-09 10:34:18] INFO: VAE lr: 0.0001
+[2026-09-09 10:34:18] INFO: VAE beta (state/action): 0.05/0.05
+[2026-09-09 10:34:18] INFO: KSG ks: (5, 6, 7)
+[2026-09-09 10:34:18] INFO: Quality batch size: 1024
+[2026-09-09 10:34:18] INFO: Quality repeat: 4
+[2026-09-09 10:34:18] INFO: Effective discard fraction: 0.0
+[2026-09-09 10:34:18] INFO: Relative action: True
+[2026-09-09 10:34:18] INFO: Latent source: freshly encoded
+[2026-09-09 10:34:18] INFO: Git commit: 45df540a28308e80979d7c57cfec0109af71ff29
+[2026-09-09 10:34:18] INFO: Cache fingerprint: 37532a98aba38c7e9b25fbc0b3d98d67
+[2026-09-09 10:34:18] INFO: Selected episodes: 10
+[2026-09-09 10:34:18] INFO: Top episode indices: [29, 37, 38, 60, 170, 186, 217, 239, 370, 373]...
+[2026-09-09 10:34:18] INFO: 
+Output files:
+[2026-09-09 10:34:18] INFO:   Subset JSON: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/subsets/deminf_10_seed42.json
+[2026-09-09 10:34:18] INFO:   Episode scores: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/episode_scores.csv
+[2026-09-09 10:34:18] INFO:   Timestep scores: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/raw_timestep_scores.csv
+[2026-09-09 10:34:18] INFO:   Score rankings: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/score_rankings.csv
+[2026-09-09 10:34:18] INFO:   Config: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/config.json
+[2026-09-09 10:34:18] INFO:   Normalization stats: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/normalization_stats.npz
+[2026-09-09 10:34:18] INFO:   Latent cache: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/latents.npz
+[2026-09-09 10:34:18] INFO:   VAE checkpoints: /data/zhonglinye/jun/lerobot/personal/work2/deminf_results/coffee-button-v3_corner/checkpoints/
+[2026-09-09 10:34:18] INFO: ============================================================

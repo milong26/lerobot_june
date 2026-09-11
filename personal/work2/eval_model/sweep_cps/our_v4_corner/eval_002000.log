@@ -1,0 +1,263 @@
+WARNING 2026-09-02 21:26:05 figs/eval.py:69 No job name provided, using 'metaworld_smolvla' as job name.
+INFO 2026-09-02 21:26:05 bot_eval.py:935 {'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'pick-place-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 4,
+          'n_episodes': 200,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_smolvla',
+ 'output_dir': PosixPath('outputs/eval/2026-09-02/21-26-05_metaworld_smolvla'),
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (6,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': (0.9, 0.95),
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': PosixPath('personal/work2/duibi/ours_v4_112_seed42_corner/dynamicgrid_v4_112_seed42/checkpoints/002000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': (512, 512),
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'rename_map': {},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-09-02 21:26:06 bot_eval.py:944 Output dir: outputs/eval/2026-09-02/21-26-05_metaworld_smolvla
+INFO 2026-09-02 21:26:06 bot_eval.py:946 Making environment (batch_size=4, async=True).
+INFO 2026-09-02 21:26:06 bot_eval.py:954 Making policy.
+`torch_dtype` is deprecated! Use `dtype` instead!
+Creating Meta-World envs | task_groups=['pick-place-v3'] | n_envs(per task)=4
+Building vec env | group=pick-place-v3 | task_id=0 | task=pick-place-v3
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  24%|██▎       | 115/489 [00:00<00:00, 1145.98it/s]Loading weights:  47%|████▋     | 230/489 [00:00<00:00, 1079.08it/s]Loading weights:  78%|███████▊  | 383/489 [00:00<00:00, 1275.59it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1349.06it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/200 episodes):   0%|          | 0/50 [00:00<?, ?it/s]/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:615: UserWarning: [33mWARN: Calling `close` while waiting for a pending call to `step` to complete.[0m
+  logger.warn(
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Received the following error from Worker-2 - Shutting it down[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 772, in _async_worker
+    ) = env.step(data)
+        ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 373, in step
+    observation = self._format_raw_obs(raw_obs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 245, in _format_raw_obs
+    image = self._render_camera(self._env, self.camera_names[0])
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 237, in _render_camera
+    image = env.render()
+            ^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_env.py", line 157, in render
+    return self.mujoco_renderer.render(self.render_mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_rendering.py", line 768, in render
+    return viewer.render(render_mode=render_mode, camera_id=self.camera_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_rendering.py", line 290, in render
+    mujoco.mjr_readPixels(rgb_arr, depth_arr, self.viewport, self.con)
+KeyboardInterrupt
+[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Received the following error from Worker-1 - Shutting it down[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 772, in _async_worker
+    ) = env.step(data)
+        ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 373, in step
+    observation = self._format_raw_obs(raw_obs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 251, in _format_raw_obs
+    image_wrist = self._render_camera(self._env_wrist, self.camera_names[1])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 237, in _render_camera
+    image = env.render()
+            ^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_env.py", line 157, in render
+    return self.mujoco_renderer.render(self.render_mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_rendering.py", line 768, in render
+    return viewer.render(render_mode=render_mode, camera_id=self.camera_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_rendering.py", line 267, in render
+    mujoco.mjr_render(self.viewport, self.scn, self.con)
+KeyboardInterrupt
+[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Received the following error from Worker-3 - Shutting it down[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 772, in _async_worker
+    ) = env.step(data)
+        ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 373, in step
+    observation = self._format_raw_obs(raw_obs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 251, in _format_raw_obs
+    image_wrist = self._render_camera(self._env_wrist, self.camera_names[1])
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/metaworld.py", line 237, in _render_camera
+    image = env.render()
+            ^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_env.py", line 157, in render
+    return self.mujoco_renderer.render(self.render_mode)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_rendering.py", line 768, in render
+    return viewer.render(render_mode=render_mode, camera_id=self.camera_id)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/envs/mujoco/mujoco_rendering.py", line 290, in render
+    mujoco.mjr_readPixels(rgb_arr, depth_arr, self.viewport, self.con)
+KeyboardInterrupt
+[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Received the following error from Worker-0 - Shutting it down[0m
+  self._raise_if_errors(successes)
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py:462: UserWarning: [31mERROR: Raising the last exception back to the main process.[0m
+  self._raise_if_errors(successes)
+Evaluating tasks:   0%|          | 0/1 [01:06<?, ?it/s]
+Traceback (most recent call last):
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1272, in eval_policy_all
+    tg, tid, metrics = task_runner(task_group, task_id, env)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1145, in run_one
+    metrics = eval_one(
+              ^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1071, in eval_one
+    task_result = eval_policy(
+                  ^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 666, in eval_policy
+    rollout_data = rollout(
+                   ^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 412, in rollout
+    observation, reward, terminated, truncated, info = env.step(action_numpy)
+                                                       ^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/utils.py", line 282, in step
+    return self._env.step(actions)
+           ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 393, in step
+    return self.step_wait()
+           ^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 452, in step_wait
+    env_step_return, success = pipe.recv()
+                               ^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/multiprocessing/connection.py", line 250, in recv
+    buf = self._recv_bytes()
+          ^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/multiprocessing/connection.py", line 430, in _recv_bytes
+    buf = self._recv(4)
+          ^^^^^^^^^^^^^
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/multiprocessing/connection.py", line 395, in _recv
+    chunk = read(handle, remaining)
+            ^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-eval", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1393, in main
+    eval_main()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+    response = fn(cfg, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 985, in eval_main
+    info = eval_policy_all(
+           ^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_eval.py", line 1283, in eval_policy_all
+    env.close()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/envs/utils.py", line 294, in close
+    self._env.close()
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/vector_env.py", line 233, in close
+    self.close_extras(**kwargs)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 619, in close_extras
+    function(timeout)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 462, in step_wait
+    self._raise_if_errors(successes)
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/site-packages/gymnasium/vector/async_vector_env.py", line 720, in _raise_if_errors
+    raise exctype(value)
+KeyboardInterrupt

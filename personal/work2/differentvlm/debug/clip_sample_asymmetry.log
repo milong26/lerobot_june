@@ -1,0 +1,175 @@
+TinyVLA clip_sample=True vs MEAN_STD Asymmetry Diagnostic
+Policy type: tinyvla_s
+Dataset: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+Device: cuda
+
+######################################################################
+# TinyVLA clip_sample=True vs MEAN_STD Asymmetry Diagnostic
+######################################################################
+Dataset loaded: 54067 frames, 400 episodes
+Loading tinyvla_s from /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/checkpoints/tinyvla_tinyvla_s_disassemble-v3_corner/checkpoints/012000/pretrained_model
+Policy loaded: TinyVLAPolicy, dtype=float32
+
+======================================================================
+  1. NORMALIZED ACTION RANGE VERIFICATION
+======================================================================
+[Dataset Action Statistics]
+  Mean: [0.14447343349456787, 0.3958056569099426, 0.0669124573469162, 0.5566134452819824]
+  Std:  [0.4179151654243469, 0.816068708896637, 0.637364387512207, 0.368064820766449]
+  Min:  [-0.89647692 -0.08981252 -1.68041837  0.        ]
+  Max:  [2.05052829 3.49766779 1.         0.80000001]
+
+[Theoretical Normalized Range (z-score)]
+  Expected norm min: [-2.4908173084259033, -0.5950701832771301, -2.7414941787719727, -1.512270212173462]
+  Expected norm max: [4.56086540222168, 3.8009817600250244, 1.4639781713485718, 0.6612600684165955]
+  Expected norm range: [-2.7415, 4.5609]
+
+[Critical: Does normalized range exceed [-1, 1]?]
+  Exceeds 1: True
+  => clip_sample=True WILL clip actions during DDIM sampling!
+  => This will systematically shrink the action amplitude!
+
+[Empirical Normalized Action Range]
+  Samples analyzed: 200
+  Overall min:  -1.7026
+  Overall max:  4.2677
+  Overall mean: 0.0212
+  Overall std:  1.1644
+
+[Critical: Empirical range exceeds [-1, 1]?]
+  Exceeds: True
+  => CONFIRMED: Normalized actions exceed [-1, 1]
+  => clip_sample=True will cause information loss during inference
+
+======================================================================
+  2. SCHEDULER CONFIGURATION VERIFICATION
+======================================================================
+[Scheduler Configuration]
+  Type:              DDIMScheduler
+  num_train_timesteps: 100
+  beta_schedule:     squaredcos_cap_v2
+  prediction_type:   epsilon
+  clip_sample:       True
+  clip_sample_value: N/A
+  set_alpha_to_one:  True
+  steps_offset:      0
+
+  num_inference_timesteps: 10
+
+[Critical Analysis]
+  clip_sample=True means:
+    During each DDIM step, scheduler.step() clips the predicted x_0 to [-clip_sample_value, clip_sample_value]
+    Default clip_sample_value = 1.0
+    This assumes the clean sample x_0 is in [-1, 1]
+    But with MEAN_STD normalization, x_0 can be outside [-1, 1]
+    => CLIPPING WILL OCCUR AND SHRINK THE ACTION DISTRIBUTION
+
+======================================================================
+  3. CLIPPING IMPACT COMPARISON (True vs False)
+======================================================================
+[Running Diffusion Sampling Comparison]
+  hidden_states shape: torch.Size([1, 1160, 512])
+  states shape: torch.Size([1, 4])
+  num_inference_steps: 10
+
+[Sampling with clip_sample=True]
+  Output shape: torch.Size([1, 16, 4])
+  Min: -0.992188
+  Max: 0.976562
+  Mean: -0.061428
+  Std:  0.646784
+
+[Sampling with clip_sample=False]
+  Output shape: torch.Size([1, 16, 4])
+  Min: -1.687500
+  Max: 1.179688
+  Mean: -0.368399
+  Std:  0.786795
+
+[Comparison: clip_sample=True vs False]
+  Range (clipped):    1.9688
+  Range (unclipped):  2.8672
+  Range difference:   0.8984
+  Std (clipped):      0.6468
+  Std (unclipped):    0.7868
+  Std difference:     0.1400
+
+  => CONFIRMED: clip_sample=True shrinks the action range!
+  => Range reduced by: 31.3%
+  => Std reduced by:   17.8%
+
+[Comparison with Training Target]
+  Training target range: [-1.5123, 3.3860]
+  Training target std:   2.5466
+  Inference (clipped) range:   [-0.9922, 0.9766]
+  Inference (clipped) std:     0.6468
+  Inference (unclipped) range: [-1.6875, 1.1797]
+  Inference (unclipped) std:   0.7868
+
+======================================================================
+  4. DDIM SAMPLING CLIP TRACING
+======================================================================
+[Tracing DDIM Sampling Steps (clip_sample=True)]
+  Total steps: 10
+  hidden_states shape: torch.Size([1, 1160, 512])
+  Step  0 (t= 90): range [-2.3281, 2.7969] -> [-2.3125, 2.8438] (shrink=-0.0312)
+  Step  1 (t= 80): range [-2.3125, 2.8438] -> [-2.2188, 2.7500] (shrink=0.1875) [CLIPPED]
+  Step  2 (t= 70): range [-2.2188, 2.7500] -> [-2.1094, 2.5469] (shrink=0.3125) [CLIPPED]
+  Step  3 (t= 60): range [-2.1094, 2.5469] -> [-1.9141, 2.3281] (shrink=0.4141) [CLIPPED]
+  Step  4 (t= 50): range [-1.9141, 2.3281] -> [-1.6719, 2.1250] (shrink=0.4453) [CLIPPED]
+  Step  5 (t= 40): range [-1.6719, 2.1250] -> [-1.4531, 1.8516] (shrink=0.4922) [CLIPPED]
+  Step  6 (t= 30): range [-1.4531, 1.8516] -> [-1.2500, 1.5156] (shrink=0.5391) [CLIPPED]
+  Step  7 (t= 20): range [-1.2500, 1.5156] -> [-1.0859, 1.1797] (shrink=0.5000) [CLIPPED]
+  Step  8 (t= 10): range [-1.0859, 1.1797] -> [-1.0078, 0.9961] (shrink=0.2617) [CLIPPED]
+  Step  9 (t=  0): range [-1.0078, 0.9961] -> [-1.0000, 1.0000] (shrink=0.0039) [CLIPPED]
+
+[Clip Analysis]
+  Total steps: 10
+  Steps with clipping: 9
+  Clipped step indices: [1, 2, 3, 4, 5, 6, 7, 8, 9]
+  Total range shrink: 3.1562
+  => Clipping is actively reducing action range during sampling
+
+======================================================================
+  5. MULTI-FRAME CLIPPING IMPACT ANALYSIS
+======================================================================
+[Analyzing 50 samples]
+  Processing sample 0/50...
+  Processing sample 10/50...
+  Processing sample 20/50...
+  Processing sample 30/50...
+  Processing sample 40/50...
+
+[Aggregate Statistics over 50 action vectors]
+  Training target:  mean=-0.0906, std=1.3378, range=[-1.6860, 3.3860]
+  Inference (clip=True):  mean=-0.2212, std=0.5552, range=[-1.0000, 1.0000]
+  Inference (clip=False): mean=-0.2141, std=0.7190, range=[-2.7656, 2.4688]
+
+[Distribution Compression Ratios (relative to training target)]
+  Std ratio (clipped):    0.4150
+  Std ratio (unclipped):  0.5375
+  Range ratio (clipped):    0.3943
+  Range ratio (unclipped):  1.0320
+
+  => CONFIRMED: clip_sample=True compresses the action distribution
+  => Std compressed by 58.5% relative to training target
+  => Without clip, Std is 53.7% of training target
+
+======================================================================
+  OVERALL CONCLUSION
+======================================================================
+
+  FOUND 4 CONFIRMED ISSUES:
+    1. CONFIRMED: Normalized action range [-1.7025707960128784, 4.267727851867676] exceeds [-1, 1]
+    2. CONFIRMED: scheduler clip_sample=True is enabled
+    3. CONFIRMED: clip_sample=True reduces std from 0.7868 to 0.6468 (reduction: 17.8%)
+    4. CONFIRMED: Over 50 samples, clip_sample=True compresses std to 41.5% of training target
+
+  RECOMMENDATION:
+    Change clip_sample=True to clip_sample=False in _init_diffusion_head()
+    Location: src/lerobot/policies/tinyvla/llava_pythia/model/language_model/pythia/llava_pythia.py
+    Line: self.noise_scheduler = DDIMScheduler(..., clip_sample=True, ...)
+    Change to: clip_sample=False
+
+Results saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/clip_sample_asymmetry_results.json
+Log saved to: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/debug/clip_sample_asymmetry.log

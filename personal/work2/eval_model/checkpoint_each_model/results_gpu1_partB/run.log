@@ -1,0 +1,348 @@
+============================================================
+MetaWorld Checkpoint Sweep - GPU 1 (Part B)
+============================================================
+Start time: 2026年 09月 02日 星期三 23:49:44 CST
+GPU: 1
+Episodes/checkpoint: 200
+Batch size: 4
+Seed: 1000
+Camera: corner,gripperPOV
+Output: personal/work2/eval_model/checkpoint_each_model/results_gpu1_partB
+Models: 7
+[GPU] Using GPU 1 (CUDA_VISIBLE_DEVICES=1): NVIDIA GeForce RTX 3090
+[DISCOVER] Scanning checkpoints for assigned models...
+[DISCOVER] Found 54 tasks for Part B
+[TASKS] Assigned models and checkpoints:
+  - random_42_corner/random_112_seed42 @ 002000
+  - random_42_corner/random_112_seed42 @ 004000
+  - random_42_corner/random_112_seed42 @ 006000
+  - random_42_corner/random_112_seed42 @ 008000
+  - random_42_corner/random_112_seed42 @ 010000
+  - random_42_corner/random_112_seed42 @ 012000
+  - random_42_corner/random_112_seed42 @ 014000
+  - random_42_corner/random_112_seed42 @ 016000
+  - random_42_corner2/random_112_seed42 @ 002000
+  - random_42_corner2/random_112_seed42 @ 004000
+  - random_42_corner2/random_112_seed42 @ 006000
+  - random_42_corner2/random_112_seed42 @ 008000
+  - random_42_corner2/random_112_seed42 @ 010000
+  - random_42_corner2/random_112_seed42 @ 012000
+  - random_42_corner2/random_112_seed42 @ 014000
+  - random_42_corner2/random_112_seed42 @ 016000
+  - random_42_corner3/random_112_seed42 @ 002000
+  - random_42_corner3/random_112_seed42 @ 004000
+  - random_42_corner3/random_112_seed42 @ 006000
+  - random_42_corner3/random_112_seed42 @ 008000
+  - random_42_corner3/random_112_seed42 @ 010000
+  - random_42_corner3/random_112_seed42 @ 012000
+  - random_42_corner3/random_112_seed42 @ 014000
+  - random_42_corner3/random_112_seed42 @ 016000
+  - subzerocore_112_seed42_corner/subzerocore_112_seed42 @ 002000
+  - subzerocore_112_seed42_corner/subzerocore_112_seed42 @ 004000
+  - subzerocore_112_seed42_corner/subzerocore_112_seed42 @ 006000
+  - subzerocore_112_seed42_corner/subzerocore_112_seed42 @ 008000
+  - subzerocore_112_seed42_corner/subzerocore_112_seed42 @ 010000
+  - subzerocore_112_seed42_corner/subzerocore_112_seed42 @ 012000
+  - uniform_42_corner/uniform_112_seed42 @ 002000
+  - uniform_42_corner/uniform_112_seed42 @ 004000
+  - uniform_42_corner/uniform_112_seed42 @ 006000
+  - uniform_42_corner/uniform_112_seed42 @ 008000
+  - uniform_42_corner/uniform_112_seed42 @ 010000
+  - uniform_42_corner/uniform_112_seed42 @ 012000
+  - uniform_42_corner/uniform_112_seed42 @ 014000
+  - uniform_42_corner/uniform_112_seed42 @ 016000
+  - uniform_42_corner2/uniform_112_seed42 @ 002000
+  - uniform_42_corner2/uniform_112_seed42 @ 004000
+  - uniform_42_corner2/uniform_112_seed42 @ 006000
+  - uniform_42_corner2/uniform_112_seed42 @ 008000
+  - uniform_42_corner2/uniform_112_seed42 @ 010000
+  - uniform_42_corner2/uniform_112_seed42 @ 012000
+  - uniform_42_corner2/uniform_112_seed42 @ 014000
+  - uniform_42_corner2/uniform_112_seed42 @ 016000
+  - uniform_42_corner3/uniform_112_seed42 @ 002000
+  - uniform_42_corner3/uniform_112_seed42 @ 004000
+  - uniform_42_corner3/uniform_112_seed42 @ 006000
+  - uniform_42_corner3/uniform_112_seed42 @ 008000
+  - uniform_42_corner3/uniform_112_seed42 @ 010000
+  - uniform_42_corner3/uniform_112_seed42 @ 012000
+  - uniform_42_corner3/uniform_112_seed42 @ 014000
+  - uniform_42_corner3/uniform_112_seed42 @ 016000
+
+============================================================
+[1/54] START model=random_42_corner/random_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[2/54] START model=random_42_corner/random_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[3/54] START model=random_42_corner/random_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[4/54] START model=random_42_corner/random_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[5/54] START model=random_42_corner/random_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[6/54] START model=random_42_corner/random_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[7/54] START model=random_42_corner/random_112_seed42 checkpoint=014000
+============================================================
+[DONE] checkpoint=014000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[8/54] START model=random_42_corner/random_112_seed42 checkpoint=016000
+============================================================
+[DONE] checkpoint=016000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[9/54] START model=random_42_corner2/random_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[10/54] START model=random_42_corner2/random_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[11/54] START model=random_42_corner2/random_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[12/54] START model=random_42_corner2/random_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[13/54] START model=random_42_corner2/random_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[14/54] START model=random_42_corner2/random_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[15/54] START model=random_42_corner2/random_112_seed42 checkpoint=014000
+============================================================
+[DONE] checkpoint=014000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[16/54] START model=random_42_corner2/random_112_seed42 checkpoint=016000
+============================================================
+[DONE] checkpoint=016000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[17/54] START model=random_42_corner3/random_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[18/54] START model=random_42_corner3/random_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[19/54] START model=random_42_corner3/random_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[20/54] START model=random_42_corner3/random_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[21/54] START model=random_42_corner3/random_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[22/54] START model=random_42_corner3/random_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[23/54] START model=random_42_corner3/random_112_seed42 checkpoint=014000
+============================================================
+[DONE] checkpoint=014000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[24/54] START model=random_42_corner3/random_112_seed42 checkpoint=016000
+============================================================
+[DONE] checkpoint=016000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[25/54] START model=subzerocore_112_seed42_corner/subzerocore_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[26/54] START model=subzerocore_112_seed42_corner/subzerocore_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[27/54] START model=subzerocore_112_seed42_corner/subzerocore_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[28/54] START model=subzerocore_112_seed42_corner/subzerocore_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[29/54] START model=subzerocore_112_seed42_corner/subzerocore_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[30/54] START model=subzerocore_112_seed42_corner/subzerocore_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[31/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[32/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[33/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[34/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[35/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[36/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[37/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=014000
+============================================================
+[DONE] checkpoint=014000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[38/54] START model=uniform_42_corner/uniform_112_seed42 checkpoint=016000
+============================================================
+[DONE] checkpoint=016000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[39/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[40/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[41/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[42/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[43/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[44/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[45/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=014000
+============================================================
+[DONE] checkpoint=014000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[46/54] START model=uniform_42_corner2/uniform_112_seed42 checkpoint=016000
+============================================================
+[DONE] checkpoint=016000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[47/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=002000
+============================================================
+[DONE] checkpoint=002000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[48/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=004000
+============================================================
+[DONE] checkpoint=004000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[49/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=006000
+============================================================
+[DONE] checkpoint=006000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[50/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=008000
+============================================================
+[DONE] checkpoint=008000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[51/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=010000
+============================================================
+[DONE] checkpoint=010000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[52/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=012000
+============================================================
+[DONE] checkpoint=012000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[53/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=014000
+============================================================
+[DONE] checkpoint=014000 success=0/0=0.0% grasp=0/0=0.0%
+
+============================================================
+[54/54] START model=uniform_42_corner3/uniform_112_seed42 checkpoint=016000
+============================================================
+[DONE] checkpoint=016000 success=0/0=0.0% grasp=0/0=0.0%
+============================================================
+GPU1 PartB FINISHED
+============================================================
+Done: 54
+Skipped: 0
+Failed: 0
+Total processed: 54
+Summary: personal/work2/eval_model/checkpoint_each_model/results_gpu1_partB/summary.csv
+End time: 2026年 09月 05日 星期六 16:53:46 CST

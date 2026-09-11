@@ -1,0 +1,143 @@
+WARNING 2026-09-08 19:57:24 figs/eval.py:69 No job name provided, using 'metaworld_smolvla' as job name.
+INFO 2026-09-08 19:57:24 ot_eval.py:1019 {'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'coffee-button-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 8,
+          'n_episodes': 200,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_smolvla',
+ 'output_dir': PosixPath('outputs/eval/2026-09-08/19-57-24_metaworld_smolvla'),
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (6,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': (0.9, 0.95),
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': PosixPath('personal/work2/duibi/random_ep20_seed42_coffee-button-v3_corner/random_20_seed42/checkpoints/006000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': (512, 512),
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'rename_map': {'observation.images.top': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-09-08 19:57:24 ot_eval.py:1028 Output dir: outputs/eval/2026-09-08/19-57-24_metaworld_smolvla
+INFO 2026-09-08 19:57:24 ot_eval.py:1030 Making environment (batch_size=8, async=True).
+INFO 2026-09-08 19:57:26 ot_eval.py:1038 Making policy.
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] Model config: pad_token_id must be `None` or an integer within the vocabulary (between 0 and 31999), got 128002. This may result in unexpected behavior.
+[DEBUG] Loaded config from: personal/work2/duibi/random_ep20_seed42_coffee-button-v3_corner/random_20_seed42/checkpoints/006000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period', 'rtc_config', 'compile_model', 'compile_mode']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: smolvla
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period', 'rtc_config', 'compile_model', 'compile_mode']
+[DEBUG] Removed invalid keys: set()
+Creating Meta-World envs | task_groups=['coffee-button-v3'] | n_envs(per task)=8
+Building vec env | group=coffee-button-v3 | task_id=0 | task=coffee-button-v3
+[DEBUG factory] policy_cls: <class 'lerobot.policies.smolvla.modeling_smolvla.SmolVLAPolicy'>
+[DEBUG factory] policy_cls.__init__ signature: <function SmolVLAPolicy.__init__ at 0x7e4717635bc0>
+[DEBUG factory] kwargs keys: ['config', 'pretrained_name_or_path', 'revision']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  45%|████▍     | 219/489 [00:00<00:00, 2182.95it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 2509.76it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/200 episodes):   0%|          | 0/25 [00:00<?, ?it/s][transformers] Calling `crop` with a positive value is deprecated and will be removed in version 5.18. Please use a negative integer to remove that number of tokens from the cache instead.
+Evaluating (8/200 episodes, success: 8/8, rate: 100.0%):   0%|          | 0/25 [00:28<?, ?it/s]Evaluating (8/200 episodes, success: 8/8, rate: 100.0%):   4%|▍         | 1/25 [00:28<11:16, 28.17s/it]Evaluating (16/200 episodes, success: 13/16, rate: 81.2%):   4%|▍         | 1/25 [01:08<11:16, 28.17s/it]Evaluating (16/200 episodes, success: 13/16, rate: 81.2%):   8%|▊         | 2/25 [01:08<13:27, 35.12s/it]Evaluating (24/200 episodes, success: 21/24, rate: 87.5%):   8%|▊         | 2/25 [01:12<13:27, 35.12s/it]Evaluating (24/200 episodes, success: 21/24, rate: 87.5%):  12%|█▏        | 3/25 [01:12<07:46, 21.22s/it]Evaluating (32/200 episodes, success: 29/32, rate: 90.6%):  12%|█▏        | 3/25 [01:16<07:46, 21.22s/it]Evaluating (32/200 episodes, success: 29/32, rate: 90.6%):  16%|█▌        | 4/25 [01:16<04:57, 14.15s/it]Evaluating (40/200 episodes, success: 36/40, rate: 90.0%):  16%|█▌        | 4/25 [01:52<04:57, 14.15s/it]Evaluating (40/200 episodes, success: 36/40, rate: 90.0%):  20%|██        | 5/25 [01:52<07:26, 22.31s/it]Evaluating (48/200 episodes, success: 44/48, rate: 91.7%):  20%|██        | 5/25 [01:59<07:26, 22.31s/it]Evaluating (48/200 episodes, success: 44/48, rate: 91.7%):  24%|██▍       | 6/25 [01:59<05:22, 16.96s/it]Evaluating (56/200 episodes, success: 51/56, rate: 91.1%):  24%|██▍       | 6/25 [02:38<05:22, 16.96s/it]Evaluating (56/200 episodes, success: 51/56, rate: 91.1%):  28%|██▊       | 7/25 [02:38<07:15, 24.19s/it]Evaluating (64/200 episodes, success: 59/64, rate: 92.2%):  28%|██▊       | 7/25 [02:43<07:15, 24.19s/it]Evaluating (64/200 episodes, success: 59/64, rate: 92.2%):  32%|███▏      | 8/25 [02:43<05:08, 18.14s/it]Evaluating (72/200 episodes, success: 67/72, rate: 93.1%):  32%|███▏      | 8/25 [02:50<05:08, 18.14s/it]Evaluating (72/200 episodes, success: 67/72, rate: 93.1%):  36%|███▌      | 9/25 [02:50<03:54, 14.67s/it]Evaluating (80/200 episodes, success: 75/80, rate: 93.8%):  36%|███▌      | 9/25 [02:53<03:54, 14.67s/it]Evaluating (80/200 episodes, success: 75/80, rate: 93.8%):  40%|████      | 10/25 [02:53<02:46, 11.12s/it]Evaluating (88/200 episodes, success: 82/88, rate: 93.2%):  40%|████      | 10/25 [03:32<02:46, 11.12s/it]Evaluating (88/200 episodes, success: 82/88, rate: 93.2%):  44%|████▍     | 11/25 [03:32<04:35, 19.65s/it]Evaluating (96/200 episodes, success: 89/96, rate: 92.7%):  44%|████▍     | 11/25 [04:12<04:35, 19.65s/it]Evaluating (96/200 episodes, success: 89/96, rate: 92.7%):  48%|████▊     | 12/25 [04:12<05:33, 25.67s/it]Evaluating (104/200 episodes, success: 97/104, rate: 93.3%):  48%|████▊     | 12/25 [04:47<05:33, 25.67s/it]Evaluating (104/200 episodes, success: 97/104, rate: 93.3%):  52%|█████▏    | 13/25 [04:47<05:43, 28.66s/it]Evaluating (112/200 episodes, success: 105/112, rate: 93.8%):  52%|█████▏    | 13/25 [04:51<05:43, 28.66s/it]Evaluating (112/200 episodes, success: 105/112, rate: 93.8%):  56%|█████▌    | 14/25 [04:51<03:51, 21.02s/it]Evaluating (120/200 episodes, success: 113/120, rate: 94.2%):  56%|█████▌    | 14/25 [04:56<03:51, 21.02s/it]Evaluating (120/200 episodes, success: 113/120, rate: 94.2%):  60%|██████    | 15/25 [04:56<02:42, 16.24s/it]Evaluating (128/200 episodes, success: 121/128, rate: 94.5%):  60%|██████    | 15/25 [04:59<02:42, 16.24s/it]Evaluating (128/200 episodes, success: 121/128, rate: 94.5%):  64%|██████▍   | 16/25 [04:59<01:50, 12.28s/it]Evaluating (136/200 episodes, success: 128/136, rate: 94.1%):  64%|██████▍   | 16/25 [05:37<01:50, 12.28s/it]Evaluating (136/200 episodes, success: 128/136, rate: 94.1%):  68%|██████▊   | 17/25 [05:37<02:39, 19.94s/it]Evaluating (144/200 episodes, success: 136/144, rate: 94.4%):  68%|██████▊   | 17/25 [05:41<02:39, 19.94s/it]Evaluating (144/200 episodes, success: 136/144, rate: 94.4%):  72%|███████▏  | 18/25 [05:41<01:47, 15.29s/it]Evaluating (152/200 episodes, success: 144/152, rate: 94.7%):  72%|███████▏  | 18/25 [05:45<01:47, 15.29s/it]Evaluating (152/200 episodes, success: 144/152, rate: 94.7%):  76%|███████▌  | 19/25 [05:45<01:10, 11.70s/it]Evaluating (160/200 episodes, success: 152/160, rate: 95.0%):  76%|███████▌  | 19/25 [05:49<01:10, 11.70s/it]Evaluating (160/200 episodes, success: 152/160, rate: 95.0%):  80%|████████  | 20/25 [05:49<00:48,  9.64s/it]Evaluating (168/200 episodes, success: 160/168, rate: 95.2%):  80%|████████  | 20/25 [05:53<00:48,  9.64s/it]Evaluating (168/200 episodes, success: 160/168, rate: 95.2%):  84%|████████▍ | 21/25 [05:53<00:30,  7.72s/it]Evaluating (176/200 episodes, success: 168/176, rate: 95.5%):  84%|████████▍ | 21/25 [05:56<00:30,  7.72s/it]Evaluating (176/200 episodes, success: 168/176, rate: 95.5%):  88%|████████▊ | 22/25 [05:56<00:19,  6.37s/it]Evaluating (184/200 episodes, success: 176/184, rate: 95.7%):  88%|████████▊ | 22/25 [05:59<00:19,  6.37s/it]Evaluating (184/200 episodes, success: 176/184, rate: 95.7%):  92%|█████████▏| 23/25 [05:59<00:10,  5.44s/it]Evaluating (192/200 episodes, success: 184/192, rate: 95.8%):  92%|█████████▏| 23/25 [06:38<00:10,  5.44s/it]Evaluating (192/200 episodes, success: 184/192, rate: 95.8%):  96%|█████████▌| 24/25 [06:38<00:15, 15.38s/it]Evaluating (200/200 episodes, success: 191/200, rate: 95.5%):  96%|█████████▌| 24/25 [07:17<00:15, 15.38s/it]Evaluating (200/200 episodes, success: 191/200, rate: 95.5%): 100%|██████████| 25/25 [07:17<00:00, 22.51s/it]Evaluating (200/200 episodes, success: 191/200, rate: 95.5%): 100%|██████████| 25/25 [07:17<00:00, 17.50s/it]
+INFO 2026-09-08 20:07:13 bot_eval.py:965 Saved per-episode eval results to outputs/eval/2026-09-08/19-57-24_metaworld_smolvla/eval_results/coffee-button-v3_0/eval_episode_results.json
+Task 1/1: coffee-button-v3 (episodes: 200, success: 191):   0%|          | 0/1 [07:17<?, ?it/s]Task 1/1: coffee-button-v3 (episodes: 200, success: 191): 100%|██████████| 1/1 [07:17<00:00, 437.43s/it]Task 1/1: coffee-button-v3 (episodes: 200, success: 191): 100%|██████████| 1/1 [07:18<00:00, 438.25s/it]
+INFO 2026-09-08 20:07:14 ot_eval.py:1470 Saved per-episode eval results to outputs/eval/2026-09-08/19-57-24_metaworld_smolvla/eval_results/eval_episode_results.json
+INFO 2026-09-08 20:07:14 ot_eval.py:1089 Overall Aggregated Metrics:
+INFO 2026-09-08 20:07:14 ot_eval.py:1090 {'avg_sum_reward': 48.001964509878206, 'avg_max_reward': 1.2279062154133127, 'pc_success': 95.5, 'pc_grasp_success': 100.0, 'n_episodes': 200, 'eval_s': 438.25389075279236, 'eval_ep_s': 2.1912694585323336, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-09-08 20:07:14 ot_eval.py:1094 
+Aggregated Metrics for per_task:
+INFO 2026-09-08 20:07:14 ot_eval.py:1095 [{'task_group': 'coffee-button-v3', 'task_id': 0, 'metrics': {'sum_rewards': [21.101225025903084, 16.040089084985894, 17.90734901316033, 21.336251773741825, 20.817327534982265, 21.81595160091547, 23.02257000701418, 20.150876448944942, 536.7926631009581, 22.5899355312419, 537.8786671832698, 17.2776444862383, 19.485343356377523, 21.424357374626865, 509.6326980727107, 17.655580958712736, 17.694672939187093, 15.583186423208625, 20.6283662448309, 17.372178553699886, 17.061380531273027, 18.067582997429774, 18.72667650554894, 22.41114999135857, 21.17495437484444, 18.413514232858866, 22.173650259910413, 23.80316382893002, 23.95049944383745, 19.66000605879051, 22.944412077808572, 16.859030356033408, 20.695076542509153, 19.768986146291347, 557.9234491775827, 38.68447249365586, 18.89221666129506, 19.307849867206528, 19.661391760560498, 22.137544406465565, 16.778322732246416, 20.23034574855927, 17.709287997804008, 17.73556775038546, 50.52489023114026, 21.109561285245597, 16.9057023629045, 20.891317888630002, 22.287981356005808, 19.040498613571085, 19.741263776647628, 21.083567058785842, 540.1283660811062, 22.897531379631573, 18.8323986136017, 14.575478738109544, 20.883064523615477, 19.549213816614394, 19.98370209454839, 19.89047360843751, 16.935910000264684, 16.970621078597212, 23.5909414913464, 41.179362580632954, 17.50988499558601, 20.107389096290504, 22.49594107952331, 19.412837544212348, 16.41726058867173, 22.869847088042565, 20.571695252829684, 39.0790342985356, 19.58368244551346, 18.5508462340716, 20.111255388094637, 17.024470450886774, 21.181448973207203, 23.693287895455583, 19.035172111122804, 19.867829389363266, 24.09914009628745, 23.49376663490079, 19.709257270766145, 21.782550332731926, 21.82711653699058, 20.32041993213526, 522.3519676743513, 21.34054538870426, 22.7472765478863, 22.84513295743045, 16.995978136009807, 24.300543797104055, 514.6011871253626, 17.917535180322265, 16.43854274917406, 22.911320384587377, 481.7467045455973, 25.07450268565225, 21.167217310946228, 20.600169844774232, 18.717272697685864, 20.29457714798542, 18.3956079646822, 23.855008585050943, 19.663360951925448, 21.365974621618328, 19.43301221403134, 21.79783326903432, 20.78921227531409, 15.575533629263507, 23.71745248103122, 20.290511771482375, 17.796494848972554, 18.713030867197098, 22.469065610246677, 22.746989988954383, 50.33418185183916, 22.47681290385381, 18.418459616876834, 24.354227353226975, 16.12529287891074, 18.84457236514346, 23.445950421953633, 16.38036158344594, 16.552426516175082, 16.52316599975567, 18.42684221922122, 19.43827501330089, 23.483501549321787, 23.3043731731926, 17.823759157898152, 21.851652023985764, 443.23380511955753, 16.42800823339917, 23.600243063407735, 22.399382427569122, 19.155046538707076, 16.269667019214197, 19.271676182434067, 23.815966732074155, 18.870846647550024, 16.963527561989284, 21.2553480368731, 19.470498864708233, 16.032286075964844, 22.50079340178116, 24.421902058654688, 19.89431544658139, 15.966797667902352, 18.359500399311734, 16.947795005438817, 23.58572475455524, 21.89909745735085, 17.713323442297213, 23.168629455000115, 38.314809398398864, 22.246391575044377, 20.626588596664373, 19.44629669395659, 19.890188972481873, 18.226627472042953, 18.36091069503526, 23.448948231823948, 21.185730749085813, 19.26362069861154, 17.7149001501322, 23.600806222796447, 19.738764974192108, 18.186768637277225, 22.40830541376016, 23.43038033679153, 18.61759641693361, 20.492503417673802, 19.398910831005608, 18.59058740670778, 23.360562447332196, 16.477685717108788, 20.945746942072937, 20.673714123061153, 16.332113377434602, 17.309909497808544, 20.459156055068533, 17.569616227057118, 19.325563363628206, 522.0893923605792, 17.928131786610592, 21.20018353348357, 21.782597289607043, 19.651491132728225, 18.777155282011048, 20.794476339150304, 22.5536274552476, 17.48777649517755, 20.76401316870117, 20.58173651839474, 17.726218341180292, 17.531849348229883, 23.02748941000747, 21.323273146305873, 509.13873938188476], 'max_rewards': [1.2677066414971754, 1.0395591247783549, 1.1757728813493866, 1.2892236095067071, 1.272569237902164, 1.302095183561811, 1.3347772109437006, 1.244077500102146, 1.2583911010601088, 1.3323144694355942, 1.2532334674485626, 1.1193541021901994, 1.1742015353695874, 1.3064938897910983, 1.1667594924635505, 1.1261613315619283, 1.1836818705211756, 1.0956942225458524, 1.2180232933405013, 1.1127254143183174, 1.117834464330042, 1.147851330768153, 1.2070247273434873, 1.2986705625970643, 1.210108606947292, 1.1718254460441306, 1.2836983059377152, 1.3320204370381654, 1.3590410044573715, 1.218575030556445, 1.3447044123567609, 1.1141005017691494, 1.2585013519439516, 1.2373904235312412, 1.2616096575845086, 1.175975834405847, 1.1728481347860602, 1.241053587866484, 1.2452172060211737, 1.2737868316507839, 1.109142165565871, 1.2690715468748883, 1.139769849272478, 1.115417181710312, 1.2194255738939181, 1.3087022892044105, 1.1564536234019904, 1.3037410463171744, 1.316654230819469, 1.188897397462923, 1.2056506172888395, 1.2789768528391128, 1.237441123152166, 1.330033653158584, 1.1919002149603108, 1.0454152059959845, 1.2873536641795331, 1.2030696186268002, 1.1986981978855114, 1.2401985836774292, 1.1501145751471404, 1.1331043955198332, 1.3677461637624702, 1.141390858242994, 1.1292932132269946, 1.2330355517314087, 1.3194889825607177, 1.2349566203058715, 1.1532192587814043, 1.3345771063938912, 1.2752174304229187, 1.1159644309448153, 1.2460139665891865, 1.1989081992425228, 1.194404040521778, 1.1419717488239232, 1.2939529510166232, 1.3188943487283908, 1.221293989497838, 1.2459268182196608, 1.3795479564681528, 1.3705122323660026, 1.2098677152573463, 1.2920139203457848, 1.295410698146155, 1.280784313312175, 1.2036937215332568, 1.2662276895059905, 1.3424219576124, 1.3414386432808358, 1.1110215939864285, 1.344032945342514, 1.1735899653510058, 1.1715264510908105, 1.0338738714275584, 1.312680808741107, 1.2135156181351543, 1.3868977287396267, 1.288275712351013, 1.263709925246954, 1.1507336153513559, 1.1718260476073517, 1.2063704463377272, 1.3563140744643296, 1.2192694041752596, 1.3073865489692342, 1.243328701834082, 1.296251068089862, 1.2816048173714587, 1.070797782297599, 1.3225265433906006, 1.2366882533011017, 1.1775975395246228, 1.1975234353720672, 1.273047733876544, 1.29982454925443, 1.2105784290307764, 1.3206494781558713, 1.128419403837115, 1.3721668605654318, 1.0812226030328973, 1.2160757911491007, 1.3217975445020547, 1.1431148493808285, 1.1410899866391824, 1.0482724001676402, 1.1904050171125602, 1.2503314311140468, 1.332590277533102, 1.2512786332245245, 1.144882622661679, 1.2688886298031692, 0.986369826611343, 1.127114725566619, 1.3645081373921446, 1.3234444780037506, 1.183985173933824, 1.1261525079094876, 1.1976822993016563, 1.3498073340620134, 1.2227624055806787, 1.0982306009270721, 1.3051516621556432, 1.217747802243143, 1.0651137483974675, 1.3243347422387726, 1.362431656490094, 1.2444694288774572, 1.0340028966976955, 1.151562167276588, 1.1656392405427292, 1.3717141897888296, 1.2707292358465183, 1.1710610595313176, 1.3720592168776249, 1.028498640838913, 1.30706651180267, 1.2857607852236188, 1.1897283932209937, 1.2349247060370263, 1.1832590637714855, 1.195507571543821, 1.3564538826774182, 1.2886892424057304, 1.2039076199428997, 1.1498251394558139, 1.3557589544808017, 1.2143344958329827, 1.1969681873764846, 1.34185421687836, 1.375195914429196, 1.2173377584807854, 1.237331477468986, 1.1721374790793966, 1.1768018566827019, 1.3601001736663834, 1.0513782785488517, 1.2228177173623835, 1.2817340526315903, 1.1290468250476555, 1.136439623939102, 1.2734545853591719, 1.1638900437888136, 1.2365217769975165, 1.212588046098165, 1.1876030821143162, 1.267690783130106, 1.2653385642444464, 1.1785136788665418, 1.2377734577919897, 1.2903192671446901, 1.3344521225585422, 1.1584154893725072, 1.2541414761659704, 1.2691142685644636, 1.1405345660993624, 1.133645057192592, 1.3273538337418205, 1.294748960918921, 1.17217220647437], 'successes': [True, True, True, True, True, True, True, True, False, True, False, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False], 'grasp_successes': [True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True], 'video_paths': [], 'predicted_video_paths': []}}]
+INFO 2026-09-08 20:07:14 ot_eval.py:1094 
+Aggregated Metrics for per_group:
+INFO 2026-09-08 20:07:14 ot_eval.py:1095 {'coffee-button-v3': {'avg_sum_reward': 48.001964509878206, 'avg_max_reward': 1.2279062154133127, 'pc_success': 95.5, 'pc_grasp_success': 100.0, 'n_episodes': 200, 'video_paths': [], 'predicted_video_paths': []}}
+INFO 2026-09-08 20:07:14 ot_eval.py:1094 
+Aggregated Metrics for overall:
+INFO 2026-09-08 20:07:14 ot_eval.py:1095 {'avg_sum_reward': 48.001964509878206, 'avg_max_reward': 1.2279062154133127, 'pc_success': 95.5, 'pc_grasp_success': 100.0, 'n_episodes': 200, 'eval_s': 438.25389075279236, 'eval_ep_s': 2.1912694585323336, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-09-08 20:07:14 ot_eval.py:1103 End of eval
