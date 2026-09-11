@@ -1,8 +1,12 @@
 配置环境
-pip install gymnasium==0.29.1 numpy==1.26.4
-pip install -e ".[smolvla,av-dep]"
-pip install "robomme @ git+https://github.com/RoboMME/robomme_benchmark.git@main"
-pip install numpy==2.2.6 gymnasium==1.3.0 因为tinvyla那些已经配置好了
+重新配置
+conda create -n robomme python=3.12 -y
+conda activate robomme
+python -m pip install -U pip wheel
+conda install -c conda-forge ffmpeg -y
+conda install -c conda-forge ffmpeg=7.1.1 -y
+
+
 
 尝试执行采集程序
 nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
