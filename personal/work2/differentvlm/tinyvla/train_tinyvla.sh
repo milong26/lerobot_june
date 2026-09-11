@@ -58,6 +58,8 @@ DECAY_STEPS=50000
 DECAY_LR=2.5e-6
 PEAK_LR=2e-4
 EVAL_SPLIT=0
+EVAL_N_EPISODES=10     # 每次评估只测试 10 集
+EVAL_BATCH_SIZE=10     # 限制并行环境数量为 10，避免创建过多进程
 
 echo "~~~ Starting TinyVLA Training ~~~"
 echo "Steps: $TRAIN_STEPS"
@@ -72,12 +74,38 @@ echo ""
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
+export EGL_DEVICE_ID=$GPU_ID
 export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
 export LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6
 
 cd /data/zhonglinye/jun/lerobot
 
-lerobot-train \
+# Check if checkpoint exists for resume
+RESUME_FLAG=false
+CONFIG_PATH=""
+# Check both possible checkpoint locations
+if [ -d "$OUTPUT_BASE_DIR/checkpoints/checkpoints/last/pretrained_model" ]; then
+    # Nested checkpoints directory (from previous runs)
+    LAST_CHECKPOINT="$OUTPUT_BASE_DIR/checkpoints/checkpoints/last"
+    RESUME_FLAG=true
+    CONFIG_PATH="$LAST_CHECKPOINT/pretrained_model/train_config.json"
+elif [ -d "$OUTPUT_BASE_DIR/checkpoints/last/pretrained_model" ]; then
+    # Standard checkpoints directory
+    LAST_CHECKPOINT="$OUTPUT_BASE_DIR/checkpoints/last"
+    RESUME_FLAG=true
+    CONFIG_PATH="$LAST_CHECKPOINT/pretrained_model/train_config.json"
+fi
+
+if [ "$RESUME_FLAG" = true ]; then
+    echo "========================================"
+    echo "Found existing checkpoint, enabling resume"
+    echo "Checkpoint: $LAST_CHECKPOINT"
+    echo "Config: $CONFIG_PATH"
+    echo "========================================"
+fi
+
+# Build base command
+TRAIN_CMD="lerobot-train \
   --policy.type=$POLICY_TYPE \
   --policy.device=cuda \
   --policy.push_to_hub=false \
@@ -100,12 +128,26 @@ lerobot-train \
   --log_freq=$LOG_FREQ \
   --save_freq=$SAVE_FREQ \
   --env_eval_freq=$ENV_EVAL_FREQ \
+  --eval.n_episodes=$EVAL_N_EPISODES \
+  --eval.batch_size=$EVAL_BATCH_SIZE \
   --seed=$SEED \
   --job_name=$EXP_NAME \
-  --output_dir=$OUTPUT_BASE_DIR/checkpoints \
+  --output_dir=$OUTPUT_BASE_DIR \
   --wandb.enable=true \
-  --remove_features='["observation.environment_state"]' \
-  2>&1 | tee -a "$LOG_DIR/$EXP_NAME.log"
+  --remove_features='[\"observation.environment_state\"]'"
+
+# Add resume parameters if checkpoint exists
+if [ "$RESUME_FLAG" = true ]; then
+    TRAIN_CMD="$TRAIN_CMD --resume=true --config_path=$CONFIG_PATH"
+    echo ""
+    echo "=== RESUME MODE ==="
+    echo "Continuing training from checkpoint"
+    echo "==================="
+    echo ""
+fi
+
+# Execute training
+eval $TRAIN_CMD 2>&1 >> "$LOG_DIR/$EXP_NAME.log"
 
 echo "" >> "$TIME_FILE"
 echo "End time: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TIME_FILE"

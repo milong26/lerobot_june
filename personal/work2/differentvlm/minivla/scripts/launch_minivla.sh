@@ -3,6 +3,7 @@
 # Usage: bash launch_minivla.sh --gpu-id <id> --num-episodes <num> --dataset-name <name> --selection-mode <mode> [--seed <seed>]
 
 set -e
+set -o pipefail
 
 # Default values
 GPU_ID=""
@@ -150,6 +151,7 @@ export LD_PRELOAD=\$CONDA_PREFIX/lib/libstdc++.so.6
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
 export CUDA_VISIBLE_DEVICES=\$GPU_ID
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Run MiniVLA experiment
 python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
@@ -158,15 +160,16 @@ python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
     --num-episodes \$NUM_EPISODES \
     --seed \$SEED_VAL \
     --selection-mode \$SELECTION_MODE \
-    --train-steps 20000 \
+    --policy-type minivla_wrist \
+    --train-steps 50000 \
     --train-save-freq 2000 \
     --env-eval-freq 2000 \
     --eval-n-episodes 10 \
+    --final-eval-episodes 200 \
     --action-tokenizer-type extra_action_tokenizer \
     --scheduler-warmup-steps 500 \
     --projector-lr 1e-4 \
     --backbone-lr 2e-5 \
-    --no-eval \
     2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo "" >> "\$TIME_FILE"

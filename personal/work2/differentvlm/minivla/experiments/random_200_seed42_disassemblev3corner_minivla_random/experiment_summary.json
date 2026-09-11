@@ -2,24 +2,24 @@
   "exp_name": "random_200_seed42_disassemblev3corner_minivla_random",
   "dataset_name": "disassemble-v3_corner",
   "gpu_id": 0,
-  "start_time": "2026-09-09 17:01:55",
-  "end_time": "2026-09-09 21:32:04",
-  "current_stage": "completed",
-  "failed_stage": null,
+  "start_time": "2026-09-11 10:29:51",
+  "end_time": "2026-09-11 10:35:15",
+  "current_stage": "training",
+  "failed_stage": "training",
   "config": {
     "selection_mode": "random",
     "selection_num_episodes": 200,
     "selection_seed": 42,
-    "train_steps": 20000,
+    "train_steps": 50000,
     "train_batch_size": 4,
     "train_lr": 2e-05,
-    "eval_n_episodes": 200,
+    "eval_n_episodes": 10,
     "eval_seed": 42,
     "vq_model_path": "Stanford-ILIAD/pretrain_vq"
   },
   "paths": {
     "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/subsets/random_200_seed42.json",
-    "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints",
+    "checkpoint_dir": null,
     "eval_results_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/eval_results"
   },
   "stages": {
@@ -27,29 +27,9 @@
       "status": "success",
       "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/subsets/random_200_seed42.json",
       "time_seconds": 0.0
-    },
-    "training": {
-      "status": "success",
-      "checkpoint_dir": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints",
-      "time_seconds": 16143.7
-    },
-    "evaluation": {
-      "status": "success",
-      "time_seconds": 65.5
     }
   },
-  "final_metrics": {
-    "eval_results": [
-      {
-        "pc_success": -1,
-        "pc_grasp_success": -1,
-        "parse_status": "failed",
-        "step": 20000,
-        "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model"
-      }
-    ],
-    "best_pc_success": -1,
-    "best_pc_grasp_success": -1
-  },
-  "total_time_seconds": 16209.2
+  "final_metrics": {},
+  "total_time_seconds": 324.2,
+  "error": "Training failed with exit code 1. Check log: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/logs/random_200_seed42_disassemblev3corner_minivla_random_training.log"
 }

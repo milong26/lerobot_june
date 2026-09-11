@@ -1,0 +1,11 @@
+{
+  "num_episodes": 0,
+  "success_count": 0,
+  "grasp_success_count": 0,
+  "fail_count": 0,
+  "success_rate": 0.0,
+  "grasp_success_rate": 0.0,
+  "success@5mm": null,
+  "coffee_success_5mm_count": null,
+  "episodes": []
+}

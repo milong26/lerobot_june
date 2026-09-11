@@ -125,13 +125,11 @@ class VLATokenizerWrapper:
     def build_prompt(self, instruction: str, action_text: str, state_text: str | None = None) -> str:
         """
         Build training prompt with instruction and action response.
-        Mirrors RLDSBatchTransform conversation building.
-        If state_text is provided, appends proprioceptive state to the instruction.
+        Mirrors official MiniVLA RLDSBatchTransform conversation building.
+        Official MiniVLA uses ONLY task instruction, NO state text in prompt.
+        State is processed separately through proprio encoder (not used in this implementation).
         """
-        if state_text:
-            full_instruction = f"What action should the robot take to {instruction.lower()}? The robot state is: {state_text}"
-        else:
-            full_instruction = f"What action should the robot take to {instruction.lower()}?"
+        full_instruction = f"What action should the robot take to {instruction.lower()}?"
         prompt_builder = QwenPromptBuilder("openvla")
         prompt_builder.add_turn("human", full_instruction)
         prompt_builder.add_turn("gpt", action_text)
@@ -140,12 +138,9 @@ class VLATokenizerWrapper:
     def build_inference_prompt(self, instruction: str, state_text: str | None = None) -> str:
         """
         Build inference prompt (no action response).
-        If state_text is provided, appends proprioceptive state to the instruction.
+        Official MiniVLA uses ONLY task instruction, NO state text in prompt.
         """
-        if state_text:
-            full_instruction = f"What action should the robot take to {instruction.lower()}? The robot state is: {state_text}"
-        else:
-            full_instruction = f"What action should the robot take to {instruction.lower()}?"
+        full_instruction = f"What action should the robot take to {instruction.lower()}?"
         prompt_builder = QwenPromptBuilder("openvla")
         prompt_builder.add_turn("human", full_instruction)
         return prompt_builder.get_prompt()

@@ -1,21 +1,4 @@
-运行
-bash personal/work2/differentvlm/tinyvla/launch_tinyvla-s.sh --gpu-id 1 --num-episodes 200 --dataset-name disassemble-v3_corner --method random --seed 42
-等价于
---method random
 
-bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
-tmux: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by tmux)
-Launched experiment: tinyvla_s_random_ep200_seed42
-tmux session: tinyvla_s_random_ep200_s42_disassemble-v3_corner
-Output dir: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner
-Dataset: disassemble-v3_corner
-Dataset root: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
-GPU: 1
-Episodes: 200
-Method: random
-
-Monitor with: tmux attach -t tinyvla_s_random_ep200_s42_disassemble-v3_corner
-Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/logs/tinyvla_s_random_ep200_seed42.log
 
 
 Supported methods:
@@ -23,7 +6,7 @@ Supported methods:
 
 
 
-
+# 代码
 之后
 解析参数，然后创建目录，生成脚本，启动tmux并执行
 执行过程：
@@ -128,3 +111,106 @@ action head的类型是DROID Diffusion，训练时：给真实动作逐步加噪
 │  - info: 其他指标字典                                            │
 └─────────────────────────────────────────────────────────────────┘
 
+# train
+运行
+bash personal/work2/differentvlm/tinyvla/launch_tinyvla-s.sh --gpu-id 1 --num-episodes 200 --dataset-name disassemble-v3_corner --method random --seed 42
+等价于
+--method random
+
+bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
+tmux: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by tmux)
+Launched experiment: tinyvla_s_random_ep200_seed42
+tmux session: tinyvla_s_random_ep200_s42_disassemble-v3_corner
+Output dir: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner
+Dataset: disassemble-v3_corner
+Dataset root: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+GPU: 1
+Episodes: 200
+Method: random
+
+Monitor with: tmux attach -t tinyvla_s_random_ep200_s42_disassemble-v3_corner
+Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/logs/tinyvla_s_random_ep200_seed42.log
+
+
+
+# eval
+看wandb效果好像有成功率非0的了，虽然我只测试了10次
+
+
+## 24k：成功率3%
+
+
+export MUJOCO_GL=egl 
+export PYOPENGL_PLATFORM=egl
+export CUDA_VISIBLE_DEVICES=1
+export MUJOCO_EGL_DEVICE_ID=1
+
+lerobot-eval \
+    --policy.path=personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/024000/pretrained_model \
+    --env.type=metaworld \
+    --env.task=disassemble-v3 \
+    --env.camera_name=corner,gripperPOV \
+    --env.use_self_mw=true \
+    --eval.batch_size=8 \
+    --eval.n_episodes=200 \
+    --policy.device=cuda \
+    --policy.use_amp=false \
+    --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}' \
+    2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_24kcp.log
+
+# 20k 0.5%
+export MUJOCO_GL=egl 
+export PYOPENGL_PLATFORM=egl
+export CUDA_VISIBLE_DEVICES=1
+export MUJOCO_EGL_DEVICE_ID=1
+
+lerobot-eval \
+    --policy.path=personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/020000/pretrained_model \
+    --env.type=metaworld \
+    --env.task=disassemble-v3 \
+    --env.camera_name=corner,gripperPOV \
+    --env.use_self_mw=true \
+    --eval.batch_size=8 \
+    --eval.n_episodes=200 \
+    --policy.device=cuda \
+    --policy.use_amp=false \
+    --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}' \
+    2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_20kcp.log
+
+# 30k:1.0%
+export MUJOCO_GL=egl 
+export PYOPENGL_PLATFORM=egl
+export CUDA_VISIBLE_DEVICES=1
+export MUJOCO_EGL_DEVICE_ID=1
+
+lerobot-eval \
+    --policy.path=personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/030000/pretrained_model \
+    --env.type=metaworld \
+    --env.task=disassemble-v3 \
+    --env.camera_name=corner,gripperPOV \
+    --env.use_self_mw=true \
+    --eval.batch_size=8 \
+    --eval.n_episodes=200 \
+    --policy.device=cuda \
+    --policy.use_amp=false \
+    --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}' \
+    2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_30kcp.log
+
+# 50k: 3.0%
+export MUJOCO_GL=egl 
+export PYOPENGL_PLATFORM=egl
+export CUDA_VISIBLE_DEVICES=2
+export MUJOCO_EGL_DEVICE_ID=2
+
+lerobot-eval \
+    --policy.path=personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model \
+    --env.type=metaworld \
+    --env.task=disassemble-v3 \
+    --env.camera_name=corner,gripperPOV \
+    --env.use_self_mw=true \
+    --eval.batch_size=8 \
+    --eval.n_episodes=200 \
+    --policy.device=cuda \
+    --policy.use_amp=false \
+    --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}' \
+    2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_50kcp.log

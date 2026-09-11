@@ -55,8 +55,8 @@ def select_random(
 
     stage_start = time.time()
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[5]
-    WORK2_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = Path(__file__).resolve().parents[4]
+    WORK2_ROOT = PROJECT_ROOT / "personal" / "work2"
 
     select_script = WORK2_ROOT / "duibi" / "train_and_eval_scripts" / "select_random_episodes.py"
     if not select_script.exists():
@@ -118,8 +118,8 @@ def select_grid_uniform(
 
     stage_start = time.time()
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[5]
-    WORK2_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = Path(__file__).resolve().parents[4]
+    WORK2_ROOT = PROJECT_ROOT / "personal" / "work2"
 
     select_script = WORK2_ROOT / "duibi" / "train_and_eval_scripts" / "select_grid_uniform.py"
     if not select_script.exists():
@@ -187,8 +187,8 @@ def select_our_v5(
 
     stage_start = time.time()
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[5]
-    WORK2_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = Path(__file__).resolve().parents[4]
+    WORK2_ROOT = PROJECT_ROOT / "personal" / "work2"
 
     select_script = WORK2_ROOT / "our_v5" / "select_our_v5.py"
     if not select_script.exists():
@@ -293,8 +293,8 @@ def select_deminf(
 
     stage_start = time.time()
 
-    PROJECT_ROOT = Path(__file__).resolve().parents[5]
-    WORK2_ROOT = Path(__file__).resolve().parents[3]
+    PROJECT_ROOT = Path(__file__).resolve().parents[4]
+    WORK2_ROOT = PROJECT_ROOT / "personal" / "work2"
 
     select_script = WORK2_ROOT / "deminf" / "run_deminf.py"
     if not select_script.exists():

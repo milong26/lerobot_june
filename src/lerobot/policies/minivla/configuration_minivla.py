@@ -327,7 +327,15 @@ class _MiniVLAConfigBase(PreTrainedConfig):
         )
 
     def get_scheduler_preset(self):
-        return None
+        from lerobot.optim.schedulers import ConstantWithWarmupSchedulerConfig
+
+        warmup_steps = self.scheduler_warmup_steps if self.scheduler_warmup_steps > 0 else None
+        if warmup_steps is None and self.scheduler_warmup_ratio > 0:
+            warmup_steps = 0  # Will be calculated during training
+
+        return ConstantWithWarmupSchedulerConfig(
+            num_warmup_steps=warmup_steps if warmup_steps is not None else 0,
+        )
 
     @property
     def observation_delta_indices(self) -> list:

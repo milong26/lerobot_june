@@ -155,7 +155,7 @@ def compute_sequence_patches(
         # (B*T, num_patches, embed_dim) -> (B, T*num_patches, embed_dim)
         b, t = trunc.shape[0], trunc.shape[1]
         n_tokens = out.shape[1]
-        out = out.view(b, t * n_tokens, -1)
+        out = out.contiguous().view(b, t * n_tokens, -1)
         patches[k] = out
     return patches
 

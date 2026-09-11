@@ -369,17 +369,10 @@ class MiniVLACore(nn.Module):
                         f"or switch to a non-VQ action tokenizer (e.g., extra_action_tokenizer)."
                     )
 
-            # Format state as text for prompt (mirrors official OpenVLA proprio handling)
-            state_texts = []
-            if state is not None:
-                # state shape: [B, state_dim] or [B, 1, state_dim]
-                if state.dim() == 3:
-                    state = state.squeeze(1)
-                for i in range(batch_size):
-                    state_vals = state[i].cpu().numpy()
-                    state_texts.append(", ".join([f"{v:.3f}" for v in state_vals]))
-            else:
-                state_texts = [None] * batch_size
+            # Official MiniVLA does NOT include state text in prompts.
+            # State (proprioception) is processed separately, not as text tokens.
+            # Keep state parameter for API compatibility but do not format as text.
+            state_texts = [None] * batch_size
 
             action_texts = []
             valid_action_mask = []
@@ -476,16 +469,9 @@ class MiniVLACore(nn.Module):
                 attention_mask_list, batch_first=True, padding_value=0
             )
         else:
-            # Inference mode: format state text if available
-            inference_state_texts = []
-            if state is not None:
-                if state.dim() == 3:
-                    state = state.squeeze(1)
-                for i in range(batch_size):
-                    state_vals = state[i].cpu().numpy()
-                    inference_state_texts.append(", ".join([f"{v:.3f}" for v in state_vals]))
-            else:
-                inference_state_texts = [None] * batch_size
+            # Inference mode: official MiniVLA does NOT include state text in prompts.
+            # Keep state parameter for API compatibility but do not format as text.
+            inference_state_texts = [None] * batch_size
 
             input_ids_list = []
             attention_mask_list = []

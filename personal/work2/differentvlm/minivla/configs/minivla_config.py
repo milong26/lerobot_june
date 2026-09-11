@@ -46,9 +46,9 @@ DATASET_CONFIGS = {
 SELECTION_NUM_EPISODES = 112
 SELECTION_SEED = 42
 
-TRAIN_STEPS = 20000
+TRAIN_STEPS = 50000
 TRAIN_SAVE_FREQ = 2000
-TRAIN_BATCH_SIZE = 4
+TRAIN_BATCH_SIZE = 2
 TRAIN_NUM_WORKERS = 16
 TRAIN_LR = 2e-5
 
@@ -126,6 +126,7 @@ class MiniVLAExperimentConfig:
     train_batch_size: int = TRAIN_BATCH_SIZE
     train_num_workers: int = TRAIN_NUM_WORKERS
     train_lr: float = TRAIN_LR
+    policy_type: str = "minivla_wrist"  # minivla (single camera) or minivla_wrist (dual camera)
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE
     official_vla_checkpoint: str = ""
     resume: bool = False
@@ -174,6 +175,7 @@ def get_minivla_config(
     env_eval_freq: int = 0,
     eval_n_episodes: int = EVAL_N_EPISODES,
     use_self_mw: bool = True,
+    policy_type: str = "minivla_wrist",
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE,
     official_vla_checkpoint: str = "",
     resume: bool = False,
@@ -211,6 +213,7 @@ def get_minivla_config(
         train_batch_size=TRAIN_BATCH_SIZE,
         train_num_workers=TRAIN_NUM_WORKERS,
         train_lr=TRAIN_LR,
+        policy_type=policy_type,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,
         resume=resume,

@@ -32,7 +32,7 @@ if str(WORK2_ROOT) not in sys.path:
 
 from differentvlm.minivla.configs.minivla_config import get_minivla_config, MiniVLAExperimentConfig
 from differentvlm.minivla.train.train_minivla import run_minivla_training
-from differentvlm.minivla.eval.eval_minivla import run_eval_all_checkpoints
+from differentvlm.minivla.eval.eval_minivla import run_eval_all_checkpoints, run_final_eval
 
 
 def ensure_v5_embeddings_exist(cfg: MiniVLAExperimentConfig) -> tuple:
@@ -384,7 +384,9 @@ def run_experiment(
     train_save_freq: int = 2000,
     env_eval_freq: int = 0,
     eval_n_episodes: int = 10,
+    final_eval_episodes: int = 10,
     use_self_mw: bool = True,
+    policy_type: str = "minivla_wrist",
     action_tokenizer_type: str = "extra_action_tokenizer",
     official_vla_checkpoint: str = "",
     resume: bool = False,
@@ -408,6 +410,7 @@ def run_experiment(
         env_eval_freq=env_eval_freq,
         eval_n_episodes=eval_n_episodes,
         use_self_mw=use_self_mw,
+        policy_type=policy_type,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,
         resume=resume,
@@ -494,7 +497,7 @@ def run_experiment(
 
         # Stage 3: Evaluation
         if eval_all:
-            print(f"\nStage 3: Evaluation (all checkpoints)")
+            print(f"\nStage 3: Evaluation (all checkpoints, {cfg.eval_n_episodes} episodes each)")
             experiment_state["current_stage"] = "evaluation"
             stage_start = time.time()
             eval_results = run_eval_all_checkpoints(cfg, checkpoint_dir, latest_only=eval_latest_only)
@@ -502,6 +505,7 @@ def run_experiment(
             experiment_state["stages"]["evaluation"] = {
                 "status": "success",
                 "time_seconds": round(stage_time, 1),
+                "n_episodes_per_checkpoint": cfg.eval_n_episodes,
             }
             experiment_state["final_metrics"] = {
                 "eval_results": eval_results,
@@ -515,6 +519,29 @@ def run_experiment(
                 ),
             }
             print(f"Stage 3 complete: {stage_time:.1f}s")
+
+        # Stage 4: Final Comprehensive Evaluation (200 episodes per checkpoint)
+        if final_eval_episodes > 0 and eval_all:
+            print(f"\nStage 4: Final Comprehensive Evaluation ({final_eval_episodes} episodes per checkpoint)")
+            experiment_state["current_stage"] = "final_evaluation"
+            stage_start = time.time()
+            final_eval_results = run_final_eval(cfg, checkpoint_dir, n_episodes=final_eval_episodes)
+            stage_time = time.time() - stage_start
+            experiment_state["stages"]["final_evaluation"] = {
+                "status": "success",
+                "time_seconds": round(stage_time, 1),
+                "n_episodes_per_checkpoint": final_eval_episodes,
+            }
+            experiment_state["final_metrics"]["final_eval_results"] = final_eval_results
+            experiment_state["final_metrics"]["best_final_pc_success"] = max(
+                [r.get("pc_success", -1) for r in final_eval_results if r.get("pc_success", -1) >= 0],
+                default=-1,
+            )
+            experiment_state["final_metrics"]["best_final_pc_grasp_success"] = max(
+                [r.get("pc_grasp_success", -1) for r in final_eval_results if r.get("pc_grasp_success", -1) >= 0],
+                default=-1,
+            )
+            print(f"Stage 4 complete: {stage_time:.1f}s")
 
     except Exception as e:
         print(f"\nEXPERIMENT FAILED at stage: {experiment_state['current_stage']}")
@@ -534,8 +561,14 @@ def run_experiment(
     print(f"Total time: {experiment_state['total_time_seconds']/3600:.2f} hours ({experiment_state['total_time_seconds']/60:.1f} minutes)")
     print(f"Summary: {Path(cfg.experiment_dir) / 'experiment_summary.json'}")
     if experiment_state["final_metrics"]:
-        print(f"pc_success: {experiment_state['final_metrics'].get('best_pc_success', 'N/A')}")
-        print(f"pc_grasp_success: {experiment_state['final_metrics'].get('best_pc_grasp_success', 'N/A')}")
+        print(f"\nTraining-time eval (10 episodes/checkpoint):")
+        print(f"  Best pc_success: {experiment_state['final_metrics'].get('best_pc_success', 'N/A')}")
+        print(f"  Best pc_grasp_success: {experiment_state['final_metrics'].get('best_pc_grasp_success', 'N/A')}")
+        if "best_final_pc_success" in experiment_state["final_metrics"]:
+            print(f"\nFinal comprehensive eval (200 episodes/checkpoint):")
+            print(f"  Best pc_success: {experiment_state['final_metrics'].get('best_final_pc_success', 'N/A')}")
+            print(f"  Best pc_grasp_success: {experiment_state['final_metrics'].get('best_final_pc_grasp_success', 'N/A')}")
+            print(f"  Results saved to: {Path(cfg.eval_results_dir) / 'final_eval_200episodes' / 'final_eval_summary.json'}")
 
     sys.stdout.flush()
     return experiment_state
@@ -560,10 +593,14 @@ def main():
     parser.add_argument("--env-eval-freq", type=int, default=0,
                        help="Environment eval frequency during training (0=disabled, >0=eval every N steps)")
     parser.add_argument("--eval-n-episodes", type=int, default=10, help="Number of episodes for evaluation")
+    parser.add_argument("--final-eval-episodes", type=int, default=200,
+                       help="Number of episodes for final comprehensive eval (0=disabled, default=200)")
     parser.add_argument("--use-self-mw", action="store_true", default=True,
                        help="Use self-collected Meta-World dataset format (dual camera, lerobot naming)")
     parser.add_argument("--no-use-self-mw", action="store_false", dest="use_self_mw",
                        help="Disable self-collected Meta-World dataset format")
+    parser.add_argument("--policy-type", type=str, default="minivla_wrist",
+                       help="Policy type: minivla (single camera) or minivla_wrist (dual camera)")
     parser.add_argument("--action-tokenizer-type", type=str, default="extra_action_tokenizer",
                        help="Action tokenizer type (extra_action_tokenizer, libero_vq_action_tokenizer, etc.)")
     parser.add_argument("--official-vla-checkpoint", type=str, default="",
@@ -590,7 +627,9 @@ def main():
         train_save_freq=args.train_save_freq,
         env_eval_freq=args.env_eval_freq,
         eval_n_episodes=args.eval_n_episodes,
+        final_eval_episodes=args.final_eval_episodes,
         use_self_mw=args.use_self_mw,
+        policy_type=args.policy_type,
         action_tokenizer_type=args.action_tokenizer_type,
         official_vla_checkpoint=args.official_vla_checkpoint,
         resume=args.resume,

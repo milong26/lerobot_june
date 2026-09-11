@@ -461,22 +461,22 @@ def rollout(
             assert action_numpy.ndim == 2, "Action dimensions should be (batch, action_dim)"
 
             # For TinyVLA: capture raw diffusion output stats
-            if is_tinyvla and step % 50 == 0:
-                raw_action_np = raw_action.to("cpu").to(dtype=torch.float32).numpy()
-                logger.info(
-                    f"[TinyVLA DIAG] step={step} | raw_diffusion_output: "
-                    f"shape={raw_action_np.shape}, min={raw_action_np.min(axis=0)}, "
-                    f"max={raw_action_np.max(axis=0)}, mean={raw_action_np.mean(axis=0)}, "
-                    f"std={raw_action_np.std(axis=0)}"
-                )
-                logger.info(
-                    f"[TinyVLA DIAG] step={step} | postproc_action (pre-clip): "
-                    f"shape={action_numpy.shape}, min={action_numpy.min(axis=0)}, "
-                    f"max={action_numpy.max(axis=0)}, mean={action_numpy.mean(axis=0)}, "
-                    f"std={action_numpy.std(axis=0)}"
-                )
-                if action_numpy.shape[1] <= 8:
-                    logger.info(f"[TinyVLA DIAG] step={step} | first 3 postproc actions: {action_numpy[:3]}")
+            # if is_tinyvla and step % 50 == 0:
+            #     raw_action_np = raw_action.to("cpu").to(dtype=torch.float32).numpy()
+            #     logger.info(
+            #         f"[TinyVLA DIAG] step={step} | raw_diffusion_output: "
+            #         f"shape={raw_action_np.shape}, min={raw_action_np.min(axis=0)}, "
+            #         f"max={raw_action_np.max(axis=0)}, mean={raw_action_np.mean(axis=0)}, "
+            #         f"std={raw_action_np.std(axis=0)}"
+            #     )
+            #     logger.info(
+            #         f"[TinyVLA DIAG] step={step} | postproc_action (pre-clip): "
+            #         f"shape={action_numpy.shape}, min={action_numpy.min(axis=0)}, "
+            #         f"max={action_numpy.max(axis=0)}, mean={action_numpy.mean(axis=0)}, "
+            #         f"std={action_numpy.std(axis=0)}"
+            #     )
+            #     if action_numpy.shape[1] <= 8:
+            #         logger.info(f"[TinyVLA DIAG] step={step} | first 3 postproc actions: {action_numpy[:3]}")
 
             # Clip action to env action space bounds (per-dimension)
             env_low = env.action_space.low
@@ -490,33 +490,34 @@ def rollout(
                     n_clipped_high = clipped_mask_high.sum()
                     n_total = action_numpy.size
                     pct_clipped = (n_clipped_low + n_clipped_high) / n_total * 100
-                    logger.info(
-                        f"[TinyVLA DIAG] step={step} | clip_stats: "
-                        f"env_range=[{env_low}, {env_high}], "
-                        f"clipped_low={n_clipped_low}, clipped_high={n_clipped_high}, "
-                        f"pct_clipped={pct_clipped:.1f}%"
-                    )
+                    # logger.info(
+                    #     f"[TinyVLA DIAG] step={step} | clip_stats: "
+                    #     f"env_range=[{env_low}, {env_high}], "
+                    #     f"clipped_low={n_clipped_low}, clipped_high={n_clipped_high}, "
+                    #     f"pct_clipped={pct_clipped:.1f}%"
+                    # )
                 
                 action_numpy = np.clip(action_numpy, env_low, env_high)
                 
                 # Log post-clip stats
-                if is_tinyvla and step % 50 == 0:
-                    logger.info(
-                        f"[TinyVLA DIAG] step={step} | env_action (post-clip): "
-                        f"shape={action_numpy.shape}, min={action_numpy.min(axis=0)}, "
-                        f"max={action_numpy.max(axis=0)}, mean={action_numpy.mean(axis=0)}, "
-                        f"std={action_numpy.std(axis=0)}"
-                    )
+                # if is_tinyvla and step % 50 == 0:
+                #     logger.info(
+                #         f"[TinyVLA DIAG] step={step} | env_action (post-clip): "
+                #         f"shape={action_numpy.shape}, min={action_numpy.min(axis=0)}, "
+                #         f"max={action_numpy.max(axis=0)}, mean={action_numpy.mean(axis=0)}, "
+                #         f"std={action_numpy.std(axis=0)}"
+                #     )
             else:
-                logger.warning(
-                    f"[TinyVLA DIAG] Action dim {action_numpy.shape[-1]} != env action dim {env_low.shape[-1]}, "
-                    f"skipping clip. This may cause issues."
-                )
+                pass
+                # logger.warning(
+                #     f"[TinyVLA DIAG] Action dim {action_numpy.shape[-1]} != env action dim {env_low.shape[-1]}, "
+                #     f"skipping clip. This may cause issues."
+                # )
 
             # Verify zero-action invariance: if policy outputs near-zero, postproc+clip should keep it near-zero
             if is_tinyvla and step == 0:
                 zero_check = np.abs(action_numpy).max()
-                logger.info(f"[TinyVLA DIAG] step=0 | max_abs_env_action={zero_check:.6f} (post-clip)")
+                # logger.info(f"[TinyVLA DIAG] step=0 | max_abs_env_action={zero_check:.6f} (post-clip)")
 
             # Apply the next action.
             observation, reward, terminated, truncated, info = env.step(action_numpy)

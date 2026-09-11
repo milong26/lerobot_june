@@ -1,8 +1,0 @@
-{
-  "method": "random",
-  "num_episodes": 1,
-  "seed": 42,
-  "selected_episode_indices": [
-    327
-  ]
-}

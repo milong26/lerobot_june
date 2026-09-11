@@ -45,14 +45,16 @@ def run_eval_for_checkpoint(
     cfg: MiniVLAExperimentConfig,
     checkpoint_path: str,
     step_number: int,
+    n_episodes: int | None = None,
 ) -> Dict:
     """
     Run evaluation for a single checkpoint.
     Returns evaluation results dict.
     """
+    eval_n_episodes = n_episodes if n_episodes is not None else cfg.eval_n_episodes
     print(f"\nRunning Evaluation for checkpoint step_{step_number:06d}")
     print(f"Checkpoint: {checkpoint_path}")
-    print(f"N episodes: {cfg.eval_n_episodes}")
+    print(f"N episodes: {eval_n_episodes}")
     print(f"Seed: {cfg.eval_seed}")
     print(f"GPU: {cfg.gpu_id}")
 
@@ -85,7 +87,7 @@ def run_eval_for_checkpoint(
         f"--env.camera_name={cfg.camera_names}",
         "--env.use_self_mw=true",
         f"--eval.batch_size={cfg.eval_batch_size}",
-        f"--eval.n_episodes={cfg.eval_n_episodes}",
+        f"--eval.n_episodes={eval_n_episodes}",
         "--policy.device=cuda",
         f"--rename_map={cfg.rename_map}",
     ]
@@ -262,6 +264,81 @@ def run_eval_all_checkpoints(cfg: MiniVLAExperimentConfig, checkpoint_dir: str, 
         success = r.get("pc_success", "N/A")
         grasp = r.get("pc_grasp_success", "N/A")
         print(f"  step_{step:06d}: pc_success={success}, pc_grasp_success={grasp}")
+    print(f"\nSummary saved to: {summary_file}")
+    sys.stdout.flush()
+
+    return all_results
+
+
+def run_final_eval(cfg: MiniVLAExperimentConfig, checkpoint_dir: str, n_episodes: int = 200) -> List[Dict]:
+    """
+    Run comprehensive final evaluation on all checkpoints.
+    Each checkpoint is evaluated with n_episodes (default 200) for better statistical reliability.
+    This is more thorough than the training-time eval (which uses only 10 episodes).
+    Returns list of evaluation results.
+    """
+    checkpoints = find_all_checkpoints(checkpoint_dir)
+    if not checkpoints:
+        raise FileNotFoundError(f"No valid checkpoints found in {checkpoint_dir}")
+
+    print(f"\n{'='*60}")
+    print(f"FINAL COMPREHENSIVE EVALUATION")
+    print(f"{'='*60}")
+    print(f"Found {len(checkpoints)} checkpoints to evaluate")
+    print(f"Each checkpoint will be evaluated with {n_episodes} episodes")
+    print(f"(Training-time eval used only {cfg.eval_n_episodes} episodes)")
+    sys.stdout.flush()
+
+    # Create separate output directory for final eval
+    final_eval_dir = Path(cfg.eval_results_dir) / "final_eval_200episodes"
+    final_eval_dir.mkdir(parents=True, exist_ok=True)
+
+    all_results = []
+    for step_num, ckpt_path in checkpoints:
+        print(f"\n{'='*40}")
+        print(f"Evaluating checkpoint step_{step_num:06d} with {n_episodes} episodes")
+        print(f"{'='*40}")
+        sys.stdout.flush()
+
+        try:
+            metrics = run_eval_for_checkpoint(cfg, ckpt_path, step_num, n_episodes=n_episodes)
+            metrics["step"] = step_num
+            metrics["checkpoint_path"] = ckpt_path
+            metrics["eval_type"] = "final_200_episodes"
+            all_results.append(metrics)
+        except Exception as e:
+            print(f"ERROR evaluating checkpoint step_{step_num:06d}: {e}")
+            all_results.append({
+                "step": step_num,
+                "checkpoint_path": ckpt_path,
+                "pc_success": -1,
+                "pc_grasp_success": -1,
+                "eval_type": "final_200_episodes",
+                "error": str(e),
+            })
+
+    # Save final eval summary
+    summary_file = final_eval_dir / "final_eval_summary.json"
+    with open(summary_file, "w") as f:
+        json.dump(all_results, f, indent=2)
+
+    print(f"\n{'='*60}")
+    print(f"FINAL EVALUATION SUMMARY")
+    print(f"{'='*60}")
+    for r in all_results:
+        step = r.get("step", "?")
+        success = r.get("pc_success", "N/A")
+        grasp = r.get("pc_grasp_success", "N/A")
+        print(f"  step_{step:06d}: pc_success={success}, pc_grasp_success={grasp}")
+    
+    best_success = max([r.get("pc_success", -1) for r in all_results if r.get("pc_success", -1) >= 0], default=-1)
+    best_step = None
+    for r in all_results:
+        if r.get("pc_success", -1) == best_success:
+            best_step = r.get("step")
+            break
+    
+    print(f"\n  Best checkpoint: step_{best_step:06d} with pc_success={best_success}")
     print(f"\nSummary saved to: {summary_file}")
     sys.stdout.flush()
 

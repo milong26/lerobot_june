@@ -179,7 +179,7 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
 
     cmd = [
         "lerobot-train",
-        "--policy.type=minivla",
+        f"--policy.type={cfg.policy_type}",
         "--policy.device=cuda",
         "--policy.push_to_hub=false",
         "--dataset.repo_id=lerobot/metaworld_pick_place",
@@ -218,7 +218,7 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         f"--eval.n_episodes={cfg.eval_n_episodes}",
         f"--eval.batch_size={cfg.eval_batch_size}",
         f"--env_eval_freq={cfg.env_eval_freq}",
-        f"--env.use_self_mw={cfg.use_self_mw}",
+        f"--env.use_self_mw={str(cfg.use_self_mw).lower()}",
         f"--seed={cfg.selection_seed}",
         f"--job_name=minivla_{cfg.exp_name}",
         f"--output_dir={output_dir}",
@@ -263,9 +263,10 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
             )
 
         if result.returncode != 0:
-            print(f"WARNING: Training exited with code {result.returncode}")
-            print(f"Check log: {train_log}")
-            sys.stdout.flush()
+            raise RuntimeError(
+                f"Training failed with exit code {result.returncode}. "
+                f"Check log: {train_log}"
+            )
 
     checkpoint_dir = output_dir / "checkpoints"
     print(f"\nTraining complete.")

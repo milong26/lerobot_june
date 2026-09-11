@@ -539,6 +539,7 @@ def _make_processors_from_policy_config(
     _POLICY_TYPE_TO_PROCESSOR_MODULE = {
         "tinyvla_s": "tinyvla",
         "tinyvla_b": "tinyvla",
+        "minivla_wrist": "minivla",
     }
     canonical_type = _POLICY_TYPE_TO_PROCESSOR_MODULE.get(policy_type, policy_type)
     function_name = f"make_{canonical_type}_pre_post_processors"
