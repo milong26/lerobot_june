@@ -1,0 +1,9 @@
+Metric,Random,Grid-Uniform,Ours
+configuration_coverage_ratio,0.95,1.0,1.0
+region_entropy,3.4499,3.6778,3.643
+avg_nearest_neighbor_distance,0.0275,0.0261,0.0268
+mean_pairwise_configuration_distance,0.1179,0.1278,0.1224
+visual_diversity,1.8823,1.7154,1.7595
+action_diversity,6.5431,5.3975,5.569
+js_divergence_from_candidate,0.213,0.1435,0.0553
+earth_mover_distance_from_candidate,1.5089,0.6268,0.1414
