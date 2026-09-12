@@ -65,6 +65,10 @@ VQ_MODEL_PATH = "Stanford-ILIAD/pretrain_vq"
 # Set to empty string to disable official pretrained initialization.
 OFFICIAL_PRETRAINED_CHECKPOINT = "Stanford-ILIAD/minivla-libero90-prismatic"
 
+# Official MiniVLA default learning rate (from teach_code/MiniVLA prismatic/conf/vla.py)
+# This is the default AdamW learning rate used in official MiniVLA training.
+OFFICIAL_LR = 2e-5
+
 EVAL_N_EPISODES = 10
 EVAL_SEED = 42
 EVAL_BATCH_SIZE = 4
@@ -131,7 +135,7 @@ class MiniVLAExperimentConfig:
     train_save_freq: int = TRAIN_SAVE_FREQ
     train_batch_size: int = TRAIN_BATCH_SIZE
     train_num_workers: int = TRAIN_NUM_WORKERS
-    train_lr: float = 0.0
+    train_lr: float = 2e-5  # Official MiniVLA default AdamW learning rate
     policy_type: str = "minivla_wrist"  # minivla (single camera) or minivla_wrist (dual camera)
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE
     official_vla_checkpoint: str = ""
@@ -226,7 +230,7 @@ def get_minivla_config(
         train_save_freq=train_save_freq,
         train_batch_size=TRAIN_BATCH_SIZE,
         train_num_workers=TRAIN_NUM_WORKERS,
-        train_lr=0.0,
+        train_lr=2e-5,
         policy_type=policy_type,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,

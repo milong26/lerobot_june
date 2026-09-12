@@ -92,7 +92,7 @@ def verify_optimizer_lr(lr_value: float) -> bool:
     if lr_value == 0.0:
         print(f"[PASS] Learning rate not overridden (will use official default: {OFFICIAL_LR})")
         return True
-    elif lr_value == OFFICIAL_LR:
+    elif abs(lr_value - OFFICIAL_LR) < 1e-10:
         print(f"[PASS] Learning rate matches official default: {lr_value}")
         return True
     else:
