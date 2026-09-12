@@ -132,3 +132,4 @@ trainable params: 31,457,280 || all params: 380,423,168 || trainable%: 8.2690
 number of parameters: 7.281920e+07
 Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]INFO 2026-09-12 10:21:17 bot_eval.py:744 TinyVLA diagnostic mode: action stats loaded from personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/030000/pretrained_model. NOTE: Action scaling (_scale_tinyvla_actions) is DISABLED. Actions are only unnormalized by postprocessor and clipped to env.action_space bounds.
 Evaluating (0/200 episodes):   0%|          | 0/25 [00:00<?, ?it/s]`use_return_dict` is deprecated! Use `return_dict` instead!
+Evaluating (8/200 episodes, success: 0/8, rate: 0.0%):   0%|          | 0/25 [09:29<?, ?it/s]Evaluating (8/200 episodes, success: 0/8, rate: 0.0%):   4%|▍         | 1/25 [09:29<3:47:37, 569.06s/it]
