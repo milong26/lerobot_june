@@ -3,33 +3,39 @@
   "selection_budget": 112,
   "num_regions": 40,
   "random": {
-    "configuration_coverage_ratio": 0.95,
-    "region_entropy": 3.4499,
-    "avg_nearest_neighbor_distance": 0.0275,
-    "mean_pairwise_configuration_distance": 0.1179,
+    "method": "random",
+    "selection_budget": 112,
+    "coverage_ratio": 0.95,
+    "entropy": 3.4499,
+    "nearest_neighbor_distance": 0.0275,
+    "pairwise_configuration_distance": 0.1179,
     "visual_diversity": 1.8823,
     "action_diversity": 6.5431,
-    "js_divergence_from_candidate": 0.213,
-    "earth_mover_distance_from_candidate": 1.5089
+    "js_divergence": 0.213,
+    "emd_distance": 1.5089
   },
-  "grid_uniform": {
-    "configuration_coverage_ratio": 1.0,
-    "region_entropy": 3.6778,
-    "avg_nearest_neighbor_distance": 0.0261,
-    "mean_pairwise_configuration_distance": 0.1278,
-    "visual_diversity": 1.7154,
-    "action_diversity": 5.3975,
-    "js_divergence_from_candidate": 0.1435,
-    "earth_mover_distance_from_candidate": 0.6268
+  "deminf": {
+    "method": "deminf",
+    "selection_budget": 112,
+    "coverage_ratio": 0.75,
+    "entropy": 3.2011,
+    "nearest_neighbor_distance": 0.0237,
+    "pairwise_configuration_distance": 0.106,
+    "visual_diversity": 1.222,
+    "action_diversity": 3.3806,
+    "js_divergence": 0.3032,
+    "emd_distance": 2.0418
   },
   "ours": {
-    "configuration_coverage_ratio": 1.0,
-    "region_entropy": 3.643,
-    "avg_nearest_neighbor_distance": 0.0268,
-    "mean_pairwise_configuration_distance": 0.1224,
+    "method": "ours",
+    "selection_budget": 112,
+    "coverage_ratio": 1.0,
+    "entropy": 3.643,
+    "nearest_neighbor_distance": 0.0268,
+    "pairwise_configuration_distance": 0.1224,
     "visual_diversity": 1.7595,
     "action_diversity": 5.569,
-    "js_divergence_from_candidate": 0.0553,
-    "earth_mover_distance_from_candidate": 0.1414
+    "js_divergence": 0.0553,
+    "emd_distance": 0.1414
   }
 }

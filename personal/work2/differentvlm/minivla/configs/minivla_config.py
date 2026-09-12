@@ -50,7 +50,6 @@ TRAIN_STEPS = 50000
 TRAIN_SAVE_FREQ = 2000
 TRAIN_BATCH_SIZE = 2
 TRAIN_NUM_WORKERS = 16
-TRAIN_LR = 2e-5
 
 # Action tokenizer: MetaWorld uses extra_action_tokenizer (non-VQ, supports 4D natively)
 # Do NOT use libero_vq_action_tokenizer for MetaWorld (7D VQ != 4D MetaWorld action)
@@ -58,6 +57,12 @@ ACTION_TOKENIZER_TYPE = "extra_action_tokenizer"
 
 # VQ model path (only used when action_tokenizer_type is a VQ type)
 VQ_MODEL_PATH = "Stanford-ILIAD/pretrain_vq"
+
+# Official MiniVLA pretrained checkpoint for backbone-only initialization.
+# This checkpoint provides vision_backbone, projector, and llm_backbone weights.
+# Action head is NOT loaded from this checkpoint; it is reinitialized for MetaWorld 4D actions.
+# Set to empty string to disable official pretrained initialization.
+OFFICIAL_PRETRAINED_CHECKPOINT = ""
 
 EVAL_N_EPISODES = 10
 EVAL_SEED = 42
@@ -125,12 +130,12 @@ class MiniVLAExperimentConfig:
     train_save_freq: int = TRAIN_SAVE_FREQ
     train_batch_size: int = TRAIN_BATCH_SIZE
     train_num_workers: int = TRAIN_NUM_WORKERS
-    train_lr: float = TRAIN_LR
+    train_lr: float = 0.0
     policy_type: str = "minivla_wrist"  # minivla (single camera) or minivla_wrist (dual camera)
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE
     official_vla_checkpoint: str = ""
-    official_init_mode: str = "none"
-    official_pretrained_checkpoint: str = ""
+    official_init_mode: str = "backbone_only"
+    official_pretrained_checkpoint: str = OFFICIAL_PRETRAINED_CHECKPOINT
     resume: bool = False
     restart: bool = False
     scheduler_warmup_steps: int = 0
@@ -180,8 +185,8 @@ def get_minivla_config(
     policy_type: str = "minivla_wrist",
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE,
     official_vla_checkpoint: str = "",
-    official_init_mode: str = "none",
-    official_pretrained_checkpoint: str = "",
+    official_init_mode: str = "backbone_only",
+    official_pretrained_checkpoint: str = OFFICIAL_PRETRAINED_CHECKPOINT,
     resume: bool = False,
     restart: bool = False,
     scheduler_warmup_steps: int = 0,
@@ -216,7 +221,7 @@ def get_minivla_config(
         train_save_freq=train_save_freq,
         train_batch_size=TRAIN_BATCH_SIZE,
         train_num_workers=TRAIN_NUM_WORKERS,
-        train_lr=TRAIN_LR,
+        train_lr=0.0,
         policy_type=policy_type,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,

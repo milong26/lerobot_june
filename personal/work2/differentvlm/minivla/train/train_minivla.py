@@ -146,11 +146,29 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
     print(f"Steps: {cfg.train_steps}")
     print(f"Batch size: {cfg.train_batch_size}")
     print(f"GPU: {cfg.gpu_id}")
-    if cfg.official_vla_checkpoint:
+
+    # Official VLA checkpoint initialization logging
+    loaded_modules = []
+    skipped_modules = []
+    if cfg.official_init_mode == "backbone_only" and cfg.official_pretrained_checkpoint:
+        print(f"Official VLA checkpoint: {cfg.official_pretrained_checkpoint}")
+        print(f"Initialization mode: backbone_only")
+        loaded_modules = ["vision_backbone", "projector", "llm_backbone"]
+        skipped_modules = ["action_head", "action_tokenizer", "vq_vae"]
+    elif cfg.official_vla_checkpoint:
         print(f"Official VLA checkpoint: {cfg.official_vla_checkpoint}")
-    if cfg.official_init_mode == "backbone_only":
-        print(f"Official init mode: backbone_only")
-        print(f"Official pretrained checkpoint: {cfg.official_pretrained_checkpoint}")
+        print(f"Initialization mode: full_policy")
+        loaded_modules = ["vision_backbone", "projector", "llm_backbone", "action_head"]
+        skipped_modules = []
+    else:
+        print(f"Official VLA checkpoint: None (random initialization)")
+        print(f"Initialization mode: none")
+        loaded_modules = []
+        skipped_modules = ["vision_backbone", "projector", "llm_backbone", "action_head"]
+
+    print(f"Loaded modules: {loaded_modules}")
+    print(f"Skipped modules: {skipped_modules}")
+
     if cfg.projector_lr > 0:
         print(f"Projector LR: {cfg.projector_lr}")
     if cfg.backbone_lr > 0:
@@ -196,7 +214,6 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         f"--policy.action_tokenizer_type={cfg.action_tokenizer_type}",
         f"--policy.primary_image_key={cfg.primary_image_key}",
         f"--policy.wrist_image_key={cfg.wrist_image_key}",
-        f"--policy.optimizer_lr={cfg.train_lr}",
     ]
 
     # Add official VLA checkpoint if specified (legacy full policy loading)
@@ -208,12 +225,6 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         cmd.append(f"--policy.official_init_mode=backbone_only")
         if cfg.official_pretrained_checkpoint:
             cmd.append(f"--policy.official_pretrained_checkpoint={cfg.official_pretrained_checkpoint}")
-
-    # Add per-component learning rates if specified
-    if cfg.projector_lr > 0:
-        cmd.append(f"--policy.projector_lr={cfg.projector_lr}")
-    if cfg.backbone_lr > 0:
-        cmd.append(f"--policy.backbone_lr={cfg.backbone_lr}")
 
     # Add scheduler warmup steps
     if cfg.scheduler_warmup_steps > 0:

@@ -126,8 +126,8 @@
             "names": null
         }
     },
-    "total_episodes": 143,
-    "total_frames": 22346,
+    "total_episodes": 188,
+    "total_frames": 29578,
     "total_tasks": 4,
     "chunks_size": 1000,
     "data_files_size_in_mb": 100,
@@ -136,6 +136,6 @@
     "video_path": "videos/{video_key}/chunk-{chunk_index:03d}/file-{file_index:03d}.mp4",
     "robot_type": "franka",
     "splits": {
-        "train": "0:143"
+        "train": "0:188"
     }
 }
