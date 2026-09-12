@@ -1,0 +1,12 @@
+2026-09-12 19:21:18 [INFO] Loaded 400 candidate pool episodes from episode_initial_states.json
+2026-09-12 19:21:18 [INFO] Loaded 400 rand_vecs from candidate pool
+2026-09-12 19:21:18 [WARNING] Grid-Uniform selection file not found, generating from candidate pool
+2026-09-12 19:21:18 [INFO] Loaded 200 indices from random_200_seed42.json (key=selected_episode_indices)
+2026-09-12 19:21:18 [INFO] Loaded 112 indices from deminf_112_seed42.json (key=selected_episode_indices)
+2026-09-12 19:21:18 [INFO] Loaded 112 indices from our_v5_112_seed42.json (key=selected_episode_indices)
+2026-09-12 19:21:18 [INFO] Evaluating 20 dimension combinations for discriminative power...
+2026-09-12 19:21:18 [INFO] Feature dimension: 6
+2026-09-12 19:21:18 [INFO] Selected dimensions: [0, 2, 5]
+2026-09-12 19:21:18 [INFO] Discrimination score: 11.3414
+2026-09-12 19:21:22 [INFO] Saved: personal/work2/distribution_analysis/results/configuration_space_3d_comparison.png
+2026-09-12 19:21:22 [INFO] Saved: personal/work2/distribution_analysis/results/configuration_space_3d_statistics.json

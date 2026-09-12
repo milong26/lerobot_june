@@ -188,8 +188,6 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
     print(f"GPU: {cfg.gpu_id}")
 
     # Official VLA checkpoint initialization logging
-    loaded_modules = []
-    skipped_modules = []
     resolved_checkpoint_path = cfg.official_pretrained_checkpoint
     
     if cfg.official_init_mode == "backbone_only" and cfg.official_pretrained_checkpoint:
@@ -205,23 +203,18 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
                     f"to a .pt checkpoint file. Please ensure the model is downloaded in HF cache."
                 )
         
-        print(f"Official VLA checkpoint: {resolved_checkpoint_path}")
-        print(f"Initialization mode: backbone_only")
-        loaded_modules = ["vision_backbone", "projector", "llm_backbone"]
-        skipped_modules = ["action_head", "action_tokenizer", "vq_vae"]
+        print(f"\n{'='*60}")
+        print(f"[OFFICIAL CHECKPOINT INITIALIZATION]")
+        print(f"  Checkpoint path: {resolved_checkpoint_path}")
+        print(f"  Initialization mode: backbone_only")
+        print(f"  Note: Actual module loading results will be printed by MiniVLACore during init")
+        print(f"{'='*60}")
     elif cfg.official_vla_checkpoint:
         print(f"Official VLA checkpoint: {cfg.official_vla_checkpoint}")
         print(f"Initialization mode: full_policy")
-        loaded_modules = ["vision_backbone", "projector", "llm_backbone", "action_head"]
-        skipped_modules = []
     else:
         print(f"Official VLA checkpoint: None (random initialization)")
         print(f"Initialization mode: none")
-        loaded_modules = []
-        skipped_modules = ["vision_backbone", "projector", "llm_backbone", "action_head"]
-
-    print(f"Loaded modules: {loaded_modules}")
-    print(f"Skipped modules: {skipped_modules}")
 
     if cfg.projector_lr > 0:
         print(f"Projector LR: {cfg.projector_lr}")
@@ -268,6 +261,13 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         f"--policy.action_tokenizer_type={cfg.action_tokenizer_type}",
         f"--policy.primary_image_key={cfg.primary_image_key}",
         f"--policy.wrist_image_key={cfg.wrist_image_key}",
+        # Official MiniVLA optimizer config (from teach_code/MiniVLA/prismatic/conf/vla.py)
+        f"--policy.optimizer_lr={cfg.official_lr}",
+        f"--policy.optimizer_weight_decay={cfg.official_weight_decay}",
+        f"--policy.optimizer_grad_clip_norm={cfg.official_max_grad_norm}",
+        # Official scheduler config
+        f"--policy.scheduler_type={cfg.official_lr_scheduler_type}",
+        f"--policy.scheduler_warmup_ratio={cfg.official_warmup_ratio}",
     ]
 
     # Add official VLA checkpoint if specified (legacy full policy loading)

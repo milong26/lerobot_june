@@ -373,6 +373,12 @@ class MiniVLACore(nn.Module):
         checkpoint = torch.load(checkpoint_path, map_location="cpu")
         model_state = checkpoint.get("model", checkpoint)
 
+        # Track real load_state_dict results for logging
+        all_loaded_modules = []
+        all_skipped_modules = []
+        all_missing_keys = []
+        all_unexpected_keys = []
+
         # Load projector
         if "projector" in model_state:
             missing, unexpected = self.vlm.projector.load_state_dict(model_state["projector"], strict=True)
@@ -380,8 +386,10 @@ class MiniVLACore(nn.Module):
                 raise ValueError(f"[Backbone-Only Init] Missing projector keys: {missing}")
             if unexpected:
                 raise ValueError(f"[Backbone-Only Init] Unexpected projector keys: {unexpected}")
+            all_loaded_modules.append("projector")
             logger.info("[Backbone-Only Init] Loaded projector weights from official checkpoint.")
         else:
+            all_skipped_modules.append("projector (not in checkpoint)")
             logger.warning("[Backbone-Only Init] No projector weights in official checkpoint, using pretrained init.")
 
         # Load LLM backbone
@@ -400,12 +408,12 @@ class MiniVLACore(nn.Module):
                     self.vlm.llm.resize_token_embeddings(official_vocab_size)
 
             missing, unexpected = self.vlm.llm.load_state_dict(filtered_llm_state, strict=True)
-            if missing:
-                raise ValueError(f"[Backbone-Only Init] Missing LLM keys: {missing}")
-            if unexpected:
-                raise ValueError(f"[Backbone-Only Init] Unexpected LLM keys: {unexpected}")
+            all_missing_keys.extend(missing)
+            all_unexpected_keys.extend(unexpected)
+            all_loaded_modules.append("llm_backbone")
             logger.info("[Backbone-Only Init] Loaded LLM backbone weights from official checkpoint.")
         else:
+            all_skipped_modules.append("llm_backbone (not in checkpoint)")
             logger.warning("[Backbone-Only Init] No LLM backbone weights in official checkpoint, using pretrained init.")
 
         # Load vision backbone (optional in official checkpoint)
@@ -413,13 +421,26 @@ class MiniVLACore(nn.Module):
             missing, unexpected = self.vlm.vision_backbone.load_state_dict(
                 model_state["vision_backbone"], strict=True
             )
-            if missing:
-                logger.warning(f"[Backbone-Only Init] Missing vision backbone keys (may use pretrained init): {missing[:5]}")
-            if unexpected:
-                logger.warning(f"[Backbone-Only Init] Unexpected vision backbone keys: {unexpected[:5]}")
+            all_missing_keys.extend(missing)
+            all_unexpected_keys.extend(unexpected)
+            all_loaded_modules.append("vision_backbone")
             logger.info("[Backbone-Only Init] Loaded vision backbone weights from official checkpoint.")
         else:
+            all_skipped_modules.append("vision_backbone (not in checkpoint)")
             logger.info("[Backbone-Only Init] No vision backbone weights in official checkpoint, using pretrained init.")
+
+        # Print real load_state_dict results
+        print(f"\n{'='*60}")
+        print(f"[OFFICIAL CHECKPOINT LOAD RESULTS]")
+        print(f"  Loaded modules: {all_loaded_modules}")
+        print(f"  Skipped modules: {all_skipped_modules}")
+        print(f"  Missing keys: {len(all_missing_keys)}")
+        if all_missing_keys:
+            print(f"    {all_missing_keys[:10]}{'...' if len(all_missing_keys) > 10 else ''}")
+        print(f"  Unexpected keys: {len(all_unexpected_keys)}")
+        if all_unexpected_keys:
+            print(f"    {all_unexpected_keys[:10]}{'...' if len(all_unexpected_keys) > 10 else ''}")
+        print(f"{'='*60}\n")
 
         # Explicitly do NOT:
         # - Load VQ-VAE weights
@@ -884,64 +905,41 @@ class MiniVLACore(nn.Module):
 
     def get_optim_params(self) -> list[dict]:
         """
-        Returns parameter groups with per-component learning rates.
-        Supports separate LRs for projector, backbone (vision/LLM), and default.
-        VQ-VAE is excluded.
-        Returns a list of dicts: [{params: [...], lr: ..., name: ...}, ...]
+        Returns parameter groups following official MiniVLA optimizer configuration.
+        Mirrors teach_code/MiniVLA/prismatic/training/strategies/fsdp.py::run_setup:
+          - decay group: params with ndim > 1 and not ending in ".bias" (with weight_decay)
+          - no_decay group: params with ndim <= 1 or ending in ".bias" (weight_decay=0.0)
+        VQ-VAE parameters are excluded (frozen).
+        Returns a list of dicts: [{params: [...], weight_decay: ...}, ...]
         """
         base_lr = self.config.optimizer_lr
-        projector_lr = self.config.projector_lr if self.config.projector_lr > 0 else base_lr
-        backbone_lr = self.config.backbone_lr if self.config.backbone_lr > 0 else base_lr
+        weight_decay = self.config.optimizer_weight_decay
 
-        param_groups = []
+        decay = []
+        no_decay = []
 
-        # Vision backbone parameters
-        if not self.config.freeze_vision_backbone:
-            vision_params = []
-            for p in self.vlm.vision_backbone.parameters():
-                if isinstance(p, torch.Tensor) and p.requires_grad:
-                    vision_params.append(p)
-            if vision_params:
-                param_groups.append({
-                    "params": vision_params,
-                    "lr": backbone_lr,
-                    "name": "vision_backbone",
-                })
+        for name, param in self.model.named_parameters():
+            if not param.requires_grad:
+                continue
 
-        # Projector parameters
-        projector_params = []
-        for p in self.vlm.projector.parameters():
-            if isinstance(p, torch.Tensor) and p.requires_grad:
-                projector_params.append(p)
-        if projector_params:
-            param_groups.append({
-                "params": projector_params,
-                "lr": projector_lr,
-                "name": "projector",
-            })
+            # Skip VQ-VAE parameters (frozen)
+            if "vq_vae" in name:
+                continue
 
-        # LLM parameters
-        llm_params = []
-        if self.config.freeze_llm_backbone:
-            if self.config.unfreeze_last_llm_layer:
-                for p in self.vlm.llm.model.layers[-1].parameters():
-                    if isinstance(p, torch.Tensor) and p.requires_grad:
-                        llm_params.append(p)
-        else:
-            for p in self.vlm.llm.parameters():
-                if isinstance(p, torch.Tensor) and p.requires_grad:
-                    llm_params.append(p)
+            # Official grouping: bias and low-dim params get no weight decay
+            if param.ndim <= 1 or name.endswith(".bias"):
+                no_decay.append(param)
+            else:
+                decay.append(param)
 
-        if llm_params:
-            param_groups.append({
-                "params": llm_params,
-                "lr": backbone_lr,
-                "name": "llm_backbone",
-            })
+        param_groups = [
+            {"params": decay, "weight_decay": weight_decay, "lr": base_lr, "name": "decay"},
+            {"params": no_decay, "weight_decay": 0.0, "lr": base_lr, "name": "no_decay"},
+        ]
 
         # Print parameter group details for verification
         print(f"\n{'='*60}")
-        print(f"[OPTIM PARAM GROUPS]")
+        print(f"[OPTIM PARAM GROUPS - Official MiniVLA decay/no_decay grouping]")
         total_params = 0
         for i, group in enumerate(param_groups):
             num_params = sum(p.numel() for p in group["params"])
@@ -949,10 +947,13 @@ class MiniVLACore(nn.Module):
             print(
                 f"  Group {i}: {group['name']}, "
                 f"lr={group['lr']:.2e}, "
+                f"weight_decay={group['weight_decay']}, "
                 f"num_tensors={len(group['params'])}, "
                 f"total_elements={num_params:,}"
             )
         print(f"  Total trainable parameters: {total_params:,}")
+        print(f"  Official LR: {base_lr:.2e}")
+        print(f"  Official weight_decay: {weight_decay}")
         print(f"{'='*60}\n")
 
         return param_groups
@@ -1155,6 +1156,51 @@ class MiniVLAPolicy(PreTrainedPolicy):
         super().__init__(config)
         self.model = MiniVLACore(config)
         self._action_queue: Optional[torch.Tensor] = None
+
+        # === Startup validation: action dimension and tokenizer ===
+        self._validate_action_config()
+
+    def _validate_action_config(self):
+        """
+        Validate action configuration before training starts.
+        Checks:
+        - Action dimension matches expected (not 7D LIBERO VQ)
+        - Action tokenizer is not a VQ tokenizer when using non-VQ mode
+        - Policy output shape is correct
+        """
+        action_dim = self.config.action_feature.shape[0] if self.config.action_feature else None
+        tokenizer_type = self.config._resolved_action_tokenizer_type or self.config.action_tokenizer_type
+
+        print(f"\n{'='*60}")
+        print(f"[ACTION CONFIG VALIDATION]")
+        print(f"  action dimension: {action_dim}")
+        print(f"  action tokenizer: {tokenizer_type}")
+        print(f"  is_vq_mode: {self.config.is_vq_mode}")
+
+        # Reject 7D VQ tokenizer for MetaWorld 4D actions
+        if action_dim == 7 and self.config.is_vq_mode:
+            raise ValueError(
+                f"CRITICAL: Detected 7D VQ action tokenizer (LIBERO) with 7D actions! "
+                f"MetaWorld requires 4D actions with extra_action_tokenizer. "
+                f"action_tokenizer_type={tokenizer_type}, action_dim={action_dim}. "
+                f"Please set action_tokenizer_type='extra_action_tokenizer' and ensure action_dim=4."
+            )
+
+        # Reject any VQ tokenizer when action_dim != VQ input_dim_w
+        if self.config.is_vq_mode and hasattr(self.model, "action_tokenizer") and self.model.action_tokenizer is not None:
+            if hasattr(self.model.action_tokenizer, "vq_vae") and self.model.action_tokenizer.vq_vae is not None:
+                vq_input_dim_w = self.model.action_tokenizer.vq_vae.input_dim_w
+                if action_dim != vq_input_dim_w:
+                    raise ValueError(
+                        f"CRITICAL: VQ action tokenizer input_dim_w ({vq_input_dim_w}) "
+                        f"does not match action dimension ({action_dim}). "
+                        f"Use a VQ tokenizer compatible with {action_dim}D actions, "
+                        f"or switch to extra_action_tokenizer for non-VQ mode."
+                    )
+
+        print(f"  policy output shape: [B, chunk_size={self.config.chunk_size}, action_dim={action_dim}]")
+        print(f"  Validation PASSED")
+        print(f"{'='*60}\n")
 
     def forward(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict | None]:
         pixel_values = self._extract_pixel_values(batch)

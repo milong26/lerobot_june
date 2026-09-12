@@ -69,6 +69,12 @@ OFFICIAL_PRETRAINED_CHECKPOINT = "Stanford-ILIAD/minivla-libero90-prismatic"
 # This is the default AdamW learning rate used in official MiniVLA training.
 OFFICIAL_LR = 2e-5
 
+# Official MiniVLA optimizer defaults (from teach_code/MiniVLA/prismatic/conf/vla.py)
+OFFICIAL_WEIGHT_DECAY = 0.0
+OFFICIAL_MAX_GRAD_NORM = 1.0
+OFFICIAL_LR_SCHEDULER_TYPE = "constant"
+OFFICIAL_WARMUP_RATIO = 0.0
+
 EVAL_N_EPISODES = 10
 EVAL_SEED = 42
 EVAL_BATCH_SIZE = 4
@@ -141,6 +147,11 @@ class MiniVLAExperimentConfig:
     official_vla_checkpoint: str = ""
     official_init_mode: str = "backbone_only"
     official_pretrained_checkpoint: str = OFFICIAL_PRETRAINED_CHECKPOINT
+    official_lr: float = OFFICIAL_LR
+    official_weight_decay: float = OFFICIAL_WEIGHT_DECAY
+    official_max_grad_norm: float = OFFICIAL_MAX_GRAD_NORM
+    official_lr_scheduler_type: str = OFFICIAL_LR_SCHEDULER_TYPE
+    official_warmup_ratio: float = OFFICIAL_WARMUP_RATIO
     resume: bool = False
     restart: bool = False
     scheduler_warmup_steps: int = 0

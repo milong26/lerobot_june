@@ -1,0 +1,80 @@
+{
+  "visualization_dimensions": [
+    0,
+    2,
+    5
+  ],
+  "voxel_bins": 8,
+  "total_candidate_voxel_count": 274,
+  "candidate_pool_size": 400,
+  "methods": {
+    "grid_uniform": {
+      "num_selected": 112,
+      "occupied_voxel_count": 100,
+      "voxel_coverage_ratio": 0.364964,
+      "x_range": [
+        0.00021370344620663673,
+        0.09988958388566971
+      ],
+      "y_range": [
+        0.02500000037252903,
+        0.025009989738464355
+      ],
+      "z_range": [
+        0.16990000009536743,
+        0.1700991839170456
+      ]
+    },
+    "random": {
+      "num_selected": 112,
+      "occupied_voxel_count": 100,
+      "voxel_coverage_ratio": 0.364964,
+      "x_range": [
+        0.00021370344620663673,
+        0.09988958388566971
+      ],
+      "y_range": [
+        0.02500000037252903,
+        0.025009989738464355
+      ],
+      "z_range": [
+        0.16990000009536743,
+        0.1700991839170456
+      ]
+    },
+    "deminf": {
+      "num_selected": 112,
+      "occupied_voxel_count": 96,
+      "voxel_coverage_ratio": 0.350365,
+      "x_range": [
+        0.00016936376050580293,
+        0.09984444826841354
+      ],
+      "y_range": [
+        0.02500002831220627,
+        0.025009989738464355
+      ],
+      "z_range": [
+        0.16990061104297638,
+        0.17009907960891724
+      ]
+    },
+    "ours": {
+      "num_selected": 112,
+      "occupied_voxel_count": 101,
+      "voxel_coverage_ratio": 0.368613,
+      "x_range": [
+        0.0010343894828110933,
+        0.09964556992053986
+      ],
+      "y_range": [
+        0.02500014752149582,
+        0.025009989738464355
+      ],
+      "z_range": [
+        0.169901043176651,
+        0.17009957134723663
+      ]
+    }
+  }
+}
