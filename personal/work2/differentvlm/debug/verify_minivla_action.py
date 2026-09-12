@@ -117,6 +117,35 @@ def load_model_and_preprocessor(checkpoint_path, device="cuda"):
     print(f"  use_wrist_image: {config.use_wrist_image}")
     print(f"{'='*60}")
     
+    # Print processor/postprocessor details
+    print(f"\n{'='*60}")
+    print("Processor/Postprocessor Configuration:")
+    print(f"  Preprocessor type: {type(preprocessor).__name__}")
+    print(f"  Postprocessor type: {type(postprocessor).__name__}")
+    print(f"  Preprocessor steps: {len(preprocessor.steps)}")
+    print(f"  Postprocessor steps: {len(postprocessor.steps)}")
+    
+    for i, step in enumerate(preprocessor.steps):
+        print(f"    Preprocessor[{i}]: {type(step).__name__}")
+        if isinstance(step, NormalizerProcessorStep):
+            action_stats = step.stats.get("action", {})
+            if action_stats:
+                print(f"      Action normalization stats:")
+                for key in ["min", "max", "mean", "std", "q01", "q99"]:
+                    if key in action_stats:
+                        print(f"        {key}: {action_stats[key]}")
+    
+    for i, step in enumerate(postprocessor.steps):
+        print(f"    Postprocessor[{i}]: {type(step).__name__}")
+        if isinstance(step, UnnormalizerProcessorStep):
+            action_stats = step.stats.get("action", {})
+            if action_stats:
+                print(f"      Action unnormalization stats:")
+                for key in ["min", "max", "mean", "std", "q01", "q99"]:
+                    if key in action_stats:
+                        print(f"        {key}: {action_stats[key]}")
+    print(f"{'='*60}")
+    
     return policy, preprocessor, postprocessor
 
 
@@ -198,6 +227,224 @@ def validate_normalization_sanity(policy, preprocessor, postprocessor, dataset):
     else:
         print(f"PASS: Round-trip error < 1e-2 (acceptable)")
     
+    return True
+
+
+def verify_one_step_action(policy, preprocessor, postprocessor, normalizer, frame, task_description, device="cuda"):
+    """Verify one-step action prediction with complete action pipeline logging."""
+    expert_action_raw = frame["action"].numpy()
+    observation_state = frame["observation.state"]
+    
+    # Build observation
+    observation = build_observation(frame, policy.config, task_description)
+    
+    print(f"\n{'='*60}")
+    print(f"[ACTION PIPELINE DIAGNOSTIC]")
+    print(f"{'='*60}")
+    
+    # 1. Input observation shape
+    print(f"\n[1] Input Observation:")
+    for key, val in observation.items():
+        if hasattr(val, 'shape'):
+            print(f"    {key}: shape={val.shape}, dtype={val.dtype}")
+        elif isinstance(val, str):
+            print(f"    {key}: '{val}'")
+    
+    # 2. Preprocess observation
+    observation_tensor = preprocess_observation(observation)
+    print(f"\n[2] After preprocess_observation:")
+    for key, val in observation_tensor.items():
+        if hasattr(val, 'shape'):
+            print(f"    {key}: shape={val.shape}, dtype={val.dtype}")
+    
+    # 3. Apply preprocessor
+    observation_tensor = preprocessor(observation_tensor)
+    print(f"\n[3] After preprocessor:")
+    for key, val in observation_tensor.items():
+        if hasattr(val, 'shape'):
+            print(f"    {key}: shape={val.shape}, dtype={val.dtype}")
+    
+    # 4. State/action tensor shapes before policy
+    if "observation.state" in observation_tensor:
+        state_tensor = observation_tensor["observation.state"]
+        print(f"\n[4] State tensor before policy: shape={state_tensor.shape}, dtype={state_tensor.dtype}")
+        print(f"    State values: min={state_tensor.min():.4f}, max={state_tensor.max():.4f}, mean={state_tensor.mean():.4f}")
+    
+    # 5. Policy inference
+    policy.reset()
+    with torch.inference_mode():
+        raw_action = policy.select_action(observation_tensor)
+    
+    print(f"\n[5] Policy raw output (select_action):")
+    print(f"    Shape: {raw_action.shape}")
+    print(f"    Dtype: {raw_action.dtype}")
+    print(f"    Mean: {raw_action.mean():.4f}")
+    print(f"    Std: {raw_action.std():.4f}")
+    print(f"    Min: {raw_action.min():.4f}")
+    print(f"    Max: {raw_action.max():.4f}")
+    print(f"    Values: {raw_action.cpu().numpy()}")
+    
+    # 6. Convert to numpy (raw action for MiniVLA)
+    model_raw = raw_action.to("cpu").to(dtype=torch.float32).numpy()[0]
+    
+    # 7. Normalize model output for comparison
+    model_normalized = normalize_expert_action(normalizer, model_raw).numpy()
+    
+    print(f"\n[6] Model raw action (numpy):")
+    print(f"    Shape: {model_raw.shape}")
+    print(f"    Values: {model_raw}")
+    
+    print(f"\n[7] Model normalized action:")
+    print(f"    Shape: {model_normalized.shape}")
+    print(f"    Values: {model_normalized}")
+    
+    # 8. Ground truth
+    expert_action_normalized = normalize_expert_action(normalizer, expert_action_raw).numpy()
+    
+    print(f"\n[8] Ground Truth:")
+    print(f"    Expert raw: {expert_action_raw}")
+    print(f"    Expert normalized: {expert_action_normalized}")
+    
+    # 9. Error computation
+    normalized_error = np.abs(expert_action_normalized - model_normalized).mean()
+    raw_error = np.abs(expert_action_raw - model_raw).mean()
+    
+    print(f"\n[9] Error Metrics:")
+    print(f"    Normalized MAE: {normalized_error:.4f}")
+    print(f"    Raw MAE: {raw_error:.4f}")
+    print(f"    Normalized per-dim errors: {np.abs(expert_action_normalized - model_normalized)}")
+    print(f"    Raw per-dim errors: {np.abs(expert_action_raw - model_raw)}")
+    
+    print(f"\n{'='*60}")
+    
+    return {
+        "observation_shapes": {k: v.shape if hasattr(v, 'shape') else str(v) for k, v in observation.items()},
+        "state_tensor_shape": list(observation_tensor.get("observation.state", torch.zeros(0)).shape),
+        "policy_output_shape": list(raw_action.shape),
+        "policy_output_stats": {
+            "mean": float(raw_action.mean()),
+            "std": float(raw_action.std()),
+            "min": float(raw_action.min()),
+            "max": float(raw_action.max()),
+        },
+        "model_raw_action": model_raw.tolist(),
+        "model_normalized_action": model_normalized.tolist(),
+        "expert_raw_action": expert_action_raw.tolist(),
+        "expert_normalized_action": expert_action_normalized.tolist(),
+        "normalized_mae": float(normalized_error),
+        "raw_mae": float(raw_error),
+    }
+
+
+def verify_vq_reconstruction(policy, dataset, num_samples=5):
+    """Verify VQ encoder/decoder reconstruction quality."""
+    print("\n" + "=" * 80)
+    print("VQ Reconstruction Check")
+    print("=" * 80)
+    
+    if not policy.config.is_vq_mode:
+        print("  Model is NOT in VQ mode, skipping VQ reconstruction check")
+        return {"status": "SKIPPED", "reason": "Not VQ mode"}
+    
+    # Find action tokenizer
+    core = policy.model
+    if not hasattr(core, 'action_tokenizer') or core.action_tokenizer is None:
+        print("  ERROR: No action tokenizer found!")
+        return {"status": "FAIL", "reason": "No action tokenizer"}
+    
+    action_tokenizer = core.action_tokenizer
+    if not hasattr(action_tokenizer, 'vq_vae') or action_tokenizer.vq_vae is None:
+        print("  ERROR: No VQ-VAE found in action tokenizer!")
+        return {"status": "FAIL", "reason": "No VQ-VAE"}
+    
+    vq_vae = action_tokenizer.vq_vae
+    print(f"  VQ-VAE found: {type(vq_vae).__name__}")
+    print(f"  Input dim (w): {vq_vae.input_dim_w}")
+    print(f"  Input dim (h): {vq_vae.input_dim_h}")
+    print(f"  Latent dims: {vq_vae.n_latent_dims}")
+    
+    # Test reconstruction on random samples
+    reconstruction_errors = []
+    
+    for i in range(num_samples):
+        frame_idx = np.random.randint(0, len(dataset))
+        frame = dataset[frame_idx]
+        expert_action_raw = frame["action"]
+        
+        # Convert to tensor [1, 1, action_dim]
+        action_tensor = torch.as_tensor(expert_action_raw, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        action_tensor = action_tensor.to(policy.config.device)
+        
+        # Encode
+        with torch.no_grad():
+            # VQ encode
+            latent, _, _ = vq_vae.encode(action_tensor)
+            # VQ decode
+            reconstructed = vq_vae.decode(latent)
+        
+        # Compute reconstruction error
+        error = (reconstructed - action_tensor).abs().max().item()
+        mse = ((reconstructed - action_tensor) ** 2).mean().item()
+        
+        reconstruction_errors.append({
+            "frame_idx": int(frame_idx),
+            "original": action_tensor.squeeze().cpu().numpy().tolist(),
+            "reconstructed": reconstructed.squeeze().cpu().numpy().tolist(),
+            "max_error": float(error),
+            "mse": float(mse),
+        })
+        
+        print(f"\n  Sample {i+1} (frame {frame_idx}):")
+        print(f"    Original:     {action_tensor.squeeze().cpu().numpy()}")
+        print(f"    Reconstructed: {reconstructed.squeeze().cpu().numpy()}")
+        print(f"    Max error: {error:.6f}")
+        print(f"    MSE: {mse:.6f}")
+    
+    avg_max_error = np.mean([e["max_error"] for e in reconstruction_errors])
+    avg_mse = np.mean([e["mse"] for e in reconstruction_errors])
+    
+    # Determine pass/fail
+    passed = avg_max_error < 0.01  # 1% threshold
+    
+    print(f"\n  {'='*60}")
+    print(f"  Average max error: {avg_max_error:.6f}")
+    print(f"  Average MSE: {avg_mse:.6f}")
+    print(f"  VQ Reconstruction: {'PASS' if passed else 'FAIL'}")
+    print(f"  {'='*60}")
+    
+    return {
+        "status": "PASS" if passed else "FAIL",
+        "avg_max_error": float(avg_max_error),
+        "avg_mse": float(avg_mse),
+        "samples": reconstruction_errors,
+        "vq_config": {
+            "input_dim_w": vq_vae.input_dim_w,
+            "input_dim_h": vq_vae.input_dim_h,
+            "n_latent_dims": vq_vae.n_latent_dims,
+        },
+    }
+
+
+def compare_action_distribution(raw_action_stats, processed_action_stats, threshold=0.5):
+    """Compare raw and processed action distributions, warn if significant changes."""
+    raw_mean = raw_action_stats["mean"]
+    processed_mean = processed_action_stats["mean"]
+    raw_std = raw_action_stats["std"]
+    processed_std = processed_action_stats["std"]
+    
+    mean_change = abs(raw_mean - processed_mean)
+    std_change = abs(raw_std - processed_std)
+    
+    warnings = []
+    if mean_change > threshold:
+        warnings.append(f"WARNING: Mean changed significantly: {raw_mean:.4f} -> {processed_mean:.4f} (delta={mean_change:.4f})")
+    if std_change > threshold:
+        warnings.append(f"WARNING: Std changed significantly: {raw_std:.4f} -> {processed_std:.4f} (delta={std_change:.4f})")
+    
+    if warnings:
+        for w in warnings:
+            print(f"  {w}")
+        return False
     return True
 
 
@@ -653,6 +900,9 @@ def print_and_save_results(
     eval_mode,
     num_seeds,
     output_dir=None,
+    vq_reconstruction_result=None,
+    normalization_config=None,
+    action_pipeline_diagnostics=None,
 ):
     """Print summary and save results to JSON."""
     
@@ -866,6 +1116,9 @@ def print_and_save_results(
                 },
             },
             "frames": results,
+            "vq_reconstruction": vq_reconstruction_result,
+            "normalization_config": normalization_config,
+            "action_pipeline_diagnostics": action_pipeline_diagnostics,
         }, f, indent=2, cls=NumpyEncoder)
     
     print(f"\nDetailed results saved to: {output_file}")
@@ -910,6 +1163,9 @@ def main():
         print("\nERROR: Normalization sanity check failed!")
         sys.exit(1)
     
+    # VQ reconstruction check
+    vq_reconstruction_result = verify_vq_reconstruction(policy, dataset, num_samples=5)
+    
     print("\n" + "=" * 80)
     print("Step 3: Action Evaluation")
     print("=" * 80)
@@ -928,6 +1184,33 @@ def main():
         device=args.device,
     )
     
+    # Collect normalization config
+    normalization_config = {}
+    for step in preprocessor.steps:
+        if isinstance(step, NormalizerProcessorStep):
+            action_stats = step.stats.get("action", {})
+            if action_stats:
+                normalization_config["action"] = {k: v.tolist() if hasattr(v, 'tolist') else v for k, v in action_stats.items()}
+    
+    # Collect action pipeline diagnostics for first frame
+    action_pipeline_diagnostics = None
+    if len(results) > 0 and "seeds" in results[0] and len(results[0]["seeds"]) > 0:
+        first_seed = results[0]["seeds"][0]
+        action_pipeline_diagnostics = {
+            "raw_action_stats": {
+                "mean": float(np.mean(first_seed.get("predicted_action_raw", []))),
+                "std": float(np.std(first_seed.get("predicted_action_raw", []))),
+                "min": float(np.min(first_seed.get("predicted_action_raw", []))),
+                "max": float(np.max(first_seed.get("predicted_action_raw", []))),
+            },
+            "processed_action_stats": {
+                "mean": float(np.mean(first_seed.get("predicted_action_normalized", []))),
+                "std": float(np.std(first_seed.get("predicted_action_normalized", []))),
+                "min": float(np.min(first_seed.get("predicted_action_normalized", []))),
+                "max": float(np.max(first_seed.get("predicted_action_normalized", []))),
+            },
+        }
+    
     print_and_save_results(
         results=results,
         normalized_maes_4d=normalized_maes_4d,
@@ -935,6 +1218,9 @@ def main():
         episode_index=args.episode_index,
         eval_mode=args.eval_mode,
         num_seeds=args.num_seeds,
+        vq_reconstruction_result=vq_reconstruction_result,
+        normalization_config=normalization_config,
+        action_pipeline_diagnostics=action_pipeline_diagnostics,
     )
 
 
