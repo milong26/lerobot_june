@@ -88,7 +88,13 @@ def entity_state(env):
 
 
 def movable_entities(env):
-    target_container = getattr(env.task.config_manager, "target_container", None)
+    manager = env.task.config_manager
+    target_container = getattr(manager, "target_container", None)
+    target_entity = getattr(manager, "target_entity", None)
+    if getattr(manager, "num_object", None) == 1 and isinstance(target_entity, str):
+        entity = env.task.entities.get(target_entity)
+        if entity is not None:
+            return [(target_entity, entity)]
     out = []
     for name, entity in env.task.entities.items():
         is_container = name == target_container or hasattr(entity, "contain")

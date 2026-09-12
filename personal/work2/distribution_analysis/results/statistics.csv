@@ -1,4 +1,0 @@
-method,selection_budget,coverage_ratio,entropy,nearest_neighbor_distance,pairwise_configuration_distance,visual_diversity,action_diversity,js_divergence,emd_distance
-random,112,0.95,3.4499,0.0275,0.1179,1.8823,6.5431,0.213,1.5089
-deminf,112,0.75,3.2011,0.0237,0.106,1.222,3.3806,0.3032,2.0418
-ours,112,1.0,3.643,0.0268,0.1224,1.7595,5.569,0.0553,0.1414

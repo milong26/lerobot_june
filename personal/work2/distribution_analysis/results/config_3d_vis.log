@@ -1,12 +1,23 @@
-2026-09-12 19:21:18 [INFO] Loaded 400 candidate pool episodes from episode_initial_states.json
-2026-09-12 19:21:18 [INFO] Loaded 400 rand_vecs from candidate pool
-2026-09-12 19:21:18 [WARNING] Grid-Uniform selection file not found, generating from candidate pool
-2026-09-12 19:21:18 [INFO] Loaded 200 indices from random_200_seed42.json (key=selected_episode_indices)
-2026-09-12 19:21:18 [INFO] Loaded 112 indices from deminf_112_seed42.json (key=selected_episode_indices)
-2026-09-12 19:21:18 [INFO] Loaded 112 indices from our_v5_112_seed42.json (key=selected_episode_indices)
-2026-09-12 19:21:18 [INFO] Evaluating 20 dimension combinations for discriminative power...
-2026-09-12 19:21:18 [INFO] Feature dimension: 6
-2026-09-12 19:21:18 [INFO] Selected dimensions: [0, 2, 5]
-2026-09-12 19:21:18 [INFO] Discrimination score: 11.3414
-2026-09-12 19:21:22 [INFO] Saved: personal/work2/distribution_analysis/results/configuration_space_3d_comparison.png
-2026-09-12 19:21:22 [INFO] Saved: personal/work2/distribution_analysis/results/configuration_space_3d_statistics.json
+2026-09-12 21:10:07 [INFO] Loaded 400 rand_vecs from candidate pool
+2026-09-12 21:10:07 [INFO] ============================================================
+2026-09-12 21:10:07 [INFO] Dimension Variance Analysis
+2026-09-12 21:10:07 [INFO] ============================================================
+2026-09-12 21:10:07 [INFO] Dim 0: mean=0.055017, std=0.029052, min=0.000000, max=0.099890, range=0.099890, valid=True
+2026-09-12 21:10:07 [INFO] Dim 1: mean=0.678063, std=0.047762, min=0.600000, max=0.750000, range=0.150000, valid=True
+2026-09-12 21:10:07 [INFO] Dim 2: mean=0.025005, std=0.000003, min=0.025000, max=0.025010, range=0.000010, valid=True
+2026-09-12 21:10:07 [INFO] Dim 3: mean=-0.037428, std=0.054777, min=-0.099610, max=0.100000, range=0.199610, valid=True
+2026-09-12 21:10:07 [INFO] Dim 4: mean=0.670891, std=0.046848, min=0.600000, max=0.750000, range=0.150000, valid=True
+2026-09-12 21:10:07 [INFO] Dim 5: mean=0.170001, std=0.000056, min=0.169900, max=0.170100, range=0.000200, valid=True
+2026-09-12 21:10:07 [INFO] ------------------------------------------------------------
+2026-09-12 21:10:07 [INFO] Object 1 (dims 0-2): Position [x1, y1, z1]
+2026-09-12 21:10:07 [INFO] Object 2 (dims 3-5): Position [x2, y2, z2]
+2026-09-12 21:10:07 [INFO] ------------------------------------------------------------
+2026-09-12 21:10:07 [INFO] Object 1 valid dimensions: [0, 1, 2] (3/3)
+2026-09-12 21:10:07 [INFO] Object 2 valid dimensions: [3, 4, 5] (3/3)
+2026-09-12 21:10:07 [INFO] Plotting mode: Object 1 XYZ (reason: Object 1 XYZ all valid, using Object 1 XYZ for main plot)
+2026-09-12 21:10:07 [INFO] Loaded 111 indices from grid_uniform_112_seed42.json (key=selected_episode_indices)
+2026-09-12 21:10:07 [INFO] Loaded 112 indices from random_112_seed42.json (key=selected_episode_indices)
+2026-09-12 21:10:07 [INFO] Loaded 112 indices from deminf_112_seed42.json (key=selected_episode_indices)
+2026-09-12 21:10:07 [INFO] Loaded 112 indices from our_v5_112_seed42.json (key=selected_episode_indices)
+2026-09-12 21:10:08 [INFO] Saved: personal/work2/distribution_analysis/results/configuration_space_3d_comparison.png
+2026-09-12 21:10:08 [INFO] Saved: personal/work2/distribution_analysis/results/configuration_space_3d_statistics.json

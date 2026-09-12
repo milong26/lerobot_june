@@ -918,7 +918,7 @@ class MiniVLACore(nn.Module):
         decay = []
         no_decay = []
 
-        for name, param in self.model.named_parameters():
+        for name, param in self.named_parameters():
             if not param.requires_grad:
                 continue
 

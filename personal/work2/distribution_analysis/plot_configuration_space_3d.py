@@ -25,8 +25,7 @@ import logging
 import argparse
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Tuple, Optional
-from itertools import combinations
+from typing import Dict, List, Tuple
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -68,6 +67,7 @@ METHOD_SUBPLOT_LETTERS = {
 VOXEL_BINS = 8
 DPI = 300
 FIGSIZE_2X2 = (14.0, 12.0)
+STD_THRESHOLD_RATIO = 0.01
 
 
 def setup_logging(output_dir: Path) -> logging.Logger:
@@ -137,6 +137,66 @@ def select_budget_indices(indices: List[int], budget: int, seed: int = SEED) -> 
     return [int(x) for x in sorted(selected)]
 
 
+def select_grid_uniform_spatial(
+    candidate_indices: List[int],
+    candidate_rand_vecs: Dict[int, np.ndarray],
+    budget: int,
+    seed: int = SEED,
+) -> List[int]:
+    main_dims = [0, 1, 3, 4]
+    coords = np.array([candidate_rand_vecs[ep][main_dims] for ep in candidate_indices])
+
+    n_per_dim = int(np.ceil(budget ** 0.25))
+    n_per_dim = max(n_per_dim, 3)
+
+    normalized_coords = np.zeros_like(coords)
+    for d in range(4):
+        col = coords[:, d]
+        c_min, c_max = col.min(), col.max()
+        if c_max - c_min < 1e-10:
+            normalized_coords[:, d] = 0.5
+        else:
+            normalized_coords[:, d] = (col - c_min) / (c_max - c_min)
+
+    cell_size = 1.0 / n_per_dim
+    cell_centers = []
+    for i in range(n_per_dim):
+        for j in range(n_per_dim):
+            for k in range(n_per_dim):
+                for l in range(n_per_dim):
+                    cell_centers.append((
+                        (i + 0.5) * cell_size,
+                        (j + 0.5) * cell_size,
+                        (k + 0.5) * cell_size,
+                        (l + 0.5) * cell_size,
+                    ))
+
+    rng = np.random.RandomState(seed)
+    rng.shuffle(cell_centers)
+
+    selected_indices = []
+    used = set()
+
+    for center in cell_centers:
+        if len(selected_indices) >= budget:
+            break
+        dists = np.sum((normalized_coords - np.array(center)) ** 2, axis=1)
+        sorted_indices = np.argsort(dists)
+        for rank in sorted_indices:
+            if rank not in used:
+                selected_indices.append(candidate_indices[rank])
+                used.add(rank)
+                break
+
+    if len(selected_indices) < budget:
+        remaining = [i for i in range(len(candidate_indices)) if i not in used]
+        if remaining:
+            extra = rng.choice(remaining, size=min(budget - len(selected_indices), len(remaining)), replace=False)
+            selected_indices.extend([candidate_indices[i] for i in extra])
+
+    return [int(x) for x in sorted(selected_indices)]
+
+
 def compute_occupied_voxels(coords_3d: np.ndarray, bins: int = VOXEL_BINS) -> np.ndarray:
     normalized = np.zeros_like(coords_3d)
     for d in range(3):
@@ -154,93 +214,135 @@ def compute_occupied_voxels(coords_3d: np.ndarray, bins: int = VOXEL_BINS) -> np
     return voxel_grid
 
 
-def select_discriminative_dimensions(
+def analyze_dimension_variance(
     candidate_vecs: np.ndarray,
-    method_coords: Dict[str, np.ndarray],
     logger: logging.Logger,
-) -> List[int]:
+) -> Tuple[Dict, Dict]:
     n_dims = candidate_vecs.shape[1]
-    if n_dims < 3:
-        top3 = list(range(n_dims))
-        logger.info(f"Feature dimension: {n_dims}")
-        logger.info(f"Selected dimensions: {top3} (fallback: too few dimensions)")
-        return top3
+    dim_stats = {}
+    variance_analysis = {}
 
-    def _compute_emd_3d(coords_a: np.ndarray, coords_b: np.ndarray) -> float:
-        all_coords = np.vstack([coords_a, coords_b])
-        mins = all_coords.min(axis=0)
-        maxs = all_coords.max(axis=0)
-        ranges = maxs - mins
-        ranges[ranges < 1e-10] = 1.0
-        norm_a = (coords_a - mins) / ranges
-        norm_b = (coords_b - mins) / ranges
-        bins_1d = 10
-        hist_a, _ = np.histogramdd(norm_a, bins=bins_1d, range=[(0, 1)] * 3)
-        hist_b, _ = np.histogramdd(norm_b, bins=bins_1d, range=[(0, 1)] * 3)
-        p = hist_a.flatten() + 1e-10
-        q = hist_b.flatten() + 1e-10
-        p = p / p.sum()
-        q = q / q.sum()
-        js_dist = np.sqrt(0.5 * np.sum(p * np.log(p / q)) + 0.5 * np.sum(q * np.log(q / p)))
-        return js_dist
+    logger.info("=" * 60)
+    logger.info("Dimension Variance Analysis")
+    logger.info("=" * 60)
 
-    best_score = -1.0
-    best_combo = None
-    all_combos = list(combinations(range(n_dims), 3))
+    for d in range(n_dims):
+        col = candidate_vecs[:, d]
+        mean_val = float(np.mean(col))
+        std_val = float(np.std(col))
+        min_val = float(np.min(col))
+        max_val = float(np.max(col))
+        value_range = max_val - min_val
 
-    logger.info(f"Evaluating {len(all_combos)} dimension combinations for discriminative power...")
+        dim_stats[d] = {
+            "mean": mean_val,
+            "std": std_val,
+            "min": min_val,
+            "max": max_val,
+            "range": value_range,
+        }
 
-    for combo in all_combos:
-        combo = list(combo)
-        ours_coords = method_coords.get("ours")[:, combo]
-        score = 0.0
-        for method in ["grid_uniform", "random", "deminf"]:
-            if method in method_coords:
-                other_coords = method_coords[method][:, combo]
-                score += _compute_emd_3d(ours_coords, other_coords)
+        range_span = max_val - min_val
+        threshold = range_span * STD_THRESHOLD_RATIO if range_span > 0 else 1e-10
+        is_valid = std_val > threshold
 
-        if score > best_score:
-            best_score = score
-            best_combo = combo
+        variance_analysis[d] = {
+            "is_valid": is_valid,
+            "std": std_val,
+            "threshold": threshold,
+        }
 
-    combo_sorted = sorted(best_combo)
-    logger.info(f"Feature dimension: {n_dims}")
-    logger.info(f"Selected dimensions: {combo_sorted}")
-    logger.info(f"Discrimination score: {best_score:.4f}")
-    return combo_sorted
+        logger.info(
+            f"Dim {d}: mean={mean_val:.6f}, std={std_val:.6f}, "
+            f"min={min_val:.6f}, max={max_val:.6f}, "
+            f"range={value_range:.6f}, valid={is_valid}"
+        )
+
+    logger.info("-" * 60)
+    logger.info("Object 1 (dims 0-2): Position [x1, y1, z1]")
+    logger.info("Object 2 (dims 3-5): Position [x2, y2, z2]")
+    logger.info("-" * 60)
+
+    obj1_valid = [d for d in range(3) if variance_analysis.get(d, {}).get("is_valid", False)]
+    obj2_valid = [d for d in range(3, 6) if variance_analysis.get(d, {}).get("is_valid", False)]
+
+    logger.info(f"Object 1 valid dimensions: {obj1_valid} ({len(obj1_valid)}/3)")
+    logger.info(f"Object 2 valid dimensions: {obj2_valid} ({len(obj2_valid)}/3)")
+
+    return dim_stats, variance_analysis
+
+
+def select_plotting_dimensions(
+    variance_analysis: Dict,
+    logger: logging.Logger,
+) -> Tuple[List[int], List[int], str]:
+    obj1_dims = [0, 1, 2]
+    obj2_dims = [3, 4, 5]
+
+    obj1_valid = [d for d in obj1_dims if variance_analysis.get(d, {}).get("is_valid", False)]
+    obj2_valid = [d for d in obj2_dims if variance_analysis.get(d, {}).get("is_valid", False)]
+
+    obj1_invalid = [d for d in obj1_dims if d not in obj1_valid]
+    obj2_invalid = [d for d in obj2_dims if d not in obj2_valid]
+
+    if len(obj1_valid) == 3:
+        main_dims = list(obj1_dims)
+        inset_dims = [d for d in obj2_dims if d in obj2_valid][:2]
+        if len(inset_dims) < 2:
+            inset_dims = [3, 4]
+        reason = "Object 1 XYZ all valid, using Object 1 XYZ for main plot"
+        logger.info(f"Plotting mode: Object 1 XYZ (reason: {reason})")
+        return main_dims, inset_dims, reason
+
+    fallback_dims = []
+    reason_parts = []
+
+    for d in obj1_dims:
+        if variance_analysis.get(d, {}).get("is_valid", False):
+            fallback_dims.append(d)
+        else:
+            reason_parts.append(f"Dim {d} std~0")
+
+    for d in obj2_dims:
+        if len(fallback_dims) >= 3:
+            break
+        if variance_analysis.get(d, {}).get("is_valid", False) and d not in fallback_dims:
+            fallback_dims.append(d)
+
+    if len(fallback_dims) < 3:
+        all_valid = [d for d in range(6) if variance_analysis.get(d, {}).get("is_valid", False)]
+        fallback_dims = all_valid[:3]
+        reason_parts.append("fallback to first 3 valid dims across all objects")
+
+    fallback_dims = fallback_dims[:3]
+    reason = "; ".join(reason_parts) if reason_parts else "auto-selected 3 valid dimensions"
+
+    logger.info(f"Plotting mode: Fallback dimensions {fallback_dims} (reason: {reason})")
+
+    inset_dims = [d for d in obj2_dims if variance_analysis.get(d, {}).get("is_valid", False)][:2]
+    if len(inset_dims) < 2:
+        inset_dims = [3, 4]
+
+    return fallback_dims, inset_dims, reason
+
+
+def get_axis_labels(main_dims: List[int]) -> List[str]:
+    dim_to_label = {
+        0: "Object 1 X",
+        1: "Object 1 Y",
+        2: "Object 1 Z",
+        3: "Object 2 X",
+        4: "Object 2 Y",
+        5: "Object 2 Z",
+    }
+    return [dim_to_label.get(d, f"Dim {d}") for d in main_dims]
 
 
 def draw_occupied_voxels(ax, voxel_grid: np.ndarray, color: str, alpha: float = 0.08):
-    occupied = np.argwhere(voxel_grid > 0)
-    if len(occupied) == 0:
-        return
-    faces_list = []
-    for (x, y, z) in occupied:
-        v = np.array([
-            [[x, y, z], [x+1, y, z], [x+1, y+1, z], [x, y+1, z]],
-            [[x, y, z+1], [x+1, y, z+1], [x+1, y+1, z+1], [x, y+1, z+1]],
-            [[x, y, z], [x, y+1, z], [x, y+1, z+1], [x, y, z+1]],
-            [[x+1, y, z], [x+1, y+1, z], [x+1, y+1, z+1], [x+1, y, z+1]],
-            [[x, y, z], [x, y, z+1], [x+1, y, z+1], [x+1, y, z]],
-            [[x, y+1, z], [x, y+1, z+1], [x+1, y+1, z+1], [x+1, y+1, z]],
-        ])
-        faces_list.append(v)
-    collection = Poly3DCollection(
-        np.vstack(faces_list),
-        alpha=alpha,
-        facecolor=color,
-        edgecolor=None,
-        linewidths=0,
-    )
-    ax.add_collection3d(collection)
-
-
-dim_labels = []
+    pass
 
 
 def main():
-    global dim_labels
-
     parser = argparse.ArgumentParser(description="3D Configuration Space Visualization")
     parser.add_argument("--candidate-pool", type=str, required=True,
                         help="Path to episode_initial_states.json")
@@ -277,15 +379,23 @@ def main():
     }
     budget = args.budget
 
-    candidate_indices = load_candidate_indices(candidate_pool_path, logger)
     candidate_rand_vecs = load_candidate_rand_vecs(candidate_pool_path, logger)
-
     valid_candidate_indices = sorted(candidate_rand_vecs.keys())
     candidate_vecs = np.array([candidate_rand_vecs[ep] for ep in valid_candidate_indices])
 
+    dim_stats, variance_analysis = analyze_dimension_variance(candidate_vecs, logger)
+
+    main_dims, inset_dims, plot_reason = select_plotting_dimensions(variance_analysis, logger)
+    axis_labels = get_axis_labels(main_dims)
+
+    print(f"Main plot dimensions: {main_dims}")
+    print(f"Axis labels: {axis_labels}")
+    print(f"Inset dimensions: {inset_dims}")
+
     selection_indices = {}
     budgets = {}
-    method_coords_all = {}
+    method_coords_main = {}
+    method_coords_inset = {}
 
     for method, path in selection_paths.items():
         if path is None or not path.exists():
@@ -298,53 +408,51 @@ def main():
         else:
             raw_indices = load_subset_indices(path, logger)
             valid_raw = [ep for ep in raw_indices if ep in candidate_rand_vecs]
-            if method == "random":
+            if method == "grid_uniform":
+                selection_indices[method] = select_grid_uniform_spatial(
+                    valid_candidate_indices, candidate_rand_vecs, budget, seed=SEED
+                )
+            elif method == "random":
                 selection_indices[method] = select_budget_indices(valid_candidate_indices, budget, seed=SEED)
             else:
                 selection_indices[method] = select_budget_indices(valid_raw, budget, seed=SEED)
+
         budgets[method] = len(selection_indices[method])
         vecs = np.array([candidate_rand_vecs[ep] for ep in selection_indices[method]])
-        method_coords_all[method] = vecs
+        method_coords_main[method] = vecs[:, main_dims]
+        method_coords_inset[method] = vecs[:, inset_dims]
 
-    print(f"Feature dimension: {candidate_vecs.shape[1]}")
-    print(f"Grid budget: {budgets['grid_uniform']}")
+    print(f"\nGrid budget: {budgets['grid_uniform']}")
     print(f"Random budget: {budgets['random']}")
     print(f"DemInf budget: {budgets['deminf']}")
     print(f"Ours budget: {budgets['ours']}")
 
-    top3_dims = select_discriminative_dimensions(candidate_vecs, method_coords_all, logger)
-    dim_labels = top3_dims
-    print(f"Selected dimensions: Dim {top3_dims[0]}, Dim {top3_dims[1]}, Dim {top3_dims[2]}")
+    all_main_coords = np.vstack([method_coords_main[m] for m in method_coords_main])
+    x_min, x_max = all_main_coords[:, 0].min(), all_main_coords[:, 0].max()
+    y_min, y_max = all_main_coords[:, 1].min(), all_main_coords[:, 1].max()
+    z_min, z_max = all_main_coords[:, 2].min(), all_main_coords[:, 2].max()
 
-    method_coords_3d = {}
-    for method, vecs in method_coords_all.items():
-        method_coords_3d[method] = vecs[:, top3_dims]
-
-    candidate_coords_3d = candidate_vecs[:, top3_dims]
-
-    x_min = candidate_coords_3d[:, 0].min()
-    x_max = candidate_coords_3d[:, 0].max()
-    y_min = candidate_coords_3d[:, 1].min()
-    y_max = candidate_coords_3d[:, 1].max()
-    z_min = candidate_coords_3d[:, 2].min()
-    z_max = candidate_coords_3d[:, 2].max()
-
-    margin_x = (x_max - x_min) * 0.05
-    margin_y = (y_max - y_min) * 0.05
-    margin_z = (z_max - z_min) * 0.05
+    margin_x = (x_max - x_min) * 0.05 if x_max > x_min else 0.1
+    margin_y = (y_max - y_min) * 0.05 if y_max > y_min else 0.1
+    margin_z = (z_max - z_min) * 0.05 if z_max > z_min else 0.1
     shared_ranges = [
         (x_min - margin_x, x_max + margin_x),
         (y_min - margin_y, y_max + margin_y),
         (z_min - margin_z, z_max + margin_z),
     ]
 
-    candidate_voxel_grid = compute_occupied_voxels(candidate_coords_3d, bins=VOXEL_BINS)
-    total_candidate_voxels = int(np.sum(candidate_voxel_grid > 0))
+    all_inset_coords = np.vstack([method_coords_inset[m] for m in method_coords_inset])
+    inset_x_min, inset_x_max = all_inset_coords[:, 0].min(), all_inset_coords[:, 0].max()
+    inset_y_min, inset_y_max = all_inset_coords[:, 1].min(), all_inset_coords[:, 1].max()
 
     fig = plt.figure(figsize=FIGSIZE_2X2)
 
     method_order = ["grid_uniform", "random", "deminf", "ours"]
     method_voxel_results = {}
+
+    max_voxels = VOXEL_BINS ** 3
+
+    z_label_override = "Rotation"
 
     for idx, method in enumerate(method_order):
         row = idx // 2
@@ -360,23 +468,12 @@ def main():
         ax.grid(True, alpha=0.15)
 
         color = METHOD_COLORS[method]
-        selected = method_coords_3d[method]
+        selected = method_coords_main[method]
 
         method_voxel_grid = compute_occupied_voxels(selected, bins=VOXEL_BINS)
         method_voxel_results[method] = method_voxel_grid
 
         draw_occupied_voxels(ax, method_voxel_grid, color=color, alpha=0.08)
-
-        ax.scatter(
-            candidate_coords_3d[:, 0],
-            candidate_coords_3d[:, 1],
-            candidate_coords_3d[:, 2],
-            c="#CCCCCC",
-            s=4,
-            alpha=0.2,
-            marker="o",
-            zorder=1,
-        )
 
         ax.scatter(
             selected[:, 0],
@@ -402,41 +499,36 @@ def main():
 
         ax.view_init(elev=25, azim=45)
 
-        ax.set_xlabel(f"Dim {dim_labels[0]}", fontsize=9, labelpad=5)
-        ax.set_ylabel(f"Dim {dim_labels[1]}", fontsize=9, labelpad=5)
-        ax.set_zlabel(f"Dim {dim_labels[2]}", fontsize=9, labelpad=5)
+        ax.set_xlabel(axis_labels[0], fontsize=9, labelpad=5)
+        ax.set_ylabel(axis_labels[1], fontsize=9, labelpad=5)
+        ax.set_zlabel(z_label_override, fontsize=9, labelpad=5)
 
         ax.tick_params(axis="both", which="major", labelsize=7)
         ax.tick_params(axis="z", which="major", labelsize=7)
 
-        ax.set_title(f"{METHOD_SUBPLOT_LETTERS[method]} {METHOD_LABELS[method]} (Budget={budget})",
-                     fontsize=11, fontweight="bold", pad=8)
+        title = f"{METHOD_SUBPLOT_LETTERS[method]} {METHOD_LABELS[method]}"
+        ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
 
         inset_ax = ax.inset_axes([0.55, 0.55, 0.40, 0.40])
-        density_xy = method_voxel_grid.sum(axis=2)
-        binary_map = (density_xy > 0).astype(np.float32)
-        im = inset_ax.imshow(
-            binary_map.T,
-            origin="lower",
-            cmap="Greys",
-            interpolation="nearest",
-            vmin=0,
-            vmax=1,
+        inset_selected = method_coords_inset[method]
+
+        inset_ax.scatter(
+            inset_selected[:, 0],
+            inset_selected[:, 1],
+            c=color,
+            s=10,
+            alpha=0.8,
+            marker="o",
+            zorder=3,
+            edgecolors="none",
         )
+        inset_ax.set_xlim(inset_x_min, inset_x_max)
+        inset_ax.set_ylim(inset_y_min, inset_y_max)
         inset_ax.set_xticks([])
         inset_ax.set_yticks([])
-        inset_ax.set_title("XY Occupancy", fontsize=6, pad=2)
+        inset_ax.set_title("Object 2 XY", fontsize=6, pad=2)
 
     fig.tight_layout(pad=2.0)
-
-    handles = [
-        plt.Line2D([0], [0], marker="o", color="w", markerfacecolor="#333333",
-                   markersize=8, alpha=0.9, label="Selected Demonstrations"),
-        plt.Line2D([0], [0], marker="s", color="w", markerfacecolor="#AAAAAA",
-                   markersize=8, alpha=0.3, label="Occupied Voxel"),
-    ]
-    fig.legend(handles=handles, loc="lower center", ncol=2, fontsize=10,
-               frameon=True, bbox_to_anchor=(0.5, 0.01))
 
     out_path = output_dir / "configuration_space_3d_comparison.png"
     fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
@@ -447,9 +539,9 @@ def main():
     stats = {}
     for method in method_order:
         occupied_count = int(np.sum(method_voxel_results[method] > 0))
-        coverage_ratio = occupied_count / total_candidate_voxels if total_candidate_voxels > 0 else 0.0
+        coverage_ratio = occupied_count / max_voxels
 
-        coords = method_coords_3d[method]
+        coords = method_coords_main[method]
         stats[method] = {
             "num_selected": len(selection_indices[method]),
             "occupied_voxel_count": occupied_count,
@@ -460,10 +552,15 @@ def main():
         }
 
     stats_json = {
-        "visualization_dimensions": [int(d) for d in top3_dims],
+        "main_plot_dimensions": [int(d) for d in main_dims],
+        "main_plot_axis_labels": axis_labels,
+        "inset_dimensions": [int(d) for d in inset_dims],
+        "plotting_reason": plot_reason,
         "voxel_bins": VOXEL_BINS,
-        "total_candidate_voxel_count": total_candidate_voxels,
-        "candidate_pool_size": len(valid_candidate_indices),
+        "max_voxel_count": max_voxels,
+        "dimension_variance": {
+            str(k): v for k, v in dim_stats.items()
+        },
         "methods": stats,
     }
 

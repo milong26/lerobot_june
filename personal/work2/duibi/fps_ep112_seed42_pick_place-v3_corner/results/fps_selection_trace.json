@@ -1,0 +1,921 @@
+{
+  "selection_trace": [
+    {
+      "step": 0,
+      "episode_index": 102,
+      "farthest_min_distance": null,
+      "remaining_candidates": 298
+    },
+    {
+      "step": 1,
+      "episode_index": 200,
+      "farthest_min_distance": 0.22353784728554615,
+      "remaining_candidates": 297
+    },
+    {
+      "step": 2,
+      "episode_index": 196,
+      "farthest_min_distance": 0.050371937539343645,
+      "remaining_candidates": 296
+    },
+    {
+      "step": 3,
+      "episode_index": 248,
+      "farthest_min_distance": 0.05012350967157862,
+      "remaining_candidates": 295
+    },
+    {
+      "step": 4,
+      "episode_index": 4,
+      "farthest_min_distance": 0.03708114112966718,
+      "remaining_candidates": 294
+    },
+    {
+      "step": 5,
+      "episode_index": 274,
+      "farthest_min_distance": 0.033652912139632944,
+      "remaining_candidates": 293
+    },
+    {
+      "step": 6,
+      "episode_index": 11,
+      "farthest_min_distance": 0.03351611335864173,
+      "remaining_candidates": 292
+    },
+    {
+      "step": 7,
+      "episode_index": 101,
+      "farthest_min_distance": 0.031134285611959297,
+      "remaining_candidates": 291
+    },
+    {
+      "step": 8,
+      "episode_index": 207,
+      "farthest_min_distance": 0.02965161991892812,
+      "remaining_candidates": 290
+    },
+    {
+      "step": 9,
+      "episode_index": 49,
+      "farthest_min_distance": 0.0291022769074928,
+      "remaining_candidates": 289
+    },
+    {
+      "step": 10,
+      "episode_index": 33,
+      "farthest_min_distance": 0.02816151567260853,
+      "remaining_candidates": 288
+    },
+    {
+      "step": 11,
+      "episode_index": 286,
+      "farthest_min_distance": 0.027934074535484563,
+      "remaining_candidates": 287
+    },
+    {
+      "step": 12,
+      "episode_index": 53,
+      "farthest_min_distance": 0.027771085530444033,
+      "remaining_candidates": 286
+    },
+    {
+      "step": 13,
+      "episode_index": 171,
+      "farthest_min_distance": 0.026022802419284178,
+      "remaining_candidates": 285
+    },
+    {
+      "step": 14,
+      "episode_index": 32,
+      "farthest_min_distance": 0.02592974482078426,
+      "remaining_candidates": 284
+    },
+    {
+      "step": 15,
+      "episode_index": 20,
+      "farthest_min_distance": 0.025603683012432852,
+      "remaining_candidates": 283
+    },
+    {
+      "step": 16,
+      "episode_index": 127,
+      "farthest_min_distance": 0.025231733704726988,
+      "remaining_candidates": 282
+    },
+    {
+      "step": 17,
+      "episode_index": 280,
+      "farthest_min_distance": 0.025126121084526328,
+      "remaining_candidates": 281
+    },
+    {
+      "step": 18,
+      "episode_index": 59,
+      "farthest_min_distance": 0.02512503425824506,
+      "remaining_candidates": 280
+    },
+    {
+      "step": 19,
+      "episode_index": 140,
+      "farthest_min_distance": 0.02499045106382792,
+      "remaining_candidates": 279
+    },
+    {
+      "step": 20,
+      "episode_index": 109,
+      "farthest_min_distance": 0.02466403707348133,
+      "remaining_candidates": 278
+    },
+    {
+      "step": 21,
+      "episode_index": 22,
+      "farthest_min_distance": 0.02431785541736778,
+      "remaining_candidates": 277
+    },
+    {
+      "step": 22,
+      "episode_index": 175,
+      "farthest_min_distance": 0.024278655535097428,
+      "remaining_candidates": 276
+    },
+    {
+      "step": 23,
+      "episode_index": 73,
+      "farthest_min_distance": 0.024102948711305517,
+      "remaining_candidates": 275
+    },
+    {
+      "step": 24,
+      "episode_index": 142,
+      "farthest_min_distance": 0.023842383075341082,
+      "remaining_candidates": 274
+    },
+    {
+      "step": 25,
+      "episode_index": 136,
+      "farthest_min_distance": 0.023605425027810142,
+      "remaining_candidates": 273
+    },
+    {
+      "step": 26,
+      "episode_index": 62,
+      "farthest_min_distance": 0.023382953395395666,
+      "remaining_candidates": 272
+    },
+    {
+      "step": 27,
+      "episode_index": 275,
+      "farthest_min_distance": 0.02332624884248939,
+      "remaining_candidates": 271
+    },
+    {
+      "step": 28,
+      "episode_index": 12,
+      "farthest_min_distance": 0.02332559717566769,
+      "remaining_candidates": 270
+    },
+    {
+      "step": 29,
+      "episode_index": 134,
+      "farthest_min_distance": 0.023303197523519906,
+      "remaining_candidates": 269
+    },
+    {
+      "step": 30,
+      "episode_index": 108,
+      "farthest_min_distance": 0.023060099229454966,
+      "remaining_candidates": 268
+    },
+    {
+      "step": 31,
+      "episode_index": 176,
+      "farthest_min_distance": 0.02303195086687992,
+      "remaining_candidates": 267
+    },
+    {
+      "step": 32,
+      "episode_index": 249,
+      "farthest_min_distance": 0.023027885177462782,
+      "remaining_candidates": 266
+    },
+    {
+      "step": 33,
+      "episode_index": 129,
+      "farthest_min_distance": 0.02291020766212337,
+      "remaining_candidates": 265
+    },
+    {
+      "step": 34,
+      "episode_index": 79,
+      "farthest_min_distance": 0.02274428804742289,
+      "remaining_candidates": 264
+    },
+    {
+      "step": 35,
+      "episode_index": 236,
+      "farthest_min_distance": 0.022630529057657764,
+      "remaining_candidates": 263
+    },
+    {
+      "step": 36,
+      "episode_index": 204,
+      "farthest_min_distance": 0.02247435724381503,
+      "remaining_candidates": 262
+    },
+    {
+      "step": 37,
+      "episode_index": 71,
+      "farthest_min_distance": 0.02236988525645444,
+      "remaining_candidates": 261
+    },
+    {
+      "step": 38,
+      "episode_index": 143,
+      "farthest_min_distance": 0.022351721741387436,
+      "remaining_candidates": 260
+    },
+    {
+      "step": 39,
+      "episode_index": 99,
+      "farthest_min_distance": 0.022319509127456637,
+      "remaining_candidates": 259
+    },
+    {
+      "step": 40,
+      "episode_index": 135,
+      "farthest_min_distance": 0.022312814455444918,
+      "remaining_candidates": 258
+    },
+    {
+      "step": 41,
+      "episode_index": 159,
+      "farthest_min_distance": 0.022193686495247764,
+      "remaining_candidates": 257
+    },
+    {
+      "step": 42,
+      "episode_index": 152,
+      "farthest_min_distance": 0.022162787006793718,
+      "remaining_candidates": 256
+    },
+    {
+      "step": 43,
+      "episode_index": 16,
+      "farthest_min_distance": 0.022038801004088004,
+      "remaining_candidates": 255
+    },
+    {
+      "step": 44,
+      "episode_index": 115,
+      "farthest_min_distance": 0.02197255969333658,
+      "remaining_candidates": 254
+    },
+    {
+      "step": 45,
+      "episode_index": 104,
+      "farthest_min_distance": 0.02170535994740475,
+      "remaining_candidates": 253
+    },
+    {
+      "step": 46,
+      "episode_index": 67,
+      "farthest_min_distance": 0.0216663184409364,
+      "remaining_candidates": 252
+    },
+    {
+      "step": 47,
+      "episode_index": 85,
+      "farthest_min_distance": 0.02159720531231068,
+      "remaining_candidates": 251
+    },
+    {
+      "step": 48,
+      "episode_index": 296,
+      "farthest_min_distance": 0.021416633882808407,
+      "remaining_candidates": 250
+    },
+    {
+      "step": 49,
+      "episode_index": 276,
+      "farthest_min_distance": 0.021399718856090634,
+      "remaining_candidates": 249
+    },
+    {
+      "step": 50,
+      "episode_index": 37,
+      "farthest_min_distance": 0.021380953093364657,
+      "remaining_candidates": 248
+    },
+    {
+      "step": 51,
+      "episode_index": 44,
+      "farthest_min_distance": 0.02137499306313245,
+      "remaining_candidates": 247
+    },
+    {
+      "step": 52,
+      "episode_index": 182,
+      "farthest_min_distance": 0.021193200502747804,
+      "remaining_candidates": 246
+    },
+    {
+      "step": 53,
+      "episode_index": 255,
+      "farthest_min_distance": 0.021181873495790957,
+      "remaining_candidates": 245
+    },
+    {
+      "step": 54,
+      "episode_index": 7,
+      "farthest_min_distance": 0.021117827126920122,
+      "remaining_candidates": 244
+    },
+    {
+      "step": 55,
+      "episode_index": 57,
+      "farthest_min_distance": 0.02111235357315144,
+      "remaining_candidates": 243
+    },
+    {
+      "step": 56,
+      "episode_index": 146,
+      "farthest_min_distance": 0.021091906669090305,
+      "remaining_candidates": 242
+    },
+    {
+      "step": 57,
+      "episode_index": 133,
+      "farthest_min_distance": 0.021045889626656312,
+      "remaining_candidates": 241
+    },
+    {
+      "step": 58,
+      "episode_index": 21,
+      "farthest_min_distance": 0.02101955490666819,
+      "remaining_candidates": 240
+    },
+    {
+      "step": 59,
+      "episode_index": 161,
+      "farthest_min_distance": 0.020994493197733558,
+      "remaining_candidates": 239
+    },
+    {
+      "step": 60,
+      "episode_index": 66,
+      "farthest_min_distance": 0.020980378887531292,
+      "remaining_candidates": 238
+    },
+    {
+      "step": 61,
+      "episode_index": 28,
+      "farthest_min_distance": 0.020972425316269784,
+      "remaining_candidates": 237
+    },
+    {
+      "step": 62,
+      "episode_index": 90,
+      "farthest_min_distance": 0.020971586489689324,
+      "remaining_candidates": 236
+    },
+    {
+      "step": 63,
+      "episode_index": 137,
+      "farthest_min_distance": 0.0209362140111778,
+      "remaining_candidates": 235
+    },
+    {
+      "step": 64,
+      "episode_index": 29,
+      "farthest_min_distance": 0.0209117972865014,
+      "remaining_candidates": 234
+    },
+    {
+      "step": 65,
+      "episode_index": 167,
+      "farthest_min_distance": 0.02059868306650679,
+      "remaining_candidates": 233
+    },
+    {
+      "step": 66,
+      "episode_index": 89,
+      "farthest_min_distance": 0.020546974345573964,
+      "remaining_candidates": 232
+    },
+    {
+      "step": 67,
+      "episode_index": 96,
+      "farthest_min_distance": 0.02047437647109548,
+      "remaining_candidates": 231
+    },
+    {
+      "step": 68,
+      "episode_index": 30,
+      "farthest_min_distance": 0.02036485220573547,
+      "remaining_candidates": 230
+    },
+    {
+      "step": 69,
+      "episode_index": 10,
+      "farthest_min_distance": 0.020290477076983653,
+      "remaining_candidates": 229
+    },
+    {
+      "step": 70,
+      "episode_index": 160,
+      "farthest_min_distance": 0.020252078810727842,
+      "remaining_candidates": 228
+    },
+    {
+      "step": 71,
+      "episode_index": 247,
+      "farthest_min_distance": 0.02018534851727106,
+      "remaining_candidates": 227
+    },
+    {
+      "step": 72,
+      "episode_index": 98,
+      "farthest_min_distance": 0.020087211828623917,
+      "remaining_candidates": 226
+    },
+    {
+      "step": 73,
+      "episode_index": 106,
+      "farthest_min_distance": 0.020044326860473305,
+      "remaining_candidates": 225
+    },
+    {
+      "step": 74,
+      "episode_index": 178,
+      "farthest_min_distance": 0.020034585385566694,
+      "remaining_candidates": 224
+    },
+    {
+      "step": 75,
+      "episode_index": 128,
+      "farthest_min_distance": 0.02000895102413816,
+      "remaining_candidates": 223
+    },
+    {
+      "step": 76,
+      "episode_index": 41,
+      "farthest_min_distance": 0.02000579288058499,
+      "remaining_candidates": 222
+    },
+    {
+      "step": 77,
+      "episode_index": 77,
+      "farthest_min_distance": 0.019965542528153194,
+      "remaining_candidates": 221
+    },
+    {
+      "step": 78,
+      "episode_index": 165,
+      "farthest_min_distance": 0.01996525581955216,
+      "remaining_candidates": 220
+    },
+    {
+      "step": 79,
+      "episode_index": 51,
+      "farthest_min_distance": 0.019953679947605944,
+      "remaining_candidates": 219
+    },
+    {
+      "step": 80,
+      "episode_index": 117,
+      "farthest_min_distance": 0.019841502302474348,
+      "remaining_candidates": 218
+    },
+    {
+      "step": 81,
+      "episode_index": 162,
+      "farthest_min_distance": 0.019829039332712132,
+      "remaining_candidates": 217
+    },
+    {
+      "step": 82,
+      "episode_index": 97,
+      "farthest_min_distance": 0.019738301986506467,
+      "remaining_candidates": 216
+    },
+    {
+      "step": 83,
+      "episode_index": 222,
+      "farthest_min_distance": 0.01968719480337487,
+      "remaining_candidates": 215
+    },
+    {
+      "step": 84,
+      "episode_index": 148,
+      "farthest_min_distance": 0.019658167218165268,
+      "remaining_candidates": 214
+    },
+    {
+      "step": 85,
+      "episode_index": 263,
+      "farthest_min_distance": 0.01959473737584609,
+      "remaining_candidates": 213
+    },
+    {
+      "step": 86,
+      "episode_index": 13,
+      "farthest_min_distance": 0.019518601238151023,
+      "remaining_candidates": 212
+    },
+    {
+      "step": 87,
+      "episode_index": 250,
+      "farthest_min_distance": 0.01951425847519477,
+      "remaining_candidates": 211
+    },
+    {
+      "step": 88,
+      "episode_index": 145,
+      "farthest_min_distance": 0.019493629585894158,
+      "remaining_candidates": 210
+    },
+    {
+      "step": 89,
+      "episode_index": 210,
+      "farthest_min_distance": 0.01948538784223783,
+      "remaining_candidates": 209
+    },
+    {
+      "step": 90,
+      "episode_index": 195,
+      "farthest_min_distance": 0.019437914674696497,
+      "remaining_candidates": 208
+    },
+    {
+      "step": 91,
+      "episode_index": 164,
+      "farthest_min_distance": 0.019436822027761643,
+      "remaining_candidates": 207
+    },
+    {
+      "step": 92,
+      "episode_index": 169,
+      "farthest_min_distance": 0.019409864350367904,
+      "remaining_candidates": 206
+    },
+    {
+      "step": 93,
+      "episode_index": 291,
+      "farthest_min_distance": 0.019404037103079783,
+      "remaining_candidates": 205
+    },
+    {
+      "step": 94,
+      "episode_index": 168,
+      "farthest_min_distance": 0.019393984373287158,
+      "remaining_candidates": 204
+    },
+    {
+      "step": 95,
+      "episode_index": 31,
+      "farthest_min_distance": 0.019303483786800114,
+      "remaining_candidates": 203
+    },
+    {
+      "step": 96,
+      "episode_index": 100,
+      "farthest_min_distance": 0.019276249369687345,
+      "remaining_candidates": 202
+    },
+    {
+      "step": 97,
+      "episode_index": 19,
+      "farthest_min_distance": 0.019264043355526676,
+      "remaining_candidates": 201
+    },
+    {
+      "step": 98,
+      "episode_index": 125,
+      "farthest_min_distance": 0.019253308376417057,
+      "remaining_candidates": 200
+    },
+    {
+      "step": 99,
+      "episode_index": 1,
+      "farthest_min_distance": 0.019241513940552533,
+      "remaining_candidates": 199
+    },
+    {
+      "step": 100,
+      "episode_index": 141,
+      "farthest_min_distance": 0.01922685504569545,
+      "remaining_candidates": 198
+    },
+    {
+      "step": 101,
+      "episode_index": 64,
+      "farthest_min_distance": 0.019209720521698188,
+      "remaining_candidates": 197
+    },
+    {
+      "step": 102,
+      "episode_index": 121,
+      "farthest_min_distance": 0.01915287795268183,
+      "remaining_candidates": 196
+    },
+    {
+      "step": 103,
+      "episode_index": 154,
+      "farthest_min_distance": 0.019060916428100864,
+      "remaining_candidates": 195
+    },
+    {
+      "step": 104,
+      "episode_index": 187,
+      "farthest_min_distance": 0.019046531915758936,
+      "remaining_candidates": 194
+    },
+    {
+      "step": 105,
+      "episode_index": 18,
+      "farthest_min_distance": 0.019039542315477886,
+      "remaining_candidates": 193
+    },
+    {
+      "step": 106,
+      "episode_index": 126,
+      "farthest_min_distance": 0.019023250112988815,
+      "remaining_candidates": 192
+    },
+    {
+      "step": 107,
+      "episode_index": 120,
+      "farthest_min_distance": 0.018989777143732213,
+      "remaining_candidates": 191
+    },
+    {
+      "step": 108,
+      "episode_index": 231,
+      "farthest_min_distance": 0.018944102720099956,
+      "remaining_candidates": 190
+    },
+    {
+      "step": 109,
+      "episode_index": 27,
+      "farthest_min_distance": 0.01879480097378872,
+      "remaining_candidates": 189
+    },
+    {
+      "step": 110,
+      "episode_index": 179,
+      "farthest_min_distance": 0.018775472771228832,
+      "remaining_candidates": 188
+    },
+    {
+      "step": 111,
+      "episode_index": 197,
+      "farthest_min_distance": 0.018766233523898217,
+      "remaining_candidates": 187
+    }
+  ],
+  "selection_order": [
+    102,
+    200,
+    196,
+    248,
+    4,
+    274,
+    11,
+    101,
+    207,
+    49,
+    33,
+    286,
+    53,
+    171,
+    32,
+    20,
+    127,
+    280,
+    59,
+    140,
+    109,
+    22,
+    175,
+    73,
+    142,
+    136,
+    62,
+    275,
+    12,
+    134,
+    108,
+    176,
+    249,
+    129,
+    79,
+    236,
+    204,
+    71,
+    143,
+    99,
+    135,
+    159,
+    152,
+    16,
+    115,
+    104,
+    67,
+    85,
+    296,
+    276,
+    37,
+    44,
+    182,
+    255,
+    7,
+    57,
+    146,
+    133,
+    21,
+    161,
+    66,
+    28,
+    90,
+    137,
+    29,
+    167,
+    89,
+    96,
+    30,
+    10,
+    160,
+    247,
+    98,
+    106,
+    178,
+    128,
+    41,
+    77,
+    165,
+    51,
+    117,
+    162,
+    97,
+    222,
+    148,
+    263,
+    13,
+    250,
+    145,
+    210,
+    195,
+    164,
+    169,
+    291,
+    168,
+    31,
+    100,
+    19,
+    125,
+    1,
+    141,
+    64,
+    121,
+    154,
+    187,
+    18,
+    126,
+    120,
+    231,
+    27,
+    179,
+    197
+  ],
+  "selected_episode_indices": [
+    1,
+    4,
+    7,
+    10,
+    11,
+    12,
+    13,
+    16,
+    18,
+    19,
+    20,
+    21,
+    22,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    37,
+    41,
+    44,
+    49,
+    51,
+    53,
+    57,
+    59,
+    62,
+    64,
+    66,
+    67,
+    71,
+    73,
+    77,
+    79,
+    85,
+    89,
+    90,
+    96,
+    97,
+    98,
+    99,
+    100,
+    101,
+    102,
+    104,
+    106,
+    108,
+    109,
+    115,
+    117,
+    120,
+    121,
+    125,
+    126,
+    127,
+    128,
+    129,
+    133,
+    134,
+    135,
+    136,
+    137,
+    140,
+    141,
+    142,
+    143,
+    145,
+    146,
+    148,
+    152,
+    154,
+    159,
+    160,
+    161,
+    162,
+    164,
+    165,
+    167,
+    168,
+    169,
+    171,
+    175,
+    176,
+    178,
+    179,
+    182,
+    187,
+    195,
+    196,
+    197,
+    200,
+    204,
+    207,
+    210,
+    222,
+    231,
+    236,
+    247,
+    248,
+    249,
+    250,
+    255,
+    263,
+    274,
+    275,
+    276,
+    280,
+    286,
+    291,
+    296
+  ],
+  "candidate_count": 299,
+  "selected_count": 112,
+  "feature_dim": 64,
+  "phi_global_dim": 32,
+  "phi_wrist_dim": 32,
+  "selection_elapsed_time_seconds": 0.07496213912963867,
+  "pairwise_distance_statistics": {
+    "mean": 0.08794827318044691,
+    "std": 0.08884673388266237,
+    "min": 0.018766233523898217,
+    "max": 0.26229436772120435,
+    "n_pairs": 6216
+  },
+  "monotonicity_check": {
+    "passed": true,
+    "violations": []
+  }
+}
