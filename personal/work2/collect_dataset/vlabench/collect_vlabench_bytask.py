@@ -22,6 +22,10 @@ os.environ.setdefault("PYOPENGL_PLATFORM", "egl")
 
 import numpy as np
 
+# Import these modules for their registration side effects.  VLABench's
+# registry is populated by decorators when robot/task modules are imported.
+import VLABench.robots  # noqa: F401
+import VLABench.tasks  # noqa: F401
 from VLABench.envs import load_env
 from VLABench.utils.utils import get_logger
 
@@ -163,6 +167,21 @@ def run_expert(env, task, extra_steps):
 
 
 def create_dataset(root, repo_id, image_size, fps):
+    # Re-open an initialized dataset after an interrupted collection.
+    info_file = root / "meta" / "info.json"
+    if info_file.exists():
+        # resume() opens a local dataset directly in write mode.  Calling the
+        # normal constructor may try to resolve repo_id on Hugging Face when
+        # no parquet episodes exist yet, which is wrong for local collection.
+        return LeRobotDataset.resume(
+            repo_id=repo_id,
+            root=str(root),
+            image_writer_processes=0,
+            image_writer_threads=4,
+        )
+    if root.exists() and not any(root.iterdir()):
+        # LeRobotDataset.create requires the root itself not to exist.
+        root.rmdir()
     return LeRobotDataset.create(
         repo_id=repo_id, root=str(root), robot_type="franka", fps=fps,
         use_videos=True, image_writer_processes=0, image_writer_threads=4,
@@ -207,7 +226,6 @@ def main():
     p.add_argument("--reset-wait-step", type=int, default=10)
     args = p.parse_args()
     root = Path(args.output_root) / args.task
-    root.mkdir(parents=True, exist_ok=True)
     repo_id = args.repo_id or f"vlabench_{args.task}"
     meta_path = root / "episode_initial_states.json"
     records = json.loads(meta_path.read_text()) if meta_path.exists() else {"task": args.task, "episodes": []}
