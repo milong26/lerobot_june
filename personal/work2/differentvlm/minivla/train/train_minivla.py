@@ -27,6 +27,46 @@ sys.stdout.reconfigure(line_buffering=True)
 from differentvlm.minivla.configs.minivla_config import MiniVLAExperimentConfig
 
 
+def _resolve_hf_checkpoint_path(hf_model_name: str) -> str | None:
+    """
+    Resolve HuggingFace model name to actual .pt checkpoint path.
+    Looks in HF cache for checkpoints/*.pt files.
+    Returns the latest checkpoint .pt path, or None if not found.
+    """
+    try:
+        from huggingface_hub import scan_cache_dir
+        hf_cache_info = scan_cache_dir()
+        
+        # Find the repo matching the model name
+        for repo in hf_cache_info.repos:
+            if repo.repo_id == hf_model_name:
+                # Get the latest revision
+                revisions = sorted(repo.revisions, key=lambda r: r.last_modified or "", reverse=True)
+                if revisions:
+                    latest_revision = revisions[0]
+                    snapshot_path = Path(latest_revision.snapshot_path)
+                    
+                    # Look for checkpoints/*.pt files
+                    checkpoints_dir = snapshot_path / "checkpoints"
+                    if checkpoints_dir.exists():
+                        pt_files = sorted(checkpoints_dir.glob("*.pt"))
+                        if pt_files:
+                            # Return the latest (highest step) checkpoint
+                            return str(pt_files[-1])
+                    
+                    # Also check for symlinks to checkpoints
+                    for item in snapshot_path.iterdir():
+                        if item.name == "checkpoints" and item.is_dir():
+                            pt_files = sorted(item.glob("*.pt"))
+                            if pt_files:
+                                return str(pt_files[-1])
+                break
+    except Exception as e:
+        print(f"[WARNING] Failed to resolve HF checkpoint for {hf_model_name}: {e}")
+    
+    return None
+
+
 def _find_latest_checkpoint_step(output_dir: Path) -> tuple[str, int] | None:
     """
     Find the latest checkpoint step in output_dir/checkpoints/.
@@ -150,8 +190,22 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
     # Official VLA checkpoint initialization logging
     loaded_modules = []
     skipped_modules = []
+    resolved_checkpoint_path = cfg.official_pretrained_checkpoint
+    
     if cfg.official_init_mode == "backbone_only" and cfg.official_pretrained_checkpoint:
-        print(f"Official VLA checkpoint: {cfg.official_pretrained_checkpoint}")
+        # Resolve HF model name to actual .pt checkpoint path
+        if not cfg.official_pretrained_checkpoint.endswith(".pt"):
+            resolved_path = _resolve_hf_checkpoint_path(cfg.official_pretrained_checkpoint)
+            if resolved_path:
+                resolved_checkpoint_path = resolved_path
+                print(f"Resolved HF model '{cfg.official_pretrained_checkpoint}' to: {resolved_checkpoint_path}")
+            else:
+                raise FileNotFoundError(
+                    f"Could not resolve HuggingFace model '{cfg.official_pretrained_checkpoint}' "
+                    f"to a .pt checkpoint file. Please ensure the model is downloaded in HF cache."
+                )
+        
+        print(f"Official VLA checkpoint: {resolved_checkpoint_path}")
         print(f"Initialization mode: backbone_only")
         loaded_modules = ["vision_backbone", "projector", "llm_backbone"]
         skipped_modules = ["action_head", "action_tokenizer", "vq_vae"]
@@ -223,8 +277,8 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
     # Add backbone-only pretrained initialization (new mode)
     if cfg.official_init_mode == "backbone_only":
         cmd.append(f"--policy.official_init_mode=backbone_only")
-        if cfg.official_pretrained_checkpoint:
-            cmd.append(f"--policy.official_pretrained_checkpoint={cfg.official_pretrained_checkpoint}")
+        if resolved_checkpoint_path:
+            cmd.append(f"--policy.official_pretrained_checkpoint={resolved_checkpoint_path}")
 
     # Add scheduler warmup steps
     if cfg.scheduler_warmup_steps > 0:

@@ -173,7 +173,7 @@ def main():
     # Default checkpoint path for 20k step
     default_checkpoint_path = (
         "personal/work2/differentvlm/minivla/experiments/"
-        "random_200_seed42_disassemblev3corner_minivla_random/"
+        "random_200_seed42_disassemblev3corner_minivla_random_official/"
         "checkpoints/checkpoints/020000/pretrained_model"
     )
     
@@ -183,7 +183,7 @@ def main():
     if args.checkpoint_path is None and args.step != 20000:
         checkpoint_path = (
             f"personal/work2/differentvlm/minivla/experiments/"
-            f"random_200_seed42_disassemblev3corner_minivla_random/"
+            f"random_200_seed42_disassemblev3corner_minivla_random_official/"
             f"checkpoints/checkpoints/{args.step:06d}/pretrained_model"
         )
     

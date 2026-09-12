@@ -475,16 +475,14 @@ class MiniVLAWristPretrainedConfig(MiniVLAWristConfig):
             if not self.official_pretrained_checkpoint:
                 raise ValueError(
                     "official_init_mode='backbone_only' requires a valid "
-                    "official_pretrained_checkpoint path to a MiniVLA .pt checkpoint."
+                    "official_pretrained_checkpoint path to a MiniVLA .pt checkpoint "
+                    "or a HuggingFace model name (e.g. 'Stanford-ILIAD/minivla-libero90-prismatic')."
                 )
             ckpt_path = Path(self.official_pretrained_checkpoint)
-            if not ckpt_path.exists():
+            # Allow HF model names (resolved at training time) or direct .pt paths
+            if ckpt_path.suffix == ".pt" and not ckpt_path.exists():
                 raise FileNotFoundError(
                     f"Official pretrained checkpoint not found: {ckpt_path}"
-                )
-            if ckpt_path.suffix != ".pt":
-                raise ValueError(
-                    f"official_pretrained_checkpoint must be a .pt file, got: {ckpt_path}"
                 )
         
         # Ensure action tokenizer is never VQ for this variant

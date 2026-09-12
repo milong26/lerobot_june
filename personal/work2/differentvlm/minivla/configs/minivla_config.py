@@ -61,8 +61,9 @@ VQ_MODEL_PATH = "Stanford-ILIAD/pretrain_vq"
 # Official MiniVLA pretrained checkpoint for backbone-only initialization.
 # This checkpoint provides vision_backbone, projector, and llm_backbone weights.
 # Action head is NOT loaded from this checkpoint; it is reinitialized for MetaWorld 4D actions.
+# Use HuggingFace model name (will be resolved via HF cache) or local path.
 # Set to empty string to disable official pretrained initialization.
-OFFICIAL_PRETRAINED_CHECKPOINT = ""
+OFFICIAL_PRETRAINED_CHECKPOINT = "Stanford-ILIAD/minivla-libero90-prismatic"
 
 EVAL_N_EPISODES = 10
 EVAL_SEED = 42
@@ -192,15 +193,19 @@ def get_minivla_config(
     scheduler_warmup_steps: int = 0,
     projector_lr: float = 0.0,
     backbone_lr: float = 0.0,
+    exp_suffix: str = "",
 ) -> MiniVLAExperimentConfig:
     ds_config = DATASET_CONFIGS.get(dataset_name, {})
     
     # Build experiment name with dataset, model and algorithm info
-    # Format: {selection_mode}_{num_episodes}_seed{seed}_{dataset_name}_{model}_{algorithm}
+    # Format: {selection_mode}_{num_episodes}_seed{seed}_{dataset_name}_{model}_{algorithm}[_{suffix}]
     # Example: random_112_seed42_disassemblyv3corner_minivla_random
+    # Example with suffix: random_200_seed42_disassemblev3corner_minivla_random_official
     dataset_short = dataset_name.replace("-", "").replace("_", "")
     model_name = "minivla"
     exp_name = f"{selection_mode}_{num_episodes}_seed{seed}_{dataset_short}_{model_name}_{selection_mode}"
+    if exp_suffix:
+        exp_name = f"{exp_name}_{exp_suffix}"
     
     return MiniVLAExperimentConfig(
         exp_name=exp_name,

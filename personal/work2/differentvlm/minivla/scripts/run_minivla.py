@@ -396,6 +396,7 @@ def run_experiment(
     scheduler_warmup_steps: int = 0,
     projector_lr: float = 0.0,
     backbone_lr: float = 0.0,
+    exp_suffix: str = "",
 ):
     """Run the complete MiniVLA experiment pipeline."""
     start_time = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -422,6 +423,7 @@ def run_experiment(
         scheduler_warmup_steps=scheduler_warmup_steps,
         projector_lr=projector_lr,
         backbone_lr=backbone_lr,
+        exp_suffix=exp_suffix,
     )
     cfg.ensure_dirs()
 
@@ -620,6 +622,8 @@ def main():
                        help="Projector learning rate (0.0 = use optimizer_lr)")
     parser.add_argument("--backbone-lr", type=float, default=0.0,
                        help="Vision/LLM backbone learning rate (0.0 = use optimizer_lr)")
+    parser.add_argument("--exp-suffix", type=str, default="",
+                       help="Experiment name suffix (e.g. 'official' for official pretrained checkpoint)")
     
     args = parser.parse_args()
 
@@ -647,6 +651,7 @@ def main():
         scheduler_warmup_steps=args.scheduler_warmup_steps,
         projector_lr=args.projector_lr,
         backbone_lr=args.backbone_lr,
+        exp_suffix=args.exp_suffix,
     )
 
 

@@ -43,6 +43,7 @@ from sklearn.neighbors import NearestNeighbors
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.gridspec import GridSpec
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -82,6 +83,10 @@ LABELS = {
     "deminf":    "DemInf",
     "ours":      "Ours",
 }
+
+DPI = 300
+FIGSIZE_SINGLE = (7.0, 5.5)
+FIGSIZE_2X2 = (13.0, 10.0)
 
 
 # ---------------------------------------------------------------------------
@@ -209,11 +214,35 @@ def _indices_to_rows(selected_indices: List[int], candidate_indices: List[int]) 
     return [idx_to_row[ep] for ep in selected_indices if ep in idx_to_row]
 
 
+def _get_shared_limits(coords: np.ndarray, margin: float = 0.5) -> Tuple[float, float, float, float]:
+    x_min = coords[:, 0].min() - margin
+    x_max = coords[:, 0].max() + margin
+    y_min = coords[:, 1].min() - margin
+    y_max = coords[:, 1].max() + margin
+    return x_min, x_max, y_min, y_max
+
+
+def _plot_single_panel(ax, candidate_coords, selected_rows, method_name, count,
+                       color, marker, x_min, x_max, y_min, y_max, xlabel="X", ylabel="Y"):
+    ax.scatter(candidate_coords[:, 0], candidate_coords[:, 1],
+               c=COLORS["candidate"], s=8, alpha=0.30, marker="o", zorder=1)
+    if selected_rows:
+        ax.scatter(candidate_coords[selected_rows, 0], candidate_coords[selected_rows, 1],
+                   c=color, s=30, alpha=0.88, marker=marker, zorder=2,
+                   edgecolors="white", linewidths=0.6, label=f"{method_name} (n={count})")
+    ax.set_xlabel(xlabel, fontsize=10)
+    ax.set_ylabel(ylabel, fontsize=10)
+    ax.set_xlim(x_min, x_max)
+    ax.set_ylim(y_min, y_max)
+    ax.grid(True, alpha=0.25)
+    ax.legend(fontsize=8, loc="best")
+
+
 # ---------------------------------------------------------------------------
-# Main visualization: 4-panel configuration distribution comparison
+# Multi-view configuration space visualization
 # ---------------------------------------------------------------------------
-def visualize_configuration_distribution(
-    candidate_coords: np.ndarray,
+def visualize_raw_dimensions(
+    rand_vecs: Dict[int, np.ndarray],
     candidate_indices: List[int],
     random_indices: List[int],
     deminf_indices: List[int],
@@ -222,56 +251,290 @@ def visualize_configuration_distribution(
     output_dir: Path,
     logger: logging.Logger,
 ):
+    vecs = np.array([rand_vecs[ep] for ep in candidate_indices])
+    dim = vecs.shape[1]
+    logger.info(f"rand_vec dimension: {dim}")
+
+    if dim < 2:
+        logger.warning(f"rand_vec dimension {dim} < 2, skipping raw dimension visualization")
+        return
+
+    if dim == 2:
+        dim_pairs = [(0, 1)]
+    elif dim == 3:
+        dim_pairs = [(0, 1), (0, 2), (1, 2)]
+    else:
+        variances = np.var(vecs, axis=0)
+        top3 = np.argsort(variances)[::-1][:3]
+        dim_pairs = list(zip(top3[:2], top3[1:]))
+        if len(dim_pairs) < 3:
+            dim_pairs.append((top3[0], top3[2]))
+
+    candidate_rows = list(range(len(candidate_indices)))
     random_rows = _indices_to_rows(random_indices, candidate_indices)
     deminf_rows = _indices_to_rows(deminf_indices, candidate_indices)
     ours_rows = _indices_to_rows(ours_indices, candidate_indices)
 
-    x_min = candidate_coords[:, 0].min() - 0.5
-    x_max = candidate_coords[:, 0].max() + 0.5
-    y_min = candidate_coords[:, 1].min() - 0.5
-    y_max = candidate_coords[:, 1].max() + 0.5
+    for di, dj in dim_pairs:
+        coords = vecs[:, [di, dj]]
+        x_min, x_max, y_min, y_max = _get_shared_limits(coords, margin=0.05 * (coords.max() - coords.min()))
 
-    fig, axes = plt.subplots(2, 2, figsize=(13.0, 10.0))
+        fig, axes = plt.subplots(2, 2, figsize=FIGSIZE_2X2)
+        panels = [
+            (axes[0, 0], "A", "Candidate Pool", [], None, None, len(candidate_indices)),
+            (axes[0, 1], "B", f"Random (Budget={budget})", random_rows,
+             COLORS["random"], MARKERS["random"], len(random_indices)),
+            (axes[1, 0], "C", f"DemInf (Budget={budget})", deminf_rows,
+             COLORS["deminf"], MARKERS["deminf"], len(deminf_indices)),
+            (axes[1, 1], "D", f"Ours (Budget={budget})", ours_rows,
+             COLORS["ours"], MARKERS["ours"], len(ours_indices)),
+        ]
 
-    panels = [
-        (axes[0, 0], "A", "Candidate Pool",
-         [], None, None, len(candidate_indices)),
-        (axes[0, 1], "B", f"Random (Budget={budget})",
-         random_rows, COLORS["random"], MARKERS["random"], len(random_indices)),
-        (axes[1, 0], "C", f"DemInf (Budget={budget})",
-         deminf_rows, COLORS["deminf"], MARKERS["deminf"], len(deminf_indices)),
-        (axes[1, 1], "D", f"Ours (Budget={budget})",
-         ours_rows, COLORS["ours"], MARKERS["ours"], len(ours_indices)),
+        for ax, letter, title, rows, color, marker, count in panels:
+            _plot_single_panel(ax, coords, rows, title, count, color, marker,
+                               x_min, x_max, y_min, y_max,
+                               xlabel=f"Dimension {di}", ylabel=f"Dimension {dj}")
+
+        fig.suptitle(f"Configuration Space: Dim {di} vs Dim {dj}",
+                     fontsize=13, fontweight="bold", y=1.01)
+        plt.tight_layout()
+
+        out_path = output_dir / f"raw_configuration_dim{di}_dim{dj}.png"
+        fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+        plt.close(fig)
+        logger.info(f"Saved: {out_path}")
+
+
+def visualize_pca_multi_view(
+    rand_vecs: Dict[int, np.ndarray],
+    candidate_indices: List[int],
+    random_indices: List[int],
+    deminf_indices: List[int],
+    ours_indices: List[int],
+    budget: int,
+    output_dir: Path,
+    logger: logging.Logger,
+):
+    vecs = np.array([rand_vecs[ep] for ep in candidate_indices])
+    scaler = StandardScaler()
+    vecs_scaled = scaler.fit_transform(vecs)
+
+    n_components = min(3, vecs.shape[1])
+    pca = PCA(n_components=n_components, random_state=SEED)
+    pca_result = pca.fit_transform(vecs_scaled)
+    logger.info(f"PCA explained variance ratio: {pca.explained_variance_ratio_}")
+
+    candidate_rows = list(range(len(candidate_indices)))
+    random_rows = _indices_to_rows(random_indices, candidate_indices)
+    deminf_rows = _indices_to_rows(deminf_indices, candidate_indices)
+    ours_rows = _indices_to_rows(ours_indices, candidate_indices)
+
+    pc_pairs = [(0, 1), (0, 2)] if n_components >= 3 else [(0, 1)]
+    if n_components >= 3:
+        pc_pairs = [(0, 1), (0, 2), (1, 2)]
+
+    for pi, pj in pc_pairs:
+        coords = pca_result[:, [pi, pj]]
+        x_min, x_max, y_min, y_max = _get_shared_limits(coords)
+
+        fig, axes = plt.subplots(2, 2, figsize=FIGSIZE_2X2)
+        panels = [
+            (axes[0, 0], "A", "Candidate Pool", [], None, None, len(candidate_indices)),
+            (axes[0, 1], "B", f"Random (Budget={budget})", random_rows,
+             COLORS["random"], MARKERS["random"], len(random_indices)),
+            (axes[1, 0], "C", f"DemInf (Budget={budget})", deminf_rows,
+             COLORS["deminf"], MARKERS["deminf"], len(deminf_indices)),
+            (axes[1, 1], "D", f"Ours (Budget={budget})", ours_rows,
+             COLORS["ours"], MARKERS["ours"], len(ours_indices)),
+        ]
+
+        for ax, letter, title, rows, color, marker, count in panels:
+            _plot_single_panel(ax, coords, rows, title, count, color, marker,
+                               x_min, x_max, y_min, y_max,
+                               xlabel=f"PC {pi+1}", ylabel=f"PC {pj+1}")
+
+        fig.suptitle(f"PCA Projection: PC{pi+1} vs PC{pj+1}",
+                     fontsize=13, fontweight="bold", y=1.01)
+        plt.tight_layout()
+
+        out_path = output_dir / f"pca_PC{pi+1}_PC{pj+1}.png"
+        fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+        plt.close(fig)
+        logger.info(f"Saved: {out_path}")
+
+
+def visualize_density_distribution(
+    rand_vecs: Dict[int, np.ndarray],
+    candidate_indices: List[int],
+    random_indices: List[int],
+    deminf_indices: List[int],
+    ours_indices: List[int],
+    budget: int,
+    output_dir: Path,
+    logger: logging.Logger,
+):
+    vecs = np.array([rand_vecs[ep] for ep in candidate_indices])
+    scaler = StandardScaler()
+    vecs_scaled = scaler.fit_transform(vecs)
+    pca = PCA(n_components=2, random_state=SEED)
+    coords_all = pca.fit_transform(vecs_scaled)
+    logger.info(f"Density visualization PCA explained variance: {pca.explained_variance_ratio_}")
+
+    def _get_rows(indices):
+        return _indices_to_rows(indices, candidate_indices)
+
+    random_rows = _get_rows(random_indices)
+    deminf_rows = _get_rows(deminf_indices)
+    ours_rows = _get_rows(ours_indices)
+
+    x_min, x_max, y_min, y_max = _get_shared_limits(coords_all)
+
+    fig = plt.figure(figsize=(14.0, 10.0))
+    gs = GridSpec(2, 2, figure=fig, hspace=0.30, wspace=0.25)
+
+    datasets = [
+        ("A: Candidate Pool", coords_all, None),
+        (f"B: Random (Budget={budget})", coords_all, random_rows),
+        (f"C: DemInf (Budget={budget})", coords_all, deminf_rows),
+        (f"D: Ours (Budget={budget})", coords_all, ours_rows),
     ]
 
-    for ax, letter, title, rows, color, marker, count in panels:
-        # Background: full candidate pool
-        ax.scatter(candidate_coords[:, 0], candidate_coords[:, 1],
-                   c=COLORS["candidate"], s=8, alpha=0.30, marker="o", zorder=1)
-        # Overlay selected episodes
-        if rows:
-            ax.scatter(candidate_coords[rows, 0], candidate_coords[rows, 1],
-                       c=color, s=30, alpha=0.88, marker=marker, zorder=2,
-                       edgecolors="white", linewidths=0.6)
-        ax.set_title(f"{letter}: {title}", fontsize=12, fontweight="bold")
+    for idx, (title, all_coords, sel_rows) in enumerate(datasets):
+        ax = fig.add_subplot(gs[idx // 2, idx % 2])
+
+        if sel_rows is not None and len(sel_rows) > 0:
+            sel_coords = all_coords[sel_rows]
+        else:
+            sel_coords = all_coords
+
+        x = sel_coords[:, 0]
+        y = sel_coords[:, 1]
+
+        ax.scatter(all_coords[:, 0], all_coords[:, 1],
+                   c=COLORS["candidate"], s=6, alpha=0.20, marker="o", zorder=1)
+
+        from scipy.stats import gaussian_kde
+        xy = np.vstack([x, y])
+        try:
+            kde = gaussian_kde(xy, bw_method="scott")
+            density = kde(xy)
+            ax.scatter(x, y, c=density, cmap="viridis", s=25, alpha=0.85,
+                       zorder=2, edgecolors="white", linewidths=0.4)
+            sm = plt.cm.ScalarMappable(cmap="viridis")
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax, fraction=0.046, pad=0.04)
+            cbar.set_label("Density", fontsize=8)
+        except Exception:
+            ax.scatter(x, y, c=COLORS["ours"] if "Ours" in title else
+                       COLORS["random"] if "Random" in title else COLORS["deminf"],
+                       s=25, alpha=0.85, zorder=2, edgecolors="white", linewidths=0.4)
+
+        ax.set_title(title, fontsize=12, fontweight="bold")
         ax.set_xlabel("PC 1", fontsize=10)
         ax.set_ylabel("PC 2", fontsize=10)
         ax.set_xlim(x_min, x_max)
         ax.set_ylim(y_min, y_max)
         ax.grid(True, alpha=0.25)
-        ax.text(0.02, 0.98, f"n={count}", transform=ax.transAxes,
-                fontsize=9, verticalalignment="top",
-                bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
 
-    fig.suptitle("Selection Distribution in Configuration Space",
-                 fontsize=14, fontweight="bold", y=1.01)
+    fig.suptitle("Configuration Density Distribution", fontsize=14, fontweight="bold", y=1.01)
+    out_path = output_dir / "density_configuration_distribution.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
+    plt.close(fig)
+    logger.info(f"Saved: {out_path}")
+
+
+def visualize_umap_projection(
+    rand_vecs: Dict[int, np.ndarray],
+    candidate_indices: List[int],
+    random_indices: List[int],
+    deminf_indices: List[int],
+    ours_indices: List[int],
+    budget: int,
+    output_dir: Path,
+    logger: logging.Logger,
+):
+    try:
+        import umap
+    except ImportError:
+        logger.info("UMAP visualization skipped: umap-learn not installed. "
+                    "Install with: pip install umap-learn")
+        return
+
+    vecs = np.array([rand_vecs[ep] for ep in candidate_indices])
+    scaler = StandardScaler()
+    vecs_scaled = scaler.fit_transform(vecs)
+
+    reducer = umap.UMAP(n_components=2, random_state=SEED, n_neighbors=15, min_dist=0.1)
+    coords = reducer.fit_transform(vecs_scaled)
+    logger.info("UMAP projection completed")
+
+    candidate_rows = list(range(len(candidate_indices)))
+    random_rows = _indices_to_rows(random_indices, candidate_indices)
+    deminf_rows = _indices_to_rows(deminf_indices, candidate_indices)
+    ours_rows = _indices_to_rows(ours_indices, candidate_indices)
+
+    x_min, x_max, y_min, y_max = _get_shared_limits(coords)
+
+    fig, axes = plt.subplots(2, 2, figsize=FIGSIZE_2X2)
+    panels = [
+        (axes[0, 0], "A", "Candidate Pool", [], None, None, len(candidate_indices)),
+        (axes[0, 1], "B", f"Random (Budget={budget})", random_rows,
+         COLORS["random"], MARKERS["random"], len(random_indices)),
+        (axes[1, 0], "C", f"DemInf (Budget={budget})", deminf_rows,
+         COLORS["deminf"], MARKERS["deminf"], len(deminf_indices)),
+        (axes[1, 1], "D", f"Ours (Budget={budget})", ours_rows,
+         COLORS["ours"], MARKERS["ours"], len(ours_indices)),
+    ]
+
+    for ax, letter, title, rows, color, marker, count in panels:
+        _plot_single_panel(ax, coords, rows, title, count, color, marker,
+                           x_min, x_max, y_min, y_max,
+                           xlabel="UMAP 1", ylabel="UMAP 2")
+
+    fig.suptitle("UMAP Projection: Configuration Space", fontsize=13, fontweight="bold", y=1.01)
     plt.tight_layout()
 
-    for fmt, dpi in [("pdf", 300), ("png", 300)]:
-        path = output_dir / f"configuration_distribution_comparison.{fmt}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
+    out_path = output_dir / "umap_configuration_distribution.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
     plt.close(fig)
-    logger.info("Configuration distribution comparison figure saved")
+    logger.info(f"Saved: {out_path}")
+
+
+def visualize_configuration_multi_view(
+    rand_vecs: Dict[int, np.ndarray],
+    candidate_indices: List[int],
+    random_indices: List[int],
+    deminf_indices: List[int],
+    ours_indices: List[int],
+    budget: int,
+    output_dir: Path,
+    logger: logging.Logger,
+):
+    logger.info("=" * 50)
+    logger.info("Starting multi-view configuration space visualization")
+    logger.info("=" * 50)
+
+    visualize_raw_dimensions(
+        rand_vecs, candidate_indices, random_indices, deminf_indices, ours_indices,
+        budget, output_dir, logger
+    )
+
+    visualize_pca_multi_view(
+        rand_vecs, candidate_indices, random_indices, deminf_indices, ours_indices,
+        budget, output_dir, logger
+    )
+
+    visualize_density_distribution(
+        rand_vecs, candidate_indices, random_indices, deminf_indices, ours_indices,
+        budget, output_dir, logger
+    )
+
+    visualize_umap_projection(
+        rand_vecs, candidate_indices, random_indices, deminf_indices, ours_indices,
+        budget, output_dir, logger
+    )
+
+    logger.info("Multi-view visualization complete")
 
 
 # ---------------------------------------------------------------------------
@@ -495,9 +758,8 @@ def compute_region_coverage(
     ax.grid(True, alpha=0.3, axis="y")
     plt.tight_layout()
 
-    for fmt, dpi in [("pdf", 300), ("png", 300)]:
-        path = output_dir / f"region_coverage_comparison.{fmt}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
+    out_path = output_dir / "region_coverage_comparison.png"
+    fig.savefig(out_path, dpi=DPI, bbox_inches="tight")
     plt.close(fig)
     logger.info("Region coverage comparison figure saved")
 
@@ -761,18 +1023,13 @@ def main():
     )
     logger.info(f"Created {num_regions} configuration regions")
 
-    # 6. PCA projection (single fit on full candidate pool)
-    logger.info("Computing PCA 2D projection (StandardScaler + PCA)...")
-    pca_coords, pca_indices, pca_model, scaler = compute_pca_2d(rand_vecs)
-
-    # 7. Generate configuration distribution 4-panel main figure
-    logger.info("Generating configuration distribution comparison figure...")
-    visualize_configuration_distribution(
-        pca_coords, pca_indices, random_indices, deminf_indices, ours_indices,
+    # 6. Generate multi-view configuration distribution figures
+    visualize_configuration_multi_view(
+        rand_vecs, valid_candidate_indices, random_indices, deminf_indices, ours_indices,
         budget, output_dir, logger
     )
 
-    # 8. Compute distribution statistics
+    # 7. Compute distribution statistics
     logger.info("Computing distribution statistics...")
     stats = compute_distribution_statistics(
         rand_vecs, visual_embeddings, action_descriptors,
@@ -782,7 +1039,7 @@ def main():
     )
     save_statistics(stats, output_dir, logger)
 
-    # 9. Region coverage (auxiliary)
+    # 8. Region coverage (auxiliary)
     logger.info("Computing region coverage (auxiliary)...")
     compute_region_coverage(
         episode_to_region, num_regions,
@@ -795,10 +1052,13 @@ def main():
     logger.info("=" * 60)
 
     print(f"\nAnalysis complete. Results saved to: {output_dir}")
-    print(f"  - configuration_distribution_comparison.png/pdf  (main figure)")
+    print(f"  - raw_configuration_dim*.png  (raw dimension pairs)")
+    print(f"  - pca_PC1_PC2.png, pca_PC1_PC3.png, pca_PC2_PC3.png  (PCA multi-view)")
+    print(f"  - density_configuration_distribution.png  (density visualization)")
+    print(f"  - umap_configuration_distribution.png  (UMAP, if available)")
     print(f"  - statistics.json")
     print(f"  - statistics.csv")
-    print(f"  - region_coverage_comparison.png/pdf  (auxiliary)")
+    print(f"  - region_coverage_comparison.png  (auxiliary)")
     print(f"  - region_coverage.csv  (auxiliary)")
     print(f"  - analysis.log")
 
