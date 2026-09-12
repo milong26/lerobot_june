@@ -1,42 +1,17 @@
-2026-09-12 14:57:10 [INFO] ============================================================
-2026-09-12 14:57:10 [INFO] Distribution Analysis started for task: Disassemble-v3
-2026-09-12 14:57:10 [INFO] Selection budget: 112
-2026-09-12 14:57:10 [INFO] ============================================================
-2026-09-12 14:57:10 [INFO] Dataset dir: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
-2026-09-12 14:57:10 [INFO] Candidate pool: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner/episode_initial_states.json
-2026-09-12 14:57:10 [INFO] Visual embeddings: /data/zhonglinye/jun/lerobot/personal/work2/shared_embeddings/pick_place_disassemble-v3_corner/smolvlm2-500m_last-hidden-tokenmean_global-first5_wrist-20to70_temporal-mean_pca32_v1
-2026-09-12 14:57:10 [INFO] Action descriptors: /data/zhonglinye/jun/lerobot/personal/work2/action_descriptors/pick_place_disassemble-v3_corner
-2026-09-12 14:57:10 [INFO] Ours selection: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/v5_selection_output/subsets/our_v5_112_seed42.json
-2026-09-12 14:57:10 [INFO] Random selection: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/subsets/random_200_seed42.json
-2026-09-12 14:57:10 [INFO] Loaded 400 candidate pool episodes from episode_initial_states.json
-2026-09-12 14:57:10 [INFO] Loaded 200 indices from random_200_seed42.json (key=selected_episode_indices)
-2026-09-12 14:57:10 [INFO] Loaded 112 indices from our_v5_112_seed42.json (key=selected_episode_indices)
-2026-09-12 14:57:10 [INFO] Candidate pool size: 400
-2026-09-12 14:57:10 [INFO] Raw random subset size: 200
-2026-09-12 14:57:10 [INFO] Raw ours subset size: 112
-2026-09-12 14:57:10 [INFO] Loading episode data (rand_vec, visual embedding, action descriptor)...
-2026-09-12 14:57:10 [INFO] Episodes with complete data (rand_vec+visual+action): 400 / 400
-2026-09-12 14:57:10 [INFO] Building rand_vec regions via KMeans...
-2026-09-12 14:57:10 [INFO] Created 40 configuration regions
-2026-09-12 14:57:10 [INFO] Applying selection budget: 112
-2026-09-12 14:57:10 [INFO] Random (budget=112): 112 episodes
-2026-09-12 14:57:10 [INFO] Grid-Uniform (budget=112): 112 episodes
-2026-09-12 14:57:10 [INFO] Ours (budget=112): 112 episodes
-2026-09-12 14:57:10 [INFO] Computing PCA 2D projection...
-2026-09-12 14:57:10 [INFO] Generating configuration space selection comparison...
-2026-09-12 14:57:11 [INFO] Configuration space selection comparison figure saved
-2026-09-12 14:57:11 [INFO] Generating ICLR 4-panel comparison figure...
-2026-09-12 14:57:12 [INFO] ICLR 4-panel comparison figure saved
-2026-09-12 14:57:12 [INFO] Computing region coverage heatmap...
-2026-09-12 14:57:20 [INFO] Region coverage heatmap saved
-2026-09-12 14:57:20 [INFO] Region coverage CSV saved: personal/work2/distribution_analysis/results/region_coverage_comparison_all_methods.csv
-2026-09-12 14:57:20 [INFO] Computing distribution statistics...
-2026-09-12 14:57:21 [INFO] Distribution statistics computed:
-2026-09-12 14:57:21 [INFO]   random: {'configuration_coverage_ratio': 0.95, 'region_entropy': 3.4499, 'avg_nearest_neighbor_distance': 0.0275, 'mean_pairwise_configuration_distance': 0.1179, 'visual_diversity': 1.8823, 'action_diversity': 6.5431, 'js_divergence_from_candidate': 0.213, 'earth_mover_distance_from_candidate': 1.5089}
-2026-09-12 14:57:21 [INFO]   grid_uniform: {'configuration_coverage_ratio': 1.0, 'region_entropy': 3.6778, 'avg_nearest_neighbor_distance': 0.0261, 'mean_pairwise_configuration_distance': 0.1278, 'visual_diversity': 1.7154, 'action_diversity': 5.3975, 'js_divergence_from_candidate': 0.1435, 'earth_mover_distance_from_candidate': 0.6268}
-2026-09-12 14:57:21 [INFO]   ours: {'configuration_coverage_ratio': 1.0, 'region_entropy': 3.643, 'avg_nearest_neighbor_distance': 0.0268, 'mean_pairwise_configuration_distance': 0.1224, 'visual_diversity': 1.7595, 'action_diversity': 5.569, 'js_divergence_from_candidate': 0.0553, 'earth_mover_distance_from_candidate': 0.1414}
-2026-09-12 14:57:21 [INFO] Statistics JSON saved: personal/work2/distribution_analysis/results/statistics.json
-2026-09-12 14:57:21 [INFO] Statistics CSV saved: personal/work2/distribution_analysis/results/statistics.csv
-2026-09-12 14:57:21 [INFO] ============================================================
-2026-09-12 14:57:21 [INFO] Analysis complete! All results saved to: personal/work2/distribution_analysis/results
-2026-09-12 14:57:21 [INFO] ============================================================
+2026-09-12 15:29:01 [INFO] ============================================================
+2026-09-12 15:29:01 [INFO] Distribution Analysis started for task: Disassemble-v3
+2026-09-12 15:29:01 [INFO] Selection budget: 112
+2026-09-12 15:29:01 [INFO] ============================================================
+2026-09-12 15:29:01 [INFO] Auto-resolved: /data/zhonglinye/jun/lerobot/personal/work2/duibi/deminf_112_seed42_disassemble-v3_corner
+2026-09-12 15:29:01 [INFO] Dataset dir: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+2026-09-12 15:29:01 [INFO] Candidate pool: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner/episode_initial_states.json
+2026-09-12 15:29:01 [INFO] Visual embeddings: /data/zhonglinye/jun/lerobot/personal/work2/shared_embeddings/pick_place_disassemble-v3_corner/smolvlm2-500m_last-hidden-tokenmean_global-first5_wrist-20to70_temporal-mean_pca32_v1
+2026-09-12 15:29:01 [INFO] Action descriptors: /data/zhonglinye/jun/lerobot/personal/work2/action_descriptors/pick_place_disassemble-v3_corner
+2026-09-12 15:29:01 [INFO] Ours selection: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/experiments/tinyvla_s_disassemble-v3_corner/results/v5_selection_output/subsets/our_v5_112_seed42.json
+2026-09-12 15:29:01 [INFO] Random selection: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/subsets/random_200_seed42.json
+2026-09-12 15:29:01 [INFO] DemInf selection: /data/zhonglinye/jun/lerobot/personal/work2/duibi/deminf_112_seed42_disassemble-v3_corner
+2026-09-12 15:29:01 [INFO] Loaded 400 candidate pool episodes from episode_initial_states.json
+2026-09-12 15:29:01 [INFO] Loading episode data (rand_vec, visual embedding, action descriptor)...
+2026-09-12 15:29:01 [INFO] Episodes with complete data (rand_vec+visual+action): 400 / 400
+2026-09-12 15:29:01 [INFO] Loaded 200 indices from random_200_seed42.json (key=selected_episode_indices)
+2026-09-12 15:29:01 [INFO] Loaded 112 indices from our_v5_112_seed42.json (key=selected_episode_indices)

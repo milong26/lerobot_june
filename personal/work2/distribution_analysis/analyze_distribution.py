@@ -2,17 +2,16 @@
 """
 Distribution Analysis for Configuration-Aware Hierarchical Acquisition
 
-Analyzes demonstration distribution differences between:
+Selection Distribution Visualization:
 - Candidate Pool (all available episodes)
 - Random Selection subset (fixed budget)
-- Grid-Uniform Selection baseline (round-robin region coverage)
+- DemInf Selection subset (fixed budget)
 - Ours (configuration-aware) Selection subset (fixed budget)
 
 Generates:
-1. Configuration space PCA visualization (all methods)
-2. Region coverage heatmap comparison
-3. Distribution statistics (coverage ratio, entropy, diversity, JS divergence, EMD)
-4. ICLR 4-panel comparison figure
+1. Configuration distribution comparison (4-panel main figure)
+2. Distribution statistics (coverage, entropy, diversity, JS divergence, EMD)
+3. Region coverage (auxiliary quantitative analysis)
 
 Usage:
     python analyze_distribution.py \
@@ -23,6 +22,7 @@ Usage:
         --action-descriptor-dir /path/to/action_descriptors/... \
         --selection-ours /path/to/ours_subset.json \
         --selection-random /path/to/random_subset.json \
+        --selection-deminf /path/to/deminf_subset.json \
         --selection-budget 112 \
         --output-dir personal/work2/distribution_analysis/results/
 """
@@ -37,12 +37,12 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 from scipy.spatial.distance import jensenshannon
 from scipy.stats import wasserstein_distance
+from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.neighbors import NearestNeighbors
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import matplotlib.colors as mcolors
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -59,29 +59,34 @@ from our_v5.select_our_v5 import (
     build_rand_vec_regions,
 )
 
-
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
 COLORS = {
     "candidate": "#B0B0B0",
-    "random": "#E74C3C",
-    "grid_uniform": "#3498DB",
-    "ours": "#2ECC71",
+    "random":    "#E74C3C",
+    "deminf":    "#3498DB",
+    "ours":      "#2ECC71",
 }
 
 MARKERS = {
     "candidate": "o",
-    "random": "^",
-    "grid_uniform": "D",
-    "ours": "s",
+    "random":    "^",
+    "deminf":    "D",
+    "ours":      "s",
 }
 
 LABELS = {
     "candidate": "Candidate Pool",
-    "random": "Random",
-    "grid_uniform": "Grid-Uniform",
-    "ours": "Ours",
+    "random":    "Random",
+    "deminf":    "DemInf",
+    "ours":      "Ours",
 }
 
 
+# ---------------------------------------------------------------------------
+# Data loading helpers
+# ---------------------------------------------------------------------------
 def load_action_descriptors_recursive(descriptor_path: Path) -> Dict[int, np.ndarray]:
     descriptors = {}
     for f in sorted(descriptor_path.rglob("*.npy")):
@@ -140,53 +145,6 @@ def load_candidate_pool_indices(pool_path: Path, logger: logging.Logger) -> List
     return indices
 
 
-def select_random_budget(candidate_indices: List[int], budget: int, seed: int = SEED) -> List[int]:
-    rng = np.random.RandomState(seed)
-    pool = list(candidate_indices)
-    if len(pool) > budget:
-        selected = rng.choice(pool, size=budget, replace=False).tolist()
-    else:
-        selected = pool
-    return [int(x) for x in selected]
-
-
-def select_grid_uniform_budget(
-    candidate_indices: List[int],
-    episode_to_region: Dict[int, int],
-    num_regions: int,
-    budget: int,
-) -> List[int]:
-    region_to_episodes: Dict[int, List[int]] = {r: [] for r in range(num_regions)}
-    for ep in candidate_indices:
-        rid = episode_to_region.get(ep)
-        if rid is not None:
-            region_to_episodes[rid].append(ep)
-    for r in region_to_episodes:
-        region_to_episodes[r].sort()
-
-    selected = []
-    round_idx = 0
-    while len(selected) < budget:
-        added_this_round = False
-        for r in range(num_regions):
-            if len(selected) >= budget:
-                break
-            episodes_in_region = region_to_episodes[r]
-            if round_idx < len(episodes_in_region):
-                selected.append(episodes_in_region[round_idx])
-                added_this_round = True
-        round_idx += 1
-        if not added_this_round:
-            break
-    return selected
-
-
-def select_ours_budget(ours_indices: List[int], budget: int) -> List[int]:
-    if len(ours_indices) <= budget:
-        return list(ours_indices)
-    return list(ours_indices[:budget])
-
-
 def load_all_episode_data(
     candidate_indices: List[int],
     dataset_dir: Path,
@@ -212,12 +170,38 @@ def load_all_episode_data(
     return rand_vecs_filtered, visual_filtered, action_filtered
 
 
-def compute_pca_2d(rand_vecs: Dict[int, np.ndarray]) -> Tuple[np.ndarray, List[int]]:
+# ---------------------------------------------------------------------------
+# Budget selection helpers
+# ---------------------------------------------------------------------------
+def select_random_budget(candidate_indices: List[int], budget: int, seed: int = SEED) -> List[int]:
+    rng = np.random.RandomState(seed)
+    pool = list(candidate_indices)
+    if len(pool) > budget:
+        selected = rng.choice(pool, size=budget, replace=False).tolist()
+    else:
+        selected = pool
+    return [int(x) for x in selected]
+
+
+def select_budget(indices: List[int], budget: int) -> List[int]:
+    if len(indices) <= budget:
+        return list(indices)
+    return list(indices[:budget])
+
+
+# ---------------------------------------------------------------------------
+# PCA projection (single fit on full candidate pool)
+# ---------------------------------------------------------------------------
+def compute_pca_2d(rand_vecs: Dict[int, np.ndarray]) -> Tuple[np.ndarray, List[int], PCA, StandardScaler]:
     indices = sorted(rand_vecs.keys())
     vecs = np.array([rand_vecs[i] for i in indices])
+
+    scaler = StandardScaler()
+    vecs_scaled = scaler.fit_transform(vecs)
+
     pca = PCA(n_components=2, random_state=SEED)
-    coords_2d = pca.fit_transform(vecs)
-    return coords_2d, indices
+    coords_2d = pca.fit_transform(vecs_scaled)
+    return coords_2d, indices, pca, scaler
 
 
 def _indices_to_rows(selected_indices: List[int], candidate_indices: List[int]) -> List[int]:
@@ -225,86 +209,51 @@ def _indices_to_rows(selected_indices: List[int], candidate_indices: List[int]) 
     return [idx_to_row[ep] for ep in selected_indices if ep in idx_to_row]
 
 
-def plot_configuration_space_all(
+# ---------------------------------------------------------------------------
+# Main visualization: 4-panel configuration distribution comparison
+# ---------------------------------------------------------------------------
+def visualize_configuration_distribution(
     candidate_coords: np.ndarray,
     candidate_indices: List[int],
     random_indices: List[int],
-    grid_indices: List[int],
-    ours_indices: List[int],
-    output_dir: Path,
-    logger: logging.Logger,
-):
-    random_rows = _indices_to_rows(random_indices, candidate_indices)
-    grid_rows = _indices_to_rows(grid_indices, candidate_indices)
-    ours_rows = _indices_to_rows(ours_indices, candidate_indices)
-
-    fig, ax = plt.subplots(figsize=(7.0, 5.5))
-
-    ax.scatter(candidate_coords[:, 0], candidate_coords[:, 1],
-               c=COLORS["candidate"], s=15, alpha=0.35,
-               label=f"{LABELS['candidate']} ({len(candidate_indices)})",
-               marker=MARKERS["candidate"], zorder=1)
-    ax.scatter(candidate_coords[random_rows, 0], candidate_coords[random_rows, 1],
-               c=COLORS["random"], s=30, alpha=0.85,
-               label=f"{LABELS['random']}-{len(random_indices)}",
-               marker=MARKERS["random"], zorder=2, edgecolors="white", linewidths=0.5)
-    ax.scatter(candidate_coords[grid_rows, 0], candidate_coords[grid_rows, 1],
-               c=COLORS["grid_uniform"], s=30, alpha=0.85,
-               label=f"{LABELS['grid_uniform']}-{len(grid_indices)}",
-               marker=MARKERS["grid_uniform"], zorder=3, edgecolors="white", linewidths=0.5)
-    ax.scatter(candidate_coords[ours_rows, 0], candidate_coords[ours_rows, 1],
-               c=COLORS["ours"], s=30, alpha=0.85,
-               label=f"{LABELS['ours']}-{len(ours_indices)}",
-               marker=MARKERS["ours"], zorder=4, edgecolors="white", linewidths=0.5)
-
-    ax.set_title("Configuration Space Selection Comparison", fontsize=14, fontweight="bold")
-    ax.set_xlabel("PC 1", fontsize=12)
-    ax.set_ylabel("PC 2", fontsize=12)
-    ax.legend(fontsize=9, loc="best", framealpha=0.9, ncol=2)
-    ax.grid(True, alpha=0.25)
-    plt.tight_layout()
-
-    for fmt, dpi in [("pdf", 300), ("png", 300)]:
-        path = output_dir / f"configuration_space_selection_comparison.{fmt}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
-    plt.close(fig)
-    logger.info("Configuration space selection comparison figure saved")
-
-
-def plot_iclr_4panel(
-    candidate_coords: np.ndarray,
-    candidate_indices: List[int],
-    random_indices: List[int],
-    grid_indices: List[int],
+    deminf_indices: List[int],
     ours_indices: List[int],
     budget: int,
     output_dir: Path,
     logger: logging.Logger,
 ):
     random_rows = _indices_to_rows(random_indices, candidate_indices)
-    grid_rows = _indices_to_rows(grid_indices, candidate_indices)
+    deminf_rows = _indices_to_rows(deminf_indices, candidate_indices)
     ours_rows = _indices_to_rows(ours_indices, candidate_indices)
 
-    x_min, x_max = candidate_coords[:, 0].min() - 0.5, candidate_coords[:, 0].max() + 0.5
-    y_min, y_max = candidate_coords[:, 1].min() - 0.5, candidate_coords[:, 1].max() + 0.5
+    x_min = candidate_coords[:, 0].min() - 0.5
+    x_max = candidate_coords[:, 0].max() + 0.5
+    y_min = candidate_coords[:, 1].min() - 0.5
+    y_max = candidate_coords[:, 1].max() + 0.5
 
     fig, axes = plt.subplots(2, 2, figsize=(13.0, 10.0))
 
     panels = [
-        (axes[0, 0], "A", "Candidate Pool", [], COLORS["candidate"], MARKERS["candidate"], len(candidate_indices)),
-        (axes[0, 1], "B", f"Random (budget={budget})", random_rows, COLORS["random"], MARKERS["random"], len(random_indices)),
-        (axes[1, 0], "C", f"Grid-Uniform (budget={budget})", grid_rows, COLORS["grid_uniform"], MARKERS["grid_uniform"], len(grid_indices)),
-        (axes[1, 1], "D", f"Ours (budget={budget})", ours_rows, COLORS["ours"], MARKERS["ours"], len(ours_indices)),
+        (axes[0, 0], "A", "Candidate Pool",
+         [], None, None, len(candidate_indices)),
+        (axes[0, 1], "B", f"Random (Budget={budget})",
+         random_rows, COLORS["random"], MARKERS["random"], len(random_indices)),
+        (axes[1, 0], "C", f"DemInf (Budget={budget})",
+         deminf_rows, COLORS["deminf"], MARKERS["deminf"], len(deminf_indices)),
+        (axes[1, 1], "D", f"Ours (Budget={budget})",
+         ours_rows, COLORS["ours"], MARKERS["ours"], len(ours_indices)),
     ]
 
-    for ax, panel_letter, title, rows, color, marker, count in panels:
+    for ax, letter, title, rows, color, marker, count in panels:
+        # Background: full candidate pool
         ax.scatter(candidate_coords[:, 0], candidate_coords[:, 1],
-                   c=COLORS["candidate"], s=8, alpha=0.3, marker="o", zorder=1)
+                   c=COLORS["candidate"], s=8, alpha=0.30, marker="o", zorder=1)
+        # Overlay selected episodes
         if rows:
             ax.scatter(candidate_coords[rows, 0], candidate_coords[rows, 1],
-                       c=color, s=25, alpha=0.85, marker=marker, zorder=2,
-                       edgecolors="white", linewidths=0.5)
-        ax.set_title(f"{panel_letter}: {title}", fontsize=12, fontweight="bold")
+                       c=color, s=30, alpha=0.88, marker=marker, zorder=2,
+                       edgecolors="white", linewidths=0.6)
+        ax.set_title(f"{letter}: {title}", fontsize=12, fontweight="bold")
         ax.set_xlabel("PC 1", fontsize=10)
         ax.set_ylabel("PC 2", fontsize=10)
         ax.set_xlim(x_min, x_max)
@@ -314,92 +263,20 @@ def plot_iclr_4panel(
                 fontsize=9, verticalalignment="top",
                 bbox=dict(boxstyle="round,pad=0.3", facecolor="white", alpha=0.8))
 
-    fig.suptitle("Configuration-Space Distribution Comparison", fontsize=14, fontweight="bold", y=1.01)
+    fig.suptitle("Selection Distribution in Configuration Space",
+                 fontsize=14, fontweight="bold", y=1.01)
     plt.tight_layout()
 
     for fmt, dpi in [("pdf", 300), ("png", 300)]:
-        path = output_dir / f"distribution_comparison_iclr.{fmt}"
+        path = output_dir / f"configuration_distribution_comparison.{fmt}"
         fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
     plt.close(fig)
-    logger.info("ICLR 4-panel comparison figure saved")
+    logger.info("Configuration distribution comparison figure saved")
 
 
-def plot_region_coverage_heatmap(
-    episode_to_region: Dict[int, int],
-    num_regions: int,
-    candidate_indices: List[int],
-    random_indices: List[int],
-    grid_indices: List[int],
-    ours_indices: List[int],
-    output_dir: Path,
-    logger: logging.Logger,
-) -> Dict:
-    methods = ["Candidate Pool", "Random", "Grid-Uniform", "Ours"]
-    method_indices = [candidate_indices, random_indices, grid_indices, ours_indices]
-
-    region_counts = np.zeros((len(methods), num_regions), dtype=int)
-    for mi, indices in enumerate(method_indices):
-        for ep in indices:
-            rid = episode_to_region.get(ep)
-            if rid is not None:
-                region_counts[mi, rid] += 1
-
-    fig, ax = plt.subplots(figsize=(10, 3.5))
-    im = ax.imshow(region_counts, aspect="auto", cmap="YlOrRd", interpolation="nearest")
-
-    ax.set_yticks(range(len(methods)))
-    ax.set_yticklabels(methods, fontsize=10)
-    ax.set_xlabel("Configuration Region ID", fontsize=11)
-    ax.set_title("Region Coverage Heatmap (episode count per region)", fontsize=13, fontweight="bold")
-    ax.set_xticks(range(num_regions))
-    ax.set_xticklabels([str(i) for i in range(num_regions)], fontsize=7, rotation=90)
-
-    cbar = plt.colorbar(im, ax=ax, shrink=0.8)
-    cbar.set_label("Episode Count", fontsize=10)
-
-    for i in range(len(methods)):
-        for j in range(num_regions):
-            val = region_counts[i, j]
-            if val > 0:
-                ax.text(j, i, str(val), ha="center", va="center",
-                        fontsize=6, color="black" if val < region_counts.max() * 0.6 else "white")
-
-    plt.tight_layout()
-    for fmt, dpi in [("pdf", 300), ("png", 300)]:
-        path = output_dir / f"region_coverage_heatmap.{fmt}"
-        fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
-    plt.close(fig)
-    logger.info("Region coverage heatmap saved")
-
-    coverage_data = {}
-    for j in range(num_regions):
-        coverage_data[f"region_{j}"] = {
-            "region_id": j,
-            "candidate_count": int(region_counts[0, j]),
-            "random_count": int(region_counts[1, j]),
-            "grid_uniform_count": int(region_counts[2, j]),
-            "ours_count": int(region_counts[3, j]),
-        }
-    return coverage_data
-
-
-def save_region_coverage_csv(coverage_data: Dict, num_regions: int, output_dir: Path, logger: logging.Logger):
-    csv_path = output_dir / "region_coverage_comparison_all_methods.csv"
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["region_id", "candidate_count", "random_count", "grid_uniform_count", "ours_count"])
-        for j in range(num_regions):
-            entry = coverage_data[f"region_{j}"]
-            writer.writerow([
-                entry["region_id"],
-                entry["candidate_count"],
-                entry["random_count"],
-                entry["grid_uniform_count"],
-                entry["ours_count"],
-            ])
-    logger.info(f"Region coverage CSV saved: {csv_path}")
-
-
+# ---------------------------------------------------------------------------
+# Distribution statistics
+# ---------------------------------------------------------------------------
 def compute_distribution_statistics(
     rand_vecs: Dict[int, np.ndarray],
     visual_embeddings: Dict[int, np.ndarray],
@@ -408,7 +285,7 @@ def compute_distribution_statistics(
     num_regions: int,
     candidate_indices: List[int],
     random_indices: List[int],
-    grid_indices: List[int],
+    deminf_indices: List[int],
     ours_indices: List[int],
     budget: int,
     logger: logging.Logger,
@@ -510,32 +387,41 @@ def compute_distribution_statistics(
         distances_1d = np.arange(num_regions, dtype=float)
         return float(wasserstein_distance(distances_1d, distances_1d, p, q))
 
-    def _compute_method_stats(indices, label):
+    def _compute_method_stats(indices):
         vecs = _extract_vectors(rand_vecs, indices)
         vis = _extract_vectors(visual_embeddings, indices)
         act = _extract_vectors(action_descriptors, indices)
         return {
-            "configuration_coverage_ratio": round(_coverage_ratio(indices), 4),
-            "region_entropy": round(_region_entropy(indices), 4),
-            "avg_nearest_neighbor_distance": round(_avg_nearest_neighbor(vecs), 4),
-            "mean_pairwise_configuration_distance": round(_mean_pairwise_distance(vecs), 4),
+            "method": "",
+            "selection_budget": budget,
+            "coverage_ratio": round(_coverage_ratio(indices), 4),
+            "entropy": round(_region_entropy(indices), 4),
+            "nearest_neighbor_distance": round(_avg_nearest_neighbor(vecs), 4),
+            "pairwise_configuration_distance": round(_mean_pairwise_distance(vecs), 4),
             "visual_diversity": round(_mean_pairwise_distance(vis), 4),
             "action_diversity": round(_mean_pairwise_distance(act), 4),
-            "js_divergence_from_candidate": round(_compute_js_divergence(indices), 4),
-            "earth_mover_distance_from_candidate": round(_compute_emd(indices), 4),
+            "js_divergence": round(_compute_js_divergence(indices), 4),
+            "emd_distance": round(_compute_emd(indices), 4),
         }
+
+    random_stats = _compute_method_stats(random_indices)
+    random_stats["method"] = "random"
+    deminf_stats = _compute_method_stats(deminf_indices)
+    deminf_stats["method"] = "deminf"
+    ours_stats = _compute_method_stats(ours_indices)
+    ours_stats["method"] = "ours"
 
     stats = {
         "candidate_pool_size": len(candidate_indices),
         "selection_budget": budget,
         "num_regions": num_regions,
-        "random": _compute_method_stats(random_indices, "random"),
-        "grid_uniform": _compute_method_stats(grid_indices, "grid_uniform"),
-        "ours": _compute_method_stats(ours_indices, "ours"),
+        "random": random_stats,
+        "deminf": deminf_stats,
+        "ours": ours_stats,
     }
 
     logger.info("Distribution statistics computed:")
-    for method in ["random", "grid_uniform", "ours"]:
+    for method in ["random", "deminf", "ours"]:
         logger.info(f"  {method}: {stats[method]}")
 
     return stats
@@ -549,28 +435,97 @@ def save_statistics(stats: Dict, output_dir: Path, logger: logging.Logger):
 
     csv_path = output_dir / "statistics.csv"
     metrics = [
-        "configuration_coverage_ratio",
-        "region_entropy",
-        "avg_nearest_neighbor_distance",
-        "mean_pairwise_configuration_distance",
+        "selection_budget",
+        "coverage_ratio",
+        "entropy",
+        "nearest_neighbor_distance",
+        "pairwise_configuration_distance",
         "visual_diversity",
         "action_diversity",
-        "js_divergence_from_candidate",
-        "earth_mover_distance_from_candidate",
+        "js_divergence",
+        "emd_distance",
     ]
     with open(csv_path, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Metric", "Random", "Grid-Uniform", "Ours"])
-        for metric in metrics:
-            writer.writerow([
-                metric,
-                stats["random"][metric],
-                stats["grid_uniform"][metric],
-                stats["ours"][metric],
-            ])
+        writer.writerow(["method"] + metrics)
+        for method in ["random", "deminf", "ours"]:
+            row = [method] + [stats[method][m] for m in metrics]
+            writer.writerow(row)
     logger.info(f"Statistics CSV saved: {csv_path}")
 
 
+# ---------------------------------------------------------------------------
+# Region coverage (auxiliary quantitative analysis)
+# ---------------------------------------------------------------------------
+def compute_region_coverage(
+    episode_to_region: Dict[int, int],
+    num_regions: int,
+    candidate_indices: List[int],
+    random_indices: List[int],
+    deminf_indices: List[int],
+    ours_indices: List[int],
+    output_dir: Path,
+    logger: logging.Logger,
+) -> Dict:
+    methods = ["Candidate Pool", "Random", "DemInf", "Ours"]
+    method_indices = [candidate_indices, random_indices, deminf_indices, ours_indices]
+
+    region_counts = np.zeros((len(methods), num_regions), dtype=int)
+    for mi, indices in enumerate(method_indices):
+        for ep in indices:
+            rid = episode_to_region.get(ep)
+            if rid is not None:
+                region_counts[mi, rid] += 1
+
+    # Bar chart
+    fig, ax = plt.subplots(figsize=(8.0, 4.0))
+    x = np.arange(num_regions)
+    width = 0.20
+    bar_colors = [COLORS["candidate"], COLORS["random"], COLORS["deminf"], COLORS["ours"]]
+    for mi in range(len(methods)):
+        ax.bar(x + mi * width, region_counts[mi, :], width,
+               label=methods[mi], color=bar_colors[mi], alpha=0.8)
+
+    ax.set_xlabel("Configuration Region ID", fontsize=11)
+    ax.set_ylabel("Episode Count", fontsize=11)
+    ax.set_title("Region Coverage Comparison", fontsize=13, fontweight="bold")
+    ax.set_xticks(x + width * 1.5)
+    ax.set_xticklabels([str(i) for i in range(num_regions)], fontsize=6, rotation=90)
+    ax.legend(fontsize=9)
+    ax.grid(True, alpha=0.3, axis="y")
+    plt.tight_layout()
+
+    for fmt, dpi in [("pdf", 300), ("png", 300)]:
+        path = output_dir / f"region_coverage_comparison.{fmt}"
+        fig.savefig(path, dpi=dpi, bbox_inches="tight", format=fmt)
+    plt.close(fig)
+    logger.info("Region coverage comparison figure saved")
+
+    # CSV
+    csv_path = output_dir / "region_coverage.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["region_id", "candidate_count", "random_count", "deminf_count", "ours_count"])
+        for j in range(num_regions):
+            writer.writerow([j, int(region_counts[0, j]), int(region_counts[1, j]),
+                             int(region_counts[2, j]), int(region_counts[3, j])])
+    logger.info(f"Region coverage CSV saved: {csv_path}")
+
+    coverage_data = {}
+    for j in range(num_regions):
+        coverage_data[f"region_{j}"] = {
+            "region_id": j,
+            "candidate_count": int(region_counts[0, j]),
+            "random_count": int(region_counts[1, j]),
+            "deminf_count": int(region_counts[2, j]),
+            "ours_count": int(region_counts[3, j]),
+        }
+    return coverage_data
+
+
+# ---------------------------------------------------------------------------
+# Auto path resolution
+# ---------------------------------------------------------------------------
 def resolve_path_auto(base_dir: Path, task: str, pattern_keywords: List[str], logger: logging.Logger) -> Optional[Path]:
     task_lower = task.lower()
     task_underscore = task.replace("-", "_").lower()
@@ -590,16 +545,36 @@ def resolve_path_auto(base_dir: Path, task: str, pattern_keywords: List[str], lo
             for c in known_subdirs:
                 name = c.name.lower()
                 if variant in name and keyword in name:
-                    logger.info(f"Auto-resolved: {c}")
+                    logger.info(f"Auto-resolved dir: {c}")
                     return c
             for c in known_subdirs:
                 name = c.name.lower()
                 if variant in name:
-                    logger.info(f"Auto-resolved: {c}")
+                    logger.info(f"Auto-resolved dir: {c}")
                     return c
     return None
 
 
+def find_subset_json_in_dir(dir_path: Path, logger: logging.Logger) -> Optional[Path]:
+    if dir_path.is_file() and dir_path.suffix == ".json":
+        return dir_path
+    for f in sorted(dir_path.rglob("*.json")):
+        if f.name == "info.json":
+            continue
+        try:
+            with open(f, "r") as fh:
+                data = json.load(fh)
+            if "selected_episode_indices" in data or "selected_episode_ids" in data:
+                logger.info(f"Found subset JSON: {f}")
+                return f
+        except Exception:
+            continue
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Argument parsing
+# ---------------------------------------------------------------------------
 def parse_args():
     parser = argparse.ArgumentParser(description="Distribution Analysis for Configuration-Aware Selection")
     parser.add_argument("--task", type=str, required=True,
@@ -610,6 +585,8 @@ def parse_args():
                         help="Path to ours selection subset JSON")
     parser.add_argument("--selection-random", type=str, default=None,
                         help="Path to random selection subset JSON")
+    parser.add_argument("--selection-deminf", type=str, default=None,
+                        help="Path to DemInf selection subset JSON")
     parser.add_argument("--visual-embedding-dir", type=str, default=None,
                         help="Path to visual embedding cache directory")
     parser.add_argument("--action-descriptor-dir", type=str, default=None,
@@ -624,6 +601,9 @@ def parse_args():
     return parser.parse_args()
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 def main():
     args = parse_args()
     output_dir = Path(args.output_dir)
@@ -637,6 +617,7 @@ def main():
 
     work2 = Path(__file__).resolve().parent.parent
 
+    # Resolve dataset dir
     if args.dataset_dir:
         dataset_dir = Path(args.dataset_dir)
     else:
@@ -646,6 +627,7 @@ def main():
                          f"Please provide --dataset-dir explicitly.")
             sys.exit(1)
 
+    # Resolve candidate pool
     if args.candidate_pool:
         pool_path = Path(args.candidate_pool)
     else:
@@ -655,6 +637,7 @@ def main():
                          f"Please provide --candidate-pool explicitly.")
             sys.exit(1)
 
+    # Resolve visual embeddings
     if args.visual_embedding_dir:
         visual_dir = Path(args.visual_embedding_dir)
     else:
@@ -664,6 +647,7 @@ def main():
                          f"Please provide --visual-embedding-dir explicitly.")
             sys.exit(1)
 
+    # Resolve action descriptors
     if args.action_descriptor_dir:
         action_dir = Path(args.action_descriptor_dir)
     else:
@@ -673,23 +657,46 @@ def main():
                          f"Please provide --action-descriptor-dir explicitly.")
             sys.exit(1)
 
+    # Resolve ours selection
     if args.selection_ours:
         ours_path = Path(args.selection_ours)
     else:
-        ours_path = resolve_path_auto(work2, args.task, ["our_v5", "ours", "subzerocore"], logger)
-        if ours_path is None:
+        ours_dir = resolve_path_auto(work2, args.task, ["our_v5", "ours", "subzerocore"], logger)
+        if ours_dir is None:
             logger.error(f"Cannot find ours selection subset for task {args.task}. "
                          f"Please provide --selection-ours explicitly.")
             sys.exit(1)
+        ours_path = find_subset_json_in_dir(ours_dir, logger)
+        if ours_path is None:
+            logger.error(f"Cannot find subset JSON in {ours_dir}. "
+                         f"Please provide --selection-ours explicitly.")
+            sys.exit(1)
 
+    # Resolve random selection
     if args.selection_random:
         random_path = Path(args.selection_random)
     else:
-        random_path = resolve_path_auto(work2, args.task, ["random"], logger)
-        if random_path is None:
+        random_dir = resolve_path_auto(work2, args.task, ["random"], logger)
+        if random_dir is None:
             logger.error(f"Cannot find random selection subset for task {args.task}. "
                          f"Please provide --selection-random explicitly.")
             sys.exit(1)
+        random_path = find_subset_json_in_dir(random_dir, logger)
+        if random_path is None:
+            logger.error(f"Cannot find subset JSON in {random_dir}. "
+                         f"Please provide --selection-random explicitly.")
+            sys.exit(1)
+
+    # Resolve DemInf selection (optional)
+    deminf_path = None
+    if args.selection_deminf:
+        deminf_path = Path(args.selection_deminf)
+    else:
+        deminf_dir = resolve_path_auto(work2, args.task, ["deminf"], logger)
+        if deminf_dir is not None:
+            deminf_path = find_subset_json_in_dir(deminf_dir, logger)
+        if deminf_path is None:
+            logger.warning("DemInf selection file not found. DemInf analysis will be skipped.")
 
     logger.info(f"Dataset dir: {dataset_dir}")
     logger.info(f"Candidate pool: {pool_path}")
@@ -697,23 +704,46 @@ def main():
     logger.info(f"Action descriptors: {action_dir}")
     logger.info(f"Ours selection: {ours_path}")
     logger.info(f"Random selection: {random_path}")
+    logger.info(f"DemInf selection: {deminf_path}")
 
+    # 1. Load candidate pool episode index
     candidate_indices = load_candidate_pool_indices(pool_path, logger)
-    raw_random_indices = load_subset_indices(random_path, logger)
-    raw_ours_indices = load_subset_indices(ours_path, logger)
 
-    logger.info(f"Candidate pool size: {len(candidate_indices)}")
-    logger.info(f"Raw random subset size: {len(raw_random_indices)}")
-    logger.info(f"Raw ours subset size: {len(raw_ours_indices)}")
-
+    # 2. Load rand_vec, visual embedding, action descriptor
     logger.info("Loading episode data (rand_vec, visual embedding, action descriptor)...")
     rand_vecs, visual_embeddings, action_descriptors = load_all_episode_data(
         candidate_indices, dataset_dir, visual_dir, action_dir, logger
     )
-
     valid_candidate_indices = sorted(rand_vecs.keys())
 
-    logger.info("Building rand_vec regions via KMeans...")
+    # 3. Load Random, DemInf, Ours selection index
+    raw_random_indices = load_subset_indices(random_path, logger)
+    raw_ours_indices = load_subset_indices(ours_path, logger)
+    raw_deminf_indices = []
+    if deminf_path is not None and deminf_path.exists():
+        raw_deminf_indices = load_subset_indices(deminf_path, logger)
+
+    logger.info(f"Candidate pool size: {len(candidate_indices)}")
+    logger.info(f"Raw random subset size: {len(raw_random_indices)}")
+    logger.info(f"Raw ours subset size: {len(raw_ours_indices)}")
+    if raw_deminf_indices:
+        logger.info(f"Raw DemInf subset size: {len(raw_deminf_indices)}")
+
+    # 4. Apply selection budget uniformly
+    budget = args.selection_budget
+    logger.info(f"Applying selection budget: {budget}")
+
+    random_indices = select_random_budget(valid_candidate_indices, budget, seed=SEED)
+    ours_indices = select_budget(raw_ours_indices, budget)
+    deminf_indices = select_budget(raw_deminf_indices, budget) if raw_deminf_indices else []
+
+    logger.info(f"Random (budget={budget}): {len(random_indices)} episodes")
+    logger.info(f"Ours (budget={budget}): {len(ours_indices)} episodes")
+    if deminf_indices:
+        logger.info(f"DemInf (budget={budget}): {len(deminf_indices)} episodes")
+
+    # 5. Build regions (auxiliary)
+    logger.info("Building rand_vec regions via KMeans (auxiliary)...")
     episode_data_for_regions = {
         ep: {
             "rand_vec": rand_vecs[ep],
@@ -731,59 +761,45 @@ def main():
     )
     logger.info(f"Created {num_regions} configuration regions")
 
-    budget = args.selection_budget
-    logger.info(f"Applying selection budget: {budget}")
+    # 6. PCA projection (single fit on full candidate pool)
+    logger.info("Computing PCA 2D projection (StandardScaler + PCA)...")
+    pca_coords, pca_indices, pca_model, scaler = compute_pca_2d(rand_vecs)
 
-    random_indices = select_random_budget(valid_candidate_indices, budget, seed=SEED)
-    grid_indices = select_grid_uniform_budget(valid_candidate_indices, episode_to_region, num_regions, budget)
-    ours_indices = select_ours_budget(raw_ours_indices, budget)
-
-    logger.info(f"Random (budget={budget}): {len(random_indices)} episodes")
-    logger.info(f"Grid-Uniform (budget={budget}): {len(grid_indices)} episodes")
-    logger.info(f"Ours (budget={budget}): {len(ours_indices)} episodes")
-
-    logger.info("Computing PCA 2D projection...")
-    pca_coords, pca_indices = compute_pca_2d(rand_vecs)
-
-    logger.info("Generating configuration space selection comparison...")
-    plot_configuration_space_all(
-        pca_coords, pca_indices, random_indices, grid_indices, ours_indices, output_dir, logger
-    )
-
-    logger.info("Generating ICLR 4-panel comparison figure...")
-    plot_iclr_4panel(
-        pca_coords, pca_indices, random_indices, grid_indices, ours_indices,
+    # 7. Generate configuration distribution 4-panel main figure
+    logger.info("Generating configuration distribution comparison figure...")
+    visualize_configuration_distribution(
+        pca_coords, pca_indices, random_indices, deminf_indices, ours_indices,
         budget, output_dir, logger
     )
 
-    logger.info("Computing region coverage heatmap...")
-    coverage_data = plot_region_coverage_heatmap(
-        episode_to_region, num_regions,
-        valid_candidate_indices, random_indices, grid_indices, ours_indices,
-        output_dir, logger
-    )
-    save_region_coverage_csv(coverage_data, num_regions, output_dir, logger)
-
+    # 8. Compute distribution statistics
     logger.info("Computing distribution statistics...")
     stats = compute_distribution_statistics(
         rand_vecs, visual_embeddings, action_descriptors,
         episode_to_region, num_regions,
-        valid_candidate_indices, random_indices, grid_indices, ours_indices,
+        valid_candidate_indices, random_indices, deminf_indices, ours_indices,
         budget, logger
     )
     save_statistics(stats, output_dir, logger)
+
+    # 9. Region coverage (auxiliary)
+    logger.info("Computing region coverage (auxiliary)...")
+    compute_region_coverage(
+        episode_to_region, num_regions,
+        valid_candidate_indices, random_indices, deminf_indices, ours_indices,
+        output_dir, logger
+    )
 
     logger.info("=" * 60)
     logger.info(f"Analysis complete! All results saved to: {output_dir}")
     logger.info("=" * 60)
 
     print(f"\nAnalysis complete. Results saved to: {output_dir}")
-    print(f"  - configuration_space_selection_comparison.png/pdf")
-    print(f"  - distribution_comparison_iclr.png/pdf")
-    print(f"  - region_coverage_heatmap.png/pdf")
-    print(f"  - region_coverage_comparison_all_methods.csv")
+    print(f"  - configuration_distribution_comparison.png/pdf  (main figure)")
     print(f"  - statistics.json")
     print(f"  - statistics.csv")
+    print(f"  - region_coverage_comparison.png/pdf  (auxiliary)")
+    print(f"  - region_coverage.csv  (auxiliary)")
     print(f"  - analysis.log")
 
 

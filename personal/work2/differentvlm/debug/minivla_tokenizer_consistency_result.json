@@ -1,0 +1,35 @@
+{
+  "status": "PASS",
+  "comparisons": {
+    "action_dim": {
+      "checkpoint": null,
+      "runtime": null,
+      "status": "PASS"
+    },
+    "input_dim_w": {
+      "checkpoint": null,
+      "runtime": null,
+      "status": "PASS"
+    },
+    "latent_dim": {
+      "checkpoint": null,
+      "runtime": null,
+      "status": "PASS"
+    },
+    "codebook_size": {
+      "checkpoint": null,
+      "runtime": null,
+      "status": "PASS"
+    },
+    "tokenizer_type": {
+      "checkpoint": "extra_action_tokenizer",
+      "runtime": "extra_action_tokenizer",
+      "status": "PASS"
+    },
+    "is_vq_mode": {
+      "checkpoint": false,
+      "runtime": false,
+      "status": "PASS"
+    }
+  }
+}

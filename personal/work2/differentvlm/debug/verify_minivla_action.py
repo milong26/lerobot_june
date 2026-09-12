@@ -336,93 +336,300 @@ def verify_one_step_action(policy, preprocessor, postprocessor, normalizer, fram
     }
 
 
-def verify_vq_reconstruction(policy, dataset, num_samples=5):
-    """Verify VQ encoder/decoder reconstruction quality."""
+def verify_vq_reconstruction(policy, dataset, num_samples=5, base_seed=42):
+    """
+    VQ Action Reconstruction Verification.
+    
+    Data flow:
+        dataset ground truth action
+            -> MiniVLA action tokenizer encoder
+            -> latent/token
+            -> action decoder
+            -> reconstructed action
+    
+    Uses the ACTUAL tokenizer instance from the loaded policy, NOT a new one.
+    """
     print("\n" + "=" * 80)
-    print("VQ Reconstruction Check")
+    print("VQ Action Reconstruction Verification")
     print("=" * 80)
     
-    if not policy.config.is_vq_mode:
-        print("  Model is NOT in VQ mode, skipping VQ reconstruction check")
-        return {"status": "SKIPPED", "reason": "Not VQ mode"}
+    # Set random seed for reproducibility
+    torch.manual_seed(base_seed)
+    np.random.seed(base_seed)
     
-    # Find action tokenizer
+    # Find the VQ-VAE from the loaded policy
     core = policy.model
+    
+    # First, print all relevant modules for debugging
+    print("\n[DEBUG][VQ] Searching for tokenizer/encoder/decoder modules in policy...")
+    relevant_modules = []
+    for name, module in policy.named_modules():
+        name_lower = name.lower()
+        if any(kw in name_lower for kw in ["token", "vq", "encoder", "decoder", "action"]):
+            relevant_modules.append((name, type(module).__name__))
+            print(f"  [DEBUG][VQ] {name}: {type(module).__name__}")
+    
+    # Access the VQ-VAE through the action tokenizer
     if not hasattr(core, 'action_tokenizer') or core.action_tokenizer is None:
-        print("  ERROR: No action tokenizer found!")
-        return {"status": "FAIL", "reason": "No action tokenizer"}
+        print("\n  ERROR: No action_tokenizer found in policy.model!")
+        return {"status": "FAIL", "reason": "No action_tokenizer"}
     
     action_tokenizer = core.action_tokenizer
+    print(f"\n[DEBUG][VQ] action_tokenizer class: {type(action_tokenizer).__name__}")
+    
     if not hasattr(action_tokenizer, 'vq_vae') or action_tokenizer.vq_vae is None:
-        print("  ERROR: No VQ-VAE found in action tokenizer!")
-        return {"status": "FAIL", "reason": "No VQ-VAE"}
+        print("\n  ERROR: No vq_vae found in action_tokenizer!")
+        print(f"  action_tokenizer attributes: {dir(action_tokenizer)}")
+        return {"status": "FAIL", "reason": "No vq_vae in action_tokenizer"}
     
     vq_vae = action_tokenizer.vq_vae
-    print(f"  VQ-VAE found: {type(vq_vae).__name__}")
-    print(f"  Input dim (w): {vq_vae.input_dim_w}")
-    print(f"  Input dim (h): {vq_vae.input_dim_h}")
-    print(f"  Latent dims: {vq_vae.n_latent_dims}")
+    print(f"[DEBUG][VQ] vq_vae class: {type(vq_vae).__name__}")
+    print(f"[DEBUG][VQ] encoder class: {type(vq_vae.encoder).__name__}")
+    print(f"[DEBUG][VQ] decoder class: {type(vq_vae.decoder).__name__}")
+    print(f"[DEBUG][VQ] input_dim_w: {vq_vae.input_dim_w}")
+    print(f"[DEBUG][VQ] input_dim_h: {vq_vae.input_dim_h}")
+    print(f"[DEBUG][VQ] n_latent_dims: {vq_vae.n_latent_dims}")
+    print(f"[DEBUG][VQ] vqvae_n_embed: {vq_vae.vqvae_n_embed}")
+    print(f"[DEBUG][VQ] vqvae_groups: {vq_vae.vqvae_groups}")
+    print(f"[DEBUG][VQ] act_scale: {vq_vae.act_scale}")
     
-    # Test reconstruction on random samples
-    reconstruction_errors = []
+    # Sample random frames from dataset
+    rng = np.random.RandomState(base_seed)
+    sample_indices = rng.randint(0, len(dataset), size=num_samples)
     
-    for i in range(num_samples):
-        frame_idx = np.random.randint(0, len(dataset))
-        frame = dataset[frame_idx]
-        expert_action_raw = frame["action"]
+    all_original = []
+    all_reconstructed = []
+    all_maes = []
+    all_max_errors = []
+    per_dim_errors = []
+    
+    print(f"\n  Testing {num_samples} random samples...")
+    print(f"  {'='*60}")
+    
+    for i, frame_idx in enumerate(sample_indices):
+        frame = dataset[int(frame_idx)]
+        action_gt = frame["action"]
         
-        # Convert to tensor [1, 1, action_dim]
-        action_tensor = torch.as_tensor(expert_action_raw, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
-        action_tensor = action_tensor.to(policy.config.device)
+        if isinstance(action_gt, torch.Tensor):
+            action_gt = action_gt.numpy()
         
-        # Encode
+        # Convert to tensor [1, 1, action_dim] (batch=1, time=1, action_dim)
+        action_tensor = torch.as_tensor(action_gt, dtype=torch.float32).unsqueeze(0).unsqueeze(0)
+        action_tensor = action_tensor.to(vq_vae.device)
+        
+        print(f"\n  [DEBUG][VQ] Sample {i+1} (frame {frame_idx}):")
+        print(f"    [DEBUG][VQ] input action shape: {action_tensor.shape}")
+        
+        # Encode: use vq_vae.get_code() which handles preprocessing + encoding
         with torch.no_grad():
-            # VQ encode
-            latent, _, _ = vq_vae.encode(action_tensor)
-            # VQ decode
-            reconstructed = vq_vae.decode(latent)
+            vq_vae.eval()
+            state_vq, vq_code = vq_vae.get_code(action_tensor, required_recon=False)
         
-        # Compute reconstruction error
-        error = (reconstructed - action_tensor).abs().max().item()
-        mse = ((reconstructed - action_tensor) ** 2).mean().item()
+        print(f"    [DEBUG][VQ] latent shape (state_vq): {state_vq.shape}")
+        print(f"    [DEBUG][VQ] vq_code shape: {vq_code.shape}")
         
-        reconstruction_errors.append({
-            "frame_idx": int(frame_idx),
-            "original": action_tensor.squeeze().cpu().numpy().tolist(),
-            "reconstructed": reconstructed.squeeze().cpu().numpy().tolist(),
-            "max_error": float(error),
-            "mse": float(mse),
-        })
+        # Decode: use get_action_from_latent
+        with torch.no_grad():
+            reconstructed = vq_vae.get_action_from_latent(state_vq)
         
-        print(f"\n  Sample {i+1} (frame {frame_idx}):")
-        print(f"    Original:     {action_tensor.squeeze().cpu().numpy()}")
-        print(f"    Reconstructed: {reconstructed.squeeze().cpu().numpy()}")
-        print(f"    Max error: {error:.6f}")
-        print(f"    MSE: {mse:.6f}")
+        print(f"    [DEBUG][VQ] reconstructed shape: {reconstructed.shape}")
+        
+        # Compute errors
+        error = (reconstructed - action_tensor).abs()
+        mae = error.mean().item()
+        max_err = error.max().item()
+        
+        # Per-dimension MAE
+        per_dim_mae = error.squeeze(0).squeeze(0).cpu().numpy()  # [action_dim]
+        
+        all_original.append(action_tensor.squeeze().cpu().numpy())
+        all_reconstructed.append(reconstructed.squeeze().cpu().numpy())
+        all_maes.append(mae)
+        all_max_errors.append(max_err)
+        per_dim_errors.append(per_dim_mae)
+        
+        if i < 3:  # Print first 3 samples
+            print(f"    Original:     {action_tensor.squeeze().cpu().numpy()}")
+            print(f"    Reconstructed: {reconstructed.squeeze().cpu().numpy()}")
+            print(f"    MAE: {mae:.6f}, Max Error: {max_err:.6f}")
+            print(f"    Per-dim MAE: {per_dim_mae}")
     
-    avg_max_error = np.mean([e["max_error"] for e in reconstruction_errors])
-    avg_mse = np.mean([e["mse"] for e in reconstruction_errors])
+    # Aggregate statistics
+    all_original = np.array(all_original)
+    all_reconstructed = np.array(all_reconstructed)
+    per_dim_errors = np.array(per_dim_errors)  # [num_samples, action_dim]
     
-    # Determine pass/fail
-    passed = avg_max_error < 0.01  # 1% threshold
+    overall_mae = np.mean(all_maes)
+    max_error = np.max(all_max_errors)
+    dim_mae = per_dim_errors.mean(axis=0)  # [action_dim]
+    
+    original_min = all_original.min(axis=0)
+    original_max = all_original.max(axis=0)
+    recon_min = all_reconstructed.min(axis=0)
+    recon_max = all_reconstructed.max(axis=0)
+    
+    action_dim = all_original.shape[-1]
+    dim_names = ["x", "y", "z", "gripper"][:action_dim]
     
     print(f"\n  {'='*60}")
-    print(f"  Average max error: {avg_max_error:.6f}")
-    print(f"  Average MSE: {avg_mse:.6f}")
+    print(f"  Results ({num_samples} samples, action_dim={action_dim}):")
+    print(f"  {'='*60}")
+    print(f"  Overall MAE: {overall_mae:.6f}")
+    print(f"  Max Error:   {max_error:.6f}")
+    print(f"\n  Per-Dimension MAE:")
+    for d in range(action_dim):
+        print(f"    {dim_names[d]:>8s}: {dim_mae[d]:.6f}")
+    print(f"\n  Original Range:")
+    print(f"    min: {original_min}")
+    print(f"    max: {original_max}")
+    print(f"  Reconstructed Range:")
+    print(f"    min: {recon_min}")
+    print(f"    max: {recon_max}")
+    
+    # Pass/fail: MAE < 0.01 (1% of normalized range)
+    passed = overall_mae < 0.01
+    print(f"\n  {'='*60}")
     print(f"  VQ Reconstruction: {'PASS' if passed else 'FAIL'}")
     print(f"  {'='*60}")
     
-    return {
+    result = {
         "status": "PASS" if passed else "FAIL",
-        "avg_max_error": float(avg_max_error),
-        "avg_mse": float(avg_mse),
-        "samples": reconstruction_errors,
+        "num_samples": num_samples,
+        "action_dim": action_dim,
+        "overall_mae": float(overall_mae),
+        "dimension_mae": {dim_names[d]: float(dim_mae[d]) for d in range(action_dim)},
+        "max_error": float(max_error),
+        "original_range": {
+            "min": original_min.tolist(),
+            "max": original_max.tolist(),
+        },
+        "reconstruction_range": {
+            "min": recon_min.tolist(),
+            "max": recon_max.tolist(),
+        },
         "vq_config": {
+            "encoder_class": type(vq_vae.encoder).__name__,
+            "decoder_class": type(vq_vae.decoder).__name__,
             "input_dim_w": vq_vae.input_dim_w,
             "input_dim_h": vq_vae.input_dim_h,
             "n_latent_dims": vq_vae.n_latent_dims,
+            "vqvae_n_embed": vq_vae.vqvae_n_embed,
+            "vqvae_groups": vq_vae.vqvae_groups,
+            "act_scale": vq_vae.act_scale,
         },
     }
+    
+    return result
+
+
+def verify_tokenizer_consistency(policy, checkpoint_path):
+    """
+    Tokenizer Consistency Verification.
+    
+    Compares checkpoint config with runtime tokenizer configuration.
+    """
+    print("\n" + "=" * 80)
+    print("Tokenizer Consistency Verification")
+    print("=" * 80)
+    
+    # Load checkpoint config
+    ckpt_config = PreTrainedConfig.from_pretrained(checkpoint_path)
+    
+    print(f"\n[DEBUG][TOKENIZER] checkpoint config keys: {list(ckpt_config.__dict__.keys())}")
+    
+    # Extract checkpoint config values
+    ckpt_action_dim = getattr(ckpt_config, 'action_dim', None)
+    ckpt_input_dim_w = None
+    ckpt_latent_dim = None
+    ckpt_codebook_size = None
+    ckpt_tokenizer_type = getattr(ckpt_config, 'action_tokenizer_type', None)
+    ckpt_is_vq = getattr(ckpt_config, 'is_vq_mode', None)
+    
+    # Get VQ-specific config if available
+    if ckpt_is_vq:
+        ckpt_input_dim_w = getattr(ckpt_config, 'input_dim_w', None)
+        ckpt_latent_dim = getattr(ckpt_config, 'n_latent_dims', None)
+        ckpt_codebook_size = getattr(ckpt_config, 'vqvae_n_embed', None)
+    
+    print(f"\n  Checkpoint Config:")
+    print(f"    action_dim = {ckpt_action_dim}")
+    print(f"    input_dim_w = {ckpt_input_dim_w}")
+    print(f"    latent_dim = {ckpt_latent_dim}")
+    print(f"    codebook_size = {ckpt_codebook_size}")
+    print(f"    tokenizer_type = {ckpt_tokenizer_type}")
+    print(f"    is_vq_mode = {ckpt_is_vq}")
+    
+    # Extract runtime config from policy
+    runtime_config = policy.config
+    runtime_action_dim = getattr(runtime_config, 'action_dim', None)
+    runtime_tokenizer_type = getattr(runtime_config, 'action_tokenizer_type', None)
+    runtime_is_vq = getattr(runtime_config, 'is_vq_mode', None)
+    
+    runtime_input_dim_w = None
+    runtime_latent_dim = None
+    runtime_codebook_size = None
+    
+    # Get VQ-VAE runtime config
+    core = policy.model
+    if hasattr(core, 'action_tokenizer') and core.action_tokenizer is not None:
+        action_tokenizer = core.action_tokenizer
+        if hasattr(action_tokenizer, 'vq_vae') and action_tokenizer.vq_vae is not None:
+            vq_vae = action_tokenizer.vq_vae
+            runtime_input_dim_w = vq_vae.input_dim_w
+            runtime_latent_dim = vq_vae.n_latent_dims
+            runtime_codebook_size = vq_vae.vqvae_n_embed
+    
+    print(f"\n  Runtime Config:")
+    print(f"    action_dim = {runtime_action_dim}")
+    print(f"    input_dim_w = {runtime_input_dim_w}")
+    print(f"    latent_dim = {runtime_latent_dim}")
+    print(f"    codebook_size = {runtime_codebook_size}")
+    print(f"    tokenizer_type = {runtime_tokenizer_type}")
+    print(f"    is_vq_mode = {runtime_is_vq}")
+    
+    # Compare
+    print(f"\n  {'='*60}")
+    print(f"  Comparison:")
+    print(f"  {'='*60}")
+    
+    comparisons = {
+        "action_dim": (ckpt_action_dim, runtime_action_dim),
+        "input_dim_w": (ckpt_input_dim_w, runtime_input_dim_w),
+        "latent_dim": (ckpt_latent_dim, runtime_latent_dim),
+        "codebook_size": (ckpt_codebook_size, runtime_codebook_size),
+        "tokenizer_type": (ckpt_tokenizer_type, runtime_tokenizer_type),
+        "is_vq_mode": (ckpt_is_vq, runtime_is_vq),
+    }
+    
+    all_pass = True
+    comparison_results = {}
+    
+    for key, (ckpt_val, runtime_val) in comparisons.items():
+        match = (ckpt_val == runtime_val)
+        status = "PASS" if match else "FAIL"
+        if not match:
+            all_pass = False
+        comparison_results[key] = {
+            "checkpoint": ckpt_val,
+            "runtime": runtime_val,
+            "status": status,
+        }
+        print(f"    {key:>20s}: checkpoint={ckpt_val}, runtime={runtime_val} -> {status}")
+    
+    print(f"\n  {'='*60}")
+    if all_pass:
+        print(f"  Tokenizer Consistency: PASS")
+    else:
+        print(f"  WARNING: checkpoint tokenizer configuration does not match runtime tokenizer.")
+        print(f"  Tokenizer Consistency: FAIL")
+    print(f"  {'='*60}")
+    
+    result = {
+        "status": "PASS" if all_pass else "FAIL",
+        "comparisons": comparison_results,
+    }
+    
+    return result
 
 
 def compare_action_distribution(raw_action_stats, processed_action_stats, threshold=0.5):
@@ -903,6 +1110,7 @@ def print_and_save_results(
     vq_reconstruction_result=None,
     normalization_config=None,
     action_pipeline_diagnostics=None,
+    tokenizer_consistency_result=None,
 ):
     """Print summary and save results to JSON."""
     
@@ -1119,9 +1327,24 @@ def print_and_save_results(
             "vq_reconstruction": vq_reconstruction_result,
             "normalization_config": normalization_config,
             "action_pipeline_diagnostics": action_pipeline_diagnostics,
+            "tokenizer_consistency": tokenizer_consistency_result,
         }, f, indent=2, cls=NumpyEncoder)
     
     print(f"\nDetailed results saved to: {output_file}")
+    
+    # Save separate VQ reconstruction JSON if available
+    if vq_reconstruction_result is not None:
+        vq_output_file = output_dir / "minivla_vq_reconstruction_result.json"
+        with open(vq_output_file, "w") as f:
+            json.dump(vq_reconstruction_result, f, indent=2, cls=NumpyEncoder)
+        print(f"VQ reconstruction result saved to: {vq_output_file}")
+    
+    # Save separate tokenizer consistency JSON if available
+    if tokenizer_consistency_result is not None:
+        tokenizer_output_file = output_dir / "minivla_tokenizer_consistency_result.json"
+        with open(tokenizer_output_file, "w") as f:
+            json.dump(tokenizer_consistency_result, f, indent=2, cls=NumpyEncoder)
+        print(f"Tokenizer consistency result saved to: {tokenizer_output_file}")
 
 
 def main():
@@ -1135,6 +1358,14 @@ def main():
     parser.add_argument("--seed_stride", type=int, default=SEED_STRIDE)
     parser.add_argument("--eval_mode", type=str, default="one_step", choices=["one_step", "chunk"])
     parser.add_argument("--device", type=str, default="cuda")
+    
+    # New verification flags
+    parser.add_argument("--verify_vq_reconstruction", action="store_true",
+                        help="Enable VQ tokenizer reconstruction verification")
+    parser.add_argument("--verify_tokenizer_consistency", action="store_true",
+                        help="Enable checkpoint-tokenizer consistency verification")
+    parser.add_argument("--num_reconstruction_samples", type=int, default=100,
+                        help="Number of samples for VQ reconstruction test (default: 100)")
     args = parser.parse_args()
     
     print("=" * 80)
@@ -1163,8 +1394,17 @@ def main():
         print("\nERROR: Normalization sanity check failed!")
         sys.exit(1)
     
-    # VQ reconstruction check
-    vq_reconstruction_result = verify_vq_reconstruction(policy, dataset, num_samples=5)
+    # Optional: VQ reconstruction verification
+    vq_reconstruction_result = None
+    if args.verify_vq_reconstruction:
+        vq_reconstruction_result = verify_vq_reconstruction(
+            policy, dataset, num_samples=args.num_reconstruction_samples, base_seed=args.base_seed
+        )
+    
+    # Optional: Tokenizer consistency verification
+    tokenizer_consistency_result = None
+    if args.verify_tokenizer_consistency:
+        tokenizer_consistency_result = verify_tokenizer_consistency(policy, args.checkpoint_path)
     
     print("\n" + "=" * 80)
     print("Step 3: Action Evaluation")
@@ -1221,6 +1461,7 @@ def main():
         vq_reconstruction_result=vq_reconstruction_result,
         normalization_config=normalization_config,
         action_pipeline_diagnostics=action_pipeline_diagnostics,
+        tokenizer_consistency_result=tokenizer_consistency_result,
     )
 
 

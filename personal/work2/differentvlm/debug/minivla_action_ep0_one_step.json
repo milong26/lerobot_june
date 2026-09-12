@@ -22833,8 +22833,8 @@
     }
   ],
   "vq_reconstruction": {
-    "status": "SKIPPED",
-    "reason": "Not VQ mode"
+    "status": "FAIL",
+    "reason": "No vq_vae in action_tokenizer"
   },
   "normalization_config": {
     "action": {
@@ -22907,6 +22907,41 @@
       "std": 0.7171653345746316,
       "min": -0.25820493698120117,
       "max": 1.4902033805847168
+    }
+  },
+  "tokenizer_consistency": {
+    "status": "PASS",
+    "comparisons": {
+      "action_dim": {
+        "checkpoint": null,
+        "runtime": null,
+        "status": "PASS"
+      },
+      "input_dim_w": {
+        "checkpoint": null,
+        "runtime": null,
+        "status": "PASS"
+      },
+      "latent_dim": {
+        "checkpoint": null,
+        "runtime": null,
+        "status": "PASS"
+      },
+      "codebook_size": {
+        "checkpoint": null,
+        "runtime": null,
+        "status": "PASS"
+      },
+      "tokenizer_type": {
+        "checkpoint": "extra_action_tokenizer",
+        "runtime": "extra_action_tokenizer",
+        "status": "PASS"
+      },
+      "is_vq_mode": {
+        "checkpoint": false,
+        "runtime": false,
+        "status": "PASS"
+      }
     }
   }
 }
