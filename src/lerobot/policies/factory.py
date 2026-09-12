@@ -166,6 +166,9 @@ def make_policy_config(policy_type: str, **kwargs) -> PreTrainedConfig:
     elif policy_type == "minivla_wrist":
         from .minivla.configuration_minivla import MiniVLAWristConfig
         return MiniVLAWristConfig(**kwargs)
+    elif policy_type == "minivla_wrist_pretrained":
+        from .minivla.configuration_minivla import MiniVLAWristPretrainedConfig
+        return MiniVLAWristPretrainedConfig(**kwargs)
     else:
         try:
             config_cls = PreTrainedConfig.get_choice_class(policy_type)
@@ -540,6 +543,7 @@ def _make_processors_from_policy_config(
         "tinyvla_s": "tinyvla",
         "tinyvla_b": "tinyvla",
         "minivla_wrist": "minivla",
+        "minivla_wrist_pretrained": "minivla",
     }
     canonical_type = _POLICY_TYPE_TO_PROCESSOR_MODULE.get(policy_type, policy_type)
     function_name = f"make_{canonical_type}_pre_post_processors"

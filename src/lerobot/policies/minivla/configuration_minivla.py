@@ -83,6 +83,14 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     llm_backbone_id: str = _OFFICIAL_LLM_BACKBONE
     official_vla_checkpoint: str = ""
 
+    # === Official pretrained initialization (backbone-only mode) ===
+    # "none" = no official init (default for old variants)
+    # "backbone_only" = load vision/projector/llm from official .pt, skip VQ/action pipeline
+    official_init_mode: str = "none"
+    # Path to official MiniVLA .pt checkpoint for backbone-only initialization.
+    # This is NOT LeRobot pretrained_path and does NOT participate in resume logic.
+    official_pretrained_checkpoint: str = ""
+
     # === Qwen / Tokenizer ===
     base_vlm_checkpoint: str = _OFFICIAL_QWEN_BASE
     num_extra_tokens: int = _OFFICIAL_NUM_EXTRA_TOKENS
@@ -439,3 +447,50 @@ class MiniVLAWristConfig(_MiniVLAConfigBase):
     @property
     def observation_delta_indices(self) -> list:
         return [0]
+
+
+@PreTrainedConfig.register_subclass("minivla_wrist_pretrained")
+@dataclass
+class MiniVLAWristPretrainedConfig(MiniVLAWristConfig):
+    """
+    MiniVLA wrist variant initialized from official pretrained backbone weights.
+    
+    Uses Stanford-ILIAD/minivla-libero90-prismatic official vision/projector/Qwen
+    weights, then discards all official 7D action pipeline configuration and uses
+    the current MetaWorld 4D extra_action_tokenizer instead.
+    
+    Inherits all wrist config: image_sequence_len=2, use_wrist_image=True,
+    observation_delta_indices=[0], QUANTILES normalization, explicit camera keys.
+    """
+
+    # Backbone-only initialization is the default for this variant
+    official_init_mode: str = "backbone_only"
+    
+    # Action tokenizer MUST be extra_action_tokenizer (4D MetaWorld), never VQ
+    action_tokenizer_type: str = "extra_action_tokenizer"
+
+    def validate_vla_config(self) -> None:
+        """Validate backbone-only mode requires a valid official checkpoint path."""
+        if self.official_init_mode == "backbone_only":
+            if not self.official_pretrained_checkpoint:
+                raise ValueError(
+                    "official_init_mode='backbone_only' requires a valid "
+                    "official_pretrained_checkpoint path to a MiniVLA .pt checkpoint."
+                )
+            ckpt_path = Path(self.official_pretrained_checkpoint)
+            if not ckpt_path.exists():
+                raise FileNotFoundError(
+                    f"Official pretrained checkpoint not found: {ckpt_path}"
+                )
+            if ckpt_path.suffix != ".pt":
+                raise ValueError(
+                    f"official_pretrained_checkpoint must be a .pt file, got: {ckpt_path}"
+                )
+        
+        # Ensure action tokenizer is never VQ for this variant
+        if self.action_tokenizer_type in VQ_TOKENIZER_TYPES:
+            raise ValueError(
+                f"minivla_wrist_pretrained must use extra_action_tokenizer, "
+                f"not VQ tokenizer '{self.action_tokenizer_type}'. "
+                f"Official 7D VQ action pipeline is not compatible with MetaWorld 4D actions."
+            )

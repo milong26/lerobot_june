@@ -281,10 +281,19 @@ class TrainPipelineConfig(HubMixin):
                 self.job_name = f"{self.env.type}_{active_cfg.type}"
 
         if not self.resume and isinstance(self.output_dir, Path) and self.output_dir.is_dir():
-            raise FileExistsError(
-                f"Output directory {self.output_dir} already exists and resume is {self.resume}. "
-                f"Please change your output directory so that {self.output_dir} is not overwritten."
+            # Only raise error if there are actual training artifacts (checkpoints)
+            has_checkpoints = (
+                (self.output_dir / "checkpoints").is_dir() and
+                any((self.output_dir / "checkpoints").iterdir())
             )
+            has_train_config = (self.output_dir / "train_config.json").is_file()
+            has_pretrained_model = (self.output_dir / "pretrained_model").is_dir()
+            
+            if has_checkpoints or has_train_config or has_pretrained_model:
+                raise FileExistsError(
+                    f"Output directory {self.output_dir} already exists and resume is {self.resume}. "
+                    f"Please change your output directory so that {self.output_dir} is not overwritten."
+                )
         elif not self.output_dir:
             now = dt.datetime.now()
             train_dir = f"{now:%Y-%m-%d}/{now:%H-%M-%S}_{self.job_name}"

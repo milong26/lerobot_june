@@ -23,6 +23,8 @@ NUM_EPISODES=""
 DATASET_NAME="disassemble-v3_corner"
 SEED=42
 GPU_ID=0
+POLICY_TYPE="minivla_wrist"
+OFFICIAL_PRETRAINED_CHECKPOINT=""
 
 # Parse named arguments
 while [[ $# -gt 0 ]]; do
@@ -47,9 +49,17 @@ while [[ $# -gt 0 ]]; do
             GPU_ID="$2"
             shift 2
             ;;
+        --policy-type)
+            POLICY_TYPE="$2"
+            shift 2
+            ;;
+        --official-pretrained-checkpoint)
+            OFFICIAL_PRETRAINED_CHECKPOINT="$2"
+            shift 2
+            ;;
         *)
             echo "Unknown argument: $1"
-            echo "Usage: bash launch_minivla.sh --selection-mode <mode> --num-episodes <num> --dataset-name <name> [--seed <seed>] [--gpu-id <id>]"
+            echo "Usage: bash launch_minivla.sh --selection-mode <mode> --num-episodes <num> --dataset-name <name> [--seed <seed>] [--gpu-id <id>] [--policy-type <type>] [--official-pretrained-checkpoint <path>]"
             echo "Supported selection modes: random, grid_uniform, uniform, our_v5, deminf, subzerocore"
             exit 1
             ;;
@@ -71,10 +81,18 @@ fi
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LEROBOT_ROOT="/data/zhonglinye/jun/lerobot"
-OUTPUT_BASE_DIR="$LEROBOT_ROOT/personal/work2/differentvlm/minivla/experiments/${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}_minivla_${SELECTION_MODE}"
+
+# Include policy type in experiment name when not default
+if [ "$POLICY_TYPE" = "minivla_wrist" ]; then
+    POLICY_SUFFIX="minivla"
+else
+    POLICY_SUFFIX="$POLICY_TYPE"
+fi
+
+OUTPUT_BASE_DIR="$LEROBOT_ROOT/personal/work2/differentvlm/minivla/experiments/${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}_${POLICY_SUFFIX}_${SELECTION_MODE}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
-EXP_NAME="${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}_minivla_${SELECTION_MODE}"
-TMUX_SESSION="minivla_${SELECTION_MODE}_ep${NUM_EPISODES}_s${SEED}_${DATASET_NAME}"
+EXP_NAME="${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}_${POLICY_SUFFIX}_${SELECTION_MODE}"
+TMUX_SESSION="minivla_${SELECTION_MODE}_ep${NUM_EPISODES}_s${SEED}_${DATASET_NAME}_${POLICY_SUFFIX}"
 
 # Auto-construct dataset root path from dataset name
 DATASET_ROOT="$LEROBOT_ROOT/personal/work2/dataset_view/${DATASET_NAME}"
@@ -102,6 +120,8 @@ SEED_VAL=""
 DATASET_NAME=""
 NUM_EPISODES=""
 SELECTION_MODE=""
+POLICY_TYPE=""
+OFFICIAL_PRETRAINED_CHECKPOINT=""
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -125,13 +145,28 @@ while [[ $# -gt 0 ]]; do
             SELECTION_MODE="$2"
             shift 2
             ;;
+        --policy-type)
+            POLICY_TYPE="$2"
+            shift 2
+            ;;
+        --official-pretrained-checkpoint)
+            OFFICIAL_PRETRAINED_CHECKPOINT="$2"
+            shift 2
+            ;;
         *)
             shift
             ;;
     esac
 done
 
-EXP_NAME="${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED_VAL}_${DATASET_NAME}_minivla_${SELECTION_MODE}"
+# Include policy type in experiment name when not default
+if [ -z "$POLICY_TYPE" ] || [ "$POLICY_TYPE" = "minivla_wrist" ]; then
+    POLICY_SUFFIX="minivla"
+else
+    POLICY_SUFFIX="$POLICY_TYPE"
+fi
+
+EXP_NAME="${SELECTION_MODE}_${NUM_EPISODES}_seed${SEED_VAL}_${DATASET_NAME}_${POLICY_SUFFIX}_${SELECTION_MODE}"
 OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/${EXP_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
 TIME_FILE="$LOG_DIR/$EXP_NAME.time"
@@ -176,7 +211,8 @@ export CUDA_VISIBLE_DEVICES=$GPU_ID
 #   - scheduler_warmup_steps: 500
 #   - action_tokenizer_type: extra_action_tokenizer
 #   - eval_n_episodes: 10
-python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
+# Build command arguments
+RUN_CMD="python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
     --gpu $GPU_ID \
     --dataset $DATASET_NAME \
     --num-episodes $NUM_EPISODES \
@@ -190,8 +226,22 @@ python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
     --scheduler-warmup-steps 500 \
     --projector-lr 1e-4 \
     --backbone-lr 2e-5 \
-    --no-eval \
-    2>&1 | tee -a "$LOG_DIR/$EXP_NAME.log"
+    --no-eval"
+
+# Add policy type if not default
+if [ -n "$POLICY_TYPE" ] && [ "$POLICY_TYPE" != "minivla_wrist" ]; then
+    RUN_CMD="$RUN_CMD \
+    --policy-type $POLICY_TYPE"
+fi
+
+# Add official pretrained checkpoint if specified
+if [ -n "$OFFICIAL_PRETRAINED_CHECKPOINT" ]; then
+    RUN_CMD="$RUN_CMD \
+    --official-init-mode backbone_only \
+    --official-pretrained-checkpoint $OFFICIAL_PRETRAINED_CHECKPOINT"
+fi
+
+eval $RUN_CMD 2>&1 | tee -a "$LOG_DIR/$EXP_NAME.log"
 
 echo "" >> "$TIME_FILE"
 echo "End time: $(date '+%Y-%m-%d %H:%M:%S')" >> "$TIME_FILE"

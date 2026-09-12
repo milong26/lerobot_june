@@ -148,6 +148,9 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
     print(f"GPU: {cfg.gpu_id}")
     if cfg.official_vla_checkpoint:
         print(f"Official VLA checkpoint: {cfg.official_vla_checkpoint}")
+    if cfg.official_init_mode == "backbone_only":
+        print(f"Official init mode: backbone_only")
+        print(f"Official pretrained checkpoint: {cfg.official_pretrained_checkpoint}")
     if cfg.projector_lr > 0:
         print(f"Projector LR: {cfg.projector_lr}")
     if cfg.backbone_lr > 0:
@@ -196,9 +199,15 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         f"--policy.optimizer_lr={cfg.train_lr}",
     ]
 
-    # Add official VLA checkpoint if specified
+    # Add official VLA checkpoint if specified (legacy full policy loading)
     if cfg.official_vla_checkpoint:
         cmd.append(f"--policy.official_vla_checkpoint={cfg.official_vla_checkpoint}")
+
+    # Add backbone-only pretrained initialization (new mode)
+    if cfg.official_init_mode == "backbone_only":
+        cmd.append(f"--policy.official_init_mode=backbone_only")
+        if cfg.official_pretrained_checkpoint:
+            cmd.append(f"--policy.official_pretrained_checkpoint={cfg.official_pretrained_checkpoint}")
 
     # Add per-component learning rates if specified
     if cfg.projector_lr > 0:

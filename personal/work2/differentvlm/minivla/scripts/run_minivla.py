@@ -389,6 +389,8 @@ def run_experiment(
     policy_type: str = "minivla_wrist",
     action_tokenizer_type: str = "extra_action_tokenizer",
     official_vla_checkpoint: str = "",
+    official_init_mode: str = "none",
+    official_pretrained_checkpoint: str = "",
     resume: bool = False,
     restart: bool = False,
     scheduler_warmup_steps: int = 0,
@@ -413,6 +415,8 @@ def run_experiment(
         policy_type=policy_type,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,
+        official_init_mode=official_init_mode,
+        official_pretrained_checkpoint=official_pretrained_checkpoint,
         resume=resume,
         restart=restart,
         scheduler_warmup_steps=scheduler_warmup_steps,
@@ -604,7 +608,11 @@ def main():
     parser.add_argument("--action-tokenizer-type", type=str, default="extra_action_tokenizer",
                        help="Action tokenizer type (extra_action_tokenizer, libero_vq_action_tokenizer, etc.)")
     parser.add_argument("--official-vla-checkpoint", type=str, default="",
-                       help="Path to official VLA checkpoint for initialization")
+                       help="Path to official VLA checkpoint for full policy initialization (legacy)")
+    parser.add_argument("--official-init-mode", type=str, default="none",
+                       help="Official init mode: 'none' (default) or 'backbone_only' (new pretrained mode)")
+    parser.add_argument("--official-pretrained-checkpoint", type=str, default="",
+                       help="Path to official MiniVLA .pt checkpoint for backbone-only initialization (new mode)")
     parser.add_argument("--resume", action="store_true", help="Resume from existing checkpoint")
     parser.add_argument("--restart", action="store_true", help="Delete old experiment and start fresh")
     parser.add_argument("--scheduler-warmup-steps", type=int, default=0, help="Scheduler warmup steps")
@@ -632,6 +640,8 @@ def main():
         policy_type=args.policy_type,
         action_tokenizer_type=args.action_tokenizer_type,
         official_vla_checkpoint=args.official_vla_checkpoint,
+        official_init_mode=args.official_init_mode,
+        official_pretrained_checkpoint=args.official_pretrained_checkpoint,
         resume=args.resume,
         restart=args.restart,
         scheduler_warmup_steps=args.scheduler_warmup_steps,

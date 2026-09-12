@@ -129,6 +129,8 @@ class MiniVLAExperimentConfig:
     policy_type: str = "minivla_wrist"  # minivla (single camera) or minivla_wrist (dual camera)
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE
     official_vla_checkpoint: str = ""
+    official_init_mode: str = "none"
+    official_pretrained_checkpoint: str = ""
     resume: bool = False
     restart: bool = False
     scheduler_warmup_steps: int = 0
@@ -178,6 +180,8 @@ def get_minivla_config(
     policy_type: str = "minivla_wrist",
     action_tokenizer_type: str = ACTION_TOKENIZER_TYPE,
     official_vla_checkpoint: str = "",
+    official_init_mode: str = "none",
+    official_pretrained_checkpoint: str = "",
     resume: bool = False,
     restart: bool = False,
     scheduler_warmup_steps: int = 0,
@@ -216,6 +220,8 @@ def get_minivla_config(
         policy_type=policy_type,
         action_tokenizer_type=action_tokenizer_type,
         official_vla_checkpoint=official_vla_checkpoint,
+        official_init_mode=official_init_mode,
+        official_pretrained_checkpoint=official_pretrained_checkpoint,
         resume=resume,
         restart=restart,
         scheduler_warmup_steps=scheduler_warmup_steps,

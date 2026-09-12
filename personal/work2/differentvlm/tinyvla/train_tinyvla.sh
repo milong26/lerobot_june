@@ -19,44 +19,6 @@ TIME_FILE="$LOG_DIR/$EXP_NAME.time"
 PID_FILE="$LOG_DIR/$EXP_NAME.pid"
 DATASET_ROOT="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view/${DATASET_NAME}"
 
-# Check if checkpoint exists for resume BEFORE creating any directories
-RESUME_FLAG=false
-CONFIG_PATH=""
-# Check both possible checkpoint locations
-if [ -d "$OUTPUT_BASE_DIR/checkpoints/checkpoints/last/pretrained_model" ]; then
-    # Nested checkpoints directory (from previous runs)
-    LAST_CHECKPOINT="$OUTPUT_BASE_DIR/checkpoints/checkpoints/last"
-    RESUME_FLAG=true
-    CONFIG_PATH="$LAST_CHECKPOINT/pretrained_model/train_config.json"
-elif [ -d "$OUTPUT_BASE_DIR/checkpoints/last/pretrained_model" ]; then
-    # Standard checkpoints directory
-    LAST_CHECKPOINT="$OUTPUT_BASE_DIR/checkpoints/last"
-    RESUME_FLAG=true
-    CONFIG_PATH="$LAST_CHECKPOINT/pretrained_model/train_config.json"
-elif [ -d "$OUTPUT_BASE_DIR" ]; then
-    # Directory exists but no checkpoint - likely created by launch script's mkdir -p
-    # Save subsets if they exist, then recreate the directory
-    echo "Output directory exists but no checkpoint found (likely created by launch script)"
-    echo "Recreating directory structure..."
-    
-    # Save subsets if they exist
-    TEMP_SUBSETS=""
-    if [ -d "$OUTPUT_BASE_DIR/subsets" ]; then
-        TEMP_SUBSETS=$(mktemp -d)
-        cp -r "$OUTPUT_BASE_DIR/subsets" "$TEMP_SUBSETS/" 2>/dev/null || true
-    fi
-    
-    # Remove and recreate
-    rm -rf "$OUTPUT_BASE_DIR"
-    mkdir -p "$LOG_DIR" "$OUTPUT_BASE_DIR/subsets"
-    
-    # Restore subsets
-    if [ -n "$TEMP_SUBSETS" ] && [ -d "$TEMP_SUBSETS/subsets" ]; then
-        cp -r "$TEMP_SUBSETS/subsets/"* "$OUTPUT_BASE_DIR/subsets/" 2>/dev/null || true
-        rm -rf "$TEMP_SUBSETS"
-    fi
-fi
-
 mkdir -p "$LOG_DIR"
 
 echo $$ > "$PID_FILE"
@@ -118,7 +80,18 @@ export LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6
 
 cd /data/zhonglinye/jun/lerobot
 
-# RESUME_FLAG already set above before mkdir
+# Check if checkpoint exists for resume
+RESUME_FLAG=false
+CONFIG_PATH=""
+if [ -d "$OUTPUT_BASE_DIR/checkpoints/checkpoints/last/pretrained_model" ]; then
+    LAST_CHECKPOINT="$OUTPUT_BASE_DIR/checkpoints/checkpoints/last"
+    RESUME_FLAG=true
+    CONFIG_PATH="$LAST_CHECKPOINT/pretrained_model/train_config.json"
+elif [ -d "$OUTPUT_BASE_DIR/checkpoints/last/pretrained_model" ]; then
+    LAST_CHECKPOINT="$OUTPUT_BASE_DIR/checkpoints/last"
+    RESUME_FLAG=true
+    CONFIG_PATH="$LAST_CHECKPOINT/pretrained_model/train_config.json"
+fi
 
 if [ "$RESUME_FLAG" = true ]; then
     echo "========================================"
@@ -160,7 +133,7 @@ TRAIN_CMD="lerobot-train \
   --wandb.enable=true \
   --remove_features='[\"observation.environment_state\"]'"
 
-# Add resume parameters if checkpoint exists
+# Add resume parameter if checkpoint exists
 if [ "$RESUME_FLAG" = true ]; then
     TRAIN_CMD="$TRAIN_CMD --resume=true --config_path=$CONFIG_PATH"
     echo ""

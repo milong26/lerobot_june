@@ -1,5 +1,8 @@
 {
-  "pc_success": -1,
-  "pc_grasp_success": -1,
-  "parse_status": "failed"
+  "pc_success": 0.0,
+  "pc_grasp_success": 0.0,
+  "avg_sum_reward": 77.20082083052378,
+  "avg_max_reward": 0.9804092513494229,
+  "n_episodes": 10,
+  "parse_status": "ok"
 }

@@ -463,3 +463,23 @@ def make_minivla_wrist_pre_post_processors(
         steps.to_cpu,
     ]
     return make_policy_processor_pipelines(input_steps=input_steps, output_steps=output_steps)
+
+
+def make_minivla_wrist_pretrained_pre_post_processors(
+    config: MiniVLAConfig,
+    dataset_stats: dict[str, dict[str, torch.Tensor]] | None = None,
+    dataset_meta: Any | None = None,
+) -> tuple[
+    PolicyProcessorPipeline[dict[str, Any], dict[str, Any]],
+    PolicyProcessorPipeline[PolicyAction, PolicyAction],
+]:
+    """
+    Processor factory for minivla_wrist_pretrained.
+    Reuses the wrist processor exactly: same QUANTILES stats, same dual-camera handling,
+    same primary/wrist image keys. Does NOT use official 7D action statistics.
+    """
+    return make_minivla_wrist_pre_post_processors(
+        config=config,
+        dataset_stats=dataset_stats,
+        dataset_meta=dataset_meta,
+    )

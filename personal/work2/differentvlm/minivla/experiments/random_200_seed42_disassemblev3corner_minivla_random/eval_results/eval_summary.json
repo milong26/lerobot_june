@@ -1,9 +1,252 @@
 [
   {
-    "pc_success": -1,
-    "pc_grasp_success": -1,
-    "parse_status": "failed",
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.77856227689873,
+    "avg_max_reward": 0.9698704108861206,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 2000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/002000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.78448766093885,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 4000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/004000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.99521076910833,
+    "avg_max_reward": 0.9698603634270218,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 6000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/006000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 197.09407761318943,
+    "avg_max_reward": 0.9698682932852684,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 8000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/008000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.56390759482807,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 10000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/010000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.61541485708898,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 12000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/012000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.86030532823978,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 14000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/014000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 192.11324680774715,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 16000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/016000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.59741959059292,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 18000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/018000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 77.20082083052378,
+    "avg_max_reward": 0.9804092513494229,
+    "n_episodes": 10,
+    "parse_status": "ok",
     "step": 20000,
     "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/020000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 193.76843244603953,
+    "avg_max_reward": 0.9698602601091467,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 22000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/022000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.59427816009512,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 24000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/024000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 195.92291051571215,
+    "avg_max_reward": 0.9698720444474892,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 26000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/026000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.55010710715982,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 28000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/028000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.56972904346293,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 30000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/030000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.5701679008178,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 32000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/032000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.5687437928249,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 34000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/034000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.56230302038134,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 36000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/036000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 192.51925029582728,
+    "avg_max_reward": 0.9698766715599767,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 38000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/038000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.6069348862178,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 40000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/040000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.7946263074802,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 42000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/042000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.8253716852889,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 44000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/044000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 192.93966171891572,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 46000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/046000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.5636639357066,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 48000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/048000/pretrained_model"
+  },
+  {
+    "pc_success": 0.0,
+    "pc_grasp_success": 0.0,
+    "avg_sum_reward": 191.6289867614682,
+    "avg_max_reward": 0.9698602601245409,
+    "n_episodes": 10,
+    "parse_status": "ok",
+    "step": 50000,
+    "checkpoint_path": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_200_seed42_disassemblev3corner_minivla_random/checkpoints/checkpoints/050000/pretrained_model"
   }
 ]

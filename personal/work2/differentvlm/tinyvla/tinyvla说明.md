@@ -196,14 +196,14 @@ lerobot-eval \
     --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}' \
     2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_30kcp.log
 
-# 50k: 3.0%
+# 50k: 
 export MUJOCO_GL=egl 
 export PYOPENGL_PLATFORM=egl
 export CUDA_VISIBLE_DEVICES=1
 export MUJOCO_EGL_DEVICE_ID=1
 
 lerobot-eval \
-    --policy.path=personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/050000/pretrained_model \
+    --policy.path=personal/work2/differentvlm/tinyvla/tinyvla_s_random_ep200_seed42_disassemble-v3_corner/checkpoints/020000/pretrained_model \
     --env.type=metaworld \
     --env.task=disassemble-v3 \
     --env.camera_name=corner,gripperPOV \
@@ -213,5 +213,5 @@ lerobot-eval \
     --policy.device=cuda \
     --policy.use_amp=false \
     --policy.n_action_steps=1 \
-    --rename_map='{"observation.images.top": "observation.images.camera1", "observation.images.wrist": "observation.images.camera2"}' \
-    2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_50kcp_nact1.log
+    --rename_map='{"observation.images.camera1": "observation.images.top", "observation.images.camera2": "observation.images.wrist"}' \
+    2>&1 | tee personal/work2/eval_model/eval_mw_tvvla_s_disassemble-v3_corner_200ep_20kcp_nact1.log

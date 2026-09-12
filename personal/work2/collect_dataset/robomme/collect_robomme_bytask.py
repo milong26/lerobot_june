@@ -460,17 +460,19 @@ def phase_random(args, dataset, task, start_ep_idx=0):
     consecutive_failures = 0
     task_description = TASK_DESCRIPTIONS.get(task, task)
 
-    while success_count < args.num_random_episodes:
-        started = time.time()
-        raw_env = None
-        try:
-            raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
-            steps, ep_info = run_episode_with_planner(
-                raw_env,
-                task,
-                image_size=args.image_size,
-                extra_frames=args.extra_frames_after_success,
-            )
+    # Create env once and reuse it to avoid Vulkan resource exhaustion
+    raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
+    try:
+        while success_count < args.num_random_episodes:
+            started = time.time()
+            try:
+                raw_env.unwrapped.seed = int(seed)
+                steps, ep_info = run_episode_with_planner(
+                    raw_env,
+                    task,
+                    image_size=args.image_size,
+                    extra_frames=args.extra_frames_after_success,
+                )
 
             if ep_info["success"]:
                 frames = steps_to_frames(steps, task_description)

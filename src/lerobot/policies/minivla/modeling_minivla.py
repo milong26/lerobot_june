@@ -33,7 +33,7 @@ import torch.nn as nn
 
 from lerobot.policies.pretrained import ActionSelectKwargs, PreTrainedPolicy
 
-from .configuration_minivla import MiniVLAConfig, MiniVLAT2Config, MiniVLAWristConfig, VQ_TOKENIZER_TYPES
+from .configuration_minivla import MiniVLAConfig, MiniVLAT2Config, MiniVLAWristConfig, MiniVLAWristPretrainedConfig, VQ_TOKENIZER_TYPES
 from .tokenizer import VLATokenizerWrapper
 from .vq_action import VQActionTokenizer, ActionTokenizer
 from .vla_backbone import MiniVLAVLBackbone, IGNORE_INDEX
@@ -58,7 +58,9 @@ class MiniVLACore(nn.Module):
 
         # === Read official metadata BEFORE creating VLM and action tokenizer ===
         # Mirrors teach_code/MiniVLA/prismatic/models/load.py::load_vla
-        self._read_official_metadata()
+        # Skip in backbone_only mode to avoid importing official 7D action config
+        if config.official_init_mode != "backbone_only":
+            self._read_official_metadata()
 
         # === Tokenizer (shared between VLM and action tokenizer) ===
         self.tokenizer = VLATokenizerWrapper(
@@ -87,9 +89,13 @@ class MiniVLACore(nn.Module):
 
         self.vlm.set_pad_token_id(self.tokenizer.pad_token_id)
 
-        # === Load official checkpoint if specified ===
+        # === Load official checkpoint if specified (full policy loading, old path) ===
         if config.official_vla_checkpoint:
             self._load_official_checkpoint(config.official_vla_checkpoint)
+
+        # === Backbone-only initialization from official pretrained checkpoint ===
+        if config.official_init_mode == "backbone_only" and config.official_pretrained_checkpoint:
+            self._load_official_backbone_only_checkpoint(config.official_pretrained_checkpoint)
 
     def _read_official_metadata(self):
         """
@@ -294,6 +300,134 @@ class MiniVLACore(nn.Module):
                 vq_model_path = Path(vq_path) / "checkpoints" / "model.pt"
                 if vq_model_path.exists():
                     self.vq_vae.load_official_checkpoint(str(vq_model_path))
+
+    def _read_official_backbone_metadata(self, checkpoint_path: str) -> dict:
+        """
+        Read backbone architecture metadata from official run directory config.json.
+        Only reads vision_backbone_id, llm_backbone_id, arch_specifier, image_size,
+        and LLM vocab/extra token configuration.
+        
+        Does NOT read: vla.action_tokenizer, dataset statistics, action dimension,
+        VQ configuration, wrist/base action config, or any embodiment-specific settings.
+        """
+        checkpoint_path = Path(checkpoint_path)
+        if not checkpoint_path.exists() or checkpoint_path.suffix != ".pt":
+            return {}
+
+        run_dir = checkpoint_path.parents[1]
+        config_json = run_dir / "config.json"
+        if not config_json.exists():
+            return {}
+
+        with open(config_json, "r") as f:
+            full_config = json.load(f)
+
+        model_cfg = full_config.get("model", {})
+        metadata = {}
+
+        backbone_keys = [
+            "vision_backbone_id",
+            "llm_backbone_id",
+            "arch_specifier",
+            "image_size",
+            "image_resize_strategy",
+        ]
+        for key in backbone_keys:
+            if key in model_cfg:
+                metadata[key] = model_cfg[key]
+
+        return metadata
+
+    def _load_official_backbone_only_checkpoint(self, checkpoint_path: str):
+        """
+        Load only vision_backbone, projector, and llm_backbone weights from an
+        official MiniVLA checkpoint. Used by minivla_wrist_pretrained to initialize
+        from Stanford-ILIAD/minivla-libero90-prismatic pretrained weights.
+
+        This function:
+        - Loads projector, llm_backbone, vision_backbone weights (when available)
+        - Does NOT load VQ-VAE weights
+        - Does NOT load action tokenizer objects
+        - Does NOT read or apply official 7D action statistics
+        - Does NOT override normalization_mapping
+        - Does NOT override action_tokenizer_type
+        - Does NOT set _resolved_action_tokenizer_type
+        - Does NOT override chunk_size, n_action_steps, image_sequence_len,
+          use_wrist_image, primary_image_key, wrist_image_key, action_unnorm_key
+        - Ensures official 7D embodiment info does NOT enter MetaWorld 4D pipeline
+        """
+        checkpoint_path = Path(checkpoint_path)
+        if not checkpoint_path.exists():
+            raise FileNotFoundError(f"Official backbone checkpoint not found: {checkpoint_path}")
+
+        assert (checkpoint_path.suffix == ".pt") and (checkpoint_path.parent.name == "checkpoints"), (
+            "Invalid checkpoint path! Expected path like '<run_dir>/checkpoints/<name>.pt'"
+        )
+
+        # Read backbone metadata only (no action/VQ config)
+        backbone_meta = self._read_official_backbone_metadata(checkpoint_path)
+        if backbone_meta:
+            logger.info(f"[Backbone-Only Init] Official backbone metadata: {backbone_meta}")
+
+        # Load checkpoint weights
+        checkpoint = torch.load(checkpoint_path, map_location="cpu")
+        model_state = checkpoint.get("model", checkpoint)
+
+        # Load projector
+        if "projector" in model_state:
+            missing, unexpected = self.vlm.projector.load_state_dict(model_state["projector"], strict=True)
+            if missing:
+                raise ValueError(f"[Backbone-Only Init] Missing projector keys: {missing}")
+            if unexpected:
+                raise ValueError(f"[Backbone-Only Init] Unexpected projector keys: {unexpected}")
+            logger.info("[Backbone-Only Init] Loaded projector weights from official checkpoint.")
+        else:
+            logger.warning("[Backbone-Only Init] No projector weights in official checkpoint, using pretrained init.")
+
+        # Load LLM backbone
+        if "llm_backbone" in model_state:
+            llm_state = model_state["llm_backbone"]
+            filtered_llm_state = {}
+            for k, v in llm_state.items():
+                clean_key = k.replace("llm.", "") if k.startswith("llm.") else k
+                filtered_llm_state[clean_key] = v
+
+            official_embed_shape = filtered_llm_state.get("model.embed_tokens.weight", None)
+            if official_embed_shape is not None:
+                official_vocab_size = official_embed_shape.shape[0]
+                current_vocab_size = self.vlm.llm.model.embed_tokens.weight.shape[0]
+                if official_vocab_size != current_vocab_size:
+                    self.vlm.llm.resize_token_embeddings(official_vocab_size)
+
+            missing, unexpected = self.vlm.llm.load_state_dict(filtered_llm_state, strict=True)
+            if missing:
+                raise ValueError(f"[Backbone-Only Init] Missing LLM keys: {missing}")
+            if unexpected:
+                raise ValueError(f"[Backbone-Only Init] Unexpected LLM keys: {unexpected}")
+            logger.info("[Backbone-Only Init] Loaded LLM backbone weights from official checkpoint.")
+        else:
+            logger.warning("[Backbone-Only Init] No LLM backbone weights in official checkpoint, using pretrained init.")
+
+        # Load vision backbone (optional in official checkpoint)
+        if "vision_backbone" in model_state:
+            missing, unexpected = self.vlm.vision_backbone.load_state_dict(
+                model_state["vision_backbone"], strict=True
+            )
+            if missing:
+                logger.warning(f"[Backbone-Only Init] Missing vision backbone keys (may use pretrained init): {missing[:5]}")
+            if unexpected:
+                logger.warning(f"[Backbone-Only Init] Unexpected vision backbone keys: {unexpected[:5]}")
+            logger.info("[Backbone-Only Init] Loaded vision backbone weights from official checkpoint.")
+        else:
+            logger.info("[Backbone-Only Init] No vision backbone weights in official checkpoint, using pretrained init.")
+
+        # Explicitly do NOT:
+        # - Load VQ-VAE weights
+        # - Load action tokenizer
+        # - Read dataset_statistics.json
+        # - Override config._resolved_action_tokenizer_type
+        # - Override any MetaWorld action pipeline configuration
+        logger.info("[Backbone-Only Init] Backbone initialization complete. MetaWorld 4D action pipeline unchanged.")
 
     def _get_action_dim(self) -> int:
         """
@@ -864,6 +998,16 @@ class MiniVLAPolicy(PreTrainedPolicy):
                     pretrained_name_or_path=pretrained_name_or_path,
                 )
             
+            # When reloading a LeRobot checkpoint, disable official backbone-only init.
+            # The LeRobot safetensors already contains the fully trained model weights,
+            # so we must NOT re-initialize from the official .pt checkpoint.
+            if hasattr(config, "official_init_mode"):
+                config.official_init_mode = "none"
+            if hasattr(config, "official_pretrained_checkpoint"):
+                config.official_pretrained_checkpoint = ""
+            if hasattr(config, "official_vla_checkpoint"):
+                config.official_vla_checkpoint = ""
+            
             # Create the policy instance
             instance = cls(config, **kwargs)
             
@@ -1116,3 +1260,18 @@ class MiniVLAWristPolicy(MiniVLAPolicy):
     """Alias for minivla_wrist variant."""
     config_class = MiniVLAWristConfig
     name = "minivla_wrist"
+
+
+class MiniVLAWristPretrainedPolicy(MiniVLAPolicy):
+    """
+    Alias for minivla_wrist_pretrained variant.
+    
+    Uses official MiniVLA pretrained vision/projector/Qwen weights for initialization,
+    then fine-tunes with MetaWorld 4D action pipeline using extra_action_tokenizer.
+    
+    All forward(), predict_action_chunk(), select_action(), processor usage,
+    LeRobot checkpoint save/restore, and from_pretrained() logic are inherited
+    from MiniVLAPolicy without modification.
+    """
+    config_class = MiniVLAWristPretrainedConfig
+    name = "minivla_wrist_pretrained"
