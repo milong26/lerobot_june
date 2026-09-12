@@ -1,0 +1,7 @@
+Metric,Random,Ours
+configuration_coverage_ratio,1.0,1.0
+region_entropy,3.5854,3.643
+avg_nearest_neighbor_distance,0.0226,0.0268
+mean_pairwise_configuration_distance,0.1197,0.1224
+visual_diversity,1.8067,1.7595
+action_diversity,5.9574,5.569
