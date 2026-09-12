@@ -459,11 +459,14 @@ def phase_random(args, dataset, task, start_ep_idx=0):
     seed = args.seed_start
     consecutive_failures = 0
     task_description = TASK_DESCRIPTIONS.get(task, task)
+    env_recreate_interval = 50
+    episodes_since_recreate = 0
+
+    # Create env and recreate every 50 episodes to avoid Vulkan resource exhaustion
+    raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
 
     while success_count < args.num_random_episodes:
         started = time.time()
-        # Recreate env each episode to avoid Vulkan resource exhaustion
-        raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
         try:
             raw_env.unwrapped.seed = int(seed)
             steps, ep_info = run_episode_with_planner(
@@ -505,17 +508,27 @@ def phase_random(args, dataset, task, start_ep_idx=0):
             if dataset.has_pending_frames():
                 dataset.clear_episode_buffer(delete_images=True)
             print(f"  [R] ERROR (seed={seed}): {type(exc).__name__}: {exc}")
-        finally:
+
+        episodes_since_recreate += 1
+        if episodes_since_recreate >= env_recreate_interval:
             if raw_env is not None:
                 try:
                     raw_env.close()
                 except Exception:
                     pass
+            raw_env = create_raw_env(task, seed + 1, difficulty=args.difficulty)
+            episodes_since_recreate = 0
 
         seed += 1
         if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
             print(f"Warning: {MAX_CONSECUTIVE_FAILURES} consecutive failures, continuing.")
             consecutive_failures = 0
+
+    if raw_env is not None:
+        try:
+            raw_env.close()
+        except Exception:
+            pass
 
     print(f"Phase 1 complete: {success_count}/{args.num_random_episodes} successful")
     return infos
@@ -557,6 +570,11 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
     infos = []
     success_count = 0
     config_idx = 0
+    env_recreate_interval = 50
+    episodes_since_recreate = 0
+
+    # Create env and recreate every 50 episodes to avoid Vulkan resource exhaustion
+    raw_env = create_raw_env(task, int(rng.randint(0, 1_000_000)), difficulty=args.difficulty)
 
     while success_count < args.num_uniform_episodes:
         uniform_cfg = uniform_configs[config_idx] if config_idx < len(uniform_configs) else None
@@ -571,9 +589,8 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
                 candidate = uniform_cfg
                 method = "uniform_grid" if retry == 0 else "uniform_perturbed"
 
-            raw_env = None
             try:
-                raw_env = create_raw_env(task, seed, difficulty=args.difficulty)
+                raw_env.unwrapped.seed = int(seed)
                 steps, ep_info = run_episode_with_planner(
                     raw_env,
                     task,
@@ -604,21 +621,23 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
                 if dataset.has_pending_frames():
                     dataset.clear_episode_buffer(delete_images=True)
                 print(f"  [U] ERROR (seed={seed}): {type(exc).__name__}: {exc}")
-            finally:
+
+        if success_this_config:
+            episodes_since_recreate += 1
+            if episodes_since_recreate >= env_recreate_interval:
                 if raw_env is not None:
                     try:
                         raw_env.close()
                     except Exception:
                         pass
-
-        if success_this_config:
+                raw_env = create_raw_env(task, int(rng.randint(0, 1_000_000)), difficulty=args.difficulty)
+                episodes_since_recreate = 0
             continue
 
         # If all configs exhausted or failed, fall back to random
         while success_count < args.num_uniform_episodes:
-            raw_env = None
             try:
-                raw_env = create_raw_env(task, fallback_seed, difficulty=args.difficulty)
+                raw_env.unwrapped.seed = int(fallback_seed)
                 steps, ep_info = run_episode_with_planner(
                     raw_env,
                     task,
@@ -642,14 +661,25 @@ def phase_uniform(args, dataset, task, start_ep_idx=0):
                 if dataset.has_pending_frames():
                     dataset.clear_episode_buffer(delete_images=True)
                 print(f"  [U] FALLBACK ERROR (seed={fallback_seed}): {type(exc).__name__}: {exc}")
-            finally:
+
+            episodes_since_recreate += 1
+            if episodes_since_recreate >= env_recreate_interval:
                 if raw_env is not None:
                     try:
                         raw_env.close()
                     except Exception:
                         pass
-                fallback_seed += 1
+                raw_env = create_raw_env(task, int(rng.randint(0, 1_000_000)), difficulty=args.difficulty)
+                episodes_since_recreate = 0
+
+            fallback_seed += 1
             break
+
+    if raw_env is not None:
+        try:
+            raw_env.close()
+        except Exception:
+            pass
 
     print(f"Phase 2 complete: {success_count}/{args.num_uniform_episodes} successful")
     return infos
@@ -659,10 +689,14 @@ def _phase_fallback_random(args, dataset, task, start_ep_idx, fallback_seed, tas
     """Fallback random collection when uniform spec is not available."""
     infos = []
     success_count = 0
+    env_recreate_interval = 50
+    episodes_since_recreate = 0
+
+    raw_env = create_raw_env(task, fallback_seed, difficulty=args.difficulty)
+
     while success_count < args.num_uniform_episodes:
-        raw_env = None
         try:
-            raw_env = create_raw_env(task, fallback_seed, difficulty=args.difficulty)
+            raw_env.unwrapped.seed = int(fallback_seed)
             steps, ep_info = run_episode_with_planner(
                 raw_env,
                 task,
@@ -686,13 +720,24 @@ def _phase_fallback_random(args, dataset, task, start_ep_idx, fallback_seed, tas
             if dataset.has_pending_frames():
                 dataset.clear_episode_buffer(delete_images=True)
             print(f"  [U] FALLBACK ERROR (seed={fallback_seed}): {type(exc).__name__}: {exc}")
-        finally:
+
+        episodes_since_recreate += 1
+        if episodes_since_recreate >= env_recreate_interval:
             if raw_env is not None:
                 try:
                     raw_env.close()
                 except Exception:
                     pass
-            fallback_seed += 1
+            raw_env = create_raw_env(task, fallback_seed + 1, difficulty=args.difficulty)
+            episodes_since_recreate = 0
+
+        fallback_seed += 1
+
+    if raw_env is not None:
+        try:
+            raw_env.close()
+        except Exception:
+            pass
 
     print(f"Phase 2 complete (fallback): {success_count}/{args.num_uniform_episodes} successful")
     return infos

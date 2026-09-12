@@ -61,6 +61,20 @@ BASE_SEED = 42
 SEED_STRIDE = 1
 
 
+class NumpyEncoder(json.JSONEncoder):
+    """Custom JSON encoder that handles numpy types."""
+    def default(self, obj):
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.integer,)):
+            return int(obj)
+        if isinstance(obj, (np.floating,)):
+            return float(obj)
+        if isinstance(obj, (np.bool_,)):
+            return bool(obj)
+        return super().default(obj)
+
+
 def load_model_and_preprocessor(checkpoint_path, device="cuda"):
     """Load TinyVLA policy and preprocessor from checkpoint.
     
@@ -252,6 +266,7 @@ def run_multiseed_evaluation(
     eval_mode="one_step",
     task_description=TASK_DESCRIPTION,
     device="cuda",
+    test_sampling_mode="random",
 ):
     """Run multi-seed evaluation on a single episode.
     
@@ -288,6 +303,7 @@ def run_multiseed_evaluation(
     print(f"Task description: '{task_description}'")
     print(f"Base seed: {base_seed}")
     print(f"Chunk size: {chunk_size}")
+    print(f"Test sampling mode: {test_sampling_mode}")
     
     all_results = []
     all_normalized_maes_4d = []
@@ -323,10 +339,29 @@ def run_multiseed_evaluation(
                 
                 # Reset and set seed for each inference
                 policy.reset()
-                torch.manual_seed(current_seed)
-                if torch.cuda.is_available():
-                    torch.cuda.manual_seed(current_seed)
-                    torch.cuda.manual_seed_all(current_seed)
+                
+                # Handle different sampling modes
+                if test_sampling_mode == "deterministic":
+                    # Deterministic mode: use zero noise or fixed generator
+                    torch.manual_seed(0)
+                    if torch.cuda.is_available():
+                        torch.cuda.manual_seed(0)
+                        torch.cuda.manual_seed_all(0)
+                    np.random.seed(0)
+                elif test_sampling_mode == "fixed_seed":
+                    # Fixed seed mode: use the same seed for all frames
+                    torch.manual_seed(base_seed)
+                    if torch.cuda.is_available():
+                        torch.cuda.manual_seed(base_seed)
+                        torch.cuda.manual_seed_all(base_seed)
+                    np.random.seed(base_seed)
+                else:
+                    # Random mode: use different seed for each frame
+                    torch.manual_seed(current_seed)
+                    if torch.cuda.is_available():
+                        torch.cuda.manual_seed(current_seed)
+                        torch.cuda.manual_seed_all(current_seed)
+                    np.random.seed(current_seed)
                 
                 with torch.inference_mode():
                     raw_action = policy.select_action(observation_tensor)
@@ -334,6 +369,32 @@ def run_multiseed_evaluation(
                 # raw_action is normalized action from model
                 model_normalized = raw_action.to("cpu").to(dtype=torch.float32).numpy()[0]
                 model_raw = postprocessor_unnormalize(postprocessor, raw_action)[0]
+                
+                # Debug output for first frame only
+                debug_first_frame = (idx == 0)
+                if debug_first_frame:
+                    print(f"\n  {'='*60}")
+                    print(f"  [DIAGNOSTIC] Frame {frame_idx} - First Frame Action Comparison")
+                    print(f"  {'='*60}")
+                    print(f"  GT raw action: {expert_action_raw}")
+                    print(f"  GT normalized action: {expert_action_normalized.numpy()}")
+                    print(f"  Model normalized action: {model_normalized}")
+                    print(f"  Model raw action: {model_raw}")
+                    normalized_error = np.abs(expert_action_normalized.numpy() - model_normalized).mean()
+                    raw_error = np.abs(expert_action_raw - model_raw).mean()
+                    print(f"\n  Normalized error (MAE): {normalized_error:.4f}")
+                    print(f"  Raw error (MAE): {raw_error:.4f}")
+                    print(f"  {'='*60}")
+                    if normalized_error < 0.1 and raw_error < 0.1:
+                        print(f"  => Both errors < 0.1: Model action prediction looks GOOD")
+                        print(f"     If success rate is still 0, check chunk execution or environment eval")
+                    elif normalized_error < 0.2 and raw_error < 0.2:
+                        print(f"  => Both errors < 0.2: Model action prediction is ACCEPTABLE")
+                        print(f"     May need more training or better data quality")
+                    else:
+                        print(f"  => Both errors >= 0.2: Model action prediction is POOR")
+                        print(f"     Need to retrain or adjust training pipeline")
+                    print(f"  {'='*60}\n")
                 
                 seed_result = compute_seed_metrics(
                     expert_action_raw=expert_action_raw,
@@ -649,6 +710,342 @@ def compute_frame_distribution(expert_action_raw, expert_action_normalized, seed
     }
 
 
+def run_sampling_mode_comparison(
+    policy,
+    preprocessor,
+    postprocessor,
+    dataset,
+    episode_index=0,
+    num_seeds=20,
+    base_seed=42,
+    task_description=TASK_DESCRIPTION,
+    device="cuda",
+):
+    """Run comparison across different sampling modes (random, fixed_seed, deterministic).
+    
+    For each frame, runs inference with different sampling modes and compares:
+    - Random sampling mean error
+    - Deterministic sampling error  
+    - Best-of-N error
+    - Whether sampling variance is the main issue
+    """
+    
+    # Find normalizer in preprocessor
+    normalizer = None
+    for step in preprocessor.steps:
+        if isinstance(step, NormalizerProcessorStep):
+            normalizer = step
+            break
+    
+    if normalizer is None:
+        raise ValueError("No NormalizerProcessorStep found in preprocessor!")
+    
+    # Get episode frame indices
+    episode_indices = np.array(dataset.hf_dataset["episode_index"])
+    mask = episode_indices == episode_index
+    frame_indices = np.where(mask)[0]
+    
+    if len(frame_indices) == 0:
+        print(f"ERROR: Episode {episode_index} not found in dataset")
+        return {}
+    
+    total_frames = len(frame_indices)
+    
+    print(f"\n{'='*80}")
+    print("Sampling Mode Comparison Experiment")
+    print(f"{'='*80}")
+    print(f"Evaluating episode {episode_index} with {total_frames} frames")
+    print(f"Number of seeds per frame: {num_seeds}")
+    print(f"Task description: '{task_description}'")
+    print(f"Base seed: {base_seed}")
+    
+    # Collect results for each mode
+    all_random_maes = []
+    all_deterministic_maes = []
+    all_best_of_n_maes = []
+    
+    for idx, frame_idx in enumerate(tqdm(frame_indices, desc=f"Episode {episode_index}")):
+        frame = dataset[frame_idx]
+        expert_action_raw = frame["action"].numpy()
+        observation_state = frame["observation.state"]
+        
+        observation = {
+            "observation.images.top": frame["observation.images.top"],
+            "observation.images.wrist": frame["observation.images.wrist"],
+            "observation.state": observation_state,
+            "task": task_description,
+        }
+        
+        observation_tensor = preprocess_observation(observation)
+        observation_tensor = preprocessor(observation_tensor)
+        
+        # Normalize expert action
+        expert_action_tensor = torch.as_tensor(expert_action_raw, dtype=torch.float32)
+        expert_action_normalized = normalizer._apply_transform(
+            expert_action_tensor.unsqueeze(0).unsqueeze(0),
+            "action",
+            FeatureType.ACTION,
+            inverse=False
+        ).squeeze()
+        
+        # Run random sampling (multiple seeds)
+        random_seed_maes = []
+        for seed_idx in range(num_seeds):
+            current_seed = base_seed + seed_idx
+            policy.reset()
+            torch.manual_seed(current_seed)
+            if torch.cuda.is_available():
+                torch.cuda.manual_seed(current_seed)
+                torch.cuda.manual_seed_all(current_seed)
+            
+            with torch.inference_mode():
+                raw_action = policy.select_action(observation_tensor)
+            
+            model_normalized = raw_action.to("cpu").to(dtype=torch.float32).numpy()[0]
+            model_raw = postprocessor_unnormalize(postprocessor, raw_action)[0]
+            
+            normalized_mae = np.abs(expert_action_normalized.numpy() - model_normalized).mean()
+            random_seed_maes.append(normalized_mae)
+        
+        # Run deterministic sampling
+        policy.reset()
+        torch.manual_seed(0)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed(0)
+            torch.cuda.manual_seed_all(0)
+        np.random.seed(0)
+        
+        with torch.inference_mode():
+            raw_action = policy.select_action(observation_tensor)
+        
+        model_normalized = raw_action.to("cpu").to(dtype=torch.float32).numpy()[0]
+        model_raw = postprocessor_unnormalize(postprocessor, raw_action)[0]
+        
+        deterministic_mae = np.abs(expert_action_normalized.numpy() - model_normalized).mean()
+        
+        # Compute statistics
+        random_mean_mae = np.mean(random_seed_maes)
+        best_of_n_mae = np.min(random_seed_maes)
+        
+        all_random_maes.append(random_mean_mae)
+        all_deterministic_maes.append(deterministic_mae)
+        all_best_of_n_maes.append(best_of_n_mae)
+    
+    # Aggregate results
+    random_maes = np.array(all_random_maes)
+    deterministic_maes = np.array(all_deterministic_maes)
+    best_of_n_maes = np.array(all_best_of_n_maes)
+    
+    print(f"\n{'='*60}")
+    print("Sampling Mode Comparison Results")
+    print(f"{'='*60}")
+    print(f"\nRandom sampling mean error: {random_maes.mean():.4f} (std={random_maes.std():.4f})")
+    print(f"Deterministic sampling error: {deterministic_maes.mean():.4f} (std={deterministic_maes.std():.4f})")
+    print(f"Best-of-N error: {best_of_n_maes.mean():.4f} (std={best_of_n_maes.std():.4f})")
+    
+    # Diagnosis
+    deterministic_vs_best_gap = np.abs(deterministic_maes - best_of_n_maes).mean()
+    random_vs_deterministic_gap = np.abs(random_maes - deterministic_maes).mean()
+    
+    print(f"\nDeterministic vs Best-of-N gap: {deterministic_vs_best_gap:.4f}")
+    print(f"Random vs Deterministic gap: {random_vs_deterministic_gap:.4f}")
+    
+    sampling_variance_is_main_issue = False
+    model_prediction_quality_issue = False
+    
+    if deterministic_vs_best_gap < 0.05:
+        print(f"\n=> Deterministic MAE close to Best-of-N MAE")
+        print(f"   Sampling variance is the MAIN ISSUE")
+        print(f"   Model has learned action prediction, but diffusion sampling is unstable")
+        sampling_variance_is_main_issue = True
+    elif deterministic_maes.mean() > 0.2 and random_maes.mean() > 0.2:
+        print(f"\n=> Both deterministic and random errors are large")
+        print(f"   Model prediction quality is the MAIN ISSUE")
+        print(f"   Action head needs retraining or better training data")
+        model_prediction_quality_issue = True
+    else:
+        print(f"\n=> Mixed results, further analysis needed")
+    
+    results = {
+        "random_sampling_mean_error": {
+            "mean": float(random_maes.mean()),
+            "std": float(random_maes.std()),
+            "min": float(random_maes.min()),
+            "max": float(random_maes.max()),
+        },
+        "deterministic_sampling_error": {
+            "mean": float(deterministic_maes.mean()),
+            "std": float(deterministic_maes.std()),
+            "min": float(deterministic_maes.min()),
+            "max": float(deterministic_maes.max()),
+        },
+        "best_of_n_error": {
+            "mean": float(best_of_n_maes.mean()),
+            "std": float(best_of_n_maes.std()),
+            "min": float(best_of_n_maes.min()),
+            "max": float(best_of_n_maes.max()),
+        },
+        "diagnosis": {
+            "deterministic_vs_best_of_n_gap": float(deterministic_vs_best_gap),
+            "random_vs_deterministic_gap": float(random_vs_deterministic_gap),
+            "sampling_variance_is_main_issue": sampling_variance_is_main_issue,
+            "model_prediction_quality_issue": model_prediction_quality_issue,
+        }
+    }
+    
+    return results
+
+
+def run_chunk_step_comparison(
+    policy,
+    preprocessor,
+    postprocessor,
+    dataset,
+    episode_index=0,
+    task_description=TASK_DESCRIPTION,
+    device="cuda",
+    chunk_steps_list=None,
+):
+    """Run chunk evaluation with different n_action_steps.
+    
+    Compares execution with different action horizons to determine
+    if rollout failures are due to chunk execution strategy.
+    """
+    if chunk_steps_list is None:
+        chunk_steps_list = [1, 8, 16]
+    
+    # Find normalizer in preprocessor
+    normalizer = None
+    for step in preprocessor.steps:
+        if isinstance(step, NormalizerProcessorStep):
+            normalizer = step
+            break
+    
+    if normalizer is None:
+        raise ValueError("No NormalizerProcessorStep found in preprocessor!")
+    
+    # Get episode frame indices
+    episode_indices = np.array(dataset.hf_dataset["episode_index"])
+    mask = episode_indices == episode_index
+    frame_indices = np.where(mask)[0]
+    
+    if len(frame_indices) == 0:
+        print(f"ERROR: Episode {episode_index} not found in dataset")
+        return {}
+    
+    total_frames = len(frame_indices)
+    
+    print(f"\n{'='*80}")
+    print("Chunk Step Comparison Experiment")
+    print(f"{'='*80}")
+    print(f"Evaluating episode {episode_index} with {total_frames} frames")
+    print(f"Task description: '{task_description}'")
+    print(f"Testing n_action_steps: {chunk_steps_list}")
+    
+    results_per_step = {}
+    
+    for n_action_steps in chunk_steps_list:
+        print(f"\n{'='*60}")
+        print(f"Testing n_action_steps={n_action_steps}")
+        print(f"{'='*60}")
+        
+        # Store per-frame metrics
+        frame_maes = []
+        frame_errors = []
+        
+        # Reset policy
+        policy.reset()
+        
+        # We'll simulate chunk execution by predicting and executing n_action_steps at a time
+        current_frame_idx = 0
+        step_idx = 0
+        
+        while step_idx < total_frames:
+            frame_idx = frame_indices[step_idx]
+            frame = dataset[frame_idx]
+            expert_action_raw = frame["action"].numpy()
+            observation_state = frame["observation.state"]
+            
+            observation = {
+                "observation.images.top": frame["observation.images.top"],
+                "observation.images.wrist": frame["observation.images.wrist"],
+                "observation.state": observation_state,
+                "task": task_description,
+            }
+            
+            observation_tensor = preprocess_observation(observation)
+            observation_tensor = preprocessor(observation_tensor)
+            
+            # Normalize expert action
+            expert_action_tensor = torch.as_tensor(expert_action_raw, dtype=torch.float32)
+            expert_action_normalized = normalizer._apply_transform(
+                expert_action_tensor.unsqueeze(0).unsqueeze(0),
+                "action",
+                FeatureType.ACTION,
+                inverse=False
+            ).squeeze()
+            
+            # Predict action chunk
+            with torch.inference_mode():
+                chunk_actions = policy.predict_action_chunk(observation_tensor)
+            
+            # Execute first n_action_steps from the chunk
+            chunk_normalized = chunk_actions.to("cpu").to(dtype=torch.float32).numpy()[0]
+            
+            # Compare predicted vs expert for executed steps
+            step_maes = []
+            for t in range(min(n_action_steps, total_frames - step_idx)):
+                future_step_idx = step_idx + t
+                future_frame_idx = frame_indices[future_step_idx]
+                future_frame = dataset[future_frame_idx]
+                future_expert_raw = future_frame["action"].numpy()
+                
+                # Normalize future expert action
+                future_expert_tensor = torch.as_tensor(future_expert_raw, dtype=torch.float32)
+                future_expert_normalized = normalizer._apply_transform(
+                    future_expert_tensor.unsqueeze(0).unsqueeze(0),
+                    "action",
+                    FeatureType.ACTION,
+                    inverse=False
+                ).squeeze()
+                
+                predicted_normalized = chunk_normalized[t]
+                mae = np.abs(future_expert_normalized.numpy() - predicted_normalized).mean()
+                step_maes.append(mae)
+            
+            frame_maes.extend(step_maes)
+            step_idx += n_action_steps
+        
+        # Compute statistics for this n_action_steps
+        frame_maes = np.array(frame_maes)
+        results_per_step[n_action_steps] = {
+            "mean_mae": float(frame_maes.mean()),
+            "std_mae": float(frame_maes.std()),
+            "min_mae": float(frame_maes.min()),
+            "max_mae": float(frame_maes.max()),
+            "mae_below_0.1_ratio": float((frame_maes < 0.1).mean()),
+            "mae_below_0.2_ratio": float((frame_maes < 0.2).mean()),
+        }
+        
+        print(f"  Mean MAE: {frame_maes.mean():.4f}")
+        print(f"  Std MAE: {frame_maes.std():.4f}")
+        print(f"  MAE < 0.1: {(frame_maes < 0.1).mean()*100:.1f}%")
+        print(f"  MAE < 0.2: {(frame_maes < 0.2).mean()*100:.1f}%")
+    
+    # Print comparison table
+    print(f"\n{'='*60}")
+    print("Chunk Step Comparison Summary")
+    print(f"{'='*60}")
+    print(f"{'n_action_steps':>15} | {'Mean MAE':>10} | {'Std MAE':>10} | {'MAE<0.1':>10} | {'MAE<0.2':>10}")
+    print(f"{'-'*15}-+-{'-'*10}-+-{'-'*10}-+-{'-'*10}-+-{'-'*10}")
+    
+    for n_action_steps in chunk_steps_list:
+        r = results_per_step[n_action_steps]
+        print(f"{n_action_steps:>15} | {r['mean_mae']:>10.4f} | {r['std_mae']:>10.4f} | {r['mae_below_0.1_ratio']*100:>9.1f}% | {r['mae_below_0.2_ratio']*100:>9.1f}%")
+    
+    return results_per_step
+
+
 def print_and_save_results(
     results,
     normalized_maes_4d,
@@ -792,18 +1189,6 @@ def print_and_save_results(
     
     output_file = output_dir / f"tinyvla_multiseed_ep{episode_index}_{eval_mode}.json"
     
-    class NumpyEncoder(json.JSONEncoder):
-        def default(self, obj):
-            if isinstance(obj, np.ndarray):
-                return obj.tolist()
-            if isinstance(obj, (np.integer,)):
-                return int(obj)
-            if isinstance(obj, (np.floating,)):
-                return float(obj)
-            if isinstance(obj, (np.bool_,)):
-                return bool(obj)
-            return super().default(obj)
-    
     with open(output_file, "w") as f:
         json.dump({
             "episode_index": episode_index,
@@ -922,6 +1307,20 @@ def main():
     parser.add_argument("--seed_stride", type=int, default=SEED_STRIDE)
     parser.add_argument("--eval_mode", type=str, default="one_step", choices=["one_step", "chunk"])
     parser.add_argument("--device", type=str, default="cuda")
+    # New parameters for sampling mode comparison
+    parser.add_argument(
+        "--test_sampling_mode",
+        type=str,
+        default="random",
+        choices=["random", "fixed_seed", "deterministic"],
+        help="Sampling mode: random (default), fixed_seed, or deterministic"
+    )
+    parser.add_argument(
+        "--compare_chunk_steps",
+        type=str,
+        default=None,
+        help="Comma-separated list of n_action_steps to compare in chunk mode, e.g., '1,8,16'"
+    )
     args = parser.parse_args()
     
     print("=" * 80)
@@ -954,28 +1353,74 @@ def main():
     print("Step 3: Multi-Seed Action Evaluation")
     print("=" * 80)
     
-    results, normalized_maes_4d, raw_maes_4d = run_multiseed_evaluation(
-        policy=policy,
-        preprocessor=preprocessor,
-        postprocessor=postprocessor,
-        dataset=dataset,
-        episode_index=args.episode_index,
-        num_seeds=args.num_seeds,
-        base_seed=args.base_seed,
-        seed_stride=args.seed_stride,
-        eval_mode=args.eval_mode,
-        task_description=args.task,
-        device=args.device,
-    )
-    
-    print_and_save_results(
-        results=results,
-        normalized_maes_4d=normalized_maes_4d,
-        raw_maes_4d=raw_maes_4d,
-        episode_index=args.episode_index,
-        eval_mode=args.eval_mode,
-        num_seeds=args.num_seeds,
-    )
+    # Check if we need to run special comparison experiments
+    if args.test_sampling_mode != "random" and args.eval_mode == "one_step":
+        # Run sampling mode comparison
+        sampling_results = run_sampling_mode_comparison(
+            policy=policy,
+            preprocessor=preprocessor,
+            postprocessor=postprocessor,
+            dataset=dataset,
+            episode_index=args.episode_index,
+            num_seeds=args.num_seeds,
+            base_seed=args.base_seed,
+            task_description=args.task,
+            device=args.device,
+        )
+        
+        # Save sampling comparison results
+        output_file = Path("outputs") / f"sampling_mode_comparison_ep{args.episode_index}.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, "w") as f:
+            json.dump(sampling_results, f, indent=2, cls=NumpyEncoder)
+        print(f"\nSampling comparison results saved to: {output_file}")
+        
+    elif args.compare_chunk_steps is not None and args.eval_mode == "chunk":
+        # Run chunk step comparison
+        chunk_steps_list = [int(x) for x in args.compare_chunk_steps.split(",")]
+        chunk_results = run_chunk_step_comparison(
+            policy=policy,
+            preprocessor=preprocessor,
+            postprocessor=postprocessor,
+            dataset=dataset,
+            episode_index=args.episode_index,
+            task_description=args.task,
+            device=args.device,
+            chunk_steps_list=chunk_steps_list,
+        )
+        
+        # Save chunk comparison results
+        output_file = Path("outputs") / f"chunk_step_comparison_ep{args.episode_index}.json"
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(output_file, "w") as f:
+            json.dump(chunk_results, f, indent=2, cls=NumpyEncoder)
+        print(f"\nChunk comparison results saved to: {output_file}")
+        
+    else:
+        # Run standard multi-seed evaluation
+        results, normalized_maes_4d, raw_maes_4d = run_multiseed_evaluation(
+            policy=policy,
+            preprocessor=preprocessor,
+            postprocessor=postprocessor,
+            dataset=dataset,
+            episode_index=args.episode_index,
+            num_seeds=args.num_seeds,
+            base_seed=args.base_seed,
+            seed_stride=args.seed_stride,
+            eval_mode=args.eval_mode,
+            task_description=args.task,
+            device=args.device,
+            test_sampling_mode=args.test_sampling_mode,
+        )
+        
+        print_and_save_results(
+            results=results,
+            normalized_maes_4d=normalized_maes_4d,
+            raw_maes_4d=raw_maes_4d,
+            episode_index=args.episode_index,
+            eval_mode=args.eval_mode,
+            num_seeds=args.num_seeds,
+        )
 
 
 if __name__ == "__main__":
