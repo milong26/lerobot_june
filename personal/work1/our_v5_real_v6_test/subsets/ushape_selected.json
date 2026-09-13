@@ -1,0 +1,262 @@
+{
+  "task_name": "ushape",
+  "method": "our_v5_real",
+  "num_episodes": 20,
+  "selected_episode_indices": [
+    264,
+    285,
+    288,
+    289,
+    260,
+    274,
+    273,
+    281,
+    263,
+    278,
+    268,
+    270,
+    283,
+    276,
+    272,
+    265,
+    261,
+    282,
+    271,
+    266
+  ],
+  "selection_order": [
+    264,
+    285,
+    288,
+    289,
+    260,
+    274,
+    273,
+    281,
+    263,
+    278,
+    268,
+    270,
+    283,
+    276,
+    272,
+    265,
+    261,
+    282,
+    271,
+    266
+  ],
+  "selection_log": [
+    {
+      "step": 1,
+      "episode_index": 264,
+      "phase": "initial_batch",
+      "note": "\u521d\u59cbB0\u9009\u62e9"
+    },
+    {
+      "step": 2,
+      "episode_index": 285,
+      "phase": "initial_batch",
+      "note": "\u521d\u59cbB0\u9009\u62e9"
+    },
+    {
+      "step": 3,
+      "episode_index": 288,
+      "phase": "initial_batch",
+      "note": "\u521d\u59cbB0\u9009\u62e9"
+    },
+    {
+      "step": 4,
+      "episode_index": 289,
+      "phase": "initial_batch",
+      "note": "\u521d\u59cbB0\u9009\u62e9"
+    },
+    {
+      "step": 5,
+      "episode_index": 260,
+      "phase": "iterative_selection",
+      "region_id": 8,
+      "region_priority": 0.6069316267967224,
+      "coverage_gap": 1.0,
+      "visual_uncertainty": 0.017329050227999687,
+      "pixel_coverage_score": 0.042690567672252655,
+      "note": "\u4ece\u533a\u57df8\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.607\uff09"
+    },
+    {
+      "step": 6,
+      "episode_index": 274,
+      "phase": "iterative_selection",
+      "region_id": 5,
+      "region_priority": 0.600115180015564,
+      "coverage_gap": 1.0,
+      "visual_uncertainty": 0.00028786665643565357,
+      "pixel_coverage_score": 0.03339248150587082,
+      "note": "\u4ece\u533a\u57df5\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.600\uff09"
+    },
+    {
+      "step": 7,
+      "episode_index": 273,
+      "phase": "iterative_selection",
+      "region_id": 7,
+      "region_priority": 0.60010826587677,
+      "coverage_gap": 1.0,
+      "visual_uncertainty": 0.0002705879451241344,
+      "pixel_coverage_score": 0.034294676035642624,
+      "note": "\u4ece\u533a\u57df7\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.600\uff09"
+    },
+    {
+      "step": 8,
+      "episode_index": 281,
+      "phase": "iterative_selection",
+      "region_id": 6,
+      "region_priority": 0.6000962257385254,
+      "coverage_gap": 1.0,
+      "visual_uncertainty": 0.00024051323998719454,
+      "pixel_coverage_score": 0.030023423954844475,
+      "note": "\u4ece\u533a\u57df6\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.600\uff09"
+    },
+    {
+      "step": 9,
+      "episode_index": 263,
+      "phase": "iterative_selection",
+      "region_id": 4,
+      "region_priority": 0.6000832915306091,
+      "coverage_gap": 1.0,
+      "visual_uncertainty": 0.00020815477182623,
+      "pixel_coverage_score": 0.04490809515118599,
+      "note": "\u4ece\u533a\u57df4\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.600\uff09"
+    },
+    {
+      "step": 10,
+      "episode_index": 278,
+      "phase": "iterative_selection",
+      "region_id": 6,
+      "region_priority": 0.5143819451332092,
+      "coverage_gap": 0.8571428571428572,
+      "visual_uncertainty": 0.00024051323998719454,
+      "pixel_coverage_score": 0.029082808643579483,
+      "note": "\u4ece\u533a\u57df6\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.514\uff09"
+    },
+    {
+      "step": 11,
+      "episode_index": 268,
+      "phase": "iterative_selection",
+      "region_id": 0,
+      "region_priority": 0.5001056790351868,
+      "coverage_gap": 0.8333333333333334,
+      "visual_uncertainty": 0.00026421697111800313,
+      "pixel_coverage_score": 0.03343740478157997,
+      "note": "\u4ece\u533a\u57df0\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.500\uff09"
+    },
+    {
+      "step": 12,
+      "episode_index": 270,
+      "phase": "iterative_selection",
+      "region_id": 3,
+      "region_priority": 0.4501379430294037,
+      "coverage_gap": 0.75,
+      "visual_uncertainty": 0.000344901840435341,
+      "pixel_coverage_score": 0.04102693498134613,
+      "note": "\u4ece\u533a\u57df3\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.450\uff09"
+    },
+    {
+      "step": 13,
+      "episode_index": 283,
+      "phase": "iterative_selection",
+      "region_id": 6,
+      "region_priority": 0.4286676347255707,
+      "coverage_gap": 0.7142857142857143,
+      "visual_uncertainty": 0.00024051323998719454,
+      "pixel_coverage_score": 0.022126825526356697,
+      "note": "\u4ece\u533a\u57df6\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.429\uff09"
+    },
+    {
+      "step": 14,
+      "episode_index": 276,
+      "phase": "iterative_selection",
+      "region_id": 5,
+      "region_priority": 0.40011516213417053,
+      "coverage_gap": 0.6666666666666667,
+      "visual_uncertainty": 0.00028786665643565357,
+      "pixel_coverage_score": 0.029231738299131393,
+      "note": "\u4ece\u533a\u57df5\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.400\uff09"
+    },
+    {
+      "step": 15,
+      "episode_index": 272,
+      "phase": "iterative_selection",
+      "region_id": 7,
+      "region_priority": 0.4001082479953766,
+      "coverage_gap": 0.6666666666666667,
+      "visual_uncertainty": 0.0002705879451241344,
+      "pixel_coverage_score": 0.02573416568338871,
+      "note": "\u4ece\u533a\u57df7\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.400\uff09"
+    },
+    {
+      "step": 16,
+      "episode_index": 265,
+      "phase": "iterative_selection",
+      "region_id": 0,
+      "region_priority": 0.40010568499565125,
+      "coverage_gap": 0.6666666666666667,
+      "visual_uncertainty": 0.00026421697111800313,
+      "pixel_coverage_score": 0.024778803810477257,
+      "note": "\u4ece\u533a\u57df0\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.400\uff09"
+    },
+    {
+      "step": 17,
+      "episode_index": 261,
+      "phase": "iterative_selection",
+      "region_id": 4,
+      "region_priority": 0.4000832736492157,
+      "coverage_gap": 0.6666666666666667,
+      "visual_uncertainty": 0.00020815477182623,
+      "pixel_coverage_score": 0.02269422449171543,
+      "note": "\u4ece\u533a\u57df4\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.400\uff09"
+    },
+    {
+      "step": 18,
+      "episode_index": 282,
+      "phase": "iterative_selection",
+      "region_id": 6,
+      "region_priority": 0.3429533541202545,
+      "coverage_gap": 0.5714285714285714,
+      "visual_uncertainty": 0.00024051323998719454,
+      "pixel_coverage_score": 0.02136192098259926,
+      "note": "\u4ece\u533a\u57df6\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.343\uff09"
+    },
+    {
+      "step": 19,
+      "episode_index": 271,
+      "phase": "iterative_selection",
+      "region_id": 3,
+      "region_priority": 0.3001379668712616,
+      "coverage_gap": 0.5,
+      "visual_uncertainty": 0.000344901840435341,
+      "pixel_coverage_score": 0.02788558602333069,
+      "note": "\u4ece\u533a\u57df3\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.300\uff09"
+    },
+    {
+      "step": 20,
+      "episode_index": 266,
+      "phase": "iterative_selection",
+      "region_id": 0,
+      "region_priority": 0.3001056909561157,
+      "coverage_gap": 0.5,
+      "visual_uncertainty": 0.00026421697111800313,
+      "pixel_coverage_score": 0.02222052402794361,
+      "note": "\u4ece\u533a\u57df0\u9009\u62e9\uff08\u4f18\u5148\u7ea7=0.300\uff09"
+    }
+  ],
+  "parameters": {
+    "num_selected": 20,
+    "batch_size": 4,
+    "seed": 42,
+    "camera_key": "observation.images.top",
+    "region_ratio": 0.3,
+    "min_regions": 8,
+    "max_regions": 32,
+    "coverage_weight": 0.6,
+    "visual_weight": 0.4
+  }
+}

@@ -165,7 +165,7 @@ python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
     --policy-type minivla_wrist \
     --train-steps 50000 \
     --train-save-freq 2000 \
-    --env-eval-freq 2000 \
+    --env-eval-freq 50000 \
     --eval-n-episodes 10 \
     --final-eval-episodes 200 \
     --action-tokenizer-type extra_action_tokenizer \
