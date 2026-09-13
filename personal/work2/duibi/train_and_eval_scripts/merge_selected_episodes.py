@@ -50,6 +50,8 @@ def merge_datasets_for_training(
     
     # Collect all episode data
     all_episode_data = []  # List of (dataset_name, episode_idx, dataframe)
+    # Store episodes_meta for each dataset to correctly retrieve tasks
+    dataset_episodes_meta = {}
     
     # Load episodes from each dataset
     for i, dataset_name in enumerate(datasets):
@@ -64,6 +66,7 @@ def merge_datasets_for_training(
             print(f"  ERROR: Episodes metadata file not found: {episodes_meta_file}")
             continue
         episodes_meta = pd.read_parquet(episodes_meta_file)
+        dataset_episodes_meta[dataset_name] = episodes_meta
         
         # Load data
         data_file = dataset_dir / "data" / "chunk-000" / "file-000.parquet"
@@ -104,6 +107,19 @@ def merge_datasets_for_training(
     current_frame_idx = 0
     current_video_idx = 0
     
+    # Build global task mapping (needed for updating task_index in data)
+    global_task_name_to_index = {}
+    global_task_index = 0
+    for dataset_name in datasets:
+        dataset_dir = Path(dataset_base_dir) / dataset_name
+        tasks_file = dataset_dir / "meta" / "tasks.parquet"
+        if tasks_file.exists():
+            tasks_df = pd.read_parquet(tasks_file)
+            for task_name in tasks_df.index:
+                if task_name not in global_task_name_to_index:
+                    global_task_name_to_index[task_name] = global_task_index
+                    global_task_index += 1
+    
     print("\nMerging episode data...")
     for global_ep_idx, (dataset_name, orig_ep_idx, ep_data) in enumerate(
         tqdm(all_episode_data, desc="Merging episodes")
@@ -112,21 +128,31 @@ def merge_datasets_for_training(
         
         # Update indices
         ep_data["frame_index"] = list(range(current_frame_idx, current_frame_idx + num_frames))
+        ep_data["index"] = list(range(current_frame_idx, current_frame_idx + num_frames))  # 修复：重新计算 index 列
         ep_data["episode_index"] = global_ep_idx
         
-        merged_frames.append(ep_data)
-        
-        # Create episode metadata matching original format
-        # Get task string from episodes_meta if available
+        # Update task_index to global mapping
+        # Get task string from the correct dataset's episodes_meta
         task_str = ""
-        if "tasks" in episodes_meta.columns:
-            task_row = episodes_meta[episodes_meta["episode_index"] == ep_idx]
-            if len(task_row) > 0 and "tasks" in task_row.columns:
+        episodes_meta = dataset_episodes_meta.get(dataset_name)
+        if episodes_meta is not None and "tasks" in episodes_meta.columns:
+            task_row = episodes_meta[episodes_meta["episode_index"] == orig_ep_idx]
+            if len(task_row) > 0:
                 task_val = task_row["tasks"].iloc[0]
-                if isinstance(task_val, list):
-                    task_str = task_val[0] if len(task_val) > 0 else ""
-                else:
-                    task_str = str(task_val)
+                # Handle numpy array, list, or string
+                if hasattr(task_val, '__len__') and len(task_val) > 0:
+                    # numpy array or list
+                    task_str = str(task_val[0])
+                elif isinstance(task_val, str):
+                    task_str = task_val
+        
+        # Map task_str to global task_index and update all frames in this episode
+        if task_str and task_str in global_task_name_to_index:
+            global_task_idx = global_task_name_to_index[task_str]
+            if "task_index" in ep_data.columns:
+                ep_data["task_index"] = global_task_idx
+        
+        merged_frames.append(ep_data)
         
         episode_meta_rows.append({
             "episode_index": global_ep_idx,
@@ -134,8 +160,8 @@ def merge_datasets_for_training(
             "length": num_frames,
             "data/chunk_index": 0,
             "data/file_index": 0,
-            "dataset_from_index": 0,
-            "dataset_to_index": num_frames - 1,
+            "dataset_from_index": current_frame_idx,
+            "dataset_to_index": current_frame_idx + num_frames,
             "videos/observation.images.top/chunk_index": 0,
             "videos/observation.images.top/file_index": 0,
             "videos/observation.images.top/from_timestamp": 0.0,
@@ -201,25 +227,50 @@ def merge_datasets_for_training(
         
         video_idx += 1
     
-    # Copy metadata files from first dataset
-    first_dataset = Path(dataset_base_dir) / datasets[0]
+    # Copy/merge metadata files
     print("\nCopying metadata...")
-    for meta_file in ["info.json", "stats.json", "tasks.parquet"]:
-        src_file = first_dataset / "meta" / meta_file
-        if src_file.exists():
-            dst_file = output_path / "meta" / meta_file
-            if meta_file == "info.json":
-                # Update info.json
-                with open(src_file, "r") as f:
-                    info = json.load(f)
-                info["total_episodes"] = len(all_episode_data)
-                info["total_frames"] = current_frame_idx
-                info["total_videos"] = video_idx
-                with open(dst_file, "w") as f:
-                    json.dump(info, f, indent=2)
-            else:
-                shutil.copy2(src_file, dst_file)
-            print(f"  Copied {meta_file}")
+    
+    # Merge tasks.parquet from all datasets
+    all_tasks = []
+    task_index = 0
+    task_name_to_index = {}
+    
+    for dataset_name in datasets:
+        dataset_dir = Path(dataset_base_dir) / dataset_name
+        tasks_file = dataset_dir / "meta" / "tasks.parquet"
+        if tasks_file.exists():
+            tasks_df = pd.read_parquet(tasks_file)
+            for _, row in tasks_df.iterrows():
+                task_name = row.name if hasattr(row, 'name') else row.iloc[0]
+                if task_name not in task_name_to_index:
+                    task_name_to_index[task_name] = task_index
+                    all_tasks.append({"task": task_name, "task_index": task_index})
+                    task_index += 1
+    
+    if all_tasks:
+        merged_tasks_df = pd.DataFrame(all_tasks)
+        merged_tasks_df = merged_tasks_df.set_index("task")
+        merged_tasks_df.to_parquet(output_path / "meta" / "tasks.parquet")
+        print(f"  Merged {len(all_tasks)} tasks: {list(task_name_to_index.keys())}")
+    
+    # Copy info.json and update it
+    first_dataset = Path(dataset_base_dir) / datasets[0]
+    info_file = first_dataset / "meta" / "info.json"
+    if info_file.exists():
+        with open(info_file, "r") as f:
+            info = json.load(f)
+        info["total_episodes"] = len(all_episode_data)
+        info["total_frames"] = current_frame_idx
+        info["total_videos"] = video_idx
+        with open(output_path / "meta" / "info.json", "w") as f:
+            json.dump(info, f, indent=2)
+        print(f"  Created info.json")
+    
+    # Copy stats.json from first dataset
+    stats_file = first_dataset / "meta" / "stats.json"
+    if stats_file.exists():
+        shutil.copy2(stats_file, output_path / "meta" / "stats.json")
+        print(f"  Copied stats.json")
     
     # Copy episode_initial_states.json if exists
     src_states = first_dataset / "episode_initial_states.json"

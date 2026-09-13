@@ -44,5 +44,21 @@ lerobot-eval \
     2>&1 | tee personal/work2/eval_model/eval_mw_minivla_disassemble-v3_corner_200ep_50kcp.log
 
 
+# 第二次修改代码
 
+
+python personal/work2/differentvlm/minivla/scripts/merge_datasets.py \
+    --datasets disassemble-v3_corner pick_place-v3_corner coffee-button-v3_corner \
+    --episodes-per-dataset 112 \
+    --output-dir personal/work2/dataset_view/merged_3tasks \
+    --selection-mode random \
+    --seed 42
+
+首先合并数据集
+然后启动训练
+bash personal/work2/differentvlm/minivla/scripts/launch_random.sh \
+    --gpu-id 0 \
+    --num-episodes 336 \
+    --dataset-name merged_3tasks \
+    --seed 42
 

@@ -46,15 +46,35 @@ def run_eval_for_checkpoint(
     checkpoint_path: str,
     step_number: int,
     n_episodes: int | None = None,
+    eval_tasks: list[str] | None = None,
 ) -> Dict:
     """
     Run evaluation for a single checkpoint.
+    If eval_tasks is provided, run eval for each task separately.
     Returns evaluation results dict.
     """
     eval_n_episodes = n_episodes if n_episodes is not None else cfg.eval_n_episodes
+    
+    # Determine which tasks to evaluate
+    if eval_tasks:
+        tasks_to_eval = eval_tasks
+    else:
+        # Extract single task name from dataset name (legacy behavior)
+        dataset_base = cfg.dataset_name
+        for suffix in ["_corner", "_top", "_gripper", "_left", "_right", "_front", "_back", "_view"]:
+            if dataset_base.endswith(suffix):
+                dataset_base = dataset_base[:-len(suffix)]
+                break
+        task_base = dataset_base.replace("_", "-")
+        if "v3" not in task_base and "v2" not in task_base:
+            tasks_to_eval = [f"{task_base}-v3"]
+        else:
+            tasks_to_eval = [task_base]
+    
     print(f"\nRunning Evaluation for checkpoint step_{step_number:06d}")
     print(f"Checkpoint: {checkpoint_path}")
-    print(f"N episodes: {eval_n_episodes}")
+    print(f"N episodes per task: {eval_n_episodes}")
+    print(f"Tasks to evaluate: {tasks_to_eval}")
     print(f"Seed: {cfg.eval_seed}")
     print(f"GPU: {cfg.gpu_id}")
 
@@ -65,67 +85,107 @@ def run_eval_for_checkpoint(
     eval_output_dir = Path(cfg.eval_results_dir)
     eval_output_dir.mkdir(parents=True, exist_ok=True)
 
-    eval_log = Path(cfg.logs_dir) / f"{cfg.exp_name}_eval_step_{step_number:06d}.log"
+    # Run eval for each task
+    all_task_results = {}
+    all_episode_details = {}
+    
+    for task_name in tasks_to_eval:
+        print(f"\n{'='*60}")
+        print(f"Evaluating task: {task_name}")
+        print(f"{'='*60}")
+        
+        eval_log = Path(cfg.logs_dir) / f"{cfg.exp_name}_eval_step_{step_number:06d}_{task_name}.log"
 
-    # Extract task name from dataset name
-    dataset_base = cfg.dataset_name
-    for suffix in ["_corner", "_top", "_gripper", "_left", "_right", "_front", "_back", "_view"]:
-        if dataset_base.endswith(suffix):
-            dataset_base = dataset_base[:-len(suffix)]
-            break
-    task_base = dataset_base.replace("_", "-")
-    if "v3" not in task_base and "v2" not in task_base:
-        task_name = f"{task_base}-v3"
-    else:
-        task_name = task_base
+        cmd = [
+            "lerobot-eval",
+            f"--policy.path={checkpoint_path}",
+            "--env.type=metaworld",
+            f"--env.task={task_name}",
+            f"--env.camera_name={cfg.eval_camera_names}",
+            "--env.use_self_mw=true",
+            f"--eval.batch_size={cfg.eval_batch_size}",
+            f"--eval.n_episodes={eval_n_episodes}",
+            "--policy.device=cuda",
+            f"--rename_map={cfg.rename_map}",
+        ]
 
-    cmd = [
-        "lerobot-eval",
-        f"--policy.path={checkpoint_path}",
-        "--env.type=metaworld",
-        f"--env.task={task_name}",
-        f"--env.camera_name={cfg.eval_camera_names}",
-        "--env.use_self_mw=true",
-        f"--eval.batch_size={cfg.eval_batch_size}",
-        f"--eval.n_episodes={eval_n_episodes}",
-        "--policy.device=cuda",
-        f"--rename_map={cfg.rename_map}",
-    ]
-
-    print(f"\nRunning: lerobot-eval ...")
-    print(f"Eval log: {eval_log}")
-    sys.stdout.flush()
-
-    with open(eval_log, "w") as log_f:
-        result = subprocess.run(
-            cmd,
-            stdout=log_f,
-            stderr=subprocess.STDOUT,
-            cwd=str(Path(__file__).resolve().parents[5]),
-        )
-
-    if result.returncode != 0:
-        print(f"WARNING: Eval exited with code {result.returncode}")
+        print(f"\nRunning: lerobot-eval ...")
+        print(f"Eval log: {eval_log}")
         sys.stdout.flush()
 
-    metrics, episode_details = parse_eval_log(str(eval_log))
+        with open(eval_log, "w") as log_f:
+            result = subprocess.run(
+                cmd,
+                stdout=log_f,
+                stderr=subprocess.STDOUT,
+                cwd=str(Path(__file__).resolve().parents[5]),
+            )
 
-    # Save per-checkpoint results
+        if result.returncode != 0:
+            print(f"WARNING: Eval exited with code {result.returncode} for task {task_name}")
+            sys.stdout.flush()
+
+        metrics, episode_details = parse_eval_log(str(eval_log))
+
+        # Save per-task results
+        all_task_results[task_name] = metrics
+        all_episode_details[task_name] = episode_details
+
+        print(f"\nEval results for task {task_name} (step_{step_number:06d}):")
+        for k, v in metrics.items():
+            print(f"  {k}: {v}")
+
+    # Aggregate results across tasks
+    aggregated_metrics = {
+        "step": step_number,
+        "checkpoint_path": checkpoint_path,
+        "tasks_evaluated": tasks_to_eval,
+        "per_task_results": all_task_results,
+        "per_task_episodes": all_episode_details,
+    }
+    
+    # Compute overall statistics
+    pc_success_list = [r.get("pc_success", -1) for r in all_task_results.values() if r.get("pc_success", -1) >= 0]
+    pc_grasp_list = [r.get("pc_grasp_success", -1) for r in all_task_results.values() if r.get("pc_grasp_success", -1) >= 0]
+    reward_list = [r.get("avg_sum_reward", -1) for r in all_task_results.values() if r.get("avg_sum_reward", -1) >= 0]
+    
+    if pc_success_list:
+        aggregated_metrics["pc_success_mean"] = sum(pc_success_list) / len(pc_success_list)
+        aggregated_metrics["pc_success_max"] = max(pc_success_list)
+        aggregated_metrics["pc_success_min"] = min(pc_success_list)
+    else:
+        aggregated_metrics["pc_success_mean"] = -1
+    
+    if pc_grasp_list:
+        aggregated_metrics["pc_grasp_success_mean"] = sum(pc_grasp_list) / len(pc_grasp_list)
+    else:
+        aggregated_metrics["pc_grasp_success_mean"] = -1
+    
+    if reward_list:
+        aggregated_metrics["avg_sum_reward_mean"] = sum(reward_list) / len(reward_list)
+    else:
+        aggregated_metrics["avg_sum_reward_mean"] = -1
+
+    # Save aggregated results
     results_file = eval_output_dir / f"eval_results_step_{step_number:06d}.json"
     with open(results_file, "w") as f:
-        json.dump(metrics, f, indent=2)
+        json.dump(aggregated_metrics, f, indent=2)
 
     episodes_file = eval_output_dir / f"eval_episodes_step_{step_number:06d}.json"
     with open(episodes_file, "w") as f:
-        json.dump(episode_details, f, indent=2)
+        json.dump(all_episode_details, f, indent=2)
 
-    print(f"\nEval results for step_{step_number:06d}:")
-    for k, v in metrics.items():
-        print(f"  {k}: {v}")
+    print(f"\n{'='*60}")
+    print(f"Aggregated Results for step_{step_number:06d}:")
+    print(f"{'='*60}")
+    print(f"  Tasks evaluated: {tasks_to_eval}")
+    print(f"  pc_success_mean: {aggregated_metrics.get('pc_success_mean', -1)}")
+    print(f"  pc_grasp_success_mean: {aggregated_metrics.get('pc_grasp_success_mean', -1)}")
+    print(f"  avg_sum_reward_mean: {aggregated_metrics.get('avg_sum_reward_mean', -1)}")
     print(f"\nResults saved to: {results_file}")
     sys.stdout.flush()
 
-    return metrics
+    return aggregated_metrics
 
 
 def parse_eval_log(log_path: str) -> tuple:
@@ -239,7 +299,7 @@ def run_eval_all_checkpoints(cfg: MiniVLAExperimentConfig, checkpoint_dir: str, 
     all_results = []
     for step_num, ckpt_path in checkpoints:
         try:
-            metrics = run_eval_for_checkpoint(cfg, ckpt_path, step_num)
+            metrics = run_eval_for_checkpoint(cfg, ckpt_path, step_num, eval_tasks=cfg.eval_tasks)
             metrics["step"] = step_num
             metrics["checkpoint_path"] = ckpt_path
             all_results.append(metrics)
@@ -301,7 +361,7 @@ def run_final_eval(cfg: MiniVLAExperimentConfig, checkpoint_dir: str, n_episodes
         sys.stdout.flush()
 
         try:
-            metrics = run_eval_for_checkpoint(cfg, ckpt_path, step_num, n_episodes=n_episodes)
+            metrics = run_eval_for_checkpoint(cfg, ckpt_path, step_num, n_episodes=n_episodes, eval_tasks=cfg.eval_tasks)
             metrics["step"] = step_num
             metrics["checkpoint_path"] = ckpt_path
             metrics["eval_type"] = "final_200_episodes"

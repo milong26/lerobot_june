@@ -154,6 +154,8 @@ export CUDA_VISIBLE_DEVICES=\$GPU_ID
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 # Run MiniVLA experiment
+# Note: official_init_mode and official_pretrained_checkpoint use defaults from run_minivla.py
+# (backbone_only + Stanford-ILIAD/minivla-libero90-prismatic)
 python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
     --gpu \$GPU_ID \
     --dataset \$DATASET_NAME \
@@ -167,9 +169,6 @@ python personal/work2/differentvlm/minivla/scripts/run_minivla.py \
     --eval-n-episodes 10 \
     --final-eval-episodes 200 \
     --action-tokenizer-type extra_action_tokenizer \
-    --scheduler-warmup-steps 500 \
-    --projector-lr 1e-4 \
-    --backbone-lr 2e-5 \
     2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo "" >> "\$TIME_FILE"

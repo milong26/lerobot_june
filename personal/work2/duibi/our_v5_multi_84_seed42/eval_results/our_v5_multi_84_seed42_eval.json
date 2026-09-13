@@ -3,7 +3,7 @@
   "num_episodes_per_dataset": 28,
   "total_episodes": 84,
   "seed": 42,
-  "gpu_id": 1,
+  "gpu_id": 0,
   "datasets": [
     "coffee-button-v3_corner",
     "disassemble-v3_corner",

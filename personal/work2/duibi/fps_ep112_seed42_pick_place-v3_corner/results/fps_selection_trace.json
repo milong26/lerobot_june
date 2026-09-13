@@ -906,7 +906,7 @@
   "feature_dim": 64,
   "phi_global_dim": 32,
   "phi_wrist_dim": 32,
-  "selection_elapsed_time_seconds": 0.07496213912963867,
+  "selection_elapsed_time_seconds": 0.10555124282836914,
   "pairwise_distance_statistics": {
     "mean": 0.08794827318044691,
     "std": 0.08884673388266237,

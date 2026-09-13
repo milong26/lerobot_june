@@ -4,7 +4,7 @@
   "dataset_name": "pick_place-v3_corner",
   "num_episodes": 112,
   "seed": 42,
-  "gpu_id": 1,
+  "gpu_id": 4,
   "success_rates": [],
   "grasp_success_rates": [],
   "final_success_rate": null,

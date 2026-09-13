@@ -55,9 +55,9 @@ if [ -z "$NUM_EPISODES" ]; then
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/fps_ep${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/visual_fps_experiments/fps_ep${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
 LOG_DIR="$OUTPUT_BASE_DIR/logs"
-EXP_NAME="fps_${NUM_EPISODES}_seed${SEED}"
+EXP_NAME="fps_${NUM_EPISODES}_seed${SEED}_${DATASET_NAME}"
 TMUX_SESSION="fps_ep${NUM_EPISODES}_s${SEED}_${DATASET_NAME}"
 
 # Auto-construct dataset root path from dataset name
@@ -115,8 +115,8 @@ while [[ \$# -gt 0 ]]; do
     esac
 done
 
-EXP_NAME="fps_\${NUM_EPISODES}_seed\${SEED_VAL}"
-OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/fps_ep\${NUM_EPISODES}_seed\${SEED_VAL}_\${DATASET_NAME}"
+EXP_NAME="fps_\${NUM_EPISODES}_seed\${SEED_VAL}_\${DATASET_NAME}"
+OUTPUT_BASE_DIR="/data/zhonglinye/jun/lerobot/personal/work2/duibi/visual_fps_experiments/fps_ep\${NUM_EPISODES}_seed\${SEED_VAL}_\${DATASET_NAME}"
 LOG_DIR="\$OUTPUT_BASE_DIR/logs"
 TIME_FILE="\$LOG_DIR/\$EXP_NAME.time"
 PID_FILE="\$LOG_DIR/\$EXP_NAME.pid"
@@ -301,12 +301,12 @@ lerobot-train \\
     --policy.train_state_proj=false \\
     --policy.optimizer_lr=1e-4 \\
     --save_freq=2000 \\
-    --steps=12000 \\
+    --steps=10000 \\
     --batch_size=64 \\
     --num_workers=16 \\
     --eval.n_episodes=200 \\
     --eval.batch_size=16 \\
-    --env_eval_freq=12000 \\
+    --env_eval_freq=10000 \\
     --seed=\$SEED_VAL \\
     --job_name=smolvla_\$EXP_NAME \\
     --output_dir="\$OUTPUT_BASE_DIR/\$EXP_NAME" \\
@@ -314,7 +314,7 @@ lerobot-train \\
     --wandb.enable=true 2>&1 | tee -a "\$LOG_DIR/\$EXP_NAME.log"
 
 echo ""
-echo "Training steps: 12000"
+echo "Training steps: 10000"
 
 # Extract eval results from log
 echo ""
@@ -391,7 +391,7 @@ echo "Experiment completed: \$EXP_NAME"
 echo "Finished: \$(date '+%Y-%m-%d %H:%M:%S')"
 echo "========================================"
 
-exec bash
+sleep infinity
 RUNNER_EOF
 
 chmod +x "$RUNNER_SCRIPT"

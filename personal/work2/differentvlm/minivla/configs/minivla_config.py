@@ -22,14 +22,25 @@ WORK2_ROOT = Path(__file__).resolve().parents[3]
 # Dataset configurations: dataset_name -> (dataset_root, env_task, camera)
 DATASET_CONFIGS = {
     "pick_place-v3_corner": {
-        "dataset_root": "personal/work2/dataset_view/pick_place_corner",
+        "dataset_root": "personal/work2/dataset_view/pick_place-v3_corner",
         "env_task": "pick-place-v3",
         "camera": "corner",
-        "camera_names": "corner,gripperPOV",
-        "primary_image_key": "observation.images.corner",
-        "wrist_image_key": "observation.images.gripperPOV",
+        "camera_names": "top,wrist",
+        "primary_image_key": "observation.images.top",
+        "wrist_image_key": "observation.images.wrist",
         "eval_camera": "corner",
         "eval_camera_names": "corner,gripperPOV",
+    },
+    "merged_3tasks": {
+        "dataset_root": "personal/work2/dataset_view/merged_3tasks",
+        "env_task": "disassemble-v3",  # Default env task (will be overridden by eval_tasks)
+        "camera": "corner",
+        "camera_names": "top,wrist",
+        "primary_image_key": "observation.images.top",
+        "wrist_image_key": "observation.images.wrist",
+        "eval_camera": "corner",
+        "eval_camera_names": "corner,gripperPOV",
+        "eval_tasks": ["disassemble-v3", "pick-place-v3", "coffee-button-v3"],  # Evaluate all 3 tasks
     },
     "disassemble-v3_corner": {
         "dataset_root": "personal/work2/dataset_view/disassemble-v3_corner",
@@ -161,6 +172,7 @@ class MiniVLAExperimentConfig:
     eval_n_episodes: int = EVAL_N_EPISODES
     eval_seed: int = EVAL_SEED
     eval_batch_size: int = EVAL_BATCH_SIZE
+    eval_tasks: Optional[list[str]] = None  # List of tasks to evaluate (None = auto-detect from dataset_name)
     env_eval_freq: int = 0  # 0 = disabled, >0 = eval every N steps
     use_self_mw: bool = True  # Use self-collected Meta-World dataset format
     vq_model_path: str = VQ_MODEL_PATH
@@ -256,6 +268,7 @@ def get_minivla_config(
         eval_n_episodes=eval_n_episodes,
         eval_seed=EVAL_SEED,
         eval_batch_size=EVAL_BATCH_SIZE,
+        eval_tasks=ds_config.get("eval_tasks", None),  # Support multi-task evaluation
         env_eval_freq=env_eval_freq,
         use_self_mw=use_self_mw,
         vq_model_path=VQ_MODEL_PATH,

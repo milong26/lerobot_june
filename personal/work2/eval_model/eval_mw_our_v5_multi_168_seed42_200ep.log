@@ -1,0 +1,127 @@
+WARNING 2026-09-13 17:39:11 figs/eval.py:69 No job name provided, using 'metaworld_smolvla' as job name.
+INFO 2026-09-13 17:39:11 ot_eval.py:1146 {'env': {'camera_name': 'corner3,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'pick-place-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 4,
+          'n_episodes': 200,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_smolvla',
+ 'output_dir': PosixPath('outputs/eval/2026-09-13/17-39-11_metaworld_smolvla'),
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (6,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': (0.9, 0.95),
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': PosixPath('personal/work2/duibi/our_v5_multi_168_seed42/our_v5_multi_168_seed42/checkpoints/012000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': (512, 512),
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'rename_map': {'observation.images.top': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-09-13 17:39:11 ot_eval.py:1157 Set CUDA_VISIBLE_DEVICES=0 for policy and environment subprocesses
+INFO 2026-09-13 17:39:11 ot_eval.py:1166 Output dir: outputs/eval/2026-09-13/17-39-11_metaworld_smolvla
+INFO 2026-09-13 17:39:11 ot_eval.py:1168 Making environment (batch_size=4, async=True).
+INFO 2026-09-13 17:39:11 ot_eval.py:1176 Making policy.
+`torch_dtype` is deprecated! Use `dtype` instead!
+[DEBUG] Loaded config from: personal/work2/duibi/our_v5_multi_168_seed42/our_v5_multi_168_seed42/checkpoints/012000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period', 'rtc_config', 'compile_model', 'compile_mode']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: smolvla
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period', 'rtc_config', 'compile_model', 'compile_mode']
+[DEBUG] Removed invalid keys: set()
+Creating Meta-World envs | task_groups=['pick-place-v3'] | n_envs(per task)=4
+Building vec env | group=pick-place-v3 | task_id=0 | task=pick-place-v3
+[DEBUG factory] policy_cls: <class 'lerobot.policies.smolvla.modeling_smolvla.SmolVLAPolicy'>
+[DEBUG factory] policy_cls.__init__ signature: <function SmolVLAPolicy.__init__ at 0x7accfadeb9c0>
+[DEBUG factory] kwargs keys: ['config', 'pretrained_name_or_path', 'revision']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  33%|███▎      | 163/489 [00:00<00:00, 1629.61it/s]Loading weights:  78%|███████▊  | 379/489 [00:00<00:00, 1940.80it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1966.44it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/200 episodes):   0%|          | 0/50 [00:00<?, ?it/s]Evaluating (4/200 episodes, success: 0/4, rate: 0.0%):   0%|          | 0/50 [00:34<?, ?it/s]Evaluating (4/200 episodes, success: 0/4, rate: 0.0%):   2%|▏         | 1/50 [00:34<28:25, 34.80s/it]Evaluating (8/200 episodes, success: 0/8, rate: 0.0%):   2%|▏         | 1/50 [00:57<28:25, 34.80s/it]Evaluating (8/200 episodes, success: 0/8, rate: 0.0%):   4%|▍         | 2/50 [00:57<22:04, 27.59s/it]Evaluating (12/200 episodes, success: 0/12, rate: 0.0%):   4%|▍         | 2/50 [01:19<22:04, 27.59s/it]Evaluating (12/200 episodes, success: 0/12, rate: 0.0%):   6%|▌         | 3/50 [01:19<19:41, 25.14s/it]Evaluating (16/200 episodes, success: 0/16, rate: 0.0%):   6%|▌         | 3/50 [01:42<19:41, 25.14s/it]Evaluating (16/200 episodes, success: 0/16, rate: 0.0%):   8%|▊         | 4/50 [01:42<18:27, 24.07s/it]Evaluating (20/200 episodes, success: 0/20, rate: 0.0%):   8%|▊         | 4/50 [02:04<18:27, 24.07s/it]Evaluating (20/200 episodes, success: 0/20, rate: 0.0%):  10%|█         | 5/50 [02:04<17:36, 23.47s/it]Evaluating (24/200 episodes, success: 0/24, rate: 0.0%):  10%|█         | 5/50 [02:26<17:36, 23.47s/it]Evaluating (24/200 episodes, success: 0/24, rate: 0.0%):  12%|█▏        | 6/50 [02:26<16:56, 23.11s/it]Evaluating (28/200 episodes, success: 0/28, rate: 0.0%):  12%|█▏        | 6/50 [02:49<16:56, 23.11s/it]Evaluating (28/200 episodes, success: 0/28, rate: 0.0%):  14%|█▍        | 7/50 [02:49<16:25, 22.91s/it]Evaluating (32/200 episodes, success: 0/32, rate: 0.0%):  14%|█▍        | 7/50 [03:12<16:25, 22.91s/it]Evaluating (32/200 episodes, success: 0/32, rate: 0.0%):  16%|█▌        | 8/50 [03:12<16:02, 22.91s/it]Evaluating (36/200 episodes, success: 0/36, rate: 0.0%):  16%|█▌        | 8/50 [03:36<16:02, 22.91s/it]Evaluating (36/200 episodes, success: 0/36, rate: 0.0%):  18%|█▊        | 9/50 [03:36<15:51, 23.21s/it]Evaluating (40/200 episodes, success: 0/40, rate: 0.0%):  18%|█▊        | 9/50 [03:58<15:51, 23.21s/it]Evaluating (40/200 episodes, success: 0/40, rate: 0.0%):  20%|██        | 10/50 [03:58<15:19, 23.00s/it]Evaluating (44/200 episodes, success: 0/44, rate: 0.0%):  20%|██        | 10/50 [04:21<15:19, 23.00s/it]Evaluating (44/200 episodes, success: 0/44, rate: 0.0%):  22%|██▏       | 11/50 [04:21<14:53, 22.91s/it]Evaluating (48/200 episodes, success: 0/48, rate: 0.0%):  22%|██▏       | 11/50 [04:44<14:53, 22.91s/it]Evaluating (48/200 episodes, success: 0/48, rate: 0.0%):  24%|██▍       | 12/50 [04:44<14:30, 22.92s/it]Evaluating (52/200 episodes, success: 0/52, rate: 0.0%):  24%|██▍       | 12/50 [05:06<14:30, 22.92s/it]Evaluating (52/200 episodes, success: 0/52, rate: 0.0%):  26%|██▌       | 13/50 [05:06<13:59, 22.70s/it]Evaluating (56/200 episodes, success: 0/56, rate: 0.0%):  26%|██▌       | 13/50 [05:29<13:59, 22.70s/it]Evaluating (56/200 episodes, success: 0/56, rate: 0.0%):  28%|██▊       | 14/50 [05:29<13:39, 22.76s/it]Evaluating (60/200 episodes, success: 0/60, rate: 0.0%):  28%|██▊       | 14/50 [05:52<13:39, 22.76s/it]Evaluating (60/200 episodes, success: 0/60, rate: 0.0%):  30%|███       | 15/50 [05:52<13:16, 22.75s/it]Evaluating (64/200 episodes, success: 0/64, rate: 0.0%):  30%|███       | 15/50 [06:14<13:16, 22.75s/it]Evaluating (64/200 episodes, success: 0/64, rate: 0.0%):  32%|███▏      | 16/50 [06:14<12:54, 22.78s/it]Evaluating (68/200 episodes, success: 0/68, rate: 0.0%):  32%|███▏      | 16/50 [06:37<12:54, 22.78s/it]Evaluating (68/200 episodes, success: 0/68, rate: 0.0%):  34%|███▍      | 17/50 [06:37<12:28, 22.69s/it]Evaluating (72/200 episodes, success: 0/72, rate: 0.0%):  34%|███▍      | 17/50 [06:59<12:28, 22.69s/it]Evaluating (72/200 episodes, success: 0/72, rate: 0.0%):  36%|███▌      | 18/50 [06:59<12:01, 22.54s/it]Evaluating (76/200 episodes, success: 0/76, rate: 0.0%):  36%|███▌      | 18/50 [07:22<12:01, 22.54s/it]Evaluating (76/200 episodes, success: 0/76, rate: 0.0%):  38%|███▊      | 19/50 [07:22<11:39, 22.57s/it]Evaluating (80/200 episodes, success: 0/80, rate: 0.0%):  38%|███▊      | 19/50 [07:44<11:39, 22.57s/it]Evaluating (80/200 episodes, success: 0/80, rate: 0.0%):  40%|████      | 20/50 [07:44<11:15, 22.52s/it]Evaluating (84/200 episodes, success: 0/84, rate: 0.0%):  40%|████      | 20/50 [08:07<11:15, 22.52s/it]Evaluating (84/200 episodes, success: 0/84, rate: 0.0%):  42%|████▏     | 21/50 [08:07<10:56, 22.65s/it]Evaluating (88/200 episodes, success: 0/88, rate: 0.0%):  42%|████▏     | 21/50 [08:31<10:56, 22.65s/it]Evaluating (88/200 episodes, success: 0/88, rate: 0.0%):  44%|████▍     | 22/50 [08:31<10:44, 23.01s/it]Evaluating (92/200 episodes, success: 0/92, rate: 0.0%):  44%|████▍     | 22/50 [08:54<10:44, 23.01s/it]Evaluating (92/200 episodes, success: 0/92, rate: 0.0%):  46%|████▌     | 23/50 [08:54<10:18, 22.90s/it]Evaluating (96/200 episodes, success: 0/96, rate: 0.0%):  46%|████▌     | 23/50 [09:16<10:18, 22.90s/it]Evaluating (96/200 episodes, success: 0/96, rate: 0.0%):  48%|████▊     | 24/50 [09:16<09:54, 22.87s/it]Evaluating (100/200 episodes, success: 0/100, rate: 0.0%):  48%|████▊     | 24/50 [09:39<09:54, 22.87s/it]Evaluating (100/200 episodes, success: 0/100, rate: 0.0%):  50%|█████     | 25/50 [09:39<09:33, 22.92s/it]Evaluating (104/200 episodes, success: 0/104, rate: 0.0%):  50%|█████     | 25/50 [10:03<09:33, 22.92s/it]Evaluating (104/200 episodes, success: 0/104, rate: 0.0%):  52%|█████▏    | 26/50 [10:03<09:13, 23.05s/it]Evaluating (108/200 episodes, success: 0/108, rate: 0.0%):  52%|█████▏    | 26/50 [10:26<09:13, 23.05s/it]Evaluating (108/200 episodes, success: 0/108, rate: 0.0%):  54%|█████▍    | 27/50 [10:26<08:48, 22.96s/it]Evaluating (112/200 episodes, success: 0/112, rate: 0.0%):  54%|█████▍    | 27/50 [10:49<08:48, 22.96s/it]Evaluating (112/200 episodes, success: 0/112, rate: 0.0%):  56%|█████▌    | 28/50 [10:49<08:29, 23.17s/it]Evaluating (116/200 episodes, success: 0/116, rate: 0.0%):  56%|█████▌    | 28/50 [11:12<08:29, 23.17s/it]Evaluating (116/200 episodes, success: 0/116, rate: 0.0%):  58%|█████▊    | 29/50 [11:12<08:04, 23.08s/it]Evaluating (120/200 episodes, success: 0/120, rate: 0.0%):  58%|█████▊    | 29/50 [11:36<08:04, 23.08s/it]Evaluating (120/200 episodes, success: 0/120, rate: 0.0%):  60%|██████    | 30/50 [11:36<07:44, 23.23s/it]Evaluating (124/200 episodes, success: 0/124, rate: 0.0%):  60%|██████    | 30/50 [11:58<07:44, 23.23s/it]Evaluating (124/200 episodes, success: 0/124, rate: 0.0%):  62%|██████▏   | 31/50 [11:58<07:18, 23.09s/it]
