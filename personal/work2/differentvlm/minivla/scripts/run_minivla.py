@@ -389,8 +389,8 @@ def run_experiment(
     policy_type: str = "minivla_wrist",
     action_tokenizer_type: str = "extra_action_tokenizer",
     official_vla_checkpoint: str = "",
-    official_init_mode: str = "none",
-    official_pretrained_checkpoint: str = "",
+    official_init_mode: str = "backbone_only",
+    official_pretrained_checkpoint: str = "Stanford-ILIAD/minivla-libero90-prismatic",
     resume: bool = False,
     restart: bool = False,
     scheduler_warmup_steps: int = 0,
@@ -611,10 +611,10 @@ def main():
                        help="Action tokenizer type (extra_action_tokenizer, libero_vq_action_tokenizer, etc.)")
     parser.add_argument("--official-vla-checkpoint", type=str, default="",
                        help="Path to official VLA checkpoint for full policy initialization (legacy)")
-    parser.add_argument("--official-init-mode", type=str, default="none",
-                       help="Official init mode: 'none' (default) or 'backbone_only' (new pretrained mode)")
-    parser.add_argument("--official-pretrained-checkpoint", type=str, default="",
-                       help="Path to official MiniVLA .pt checkpoint for backbone-only initialization (new mode)")
+    parser.add_argument("--official-init-mode", type=str, default="backbone_only",
+                       help="Official init mode: 'none' or 'backbone_only' (default: backbone_only for official pretrained)")
+    parser.add_argument("--official-pretrained-checkpoint", type=str, default="Stanford-ILIAD/minivla-libero90-prismatic",
+                       help="Path to official MiniVLA .pt checkpoint for backbone-only initialization (default: Stanford-ILIAD/minivla-libero90-prismatic)")
     parser.add_argument("--resume", action="store_true", help="Resume from existing checkpoint")
     parser.add_argument("--restart", action="store_true", help="Delete old experiment and start fresh")
     parser.add_argument("--scheduler-warmup-steps", type=int, default=0, help="Scheduler warmup steps")
