@@ -47,18 +47,48 @@ lerobot-eval \
 # 第二次修改代码
 
 
-python personal/work2/differentvlm/minivla/scripts/merge_datasets.py \
-    --datasets disassemble-v3_corner pick_place-v3_corner coffee-button-v3_corner \
+cd /data/zhonglinye/jun/lerobot && python personal/work2/duibi/train_and_eval_scripts/merge_selected_episodes.py \
+    --dataset-root personal/work2/dataset_view \
+    --dataset-names disassemble-v3_corner pick_place-v3_corner coffee-button-v3_corner \
     --episodes-per-dataset 112 \
-    --output-dir personal/work2/dataset_view/merged_3tasks \
     --selection-mode random \
     --seed 42
 
 首先合并数据集
 然后启动训练
 bash personal/work2/differentvlm/minivla/scripts/launch_random.sh \
-    --gpu-id 0 \
+    --gpu-id 4 \
     --num-episodes 336 \
-    --dataset-name merged_3tasks \
+    --dataset-name merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42 \
     --seed 42
+bash personal/work2/differentvlm/minivla/scripts/launch_random.sh \ 
+    --gpu-id 4 \
+    --num-episodes 336 \
+    --dataset-name merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42 \
+    --seed 42
+bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
+bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
+tmux: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by tmux)
+Launched MiniVLA experiment: random_336_seed42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42_minivla_random
+tmux session: minivla_random_ep336_s42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42
+Output dir: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_336_seed42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42_minivla_random
+Dataset: merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42
+Dataset root: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42
+GPU: 4
+Episodes: 336
+Selection mode: random
 
+Monitor with: tmux attach -t minivla_random_ep336_s42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42
+Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_336_seed42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42_minivla_random/logs/random_336_seed42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42_minivla_random.log
+
+
+our方法的话
+
+python personal/work2/duibi/train_and_eval_scripts/merge_selected_episodes.py \
+    --dataset-root personal/work2/dataset_view \
+    --dataset-names disassemble-v3_corner pick_place-v3_corner coffee-button-v3_corner \
+    --episodes-per-dataset 112 \
+    --selection-mode ours_v5 \
+    --seed 42 \
+    --v5-output-dir personal/work2/duibi/our_v5_multi_336_seed42/subsets \
+    --output-dir personal/work2/dataset_view/merged_3tasks_v5_336_seed42

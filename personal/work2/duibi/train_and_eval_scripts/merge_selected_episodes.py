@@ -1,35 +1,309 @@
 #!/usr/bin/env python3
 """
 Merge selected episodes from multiple LeRobot datasets into a single dataset.
-This creates a new dataset directory containing only the selected episodes.
-Uses symlinks for videos to save disk space and time.
+使用官方的 split_dataset 和 merge_datasets 函数，确保数据结构正确。
 """
 
 import argparse
 import json
-import os
+import random
 import shutil
 from pathlib import Path
-import pandas as pd
-import numpy as np
-from tqdm import tqdm
+
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+from lerobot.datasets.dataset_tools import (
+    split_dataset,
+    merge_datasets,
+    recompute_stats,
+)
 
 
-def merge_datasets_for_training(
-    subset_file: str,
-    output_dir: str,
-    dataset_base_dir: str = "/data/zhonglinye/jun/lerobot/personal/work2/dataset_view",
+def _process_episode_initial_states(
+    dataset_root,
+    dataset_names,
+    selected_episode_lists,
+    output_dir,
+):
+    """处理 episode_initial_states.json（自定义文件）"""
+    print(f"\n{'=' * 60}")
+    print(f"处理 episode_initial_states.json")
+    print(f"{'=' * 60}")
+    
+    # 需要合并各子数据集的 episode_initial_states.json
+    # 按照合并后的 episode offset 重新组织
+    merged_episodes = []
+    
+    for dataset_name, selected_episodes in zip(
+        dataset_names,
+        selected_episode_lists,
+        strict=True,
+    ):
+        src_root = Path(dataset_root) / dataset_name
+        states_file = src_root / "episode_initial_states.json"
+        
+        if states_file.exists():
+            with open(states_file, "r") as f:
+                states = json.load(f)
+            
+            # 检查 JSON 格式
+            if "episodes" in states:
+                episodes_list = states["episodes"]
+            elif "initial_states" in states:
+                episodes_list = states["initial_states"]
+            elif isinstance(states, list):
+                episodes_list = states
+            else:
+                print(f"  ⚠️ {dataset_name}: episode_initial_states.json 格式未知，跳过")
+                continue
+            
+            # 只复制选中 episode 的 initial states
+            for old_ep_idx in selected_episodes:
+                if old_ep_idx < len(episodes_list):
+                    merged_episodes.append(episodes_list[old_ep_idx])
+    
+    if merged_episodes:
+        # 保存为 episodes 格式
+        merged_states = {
+            "task": "multi_task",
+            "num_episodes": len(merged_episodes),
+            "episodes": merged_episodes,
+        }
+        with open(output_dir / "episode_initial_states.json", "w") as f:
+            json.dump(merged_states, f, indent=2)
+        print(f"  ✓ 已保存 episode_initial_states.json ({len(merged_episodes)} episodes)")
+    else:
+        print(f"  ⚠️ 没有找到 episode_initial_states.json 或格式不匹配")
+    
+    # 生成 subset_file.json（兼容 train_minivla.py）
+    print(f"\n{'=' * 60}")
+    print(f"生成 subset_file.json")
+    print(f"{'=' * 60}")
+    
+    # 加载数据集获取总 episode 数
+    merged_dataset = LeRobotDataset(
+        repo_id=output_dir.name,
+        root=output_dir,
+    )
+    
+    subset_file_data = {
+        "selected_episode_indices": list(range(merged_dataset.meta.total_episodes)),
+        "total_episodes": merged_dataset.meta.total_episodes,
+        "source_datasets": dataset_names,
+    }
+    
+    with open(output_dir / "subset_file.json", "w") as f:
+        json.dump(subset_file_data, f, indent=2)
+    print(f"  ✓ 已保存 subset_file.json")
+    
+    print(f"\n{'=' * 60}")
+    print(f"处理完成！")
+    print(f"{'=' * 60}")
+
+
+def select_episodes(
+    dataset_root,
+    dataset_names,
+    selected_episode_lists,
+    output_dir,
 ):
     """
-    Merge selected episodes from multiple datasets into a single training dataset.
+    使用官方 split_dataset 和 merge_datasets 合并选中的 episode。
     
     Args:
-        subset_file: Path to the merged subset JSON file
-        output_dir: Path to output merged dataset
-        dataset_base_dir: Base directory containing source datasets
+        dataset_root: 源数据集根目录
+        dataset_names: 数据集名称列表
+        selected_episode_lists: 每个数据集选中的 episode 索引列表
+        output_dir: 输出目录
     """
+    dataset_root = Path(dataset_root)
+    output_dir = Path(output_dir)
     
-    # Load subset data
+    # 检查数据集是否已经存在
+    if output_dir.exists():
+        print(f"数据集已存在: {output_dir}")
+        print(f"跳过合并，直接处理 episode_initial_states.json")
+        
+        # 直接跳到第五步：处理 episode_initial_states.json
+        return _process_episode_initial_states(
+            dataset_root, dataset_names, selected_episode_lists, output_dir
+        )
+    
+    # 临时目录存放子数据集
+    temp_root = output_dir.parent / f"{output_dir.name}_subsets"
+    if temp_root.exists():
+        shutil.rmtree(temp_root)
+    temp_root.mkdir(parents=True, exist_ok=True)
+    
+    subset_datasets = []
+    
+    # 第一步：对每个数据集使用 split_dataset 创建子数据集
+    for dataset_name, selected_episodes in zip(
+        dataset_names,
+        selected_episode_lists,
+        strict=True,
+    ):
+        src_root = dataset_root / dataset_name
+        
+        print(f"\n{'=' * 60}")
+        print(f"处理数据集: {dataset_name}")
+        print(f"选中 episode 数: {len(selected_episodes)}")
+        print(f"{'=' * 60}")
+        
+        # 加载源数据集
+        src_dataset = LeRobotDataset(
+            repo_id=f"local/{dataset_name}",
+            root=src_root,
+        )
+        
+        print(f"  源数据集总帧数: {src_dataset.meta.total_frames}")
+        print(f"  源数据集总 episode 数: {src_dataset.meta.total_episodes}")
+        
+        # 使用 split_dataset 创建子数据集
+        split_output = temp_root / dataset_name
+        
+        result = split_dataset(
+            dataset=src_dataset,
+            splits={
+                "selected": selected_episodes,
+            },
+            output_dir=split_output,
+        )
+        
+        subset_dataset = result["selected"]
+        subset_datasets.append(subset_dataset)
+        
+        print(f"  子数据集总帧数: {subset_dataset.meta.total_frames}")
+        print(f"  子数据集总 episode 数: {subset_dataset.meta.total_episodes}")
+        
+        # 验证子数据集
+        indices = subset_dataset.hf_dataset["index"]
+        assert indices == list(range(len(indices))), f"{dataset_name}: index 不连续"
+        print(f"  ✓ index 连续且正确")
+    
+    # 第二步：使用 merge_datasets 合并子数据集
+    print(f"\n{'=' * 60}")
+    print(f"合并 {len(subset_datasets)} 个子数据集")
+    print(f"{'=' * 60}")
+    
+    merged_dataset = merge_datasets(
+        datasets=subset_datasets,
+        output_repo_id=output_dir.name,
+        output_dir=output_dir,
+        concatenate_videos=False,  # 先保证正确，再考虑优化
+        concatenate_data=False,
+    )
+    
+    print(f"  合并后总帧数: {merged_dataset.meta.total_frames}")
+    print(f"  合并后总 episode 数: {merged_dataset.meta.total_episodes}")
+    
+    # 第三步：重新计算 stats
+    print(f"\n{'=' * 60}")
+    print(f"重新计算 stats")
+    print(f"{'=' * 60}")
+    
+    recompute_stats(
+        merged_dataset,
+        skip_image_video=True,
+    )
+    
+    print(f"  ✓ stats 已重新计算")
+    
+    # 第四步：验证合并后的数据集
+    print(f"\n{'=' * 60}")
+    print(f"验证合并后的数据集")
+    print(f"{'=' * 60}")
+    
+    # 验证 index 连续性
+    assert len(merged_dataset) == merged_dataset.meta.total_frames, "总帧数不匹配"
+    print(f"  ✓ 总帧数匹配: {len(merged_dataset)}")
+    
+    indices = merged_dataset.hf_dataset["index"]
+    assert indices == list(range(len(indices))), "index 不连续"
+    print(f"  ✓ index 连续: 0 到 {len(indices) - 1}")
+    
+    # 验证 episode_index 连续性
+    episode_indices = merged_dataset.hf_dataset["episode_index"]
+    # 转换为整数列表
+    unique_ep_indices = sorted(set(int(x) if hasattr(x, 'item') else x for x in episode_indices))
+    expected_ep_indices = list(range(merged_dataset.meta.total_episodes))
+    
+    if unique_ep_indices != expected_ep_indices:
+        print(f"  ⚠️ episode_index 不连续！")
+        print(f"  期望: {expected_ep_indices[:10]}... (共 {len(expected_ep_indices)} 个)")
+        print(f"  实际: {unique_ep_indices[:10]}... (共 {len(unique_ep_indices)} 个)")
+        print(f"  差异: {set(unique_ep_indices) - set(expected_ep_indices)}")
+    
+    assert unique_ep_indices == expected_ep_indices, "episode_index 不连续"
+    print(f"  ✓ episode_index 连续: 0 到 {merged_dataset.meta.total_episodes - 1}")
+    
+    # 验证每个 episode 的 dataset_from_index 和 dataset_to_index
+    for i in range(merged_dataset.meta.total_episodes):
+        ep = merged_dataset.meta.episodes[i]
+        ep_length = ep["length"]
+        from_idx = ep["dataset_from_index"]
+        to_idx = ep["dataset_to_index"]
+        
+        assert to_idx - from_idx == ep_length, f"Episode {i}: to_idx - from_idx != length"
+    
+    print(f"  ✓ 所有 episode 的 dataset_from_index/to_index 正确")
+    
+    # 验证 action 无 NaN/Inf
+    import numpy as np
+    for i in range(len(merged_dataset)):
+        item = merged_dataset[i]
+        if 'action' in item:
+            action = item['action'].numpy()
+            assert not np.isnan(action).any(), f"Frame {i}: action 包含 NaN"
+            assert not np.isinf(action).any(), f"Frame {i}: action 包含 Inf"
+    
+    print(f"  ✓ action 无 NaN/Inf")
+    
+    # 验证 stats
+    for feature_name, feature_stats in merged_dataset.meta.stats.items():
+        if 'mean' in feature_stats:
+            mean = np.array(feature_stats['mean'])
+            std = np.array(feature_stats['std'])
+            assert np.isfinite(mean).all(), f"{feature_name}: mean 包含非有限值"
+            assert np.isfinite(std).all(), f"{feature_name}: std 包含非有限值"
+    
+    print(f"  ✓ stats 所有 mean/std 有限")
+    
+    # 第五步：处理 episode_initial_states.json 和生成 subset_file.json
+    _process_episode_initial_states(
+        dataset_root, dataset_names, selected_episode_lists, output_dir
+    )
+    
+    # 清理临时目录
+    print(f"\n{'=' * 60}")
+    print(f"清理临时目录")
+    print(f"{'=' * 60}")
+    
+    if temp_root.exists():
+        shutil.rmtree(temp_root)
+        print(f"  ✓ 已清理 {temp_root}")
+    
+    print(f"\n{'=' * 60}")
+    print(f"合并完成！")
+    print(f"{'=' * 60}")
+    print(f"输出目录: {output_dir}")
+    print(f"总 episode 数: {merged_dataset.meta.total_episodes}")
+    print(f"总帧数: {merged_dataset.meta.total_frames}")
+
+
+def merge_from_subset_file(
+    subset_file,
+    output_dir,
+    dataset_base_dir,
+):
+    """
+    从 subset file 合并数据集（兼容旧的接口）。
+    
+    Args:
+        subset_file: merged subset JSON file 路径
+        output_dir: 输出目录
+        dataset_base_dir: 源数据集根目录
+    """
+    # 加载 subset file
     with open(subset_file, "r") as f:
         subset_data = json.load(f)
     
@@ -37,278 +311,118 @@ def merge_datasets_for_training(
     episodes_per_dataset = subset_data["episodes_per_dataset"]
     all_indices = subset_data["selected_episode_indices"]
     
-    output_path = Path(output_dir)
-    if output_path.exists():
-        print(f"Removing existing output directory: {output_path}")
-        shutil.rmtree(output_path)
+    # 将 all_indices 按数据集拆分
+    selected_episode_lists = []
+    for i, ds in enumerate(datasets):
+        start_idx = i * episodes_per_dataset
+        end_idx = (i + 1) * episodes_per_dataset
+        ep_list = all_indices[start_idx:end_idx]
+        selected_episode_lists.append(ep_list)
+        print(f"数据集 {ds}: 选中 {len(ep_list)} episodes")
     
-    output_path.mkdir(parents=True, exist_ok=True)
-    
-    print(f"Merging {len(datasets)} datasets")
-    print(f"Episodes per dataset: {episodes_per_dataset}")
-    print(f"Total episodes: {len(all_indices)}")
-    
-    # Collect all episode data
-    all_episode_data = []  # List of (dataset_name, episode_idx, dataframe)
-    # Store episodes_meta for each dataset to correctly retrieve tasks
-    dataset_episodes_meta = {}
-    
-    # Load episodes from each dataset
-    for i, dataset_name in enumerate(datasets):
-        dataset_dir = Path(dataset_base_dir) / dataset_name
-        episode_indices = all_indices[i * episodes_per_dataset : (i + 1) * episodes_per_dataset]
-        
-        print(f"\nLoading {len(episode_indices)} episodes from {dataset_name}...")
-        
-        # Load episodes metadata
-        episodes_meta_file = dataset_dir / "meta" / "episodes" / "chunk-000" / "file-000.parquet"
-        if not episodes_meta_file.exists():
-            print(f"  ERROR: Episodes metadata file not found: {episodes_meta_file}")
-            continue
-        episodes_meta = pd.read_parquet(episodes_meta_file)
-        dataset_episodes_meta[dataset_name] = episodes_meta
-        
-        # Load data
-        data_file = dataset_dir / "data" / "chunk-000" / "file-000.parquet"
-        if not data_file.exists():
-            print(f"  ERROR: Data file not found: {data_file}")
-            continue
-        data_df = pd.read_parquet(data_file)
-        
-        for ep_idx in tqdm(episode_indices, desc=f"  {dataset_name}"):
-            # Extract episode data by filtering on episode_index
-            ep_data = data_df[data_df["episode_index"] == ep_idx].copy()
-            
-            if len(ep_data) == 0:
-                print(f"  WARNING: Episode {ep_idx} not found in {dataset_name}")
-                continue
-            
-            all_episode_data.append((dataset_name, ep_idx, ep_data))
-    
-    print(f"\nTotal episodes loaded: {len(all_episode_data)}")
-    if not all_episode_data:
-        print("ERROR: No episodes loaded!")
-        return
-    
-    total_frames = sum(len(ep_data) for _, _, ep_data in all_episode_data)
-    print(f"Total frames: {total_frames}")
-    
-    # Create merged dataset
-    print("\nCreating merged dataset...")
-    
-    # Create directory structure
-    (output_path / "data" / "chunk-000").mkdir(parents=True, exist_ok=True)
-    (output_path / "meta" / "episodes" / "chunk-000").mkdir(parents=True, exist_ok=True)
-    (output_path / "videos").mkdir(parents=True, exist_ok=True)
-    
-    # Merge all data with updated indices
-    merged_frames = []
-    episode_meta_rows = []
-    current_frame_idx = 0
-    current_video_idx = 0
-    
-    # Build global task mapping (needed for updating task_index in data)
-    global_task_name_to_index = {}
-    global_task_index = 0
-    for dataset_name in datasets:
-        dataset_dir = Path(dataset_base_dir) / dataset_name
-        tasks_file = dataset_dir / "meta" / "tasks.parquet"
-        if tasks_file.exists():
-            tasks_df = pd.read_parquet(tasks_file)
-            for task_name in tasks_df.index:
-                if task_name not in global_task_name_to_index:
-                    global_task_name_to_index[task_name] = global_task_index
-                    global_task_index += 1
-    
-    print("\nMerging episode data...")
-    for global_ep_idx, (dataset_name, orig_ep_idx, ep_data) in enumerate(
-        tqdm(all_episode_data, desc="Merging episodes")
-    ):
-        num_frames = len(ep_data)
-        
-        # Update indices
-        ep_data["frame_index"] = list(range(current_frame_idx, current_frame_idx + num_frames))
-        ep_data["index"] = list(range(current_frame_idx, current_frame_idx + num_frames))  # 修复：重新计算 index 列
-        ep_data["episode_index"] = global_ep_idx
-        
-        # Update task_index to global mapping
-        # Get task string from the correct dataset's episodes_meta
-        task_str = ""
-        episodes_meta = dataset_episodes_meta.get(dataset_name)
-        if episodes_meta is not None and "tasks" in episodes_meta.columns:
-            task_row = episodes_meta[episodes_meta["episode_index"] == orig_ep_idx]
-            if len(task_row) > 0:
-                task_val = task_row["tasks"].iloc[0]
-                # Handle numpy array, list, or string
-                if hasattr(task_val, '__len__') and len(task_val) > 0:
-                    # numpy array or list
-                    task_str = str(task_val[0])
-                elif isinstance(task_val, str):
-                    task_str = task_val
-        
-        # Map task_str to global task_index and update all frames in this episode
-        if task_str and task_str in global_task_name_to_index:
-            global_task_idx = global_task_name_to_index[task_str]
-            if "task_index" in ep_data.columns:
-                ep_data["task_index"] = global_task_idx
-        
-        merged_frames.append(ep_data)
-        
-        episode_meta_rows.append({
-            "episode_index": global_ep_idx,
-            "tasks": [task_str] if task_str else [],
-            "length": num_frames,
-            "data/chunk_index": 0,
-            "data/file_index": 0,
-            "dataset_from_index": current_frame_idx,
-            "dataset_to_index": current_frame_idx + num_frames,
-            "videos/observation.images.top/chunk_index": 0,
-            "videos/observation.images.top/file_index": 0,
-            "videos/observation.images.top/from_timestamp": 0.0,
-            "videos/observation.images.top/to_timestamp": float(num_frames - 1) / 80.0,
-            "videos/observation.images.wrist/chunk_index": 0,
-            "videos/observation.images.wrist/file_index": 0,
-            "videos/observation.images.wrist/from_timestamp": 0.0,
-            "videos/observation.images.wrist/to_timestamp": float(num_frames - 1) / 80.0,
-            "meta/episodes/chunk_index": 0,
-            "meta/episodes/file_index": 0,
-        })
-        
-        current_frame_idx += num_frames
-        current_video_idx += 1
-    
-    # Save merged data
-    print("\nSaving merged data...")
-    if merged_frames:
-        merged_df = pd.concat(merged_frames, ignore_index=True)
-        merged_df.to_parquet(
-            output_path / "data" / "chunk-000" / "file-000.parquet",
-            index=False
-        )
-        print(f"  Saved {len(merged_df)} frames")
-    
-    # Save episode metadata
-    if episode_meta_rows:
-        episodes_df = pd.DataFrame(episode_meta_rows)
-        episodes_df.to_parquet(
-            output_path / "meta" / "episodes" / "chunk-000" / "file-000.parquet",
-            index=False
-        )
-        print(f"  Saved {len(episodes_df)} episode metadata")
-    
-    # Create symlinks for videos
-    print("\nCreating video symlinks...")
-    video_idx = 0
-    processed_cameras = set()
-    
-    for dataset_name, orig_ep_idx, ep_data in tqdm(all_episode_data, desc="Linking videos"):
-        dataset_dir = Path(dataset_base_dir) / dataset_name
-        
-        # Find video files for this episode
-        videos_dir = dataset_dir / "videos"
-        if videos_dir.exists():
-            for camera_dir in sorted(videos_dir.glob("observation.images.*")):
-                camera_name = camera_dir.name
-                dst_camera_dir = output_path / "videos" / camera_name / "chunk-000"
-                dst_camera_dir.mkdir(parents=True, exist_ok=True)
-                
-                # Create symlink to video file (only once per camera)
-                if camera_name not in processed_cameras:
-                    src_video = camera_dir / "chunk-000" / "file-000.mp4"
-                    if src_video.exists():
-                        dst_video = dst_camera_dir / "file-000.mp4"
-                        # Remove existing file/symlink if exists
-                        if dst_video.exists() or dst_video.is_symlink():
-                            dst_video.unlink()
-                        # Create absolute symlink
-                        os.symlink(src_video.resolve(), dst_video)
-                        print(f"  Linked video: {camera_name}")
-                        processed_cameras.add(camera_name)
-        
-        video_idx += 1
-    
-    # Copy/merge metadata files
-    print("\nCopying metadata...")
-    
-    # Merge tasks.parquet from all datasets
-    all_tasks = []
-    task_index = 0
-    task_name_to_index = {}
-    
-    for dataset_name in datasets:
-        dataset_dir = Path(dataset_base_dir) / dataset_name
-        tasks_file = dataset_dir / "meta" / "tasks.parquet"
-        if tasks_file.exists():
-            tasks_df = pd.read_parquet(tasks_file)
-            for _, row in tasks_df.iterrows():
-                task_name = row.name if hasattr(row, 'name') else row.iloc[0]
-                if task_name not in task_name_to_index:
-                    task_name_to_index[task_name] = task_index
-                    all_tasks.append({"task": task_name, "task_index": task_index})
-                    task_index += 1
-    
-    if all_tasks:
-        merged_tasks_df = pd.DataFrame(all_tasks)
-        merged_tasks_df = merged_tasks_df.set_index("task")
-        merged_tasks_df.to_parquet(output_path / "meta" / "tasks.parquet")
-        print(f"  Merged {len(all_tasks)} tasks: {list(task_name_to_index.keys())}")
-    
-    # Copy info.json and update it
-    first_dataset = Path(dataset_base_dir) / datasets[0]
-    info_file = first_dataset / "meta" / "info.json"
-    if info_file.exists():
-        with open(info_file, "r") as f:
-            info = json.load(f)
-        info["total_episodes"] = len(all_episode_data)
-        info["total_frames"] = current_frame_idx
-        info["total_videos"] = video_idx
-        with open(output_path / "meta" / "info.json", "w") as f:
-            json.dump(info, f, indent=2)
-        print(f"  Created info.json")
-    
-    # Copy stats.json from first dataset
-    stats_file = first_dataset / "meta" / "stats.json"
-    if stats_file.exists():
-        shutil.copy2(stats_file, output_path / "meta" / "stats.json")
-        print(f"  Copied stats.json")
-    
-    # Copy episode_initial_states.json if exists
-    src_states = first_dataset / "episode_initial_states.json"
-    if src_states.exists():
-        # Merge initial states from all datasets
-        merged_states = {"initial_states": []}
-        for dataset_name, orig_ep_idx, ep_data in all_episode_data:
-            dataset_dir = Path(dataset_base_dir) / dataset_name
-            states_file = dataset_dir / "episode_initial_states.json"
-            if states_file.exists():
-                with open(states_file, "r") as f:
-                    states = json.load(f)
-                if "initial_states" in states and orig_ep_idx < len(states["initial_states"]):
-                    merged_states["initial_states"].append(states["initial_states"][orig_ep_idx])
-        
-        with open(output_path / "episode_initial_states.json", "w") as f:
-            json.dump(merged_states, f, indent=2)
-        print("  Copied episode_initial_states.json")
-    
-    print(f"\n✓ Merged dataset saved to: {output_path}")
-    print(f"  Episodes: {len(all_episode_data)}")
-    print(f"  Frames: {current_frame_idx}")
-    print(f"  Videos: {video_idx}")
+    # 调用 select_episodes
+    select_episodes(
+        dataset_root=dataset_base_dir,
+        dataset_names=datasets,
+        selected_episode_lists=selected_episode_lists,
+        output_dir=output_dir,
+    )
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Merge selected episodes from multiple datasets")
-    parser.add_argument("--subset-file", type=str, required=True,
-                        help="Path to merged subset JSON file")
-    parser.add_argument("--output-dir", type=str, required=True,
-                        help="Path to output merged dataset directory")
+    
+    # 新接口参数
+    parser.add_argument("--dataset-root", type=str,
+                        help="源数据集根目录")
+    parser.add_argument("--dataset-names", type=str, nargs="+",
+                        help="数据集名称列表")
+    parser.add_argument("--episodes-per-dataset", type=int,
+                        help="每个数据集选中的 episode 数")
+    parser.add_argument("--selection-mode", type=str, default="random",
+                        choices=["random", "first", "ours_v5"],
+                        help="选择模式：random, first, 或 ours_v5")
+    parser.add_argument("--seed", type=int, default=42,
+                        help="随机种子（用于 random 模式）")
+    parser.add_argument("--v5-output-dir", type=str,
+                        help="ours_v5 模式的输出目录（包含 subset JSON 文件）")
+    parser.add_argument("--output-dir", type=str,
+                        help="输出合并数据集目录")
+    
+    # 旧接口参数（兼容）
+    parser.add_argument("--subset-file", type=str,
+                        help="Path to merged subset JSON file（旧接口）")
     parser.add_argument("--dataset-base-dir", type=str,
                         default="/data/zhonglinye/jun/lerobot/personal/work2/dataset_view",
-                        help="Base directory containing source datasets")
+                        help="Base directory containing source datasets（旧接口）")
+    
     args = parser.parse_args()
     
-    merge_datasets_for_training(
-        subset_file=args.subset_file,
-        output_dir=args.output_dir,
-        dataset_base_dir=args.dataset_base_dir,
-    )
+    # 判断使用新接口还是旧接口
+    if args.subset_file:
+        # 旧接口：从 subset file 读取
+        print("使用旧接口：从 subset file 读取")
+        merge_from_subset_file(
+            subset_file=args.subset_file,
+            output_dir=args.output_dir,
+            dataset_base_dir=args.dataset_base_dir,
+        )
+    else:
+        # 新接口：直接使用参数
+        print("使用新接口：直接使用参数")
+        
+        # 生成选中的 episode 索引列表
+        selected_episode_lists = []
+        for dataset_name in args.dataset_names:
+            # 加载源数据集获取总 episode 数
+            src_root = Path(args.dataset_root) / dataset_name
+            src_dataset = LeRobotDataset(
+                repo_id=f"local/{dataset_name}",
+                root=src_root,
+            )
+            total_episodes = src_dataset.meta.total_episodes
+            
+            if args.selection_mode == "random":
+                random.seed(args.seed)
+                # 确保不超过总 episode 数
+                n_select = min(args.episodes_per_dataset, total_episodes)
+                selected_episodes = sorted(random.sample(range(total_episodes), n_select))
+                print(f"数据集 {dataset_name}: 随机选中 {n_select}/{total_episodes} 个 episodes (seed={args.seed})")
+            elif args.selection_mode == "first":
+                n_select = min(args.episodes_per_dataset, total_episodes)
+                selected_episodes = list(range(n_select))
+                print(f"数据集 {dataset_name}: 选中前 {n_select}/{total_episodes} 个 episodes")
+            elif args.selection_mode == "ours_v5":
+                # 从 ours_v5 输出目录读取 subset JSON 文件
+                # 文件路径模式: {v5_output_dir}/our_v5_{episodes}_seed{seed}_{dataset_name}/subsets/our_v5_{episodes}_seed{seed}.json
+                v5_dataset_dir = Path(args.v5_output_dir) / f"our_v5_{args.episodes_per_dataset}_seed{args.seed}_{dataset_name}"
+                v5_subset_file = v5_dataset_dir / "subsets" / f"our_v5_{args.episodes_per_dataset}_seed{args.seed}.json"
+                if not v5_subset_file.exists():
+                    raise FileNotFoundError(
+                        f"V5 subset file not found: {v5_subset_file}\n"
+                        f"请先为数据集 {dataset_name} 运行V5 episode选择脚本生成subset文件"
+                    )
+                with open(v5_subset_file, "r") as f:
+                    v5_data = json.load(f)
+                selected_episodes = sorted(v5_data["selected_episode_indices"])
+                print(f"数据集 {dataset_name}: V5 选中 {len(selected_episodes)} 个 episodes (seed={args.seed})")
+            else:
+                raise ValueError(f"Unknown selection mode: {args.selection_mode}")
+            
+            selected_episode_lists.append(selected_episodes)
+        
+        # 如果 output_dir 没有指定，自动生成包含 episode 数的目录名
+        if args.output_dir is None:
+            episodes_str = "x".join([str(len(ep_list)) for ep_list in selected_episode_lists])
+            datasets_str = "+".join(args.dataset_names)
+            mode_suffix = f"_{args.selection_mode}{args.seed}" if args.selection_mode == "random" else "_first"
+            auto_dir = Path(args.dataset_root) / f"merged_{datasets_str}_{episodes_str}{mode_suffix}"
+            args.output_dir = str(auto_dir)
+            print(f"\n自动生成输出目录: {args.output_dir}")
+        
+        select_episodes(
+            dataset_root=args.dataset_root,
+            dataset_names=args.dataset_names,
+            selected_episode_lists=selected_episode_lists,
+            output_dir=args.output_dir,
+        )

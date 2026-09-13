@@ -273,7 +273,7 @@ if [ "\$RESUME_FLAG" = true ]; then
         --env.use_self_mw=true \\
         --env_eval_freq=2000 \\
         --save_freq=2000 \\
-        --steps=12000 \\
+        --steps=10000 \\
         --eval.n_episodes=200 \\
         --eval.batch_size=16 \\
         --output_dir="\$TRAIN_OUTPUT_DIR" \\
@@ -299,7 +299,7 @@ else
         --policy.train_state_proj=false \\
         --policy.optimizer_lr=1e-4 \\
         --save_freq=2000 \\
-        --steps=12000 \\
+        --steps=10000 \\
         --batch_size=64 \\
         --num_workers=16 \\
         --eval.n_episodes=200 \\
@@ -313,7 +313,7 @@ else
 fi
 
 echo ""
-echo "Training steps: 12000"
+echo "Training steps: 10000"
 
 # Extract eval results from log
 echo ""

@@ -1,0 +1,4812 @@
+{
+  "num_episodes": 200,
+  "success_count": 146,
+  "grasp_success_count": 41,
+  "fail_count": 54,
+  "success_rate": 0.73,
+  "grasp_success_rate": 0.205,
+  "success@5mm": null,
+  "coffee_success_5mm_count": null,
+  "episodes": [
+    {
+      "episode_ix": 0,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.17616672813892365,
+      "success@5mm": null,
+      "sum_reward": 223.85588033134536,
+      "max_reward": 1.0821285174742403,
+      "seed": 42,
+      "initial_state": {
+        "episode_ix": 0,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.06438651200806646,
+          0.7234142419906245,
+          0.025004434141988274
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 1,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 185.9006629439669,
+      "max_reward": 10.0,
+      "seed": 43,
+      "initial_state": {
+        "episode_ix": 1,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.027863302551894356,
+          0.6417801446669064,
+          0.025004219995748474
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 2,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 143.33656843207729,
+      "max_reward": 10.0,
+      "seed": 44,
+      "initial_state": {
+        "episode_ix": 2,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.09836215855176161,
+          0.6969460370561602,
+          0.02500523063892462
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 3,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 115.42511179755971,
+      "max_reward": 10.0,
+      "seed": 45,
+      "initial_state": {
+        "episode_ix": 3,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.07002067881032212,
+          0.6629813154278819,
+          0.025003693717557302
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 4,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 153.6060519537115,
+      "max_reward": 10.0,
+      "seed": 46,
+      "initial_state": {
+        "episode_ix": 4,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.04840660645873229,
+          0.6371144460706364,
+          0.025005766066012385
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 5,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 157.5762030477975,
+      "max_reward": 10.0,
+      "seed": 47,
+      "initial_state": {
+        "episode_ix": 5,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.055382890509105866,
+          0.7232607379262626,
+          0.02500610868845167
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 6,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 131.935756977298,
+      "max_reward": 10.0,
+      "seed": 48,
+      "initial_state": {
+        "episode_ix": 6,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.03809322303373645,
+          0.7058415311006144,
+          0.025008853166657005
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 7,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 143.66998280105224,
+      "max_reward": 10.0,
+      "seed": 49,
+      "initial_state": {
+        "episode_ix": 7,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.03722490784799848,
+          0.7077988933339363,
+          0.02500933494300636
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 8,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.17642784118652344,
+      "success@5mm": null,
+      "sum_reward": 108.23504188673122,
+      "max_reward": 0.8289292727862109,
+      "seed": 50,
+      "initial_state": {
+        "episode_ix": 8,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.0861130839607272,
+          0.7481695457091468,
+          0.025000263070690594
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 9,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.17012682557106018,
+      "success@5mm": null,
+      "sum_reward": 34.39156623257864,
+      "max_reward": 0.18221985324191292,
+      "seed": 51,
+      "initial_state": {
+        "episode_ix": 9,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.015380728780750696,
+          0.7123487567923038,
+          0.025004030086227435
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 10,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 190.01860274211126,
+      "max_reward": 10.0,
+      "seed": 52,
+      "initial_state": {
+        "episode_ix": 10,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.03980596964013507,
+          0.602375610630588,
+          0.025002437524127945
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 11,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16538693010807037,
+      "success@5mm": null,
+      "sum_reward": 226.88392996784705,
+      "max_reward": 1.1074163055134778,
+      "seed": 53,
+      "initial_state": {
+        "episode_ix": 11,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.008013843190247739,
+          0.720850136780103,
+          0.025003738854676594
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 12,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 187.51330330312697,
+      "max_reward": 10.0,
+      "seed": 54,
+      "initial_state": {
+        "episode_ix": 12,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.07214556117660804,
+          0.6138857303644573,
+          0.025002124113426116
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 13,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 161.85245441444656,
+      "max_reward": 10.0,
+      "seed": 55,
+      "initial_state": {
+        "episode_ix": 13,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.0704232426013301,
+          0.7420628984150504,
+          0.02500067785276981
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 14,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 263.4062867586857,
+      "max_reward": 10.0,
+      "seed": 56,
+      "initial_state": {
+        "episode_ix": 14,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.09067500105549943,
+          0.6792504575769348,
+          0.025008343536272595
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 15,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.17651169002056122,
+      "success@5mm": null,
+      "sum_reward": 173.46437375494423,
+      "max_reward": 1.5164741368718992,
+      "seed": 57,
+      "initial_state": {
+        "episode_ix": 15,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.04292181377486412,
+          0.7089509153625341,
+          0.025002908735654323
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 16,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 122.1801071302057,
+      "max_reward": 10.0,
+      "seed": 58,
+      "initial_state": {
+        "episode_ix": 16,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.045007024498170345,
+          0.6309829382877402,
+          0.02500526787289192
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 17,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 149.2914746342758,
+      "max_reward": 10.0,
+      "seed": 59,
+      "initial_state": {
+        "episode_ix": 17,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.000581958002970362,
+          0.745897604089449,
+          0.025001036636165628
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 18,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.18173125386238098,
+      "success@5mm": null,
+      "sum_reward": 187.68905482561638,
+      "max_reward": 0.9022496430885457,
+      "seed": 60,
+      "initial_state": {
+        "episode_ix": 18,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.09681845992404976,
+          0.748730386661914,
+          0.025003932544989633
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 19,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 84.3883109558209,
+      "max_reward": 10.0,
+      "seed": 61,
+      "initial_state": {
+        "episode_ix": 19,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.001983619014128113,
+          0.6033605857286115,
+          0.025009364916679218
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 20,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16854986548423767,
+      "success@5mm": null,
+      "sum_reward": 179.30699807415363,
+      "max_reward": 1.3357742454673365,
+      "seed": 62,
+      "initial_state": {
+        "episode_ix": 20,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.051363498885626774,
+          0.7310924831518817,
+          0.025008267204871718
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 21,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.15888722240924835,
+      "success@5mm": null,
+      "sum_reward": 153.71252653880438,
+      "max_reward": 1.4476084280432846,
+      "seed": 63,
+      "initial_state": {
+        "episode_ix": 21,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.03866862400481935,
+          0.7477734272090408,
+          0.025009410339285085
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 22,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 275.4894973148308,
+      "max_reward": 10.0,
+      "seed": 64,
+      "initial_state": {
+        "episode_ix": 22,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.09853652500240369,
+          0.6938072177611375,
+          0.025001505404787204
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 23,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 136.46299868015424,
+      "max_reward": 10.0,
+      "seed": 65,
+      "initial_state": {
+        "episode_ix": 23,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.04498553769894878,
+          0.6657813320194715,
+          0.025007696126895514
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 24,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 105.40382700150087,
+      "max_reward": 10.0,
+      "seed": 66,
+      "initial_state": {
+        "episode_ix": 24,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.066515141024987,
+          0.7405673067447227,
+          0.025006671727296467
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 25,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 114.89885717376607,
+      "max_reward": 10.0,
+      "seed": 67,
+      "initial_state": {
+        "episode_ix": 25,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.01719367581908734,
+          0.6831170620191295,
+          0.025008022052266442
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 26,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.170396625995636,
+      "success@5mm": null,
+      "sum_reward": 163.94640702623178,
+      "max_reward": 1.0230355881089634,
+      "seed": 68,
+      "initial_state": {
+        "episode_ix": 26,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.0645126883963995,
+          0.7379607979603294,
+          0.02500255833733526
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 27,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2310129851102829,
+      "success@5mm": null,
+      "sum_reward": 138.30047667020716,
+      "max_reward": 1.5409127245597614,
+      "seed": 69,
+      "initial_state": {
+        "episode_ix": 27,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.08951485247408336,
+          0.6440177838424741,
+          0.025004698524795702
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 28,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 213.687249508264,
+      "max_reward": 10.0,
+      "seed": 70,
+      "initial_state": {
+        "episode_ix": 28,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.07899271236119348,
+          0.6988592938187206,
+          0.02500269215462112
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 29,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 72.54635880355406,
+      "max_reward": 10.0,
+      "seed": 71,
+      "initial_state": {
+        "episode_ix": 29,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.02798053357617507,
+          0.6239410760796962,
+          0.02500342617018382
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 30,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 180.54961090646253,
+      "max_reward": 10.0,
+      "seed": 72,
+      "initial_state": {
+        "episode_ix": 30,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.0573307837688134,
+          0.6077836263859046,
+          0.025002913169191596
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 31,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 214.9783312592036,
+      "max_reward": 10.0,
+      "seed": 73,
+      "initial_state": {
+        "episode_ix": 31,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.08060312141477483,
+          0.6172292724056332,
+          0.02500942193728917
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 32,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 258.62521486825267,
+      "max_reward": 10.0,
+      "seed": 74,
+      "initial_state": {
+        "episode_ix": 32,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.09789365169909225,
+          0.721749956658791,
+          0.02500731515468418
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 33,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.18156678974628448,
+      "success@5mm": null,
+      "sum_reward": 117.260944639945,
+      "max_reward": 1.0364058663046556,
+      "seed": 75,
+      "initial_state": {
+        "episode_ix": 33,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.09268623694687017,
+          0.7420925164866218,
+          0.02500866777983656
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 34,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 123.66093682602863,
+      "max_reward": 10.0,
+      "seed": 76,
+      "initial_state": {
+        "episode_ix": 34,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.056173151575028606,
+          0.7450117346573688,
+          0.025002232044727745
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 35,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 211.7260919195956,
+      "max_reward": 10.0,
+      "seed": 77,
+      "initial_state": {
+        "episode_ix": 35,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.08013006796423605,
+          0.613620245998752,
+          0.025003736243927648
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 36,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 135.99452860095977,
+      "max_reward": 10.0,
+      "seed": 78,
+      "initial_state": {
+        "episode_ix": 36,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.043259718039510675,
+          0.7401219481123952,
+          0.025005183425389915
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 37,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 171.80282913068282,
+      "max_reward": 10.0,
+      "seed": 79,
+      "initial_state": {
+        "episode_ix": 37,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.011118735468105257,
+          0.6061974697486809,
+          0.025009535037213832
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 38,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 55.845744789036516,
+      "max_reward": 10.0,
+      "seed": 80,
+      "initial_state": {
+        "episode_ix": 38,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.06381338855726577,
+          0.7163287223251703,
+          0.025007452664559785
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 39,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 271.61812400324203,
+      "max_reward": 10.0,
+      "seed": 81,
+      "initial_state": {
+        "episode_ix": 39,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.09098356037576709,
+          0.6063715700108073,
+          0.025009803261337418
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 40,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 141.62991408518508,
+      "max_reward": 10.0,
+      "seed": 82,
+      "initial_state": {
+        "episode_ix": 40,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.016292438731409255,
+          0.7142766191390458,
+          0.025004980513802202
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 41,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 91.01758804845943,
+      "max_reward": 10.0,
+      "seed": 83,
+      "initial_state": {
+        "episode_ix": 41,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.052066821343147655,
+          0.7144256885311404,
+          0.02500772082637462
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 42,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.22339306771755219,
+      "success@5mm": null,
+      "sum_reward": 235.39190182216166,
+      "max_reward": 1.1912726646506857,
+      "seed": 84,
+      "initial_state": {
+        "episode_ix": 42,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.07329683444350625,
+          0.6466778613177747,
+          0.025002218751372988
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 43,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 217.4733387223726,
+      "max_reward": 10.0,
+      "seed": 85,
+      "initial_state": {
+        "episode_ix": 43,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.09498623171099244,
+          0.6581791872435305,
+          0.02500857625677801
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 44,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 101.63183149878115,
+      "max_reward": 10.0,
+      "seed": 86,
+      "initial_state": {
+        "episode_ix": 44,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.09073617803059258,
+          0.7129078243877012,
+          0.02500871980856936
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 45,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 280.847974726855,
+      "max_reward": 10.0,
+      "seed": 87,
+      "initial_state": {
+        "episode_ix": 45,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.05629621029924634,
+          0.7038830426601467,
+          0.025009565278983625
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 46,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.23052632808685303,
+      "success@5mm": null,
+      "sum_reward": 155.6850768167307,
+      "max_reward": 1.0372944663174242,
+      "seed": 88,
+      "initial_state": {
+        "episode_ix": 46,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.06111893752391062,
+          0.6315234372709504,
+          0.0250085792328502
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 47,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 175.98830642516734,
+      "max_reward": 10.0,
+      "seed": 89,
+      "initial_state": {
+        "episode_ix": 47,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.07782347537975848,
+          0.6991597082142057,
+          0.025002958556438852
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 48,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 344.0154302014632,
+      "max_reward": 10.0,
+      "seed": 90,
+      "initial_state": {
+        "episode_ix": 48,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.09143372590010664,
+          0.6180957597746798,
+          0.02500314099904402
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 49,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 77.86113163669083,
+      "max_reward": 10.0,
+      "seed": 91,
+      "initial_state": {
+        "episode_ix": 49,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.08852335358126086,
+          0.6715035920155592,
+          0.02500548342189865
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 50,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 82.34869791434723,
+      "max_reward": 10.0,
+      "seed": 92,
+      "initial_state": {
+        "episode_ix": 50,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.09476967354009641,
+          0.6867354248446419,
+          0.0250064924988523
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 51,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 369.4030868770989,
+      "max_reward": 10.0,
+      "seed": 93,
+      "initial_state": {
+        "episode_ix": 51,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.09720333787278079,
+          0.6660705799537523,
+          0.025007642178629677
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 52,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 94.30582465160197,
+      "max_reward": 10.0,
+      "seed": 94,
+      "initial_state": {
+        "episode_ix": 52,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.08732534734100204,
+          0.6211240859139893,
+          0.025004735190134672
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 53,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 439.8964654684268,
+      "max_reward": 10.0,
+      "seed": 95,
+      "initial_state": {
+        "episode_ix": 53,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.07400234789561562,
+          0.69940793199218,
+          0.02500396941536306
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 54,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 208.10899425523974,
+      "max_reward": 10.0,
+      "seed": 96,
+      "initial_state": {
+        "episode_ix": 54,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.03228434492770269,
+          0.6715839298443643,
+          0.02500838660234936
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 55,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 75.29921364562935,
+      "max_reward": 10.0,
+      "seed": 97,
+      "initial_state": {
+        "episode_ix": 55,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.04084590140268294,
+          0.7262056742681455,
+          0.025000565439717574
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 56,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.18779517710208893,
+      "success@5mm": null,
+      "sum_reward": 98.96358648666583,
+      "max_reward": 1.0407938206905312,
+      "seed": 98,
+      "initial_state": {
+        "episode_ix": 56,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.003409795663244708,
+          0.6807027997039526,
+          0.025004899254433863
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 57,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 118.16041445137978,
+      "max_reward": 10.0,
+      "seed": 99,
+      "initial_state": {
+        "episode_ix": 57,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.01936797536698849,
+          0.6103451073316707,
+          0.025002520456919516
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 58,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 146.54866568229636,
+      "max_reward": 10.0,
+      "seed": 100,
+      "initial_state": {
+        "episode_ix": 58,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.07902631644187214,
+          0.7365509071943179,
+          0.025006881544475917
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 59,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 148.46615118787594,
+      "max_reward": 10.0,
+      "seed": 101,
+      "initial_state": {
+        "episode_ix": 59,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.06519730194604051,
+          0.6520542636919013,
+          0.025005075799081494
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 60,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 108.57803131402977,
+      "max_reward": 10.0,
+      "seed": 102,
+      "initial_state": {
+        "episode_ix": 60,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.059007111344315716,
+          0.7088464612595983,
+          0.025009189663138878
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 61,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 138.0201404777423,
+      "max_reward": 10.0,
+      "seed": 103,
+      "initial_state": {
+        "episode_ix": 61,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.04389640958981894,
+          0.743980925786898,
+          0.02500309459042706
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 62,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 141.85034679374294,
+      "max_reward": 10.0,
+      "seed": 104,
+      "initial_state": {
+        "episode_ix": 62,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.07558726122982412,
+          0.7237987638402469,
+          0.025002191128709283
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 63,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.20729301869869232,
+      "success@5mm": null,
+      "sum_reward": 127.7542482743434,
+      "max_reward": 1.2443218306641535,
+      "seed": 105,
+      "initial_state": {
+        "episode_ix": 63,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.08833688233707826,
+          0.6810724319824936,
+          0.025006122044605585
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 64,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 168.54632647813176,
+      "max_reward": 10.0,
+      "seed": 106,
+      "initial_state": {
+        "episode_ix": 64,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.032560518130116345,
+          0.6287561617183518,
+          0.025003216433251988
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 65,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 125.79334528023931,
+      "max_reward": 10.0,
+      "seed": 107,
+      "initial_state": {
+        "episode_ix": 65,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.07221033004283037,
+          0.7330150489106241,
+          0.02500882820975177
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 66,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 104.12284838005812,
+      "max_reward": 10.0,
+      "seed": 108,
+      "initial_state": {
+        "episode_ix": 66,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.0410037251496753,
+          0.6183428925145997,
+          0.025009990736747915
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 67,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 172.22301072173815,
+      "max_reward": 10.0,
+      "seed": 109,
+      "initial_state": {
+        "episode_ix": 67,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.06657096327611514,
+          0.6311148144477977,
+          0.025007602439640123
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 68,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.19998061656951904,
+      "success@5mm": null,
+      "sum_reward": 163.3198765282113,
+      "max_reward": 1.3816229308239467,
+      "seed": 110,
+      "initial_state": {
+        "episode_ix": 68,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.09467676857569449,
+          0.6999682987160946,
+          0.02500961266486793
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 69,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 151.23847173608164,
+      "max_reward": 10.0,
+      "seed": 111,
+      "initial_state": {
+        "episode_ix": 69,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.07404666892464741,
+          0.6116778279239464,
+          0.025008550139093835
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 70,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 96.36904101356195,
+      "max_reward": 10.0,
+      "seed": 112,
+      "initial_state": {
+        "episode_ix": 70,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.09664973439628442,
+          0.7191153785141021,
+          0.025009844932465882
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 71,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 100.4736831284919,
+      "max_reward": 10.0,
+      "seed": 113,
+      "initial_state": {
+        "episode_ix": 71,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.0819667069361976,
+          0.7477983439082009,
+          0.025009740814058046
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 72,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 161.05117110519694,
+      "max_reward": 10.0,
+      "seed": 114,
+      "initial_state": {
+        "episode_ix": 72,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.05576483420535808,
+          0.624989136705964,
+          0.02500317131529565
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 73,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 213.5783690445365,
+      "max_reward": 10.0,
+      "seed": 115,
+      "initial_state": {
+        "episode_ix": 73,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.007096258710086678,
+          0.6147886460102576,
+          0.025004353127264418
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 74,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 146.9895592848819,
+      "max_reward": 10.0,
+      "seed": 116,
+      "initial_state": {
+        "episode_ix": 74,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.09978507315026347,
+          0.7038916050929497,
+          0.025007716113064758
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 75,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.23982609808444977,
+      "success@5mm": null,
+      "sum_reward": 166.64808952271667,
+      "max_reward": 0.8965428553609576,
+      "seed": 117,
+      "initial_state": {
+        "episode_ix": 75,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.04743012930600932,
+          0.6149470819521092,
+          0.025009124014179835
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 76,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 136.90604674837795,
+      "max_reward": 10.0,
+      "seed": 118,
+      "initial_state": {
+        "episode_ix": 76,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.06726456290413141,
+          0.7392192410192873,
+          0.025004377251127925
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 77,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 100.91795414258002,
+      "max_reward": 10.0,
+      "seed": 119,
+      "initial_state": {
+        "episode_ix": 77,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.02383006955584284,
+          0.7441961163653946,
+          0.025005302421932055
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 78,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 246.02744111658052,
+      "max_reward": 10.0,
+      "seed": 120,
+      "initial_state": {
+        "episode_ix": 78,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.08938223375663666,
+          0.6910406332378415,
+          0.025006263790820663
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 79,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 213.49317305065034,
+      "max_reward": 10.0,
+      "seed": 121,
+      "initial_state": {
+        "episode_ix": 79,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.06115858124216344,
+          0.6040491321085066,
+          0.025006841791329868
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 80,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 119.49724096654708,
+      "max_reward": 10.0,
+      "seed": 122,
+      "initial_state": {
+        "episode_ix": 80,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.02909881195333759,
+          0.725217551732337,
+          0.025002839768113877
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 81,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 99.06877195322545,
+      "max_reward": 10.0,
+      "seed": 123,
+      "initial_state": {
+        "episode_ix": 81,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.08242415960974114,
+          0.6320644445062643,
+          0.025007414670522348
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 82,
+      "success": false,
+      "grasp_success": true,
+      "obj_to_target": 0.23858335614204407,
+      "success@5mm": null,
+      "sum_reward": 172.35125237440212,
+      "max_reward": 2.1537983417510986,
+      "seed": 124,
+      "initial_state": {
+        "episode_ix": 82,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.07773247296402284,
+          0.6272094900772752,
+          0.025006479826183557
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 83,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 208.70510729703724,
+      "max_reward": 10.0,
+      "seed": 125,
+      "initial_state": {
+        "episode_ix": 83,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.0786347878967381,
+          0.7306641724276619,
+          0.02500322147603682
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 84,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.176563560962677,
+      "success@5mm": null,
+      "sum_reward": 180.96034394476044,
+      "max_reward": 1.064694262522598,
+      "seed": 126,
+      "initial_state": {
+        "episode_ix": 84,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.08170751046154832,
+          0.7410499036020706,
+          0.025005305459158324
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 85,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.22014236450195312,
+      "success@5mm": null,
+      "sum_reward": 171.43201355428184,
+      "max_reward": 1.2191554633123562,
+      "seed": 127,
+      "initial_state": {
+        "episode_ix": 85,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.0948831779055063,
+          0.6642164435139792,
+          0.025008037545301707
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 86,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 94.48360203029097,
+      "max_reward": 10.0,
+      "seed": 128,
+      "initial_state": {
+        "episode_ix": 86,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.09205823233848978,
+          0.7264310764745442,
+          0.025005106423317724
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 87,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 114.89462063910226,
+      "max_reward": 10.0,
+      "seed": 129,
+      "initial_state": {
+        "episode_ix": 87,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.03998548033540589,
+          0.654835640869279,
+          0.0250024866624426
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 88,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.19078019261360168,
+      "success@5mm": null,
+      "sum_reward": 198.3351479719688,
+      "max_reward": 1.7980318729993314,
+      "seed": 130,
+      "initial_state": {
+        "episode_ix": 88,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.0009483772291391857,
+          0.676011055718744,
+          0.025007150591171538
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 89,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 166.08263665068586,
+      "max_reward": 10.0,
+      "seed": 131,
+      "initial_state": {
+        "episode_ix": 89,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.07208360857554207,
+          0.6194362661868832,
+          0.025006088788863998
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 90,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 72.63126631843559,
+      "max_reward": 10.0,
+      "seed": 132,
+      "initial_state": {
+        "episode_ix": 90,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.09275268799821212,
+          0.7238597230008684,
+          0.025004403225708335
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 91,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 109.25957903149128,
+      "max_reward": 10.0,
+      "seed": 133,
+      "initial_state": {
+        "episode_ix": 91,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.03315889313448924,
+          0.6837395445574193,
+          0.025004864791253845
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 92,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 205.35573714189098,
+      "max_reward": 10.0,
+      "seed": 134,
+      "initial_state": {
+        "episode_ix": 92,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.08219318691293165,
+          0.6182820785879192,
+          0.02500087403001291
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 93,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 252.80399288194405,
+      "max_reward": 10.0,
+      "seed": 135,
+      "initial_state": {
+        "episode_ix": 93,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.04888848936567815,
+          0.6310629383970103,
+          0.025006113182773328
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 94,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 182.52560005156215,
+      "max_reward": 10.0,
+      "seed": 136,
+      "initial_state": {
+        "episode_ix": 94,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.0595859796104845,
+          0.6377214971727333,
+          0.025007610891868332
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 95,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 175.99668036009018,
+      "max_reward": 10.0,
+      "seed": 137,
+      "initial_state": {
+        "episode_ix": 95,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.00012204617980077215,
+          0.7358747611402334,
+          0.02500078484958155
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 96,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 154.84701857885184,
+      "max_reward": 10.0,
+      "seed": 138,
+      "initial_state": {
+        "episode_ix": 96,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.0029833937152151883,
+          0.7408733776215517,
+          0.025009017631507677
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 97,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16755446791648865,
+      "success@5mm": null,
+      "sum_reward": 182.66227603723866,
+      "max_reward": 1.0713235252381554,
+      "seed": 139,
+      "initial_state": {
+        "episode_ix": 97,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.051670176930612446,
+          0.7338039360973753,
+          0.025007672551277317
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 98,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 169.70733107110973,
+      "max_reward": 10.0,
+      "seed": 140,
+      "initial_state": {
+        "episode_ix": 98,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.016563644316404027,
+          0.6007894974203085,
+          0.025007775461186675
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 99,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 124.03181868384509,
+      "max_reward": 10.0,
+      "seed": 141,
+      "initial_state": {
+        "episode_ix": 99,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.008172407477123167,
+          0.7222669148126674,
+          0.025006128456485293
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 100,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 89.97206163147226,
+      "max_reward": 10.0,
+      "seed": 142,
+      "initial_state": {
+        "episode_ix": 100,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.07856278743000668,
+          0.690053815617039,
+          0.025004238341985636
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 101,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.24670284986495972,
+      "success@5mm": null,
+      "sum_reward": 167.8365151688115,
+      "max_reward": 1.0085240739611214,
+      "seed": 143,
+      "initial_state": {
+        "episode_ix": 101,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.0049113883447454935,
+          0.6004630141767934,
+          0.025006320561941475
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 102,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 74.6250802554762,
+      "max_reward": 10.0,
+      "seed": 144,
+      "initial_state": {
+        "episode_ix": 102,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.0941479258684444,
+          0.7236511781206992,
+          0.025004964925519745
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 103,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.23205846548080444,
+      "success@5mm": null,
+      "sum_reward": 200.47376619065005,
+      "max_reward": 1.238279461834785,
+      "seed": 145,
+      "initial_state": {
+        "episode_ix": 103,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.003616404616234015,
+          0.6188500063640872,
+          0.025007828840285046
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 104,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.17179489135742188,
+      "success@5mm": null,
+      "sum_reward": 194.026452019455,
+      "max_reward": 1.0567355255913484,
+      "seed": 146,
+      "initial_state": {
+        "episode_ix": 104,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.011231658580010373,
+          0.7085528728989183,
+          0.025000840858923627
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 105,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 198.84127845753414,
+      "max_reward": 10.0,
+      "seed": 147,
+      "initial_state": {
+        "episode_ix": 105,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.028405908106874392,
+          0.6243562483610927,
+          0.025002696744373724
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 106,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 129.42931663114877,
+      "max_reward": 10.0,
+      "seed": 148,
+      "initial_state": {
+        "episode_ix": 106,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.09766160181959253,
+          0.6469723986419298,
+          0.02500336380913326
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 107,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 97.53664463279149,
+      "max_reward": 10.0,
+      "seed": 149,
+      "initial_state": {
+        "episode_ix": 107,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.032216296490178285,
+          0.7157359530210224,
+          0.02500091039477364
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 108,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 412.66573337582497,
+      "max_reward": 10.0,
+      "seed": 150,
+      "initial_state": {
+        "episode_ix": 108,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.09744748566188305,
+          0.7032584513588849,
+          0.025005848087428378
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 109,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 197.97407000187826,
+      "max_reward": 10.0,
+      "seed": 151,
+      "initial_state": {
+        "episode_ix": 109,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.0020756830821566765,
+          0.7495417392111918,
+          0.025003143005033767
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 110,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.22978608310222626,
+      "success@5mm": null,
+      "sum_reward": 137.1179629922829,
+      "max_reward": 1.0378881984585662,
+      "seed": 152,
+      "initial_state": {
+        "episode_ix": 110,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.04112813254793351,
+          0.6265463647259157,
+          0.025003601018931194
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 111,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 152.16676671609207,
+      "max_reward": 10.0,
+      "seed": 153,
+      "initial_state": {
+        "episode_ix": 111,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.08842851535843219,
+          0.7292950484327115,
+          0.025008965655120508
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 112,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16882993280887604,
+      "success@5mm": null,
+      "sum_reward": 198.22139230415587,
+      "max_reward": 1.0374795699820332,
+      "seed": 154,
+      "initial_state": {
+        "episode_ix": 112,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.052590823150465475,
+          0.7313315665402798,
+          0.025008965051002217
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 113,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 188.1956391198413,
+      "max_reward": 10.0,
+      "seed": 155,
+      "initial_state": {
+        "episode_ix": 113,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.08246795184448605,
+          0.6691804237935792,
+          0.02500442843497605
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 114,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1943441927433014,
+      "success@5mm": null,
+      "sum_reward": 303.13916496541384,
+      "max_reward": 1.6694734907130788,
+      "seed": 156,
+      "initial_state": {
+        "episode_ix": 114,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.09324239664008667,
+          0.710271763544768,
+          0.02500218397934215
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 115,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 171.41400689867163,
+      "max_reward": 10.0,
+      "seed": 157,
+      "initial_state": {
+        "episode_ix": 115,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.06898877509787753,
+          0.6896944160866746,
+          0.0250001438938944
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 116,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 96.65419993405439,
+      "max_reward": 10.0,
+      "seed": 158,
+      "initial_state": {
+        "episode_ix": 116,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.0792917718772708,
+          0.7188325867724481,
+          0.02500092655756481
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 117,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 155.82494069564177,
+      "max_reward": 10.0,
+      "seed": 159,
+      "initial_state": {
+        "episode_ix": 117,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.09998314830274346,
+          0.7363899446009582,
+          0.02500161726683569
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 118,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 106.8637639485384,
+      "max_reward": 10.0,
+      "seed": 160,
+      "initial_state": {
+        "episode_ix": 118,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.08894681833454393,
+          0.6562688098818544,
+          0.025001147978154527
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 119,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 100.02039271753296,
+      "max_reward": 10.0,
+      "seed": 161,
+      "initial_state": {
+        "episode_ix": 119,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.0928316555713447,
+          0.6858997937113727,
+          0.02500245589456877
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 120,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 217.17367685228987,
+      "max_reward": 10.0,
+      "seed": 162,
+      "initial_state": {
+        "episode_ix": 120,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.07350218027892984,
+          0.6196912459139399,
+          0.025004051756872498
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 121,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 95.25262731181182,
+      "max_reward": 10.0,
+      "seed": 163,
+      "initial_state": {
+        "episode_ix": 121,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.05318750642116519,
+          0.7228597346921463,
+          0.02500802313424596
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 122,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1616416871547699,
+      "success@5mm": null,
+      "sum_reward": 106.15453911891463,
+      "max_reward": 0.62560843411309,
+      "seed": 164,
+      "initial_state": {
+        "episode_ix": 122,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.03781956673946549,
+          0.7393792930147695,
+          0.025007429098024534
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 123,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1996896117925644,
+      "success@5mm": null,
+      "sum_reward": 230.4985746324337,
+      "max_reward": 1.2698556968527936,
+      "seed": 165,
+      "initial_state": {
+        "episode_ix": 123,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.07658899006568336,
+          0.6860430970454974,
+          0.025003825089107208
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 124,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 57.504643681948785,
+      "max_reward": 10.0,
+      "seed": 166,
+      "initial_state": {
+        "episode_ix": 124,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.04707410022319754,
+          0.705361153375506,
+          0.025009419588348267
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 125,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.23711076378822327,
+      "success@5mm": null,
+      "sum_reward": 18.737372083559265,
+      "max_reward": 0.10697842010479183,
+      "seed": 167,
+      "initial_state": {
+        "episode_ix": 125,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.06278204031213269,
+          0.6232035730476807,
+          0.025007046507093626
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 126,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 200.95695607012195,
+      "max_reward": 10.0,
+      "seed": 168,
+      "initial_state": {
+        "episode_ix": 126,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.03513443842214097,
+          0.6410137425030481,
+          0.02500397840170549
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 127,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 150.14010822814515,
+      "max_reward": 10.0,
+      "seed": 169,
+      "initial_state": {
+        "episode_ix": 127,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.0690966836830063,
+          0.7387331939195233,
+          0.02500400764687875
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 128,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 188.99684018552918,
+      "max_reward": 10.0,
+      "seed": 170,
+      "initial_state": {
+        "episode_ix": 128,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.002807067884206149,
+          0.6082927758130505,
+          0.025006590788676987
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 129,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2392352670431137,
+      "success@5mm": null,
+      "sum_reward": 216.59507625856,
+      "max_reward": 1.0422390475389811,
+      "seed": 171,
+      "initial_state": {
+        "episode_ix": 129,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.08860469399979534,
+          0.6316007323324492,
+          0.025002042467954684
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 130,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 89.72241997893995,
+      "max_reward": 10.0,
+      "seed": 172,
+      "initial_state": {
+        "episode_ix": 130,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.015257460152958714,
+          0.7316615940973241,
+          0.025004060889085116
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 131,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1675788015127182,
+      "success@5mm": null,
+      "sum_reward": 197.30166610875273,
+      "max_reward": 1.3120528544276115,
+      "seed": 173,
+      "initial_state": {
+        "episode_ix": 131,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.025980461125382038,
+          0.7200946635942288,
+          0.0250075675001706
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 132,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 105.1543535915921,
+      "max_reward": 10.0,
+      "seed": 174,
+      "initial_state": {
+        "episode_ix": 132,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.0969064043758081,
+          0.734374327539854,
+          0.025008463732302297
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 133,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2346653789281845,
+      "success@5mm": null,
+      "sum_reward": 218.92853298228448,
+      "max_reward": 1.0771901557101706,
+      "seed": 175,
+      "initial_state": {
+        "episode_ix": 133,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.08051899849015418,
+          0.6339871724638818,
+          0.025002507577735027
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 134,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 155.99521091932093,
+      "max_reward": 10.0,
+      "seed": 176,
+      "initial_state": {
+        "episode_ix": 134,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.01945739112376318,
+          0.6184791223420371,
+          0.02500960813581112
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 135,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16822898387908936,
+      "success@5mm": null,
+      "sum_reward": 243.21682353970897,
+      "max_reward": 1.1509588542505316,
+      "seed": 177,
+      "initial_state": {
+        "episode_ix": 135,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.010125380260875762,
+          0.7153015652214825,
+          0.025001224097253076
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 136,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 235.61910883615263,
+      "max_reward": 10.0,
+      "seed": 178,
+      "initial_state": {
+        "episode_ix": 136,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.017824475461176693,
+          0.6137359184687672,
+          0.0250060537671279
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 137,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.25374382734298706,
+      "success@5mm": null,
+      "sum_reward": 222.98992420699747,
+      "max_reward": 1.3434113047043572,
+      "seed": 179,
+      "initial_state": {
+        "episode_ix": 137,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.08517746910197611,
+          0.6099793515014417,
+          0.02500731017292692
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 138,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 202.67534039509306,
+      "max_reward": 10.0,
+      "seed": 180,
+      "initial_state": {
+        "episode_ix": 138,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.029727991748669882,
+          0.7443248618464965,
+          0.025008596963922682
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 139,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 190.37409838732074,
+      "max_reward": 10.0,
+      "seed": 181,
+      "initial_state": {
+        "episode_ix": 139,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.05430954770857208,
+          0.6264416239859213,
+          0.025006393757385243
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 140,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2337268739938736,
+      "success@5mm": null,
+      "sum_reward": 148.0174470406073,
+      "max_reward": 1.037494752271151,
+      "seed": 182,
+      "initial_state": {
+        "episode_ix": 140,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.052121895381554595,
+          0.6242466300867076,
+          0.025009278592509288
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 141,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 148.0027728107556,
+      "max_reward": 10.0,
+      "seed": 183,
+      "initial_state": {
+        "episode_ix": 141,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.08588663144101562,
+          0.6543673297400759,
+          0.025003514561499973
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 142,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 199.94468391553193,
+      "max_reward": 10.0,
+      "seed": 184,
+      "initial_state": {
+        "episode_ix": 142,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.008224441151075968,
+          0.6036514474642439,
+          0.025001572177794112
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 143,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2034231722354889,
+      "success@5mm": null,
+      "sum_reward": 86.21826119953371,
+      "max_reward": 0.5363496890390385,
+      "seed": 185,
+      "initial_state": {
+        "episode_ix": 143,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.06425598964791887,
+          0.6726061290827289,
+          0.025007057112282762
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 144,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.23962461948394775,
+      "success@5mm": null,
+      "sum_reward": 2.8779879373981183,
+      "max_reward": 0.0855782012350946,
+      "seed": 186,
+      "initial_state": {
+        "episode_ix": 144,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.09128530327536177,
+          0.6324760102576534,
+          0.025008064468306487
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 145,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 94.9761701733789,
+      "max_reward": 10.0,
+      "seed": 187,
+      "initial_state": {
+        "episode_ix": 145,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.07092970053088365,
+          0.7155180198685751,
+          0.025004587158245502
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 146,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 94.05424461472998,
+      "max_reward": 10.0,
+      "seed": 188,
+      "initial_state": {
+        "episode_ix": 146,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.09705609955430003,
+          0.6372613845774425,
+          0.02500488024894508
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 147,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 241.3278401437573,
+      "max_reward": 10.0,
+      "seed": 189,
+      "initial_state": {
+        "episode_ix": 147,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.0711069261732664,
+          0.6530319454610686,
+          0.025000555216687266
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 148,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 473.87747984647444,
+      "max_reward": 10.0,
+      "seed": 190,
+      "initial_state": {
+        "episode_ix": 148,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.048365523222540036,
+          0.6084836371806798,
+          0.025007335604271264
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 149,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 148.89075424147308,
+      "max_reward": 10.0,
+      "seed": 191,
+      "initial_state": {
+        "episode_ix": 149,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.060452097918197,
+          0.7471179894190879,
+          0.025007047547642033
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 150,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2418942004442215,
+      "success@5mm": null,
+      "sum_reward": 247.22682020879935,
+      "max_reward": 1.823651135234015,
+      "seed": 192,
+      "initial_state": {
+        "episode_ix": 150,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.05568102922805382,
+          0.6145588023874953,
+          0.025003478579621232
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 151,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 201.6359645393868,
+      "max_reward": 10.0,
+      "seed": 193,
+      "initial_state": {
+        "episode_ix": 151,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.06016608294775358,
+          0.6788570887875099,
+          0.025009676912715963
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 152,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 186.1847267138251,
+      "max_reward": 10.0,
+      "seed": 194,
+      "initial_state": {
+        "episode_ix": 152,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.030286993900579286,
+          0.6459605394101801,
+          0.025009429484560662
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 153,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 180.2728372701889,
+      "max_reward": 10.0,
+      "seed": 195,
+      "initial_state": {
+        "episode_ix": 153,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.0032476827290748747,
+          0.6432332201308152,
+          0.02500904063094164
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 154,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 321.11147775843165,
+      "max_reward": 10.0,
+      "seed": 196,
+      "initial_state": {
+        "episode_ix": 154,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.06046462656087345,
+          0.6984166327083773,
+          0.025007990401813587
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 155,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 96.9619023116189,
+      "max_reward": 10.0,
+      "seed": 197,
+      "initial_state": {
+        "episode_ix": 155,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.09828157508806858,
+          0.6033106332243108,
+          0.02500007955296556
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 156,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 170.6731961575362,
+      "max_reward": 10.0,
+      "seed": 198,
+      "initial_state": {
+        "episode_ix": 156,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.0007319319707100425,
+          0.6200409088690907,
+          0.025000180096092048
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 157,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 221.49470341638784,
+      "max_reward": 10.0,
+      "seed": 199,
+      "initial_state": {
+        "episode_ix": 157,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.025683570404555402,
+          0.6104673519791182,
+          0.02500354086453288
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 158,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 81.12219963530916,
+      "max_reward": 10.0,
+      "seed": 200,
+      "initial_state": {
+        "episode_ix": 158,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.00441730268352093,
+          0.7363136382192216,
+          0.02500526732899892
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 159,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 153.3588726754488,
+      "max_reward": 10.0,
+      "seed": 201,
+      "initial_state": {
+        "episode_ix": 159,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.0748406838282877,
+          0.6307565839181419,
+          0.025005464162895858
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 160,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 150.10183106761016,
+      "max_reward": 10.0,
+      "seed": 202,
+      "initial_state": {
+        "episode_ix": 160,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.06878771576696438,
+          0.6882313112930486,
+          0.025001222333364482
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 161,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 136.8499841295679,
+      "max_reward": 10.0,
+      "seed": 203,
+      "initial_state": {
+        "episode_ix": 161,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.07206210450159004,
+          0.7028342806857234,
+          0.0250074383510145
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 162,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 182.441521886066,
+      "max_reward": 10.0,
+      "seed": 204,
+      "initial_state": {
+        "episode_ix": 162,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.061105036693285736,
+          0.6861335895592859,
+          0.02500918948457473
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 163,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.2402358055114746,
+      "success@5mm": null,
+      "sum_reward": 24.58717602153596,
+      "max_reward": 0.20508521241703975,
+      "seed": 205,
+      "initial_state": {
+        "episode_ix": 163,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.04625901424540039,
+          0.61412514353599,
+          0.025003849937429674
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 164,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.25321975350379944,
+      "success@5mm": null,
+      "sum_reward": 196.60119232852867,
+      "max_reward": 0.9795142928928,
+      "seed": 206,
+      "initial_state": {
+        "episode_ix": 164,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.08920527557781166,
+          0.6125431758963359,
+          0.025008292479667387
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 165,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 195.33599412401315,
+      "max_reward": 10.0,
+      "seed": 207,
+      "initial_state": {
+        "episode_ix": 165,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.053748921210323077,
+          0.6701172585217048,
+          0.025009341490962636
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 166,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1839538812637329,
+      "success@5mm": null,
+      "sum_reward": 123.13758632478516,
+      "max_reward": 1.0372041789508528,
+      "seed": 208,
+      "initial_state": {
+        "episode_ix": 166,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.08704898265020959,
+          0.7276212969908609,
+          0.02500748522775948
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 167,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 125.82754052321789,
+      "max_reward": 10.0,
+      "seed": 209,
+      "initial_state": {
+        "episode_ix": 167,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.07587619288347502,
+          0.7064922828905313,
+          0.02500110272108776
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 168,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 92.72398456095472,
+      "max_reward": 10.0,
+      "seed": 210,
+      "initial_state": {
+        "episode_ix": 168,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.092177792686551,
+          0.730647424934082,
+          0.02500705636946997
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 169,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1839340627193451,
+      "success@5mm": null,
+      "sum_reward": 165.83799400136536,
+      "max_reward": 1.3128521324629614,
+      "seed": 211,
+      "initial_state": {
+        "episode_ix": 169,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.09925682584821116,
+          0.7456396090275843,
+          0.02500079247023002
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 170,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 202.8289044039389,
+      "max_reward": 10.0,
+      "seed": 212,
+      "initial_state": {
+        "episode_ix": 170,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.03951621289472373,
+          0.6011999485741614,
+          0.025000730912217325
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 171,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 154.98801216344762,
+      "max_reward": 10.0,
+      "seed": 213,
+      "initial_state": {
+        "episode_ix": 171,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.088369922164011,
+          0.7377058394311058,
+          0.025004200395539238
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 172,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 161.0282925865093,
+      "max_reward": 10.0,
+      "seed": 214,
+      "initial_state": {
+        "episode_ix": 172,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.08261934805454091,
+          0.734504322595769,
+          0.025007829345212396
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 173,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 233.10617330062306,
+      "max_reward": 10.0,
+      "seed": 215,
+      "initial_state": {
+        "episode_ix": 173,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.08968743700871624,
+          0.6805244357713234,
+          0.025007944023954003
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 174,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16430245339870453,
+      "success@5mm": null,
+      "sum_reward": 185.79448595431268,
+      "max_reward": 1.018818770905999,
+      "seed": 216,
+      "initial_state": {
+        "episode_ix": 174,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.05107942779474403,
+          0.7420147212219003,
+          0.025003802685722464
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 175,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 147.52215477969995,
+      "max_reward": 10.0,
+      "seed": 217,
+      "initial_state": {
+        "episode_ix": 175,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.09772044430445409,
+          0.6784892793495338,
+          0.025003054070640927
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 176,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 141.41312038537532,
+      "max_reward": 10.0,
+      "seed": 218,
+      "initial_state": {
+        "episode_ix": 176,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.03658228383598333,
+          0.7335988495563582,
+          0.02500675732623375
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 177,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.23376290500164032,
+      "success@5mm": null,
+      "sum_reward": 217.3605707220523,
+      "max_reward": 1.298388732706714,
+      "seed": 219,
+      "initial_state": {
+        "episode_ix": 177,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.08145818580016564,
+          0.6357255629481035,
+          0.025004930168781293
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 178,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 101.52197366689413,
+      "max_reward": 10.0,
+      "seed": 220,
+      "initial_state": {
+        "episode_ix": 178,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.060255948753679706,
+          0.7253186165499148,
+          0.025005021180788116
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 179,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 149.05711878105052,
+      "max_reward": 10.0,
+      "seed": 221,
+      "initial_state": {
+        "episode_ix": 179,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.08426986469024492,
+          0.6911977715694647,
+          0.025007796659188897
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 180,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 99.96097722961395,
+      "max_reward": 10.0,
+      "seed": 222,
+      "initial_state": {
+        "episode_ix": 180,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.06254318553160268,
+          0.7371311161629369,
+          0.025000393479782165
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 181,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 214.31575552253247,
+      "max_reward": 10.0,
+      "seed": 223,
+      "initial_state": {
+        "episode_ix": 181,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.0968017018215578,
+          0.6787998939214632,
+          0.025004996285334806
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 182,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.15934225916862488,
+      "success@5mm": null,
+      "sum_reward": 125.94349648292668,
+      "max_reward": 0.8245166131801935,
+      "seed": 224,
+      "initial_state": {
+        "episode_ix": 182,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.025577847348298623,
+          0.7390759472213464,
+          0.025003493983929637
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 183,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.18114827573299408,
+      "success@5mm": null,
+      "sum_reward": 127.52818533770859,
+      "max_reward": 0.9803031552707256,
+      "seed": 225,
+      "initial_state": {
+        "episode_ix": 183,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.09055251603363901,
+          0.7400627711113803,
+          0.02500873812637028
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 184,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.17284254729747772,
+      "success@5mm": null,
+      "sum_reward": 182.75192048405123,
+      "max_reward": 0.95861215553239,
+      "seed": 226,
+      "initial_state": {
+        "episode_ix": 184,
+        "env_idx": 8,
+        "obj_init_pos": [
+          0.04242403524714155,
+          0.7160290471129258,
+          0.025004738020615803
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 185,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.21468184888362885,
+      "success@5mm": null,
+      "sum_reward": 149.40779023787223,
+      "max_reward": 1.0377174192682785,
+      "seed": 227,
+      "initial_state": {
+        "episode_ix": 185,
+        "env_idx": 9,
+        "obj_init_pos": [
+          0.04516802368895273,
+          0.6482627066312142,
+          0.025003654572802396
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 186,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.25080007314682007,
+      "success@5mm": null,
+      "sum_reward": 182.41910420164947,
+      "max_reward": 1.1225067985351853,
+      "seed": 228,
+      "initial_state": {
+        "episode_ix": 186,
+        "env_idx": 10,
+        "obj_init_pos": [
+          0.05739088923301344,
+          0.603576507309699,
+          0.025000754181932552
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 187,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 130.4361080057956,
+      "max_reward": 10.0,
+      "seed": 229,
+      "initial_state": {
+        "episode_ix": 187,
+        "env_idx": 11,
+        "obj_init_pos": [
+          0.05896994033377682,
+          0.7410544215360348,
+          0.025009465594812808
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 188,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 102.38093421106919,
+      "max_reward": 10.0,
+      "seed": 230,
+      "initial_state": {
+        "episode_ix": 188,
+        "env_idx": 12,
+        "obj_init_pos": [
+          0.08864205835416283,
+          0.7386348910597249,
+          0.02500149007810814
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 189,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.16482144594192505,
+      "success@5mm": null,
+      "sum_reward": 197.24877935546763,
+      "max_reward": 1.6209822363938509,
+      "seed": 231,
+      "initial_state": {
+        "episode_ix": 189,
+        "env_idx": 13,
+        "obj_init_pos": [
+          0.03893980401918271,
+          0.731976779692955,
+          0.02500812768347007
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 190,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 223.0157842656276,
+      "max_reward": 10.0,
+      "seed": 232,
+      "initial_state": {
+        "episode_ix": 190,
+        "env_idx": 14,
+        "obj_init_pos": [
+          0.06857920761103051,
+          0.7158428051175086,
+          0.02500440740148578
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 191,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 169.1893301696739,
+      "max_reward": 10.0,
+      "seed": 233,
+      "initial_state": {
+        "episode_ix": 191,
+        "env_idx": 15,
+        "obj_init_pos": [
+          0.06348861537174459,
+          0.6168598248662086,
+          0.025006986448090105
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 192,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 107.87558823647485,
+      "max_reward": 10.0,
+      "seed": 234,
+      "initial_state": {
+        "episode_ix": 192,
+        "env_idx": 0,
+        "obj_init_pos": [
+          0.08557511616035895,
+          0.626302167165605,
+          0.025004527052927158
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 193,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 201.25207055111957,
+      "max_reward": 10.0,
+      "seed": 235,
+      "initial_state": {
+        "episode_ix": 193,
+        "env_idx": 1,
+        "obj_init_pos": [
+          0.05490189441517204,
+          0.6128027122546417,
+          0.02500912516525316
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 194,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 133.23283295874438,
+      "max_reward": 10.0,
+      "seed": 236,
+      "initial_state": {
+        "episode_ix": 194,
+        "env_idx": 2,
+        "obj_init_pos": [
+          0.09105554998312101,
+          0.6326428656417087,
+          0.02500905901409058
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 195,
+      "success": true,
+      "grasp_success": false,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 114.0749301295101,
+      "max_reward": 10.0,
+      "seed": 237,
+      "initial_state": {
+        "episode_ix": 195,
+        "env_idx": 3,
+        "obj_init_pos": [
+          0.004656613966294909,
+          0.6354413046993345,
+          0.02500302942923016
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 196,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 176.6186971136083,
+      "max_reward": 10.0,
+      "seed": 238,
+      "initial_state": {
+        "episode_ix": 196,
+        "env_idx": 4,
+        "obj_init_pos": [
+          0.055193017126600234,
+          0.6654181190691758,
+          0.02500940632761249
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 197,
+      "success": true,
+      "grasp_success": true,
+      "obj_to_target": 0.0,
+      "success@5mm": null,
+      "sum_reward": 170.82036600035428,
+      "max_reward": 10.0,
+      "seed": 239,
+      "initial_state": {
+        "episode_ix": 197,
+        "env_idx": 5,
+        "obj_init_pos": [
+          0.06617844866034865,
+          0.6184124871040336,
+          0.025001895630689348
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 198,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.1965866982936859,
+      "success@5mm": null,
+      "sum_reward": 185.330370426258,
+      "max_reward": 1.318206577091784,
+      "seed": 240,
+      "initial_state": {
+        "episode_ix": 198,
+        "env_idx": 6,
+        "obj_init_pos": [
+          0.09211980900122747,
+          0.7044142755284021,
+          0.02500468755821636
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    },
+    {
+      "episode_ix": 199,
+      "success": false,
+      "grasp_success": false,
+      "obj_to_target": 0.22848635911941528,
+      "success@5mm": null,
+      "sum_reward": 160.626835478508,
+      "max_reward": 1.4495307527515044,
+      "seed": 241,
+      "initial_state": {
+        "episode_ix": 199,
+        "env_idx": 7,
+        "obj_init_pos": [
+          0.09874140247344848,
+          0.6536033751515262,
+          0.025002827542004665
+        ],
+        "goal_pos": [
+          0.0,
+          0.8,
+          0.17
+        ]
+      }
+    }
+  ]
+}

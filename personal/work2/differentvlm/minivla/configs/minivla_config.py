@@ -1,3 +1,4 @@
+
 """
 MiniVLA Experiment Configuration
 
@@ -33,6 +34,17 @@ DATASET_CONFIGS = {
     },
     "merged_3tasks": {
         "dataset_root": "personal/work2/dataset_view/merged_3tasks",
+        "env_task": "disassemble-v3",  # Default env task (will be overridden by eval_tasks)
+        "camera": "corner",
+        "camera_names": "top,wrist",
+        "primary_image_key": "observation.images.top",
+        "wrist_image_key": "observation.images.wrist",
+        "eval_camera": "corner",
+        "eval_camera_names": "corner,gripperPOV",
+        "eval_tasks": ["disassemble-v3", "pick-place-v3", "coffee-button-v3"],  # Evaluate all 3 tasks
+    },
+    "merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42": {
+        "dataset_root": "personal/work2/dataset_view/merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42",
         "env_task": "disassemble-v3",  # Default env task (will be overridden by eval_tasks)
         "camera": "corner",
         "camera_names": "top,wrist",

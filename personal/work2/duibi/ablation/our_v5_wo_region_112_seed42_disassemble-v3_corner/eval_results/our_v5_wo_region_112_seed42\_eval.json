@@ -1,14 +1,11 @@
 {
-  "experiment": "our_v5_multi_168_seed42",
-  "num_episodes_per_dataset": 56,
-  "total_episodes": 168,
+  "experiment": "our_v5_wo_region_112_seed42",
+  "ablation_mode": "wo_region",
+  "selection_method": "our_v5_ablation_wo_region",
+  "dataset_name": "disassemble-v3_corner",
+  "num_episodes": 112,
   "seed": 42,
-  "gpu_id": 3,
-  "datasets": [
-    "coffee-button-v3_corner",
-    "disassemble-v3_corner",
-    "pick_place-v3_corner"
-  ],
+  "gpu_id": 0,
   "success_rates": [],
   "grasp_success_rates": [],
   "final_success_rate": null,

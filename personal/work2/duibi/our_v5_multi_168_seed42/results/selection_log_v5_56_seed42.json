@@ -686,7 +686,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.013192892074584961
+      "time_seconds": 0.015119075775146484
     },
     {
       "step": 2,
@@ -702,7 +702,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.27382069406564474,
       "joint_score": 0.6369103470328223,
-      "time_seconds": 0.01177358627319336
+      "time_seconds": 0.013479232788085938
     },
     {
       "step": 3,
@@ -718,7 +718,7 @@
       "normalized_visual_score": 0.1857005684464932,
       "normalized_action_score": 0.979930636712992,
       "joint_score": 0.5828156025797426,
-      "time_seconds": 0.010368108749389648
+      "time_seconds": 0.013365030288696289
     },
     {
       "step": 4,
@@ -734,7 +734,7 @@
       "normalized_visual_score": 0.7406805007270933,
       "normalized_action_score": 1.0,
       "joint_score": 0.8703402503635467,
-      "time_seconds": 0.010288476943969727
+      "time_seconds": 0.012898921966552734
     },
     {
       "step": 5,
@@ -750,7 +750,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.7516970691246684,
       "joint_score": 0.8758485345623341,
-      "time_seconds": 0.010471582412719727
+      "time_seconds": 0.02234029769897461
     },
     {
       "step": 6,
@@ -766,7 +766,7 @@
       "normalized_visual_score": 0.9656049657671818,
       "normalized_action_score": 1.0,
       "joint_score": 0.9828024828835908,
-      "time_seconds": 0.010362625122070312
+      "time_seconds": 0.017405986785888672
     },
     {
       "step": 7,
@@ -782,7 +782,7 @@
       "normalized_visual_score": 0.8416601798836211,
       "normalized_action_score": 1.0,
       "joint_score": 0.9208300899418105,
-      "time_seconds": 0.01041722297668457
+      "time_seconds": 0.015208721160888672
     },
     {
       "step": 8,
@@ -798,7 +798,7 @@
       "normalized_visual_score": 0.9352016316422521,
       "normalized_action_score": 0.7901943684054765,
       "joint_score": 0.8626980000238643,
-      "time_seconds": 0.010438203811645508
+      "time_seconds": 0.017410993576049805
     },
     {
       "step": 9,
@@ -814,7 +814,7 @@
       "normalized_visual_score": 0.5477713916939144,
       "normalized_action_score": 1.0,
       "joint_score": 0.7738856958469572,
-      "time_seconds": 0.010289669036865234
+      "time_seconds": 0.013669967651367188
     },
     {
       "step": 10,
@@ -830,7 +830,7 @@
       "normalized_visual_score": 0.4404085115468671,
       "normalized_action_score": 0.7491117095366677,
       "joint_score": 0.5947601105417675,
-      "time_seconds": 0.010270357131958008
+      "time_seconds": 0.013689517974853516
     },
     {
       "step": 11,
@@ -846,7 +846,7 @@
       "normalized_visual_score": 0.7764547462252903,
       "normalized_action_score": 0.901466267542628,
       "joint_score": 0.8389605068839592,
-      "time_seconds": 0.010624885559082031
+      "time_seconds": 0.025195837020874023
     },
     {
       "step": 12,
@@ -862,7 +862,7 @@
       "normalized_visual_score": 0.5549559176877729,
       "normalized_action_score": 0.9566578069809006,
       "joint_score": 0.7558068623343368,
-      "time_seconds": 0.01039743423461914
+      "time_seconds": 0.013679027557373047
     },
     {
       "step": 13,
@@ -878,7 +878,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.010555028915405273
+      "time_seconds": 0.013392925262451172
     },
     {
       "step": 14,
@@ -894,7 +894,7 @@
       "normalized_visual_score": 0.9135539854843847,
       "normalized_action_score": 0.8779050079042477,
       "joint_score": 0.8957294966943162,
-      "time_seconds": 0.010752439498901367
+      "time_seconds": 0.013607978820800781
     },
     {
       "step": 15,
@@ -910,7 +910,7 @@
       "normalized_visual_score": 0.5561559469169081,
       "normalized_action_score": 1.0,
       "joint_score": 0.778077973458454,
-      "time_seconds": 0.010902166366577148
+      "time_seconds": 0.013356447219848633
     },
     {
       "step": 16,
@@ -926,7 +926,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.9503279054830774,
       "joint_score": 0.9751639527415388,
-      "time_seconds": 0.010344743728637695
+      "time_seconds": 0.013018608093261719
     },
     {
       "step": 17,
@@ -942,7 +942,7 @@
       "normalized_visual_score": 0.4278445552501462,
       "normalized_action_score": 1.0,
       "joint_score": 0.7139222776250731,
-      "time_seconds": 0.010417461395263672
+      "time_seconds": 0.0200345516204834
     },
     {
       "step": 18,
@@ -958,7 +958,7 @@
       "normalized_visual_score": 0.933035975607223,
       "normalized_action_score": 0.7943194081901401,
       "joint_score": 0.8636776918986815,
-      "time_seconds": 0.010703563690185547
+      "time_seconds": 0.01800227165222168
     },
     {
       "step": 19,
@@ -974,7 +974,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.0107574462890625
+      "time_seconds": 0.013502836227416992
     },
     {
       "step": 20,
@@ -990,7 +990,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.010741949081420898
+      "time_seconds": 0.01391148567199707
     },
     {
       "step": 21,
@@ -1006,7 +1006,7 @@
       "normalized_visual_score": 0.8683021180089308,
       "normalized_action_score": 0.6259594913030647,
       "joint_score": 0.7471308046559977,
-      "time_seconds": 0.011216163635253906
+      "time_seconds": 0.014105081558227539
     },
     {
       "step": 22,
@@ -1022,7 +1022,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.8965364932843191,
       "joint_score": 0.9482682466421595,
-      "time_seconds": 0.010834932327270508
+      "time_seconds": 0.013178586959838867
     },
     {
       "step": 23,
@@ -1038,7 +1038,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.820595951925531,
       "joint_score": 0.9102979759627655,
-      "time_seconds": 0.01045680046081543
+      "time_seconds": 0.013059139251708984
     },
     {
       "step": 24,
@@ -1054,7 +1054,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.010683298110961914
+      "time_seconds": 0.026179075241088867
     },
     {
       "step": 25,
@@ -1070,7 +1070,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.010423898696899414
+      "time_seconds": 0.014095306396484375
     },
     {
       "step": 26,
@@ -1086,7 +1086,7 @@
       "normalized_visual_score": 0.40869248389139484,
       "normalized_action_score": 1.0,
       "joint_score": 0.7043462419456974,
-      "time_seconds": 0.010323524475097656
+      "time_seconds": 0.013666152954101562
     },
     {
       "step": 27,
@@ -1102,7 +1102,7 @@
       "normalized_visual_score": 0.8456092955399339,
       "normalized_action_score": 1.0,
       "joint_score": 0.922804647769967,
-      "time_seconds": 0.010487079620361328
+      "time_seconds": 0.014679193496704102
     },
     {
       "step": 28,
@@ -1118,7 +1118,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.9740572934833525,
       "joint_score": 0.9870286467416762,
-      "time_seconds": 0.01041269302368164
+      "time_seconds": 0.01744365692138672
     },
     {
       "step": 29,
@@ -1134,7 +1134,7 @@
       "normalized_visual_score": 0.8865007871828758,
       "normalized_action_score": 0.5502915937847304,
       "joint_score": 0.7183961904838031,
-      "time_seconds": 0.010708332061767578
+      "time_seconds": 0.013338565826416016
     },
     {
       "step": 30,
@@ -1150,7 +1150,7 @@
       "normalized_visual_score": 0.8434328260566515,
       "normalized_action_score": 1.0,
       "joint_score": 0.9217164130283257,
-      "time_seconds": 0.010538578033447266
+      "time_seconds": 0.021686077117919922
     },
     {
       "step": 31,
@@ -1166,7 +1166,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.010547637939453125
+      "time_seconds": 0.017756938934326172
     },
     {
       "step": 32,
@@ -1182,7 +1182,7 @@
       "normalized_visual_score": 0.9465330057261113,
       "normalized_action_score": 0.4847905532492636,
       "joint_score": 0.7156617794876875,
-      "time_seconds": 0.010400772094726562
+      "time_seconds": 0.013692140579223633
     },
     {
       "step": 33,
@@ -1198,7 +1198,7 @@
       "normalized_visual_score": 0.5466057386447686,
       "normalized_action_score": 0.915228730636966,
       "joint_score": 0.7309172346408672,
-      "time_seconds": 0.01068568229675293
+      "time_seconds": 0.013668298721313477
     },
     {
       "step": 34,
@@ -1214,7 +1214,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.010469675064086914
+      "time_seconds": 0.01340627670288086
     },
     {
       "step": 35,
@@ -1230,7 +1230,7 @@
       "normalized_visual_score": 0.9163742261812827,
       "normalized_action_score": 0.9711571218739297,
       "joint_score": 0.9437656740276061,
-      "time_seconds": 0.010620355606079102
+      "time_seconds": 0.011041879653930664
     },
     {
       "step": 36,
@@ -1246,7 +1246,7 @@
       "normalized_visual_score": 0.7406101178994935,
       "normalized_action_score": 0.9163321809445435,
       "joint_score": 0.8284711494220185,
-      "time_seconds": 0.010696172714233398
+      "time_seconds": 0.013458013534545898
     },
     {
       "step": 37,
@@ -1262,7 +1262,7 @@
       "normalized_visual_score": 0.6262130878490154,
       "normalized_action_score": 1.0,
       "joint_score": 0.8131065439245078,
-      "time_seconds": 0.010493755340576172
+      "time_seconds": 0.021188020706176758
     },
     {
       "step": 38,
@@ -1278,7 +1278,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.01062321662902832
+      "time_seconds": 0.011636495590209961
     },
     {
       "step": 39,
@@ -1294,7 +1294,7 @@
       "normalized_visual_score": 0.47479424614553173,
       "normalized_action_score": 0.9212280909861064,
       "joint_score": 0.698011168565819,
-      "time_seconds": 0.010672330856323242
+      "time_seconds": 0.013032913208007812
     },
     {
       "step": 40,
@@ -1310,7 +1310,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.6671169280967968,
       "joint_score": 0.8335584640483984,
-      "time_seconds": 0.01052093505859375
+      "time_seconds": 0.012798309326171875
     },
     {
       "step": 41,
@@ -1326,7 +1326,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.9263412500492435,
       "joint_score": 0.9631706250246217,
-      "time_seconds": 0.010605573654174805
+      "time_seconds": 0.012568235397338867
     },
     {
       "step": 42,
@@ -1342,7 +1342,7 @@
       "normalized_visual_score": 0.8414394650326813,
       "normalized_action_score": 0.6052978448546082,
       "joint_score": 0.7233686549436448,
-      "time_seconds": 0.010705709457397461
+      "time_seconds": 0.01075291633605957
     },
     {
       "step": 43,
@@ -1358,7 +1358,7 @@
       "normalized_visual_score": 0.44322931679025857,
       "normalized_action_score": 1.0,
       "joint_score": 0.7216146583951293,
-      "time_seconds": 0.011415958404541016
+      "time_seconds": 0.011044025421142578
     },
     {
       "step": 44,
@@ -1374,7 +1374,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 1.0,
       "joint_score": 1.0,
-      "time_seconds": 0.011111736297607422
+      "time_seconds": 0.012056350708007812
     },
     {
       "step": 45,
@@ -1390,7 +1390,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.9017576863817865,
       "joint_score": 0.9508788431908932,
-      "time_seconds": 0.010793447494506836
+      "time_seconds": 0.012499570846557617
     },
     {
       "step": 46,
@@ -1406,7 +1406,7 @@
       "normalized_visual_score": 0.9235759606558205,
       "normalized_action_score": 1.0,
       "joint_score": 0.9617879803279102,
-      "time_seconds": 0.01057291030883789
+      "time_seconds": 0.018964767456054688
     },
     {
       "step": 47,
@@ -1422,7 +1422,7 @@
       "normalized_visual_score": 0.7611347447910427,
       "normalized_action_score": 0.9630919997772764,
       "joint_score": 0.8621133722841596,
-      "time_seconds": 0.01056218147277832
+      "time_seconds": 0.01875758171081543
     },
     {
       "step": 48,
@@ -1438,7 +1438,7 @@
       "normalized_visual_score": 1.0,
       "normalized_action_score": 0.8485906811439866,
       "joint_score": 0.9242953405719934,
-      "time_seconds": 0.010653972625732422
+      "time_seconds": 0.01798391342163086
     }
   ],
   "total_steps": 48,
