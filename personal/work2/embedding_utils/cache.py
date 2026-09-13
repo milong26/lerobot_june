@@ -257,8 +257,10 @@ def validate_previous_shared_cache(
         if "dataset_name" not in metadata:
             issues.append("Metadata missing required field: dataset_name")
         else:
-            if metadata["dataset_name"] != canonical_name:
-                issues.append(f"Metadata mismatch for 'dataset_name': expected {canonical_name!r}, got {metadata['dataset_name']!r}")
+            # Accept exact match OR if cache dataset_name contains the target name
+            cache_dataset_name = metadata["dataset_name"]
+            if cache_dataset_name != canonical_name and canonical_name not in cache_dataset_name:
+                issues.append(f"Metadata mismatch for 'dataset_name': expected {canonical_name!r}, got {cache_dataset_name!r}")
 
         if "dataset_realpath" not in metadata:
             issues.append("Metadata missing required field: dataset_realpath")
@@ -270,9 +272,15 @@ def validate_previous_shared_cache(
                     f"cache has '{metadata['dataset_realpath']}', current is '{current_realpath}'"
                 )
 
+        # Check if this is a multi-dataset cache
+        is_multi_dataset_cache = False
+        if "dataset_name" in metadata:
+            cache_dataset_name = metadata["dataset_name"]
+            if cache_dataset_name != canonical_name and canonical_name in cache_dataset_name:
+                is_multi_dataset_cache = True
+
         required_fields = {
             "model_name": MODEL_NAME,
-            "prompt_text": get_prompt_text(dataset_name),
             "token_pooling": TOKEN_POOLING,
             "global_frame_rule": GLOBAL_FRAME_RULE,
             "wrist_start_ratio": WRIST_START_RATIO,
@@ -281,6 +289,10 @@ def validate_previous_shared_cache(
             "pca_dim": pca_dim,
             "extractor_version": EXTRACTOR_VERSION,
         }
+        # Only check prompt_text for non-multi-dataset caches
+        if not is_multi_dataset_cache:
+            required_fields["prompt_text"] = get_prompt_text(dataset_name)
+        
         for key, expected_val in required_fields.items():
             if key not in metadata:
                 issues.append(f"Metadata missing required field: {key}")
@@ -423,8 +435,11 @@ def validate_shared_cache(
         if "dataset_name" not in metadata:
             issues.append("Metadata missing required field: dataset_name")
         else:
-            if metadata["dataset_name"] != canonical_name:
-                issues.append(f"Metadata mismatch for 'dataset_name': expected {canonical_name!r}, got {metadata['dataset_name']!r}")
+            # Accept exact match OR if cache dataset_name contains the target name
+            # (e.g., "pick_place_disassemble-v3_corner" contains "disassemble-v3_corner")
+            cache_dataset_name = metadata["dataset_name"]
+            if cache_dataset_name != canonical_name and canonical_name not in cache_dataset_name:
+                issues.append(f"Metadata mismatch for 'dataset_name': expected {canonical_name!r}, got {cache_dataset_name!r}")
         
         if "dataset_realpath" not in metadata:
             issues.append("Metadata missing required field: dataset_realpath")
@@ -436,9 +451,15 @@ def validate_shared_cache(
                     f"cache has '{metadata['dataset_realpath']}', current is '{current_realpath}'"
                 )
         
+        # Check if this is a multi-dataset cache (cache name contains target name)
+        is_multi_dataset_cache = False
+        if "dataset_name" in metadata:
+            cache_dataset_name = metadata["dataset_name"]
+            if cache_dataset_name != canonical_name and canonical_name in cache_dataset_name:
+                is_multi_dataset_cache = True
+        
         required_fields = {
             "model_name": MODEL_NAME,
-            "prompt_text": get_prompt_text(dataset_name),
             "token_pooling": TOKEN_POOLING,
             "global_frame_rule": GLOBAL_FRAME_RULE,
             "wrist_start_ratio": WRIST_START_RATIO,
@@ -448,6 +469,10 @@ def validate_shared_cache(
             "extractor_version": EXTRACTOR_VERSION,
             "extraction_method_name": expected_method,
         }
+        # Only check prompt_text for non-multi-dataset caches
+        if not is_multi_dataset_cache:
+            required_fields["prompt_text"] = get_prompt_text(dataset_name)
+        
         for key, expected_val in required_fields.items():
             if key not in metadata:
                 issues.append(f"Metadata missing required field: {key}")

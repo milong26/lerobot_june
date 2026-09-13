@@ -218,11 +218,48 @@ def _make_planner(env, task):
         FailAwarePandaStickMotionPlanningSolver,
     )
 
+    # Monkey-patch PandaStickMotionPlanningSolver.__init__ to fix upstream bug:
+    # it passes visualize_target_grasp_pose to BaseMotionPlanningSolver which doesn't accept it
+    from mani_skill.examples.motionplanning.panda.motionplanner_stick import (
+        PandaStickMotionPlanningSolver,
+    )
+    if not hasattr(PandaStickMotionPlanningSolver, "_orig_init_patched"):
+        _orig_init = PandaStickMotionPlanningSolver.__init__
+
+        def _fixed_init(
+            self,
+            env,
+            debug=False,
+            vis=True,
+            base_pose=None,
+            visualize_target_grasp_pose=True,
+            print_env_info=True,
+            joint_vel_limits=0.9,
+            joint_acc_limits=0.9,
+        ):
+            # Call parent __init__ without visualize_target_grasp_pose
+            from mani_skill.examples.motionplanning.base_motionplanner.motionplanner import (
+                BaseMotionPlanningSolver,
+            )
+
+            BaseMotionPlanningSolver.__init__(
+                self,
+                env,
+                debug=debug,
+                vis=vis,
+                base_pose=base_pose,
+                print_env_info=print_env_info,
+                joint_vel_limits=joint_vel_limits,
+                joint_acc_limits=joint_acc_limits,
+            )
+
+        PandaStickMotionPlanningSolver.__init__ = _fixed_init
+        PandaStickMotionPlanningSolver._orig_init_patched = True
+
     common = dict(
         debug=False,
         vis=False,
         base_pose=env.unwrapped.agent.robot.pose,
-        visualize_target_grasp_pose=False,
         print_env_info=False,
     )
     if task in ("PatternLock", "RouteStick"):

@@ -285,8 +285,10 @@ def _validate_action_descriptor_cache(
         if "dataset_name" not in metadata:
             issues.append("Metadata missing required field: dataset_name")
         else:
-            if metadata["dataset_name"] != canonical_name:
-                issues.append(f"Metadata mismatch for 'dataset_name': expected {canonical_name!r}, got {metadata['dataset_name']!r}")
+            # Accept exact match OR if cache dataset_name contains the target name
+            cache_dataset_name = metadata["dataset_name"]
+            if cache_dataset_name != canonical_name and canonical_name not in cache_dataset_name:
+                issues.append(f"Metadata mismatch for 'dataset_name': expected {canonical_name!r}, got {cache_dataset_name!r}")
 
     num_found = 0
     for ep_idx in expected_episode_indices:

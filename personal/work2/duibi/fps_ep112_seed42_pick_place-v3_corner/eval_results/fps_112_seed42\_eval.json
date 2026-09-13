@@ -1,0 +1,16 @@
+{
+  "experiment": "fps_112_seed42",
+  "selection_method": "visual_farthest_point_sampling",
+  "dataset_name": "pick_place-v3_corner",
+  "num_episodes": 112,
+  "seed": 42,
+  "gpu_id": 1,
+  "success_rates": [],
+  "grasp_success_rates": [],
+  "final_success_rate": null,
+  "final_grasp_success_rate": null,
+  "max_success_rate": null,
+  "avg_success_rate": null,
+  "eval_details": [],
+  "n_eval_runs": 0
+}

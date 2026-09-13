@@ -760,8 +760,8 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                         start_seed=cfg.seed,
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
                         env_rename_map={
-                            "observation.images.camera1": "observation.images.top",
-                            "observation.images.camera2": "observation.images.wrist",
+                            "observation.images.top": "observation.images.camera1",
+                            "observation.images.wrist": "observation.images.camera2",
                         },
                     )
                 # overall metrics (suite-agnostic)

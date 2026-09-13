@@ -1,0 +1,626 @@
+{
+  "per_episode_diagnostic": [
+    {
+      "episode_id": 109,
+      "step": 1,
+      "selected_region_id": 20,
+      "region_priority": 0.5892683584492036,
+      "visual_score": 1.1983015454000512,
+      "action_score": 4.033102484204899,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 225,
+      "step": 2,
+      "selected_region_id": 9,
+      "region_priority": 0.5888513059762893,
+      "visual_score": 1.0602924198787893,
+      "action_score": 2.49811247007207,
+      "joint_score": 0.6369103470328223
+    },
+    {
+      "episode_id": 170,
+      "step": 3,
+      "selected_region_id": 34,
+      "region_priority": 0.586740936244944,
+      "visual_score": 0.7629755231294953,
+      "action_score": 2.090939341269071,
+      "joint_score": 0.5828156025797426
+    },
+    {
+      "episode_id": 202,
+      "step": 4,
+      "selected_region_id": 26,
+      "region_priority": 0.5839671606286412,
+      "visual_score": 0.9057852805836315,
+      "action_score": 2.4155226779710026,
+      "joint_score": 0.8703402503635467
+    },
+    {
+      "episode_id": 284,
+      "step": 5,
+      "selected_region_id": 21,
+      "region_priority": 0.5832978414327195,
+      "visual_score": 1.2358352094761653,
+      "action_score": 1.7683085138954482,
+      "joint_score": 0.8758485345623341
+    },
+    {
+      "episode_id": 362,
+      "step": 6,
+      "selected_region_id": 8,
+      "region_priority": 0.5816191957878964,
+      "visual_score": 0.920263174189356,
+      "action_score": 3.439967731257484,
+      "joint_score": 0.9828024828835908
+    },
+    {
+      "episode_id": 390,
+      "step": 7,
+      "selected_region_id": 12,
+      "region_priority": 0.5788808814974291,
+      "visual_score": 0.889661337033143,
+      "action_score": 2.7354044073956905,
+      "joint_score": 0.9208300899418105
+    },
+    {
+      "episode_id": 228,
+      "step": 8,
+      "selected_region_id": 15,
+      "region_priority": 0.5787250601207204,
+      "visual_score": 1.1038725119312311,
+      "action_score": 2.1720335397975754,
+      "joint_score": 0.8626980000238643
+    },
+    {
+      "episode_id": 129,
+      "step": 9,
+      "selected_region_id": 11,
+      "region_priority": 0.5781729570028126,
+      "visual_score": 0.7919534110078261,
+      "action_score": 2.4869936636349834,
+      "joint_score": 0.7738856958469572
+    },
+    {
+      "episode_id": 244,
+      "step": 10,
+      "selected_region_id": 31,
+      "region_priority": 0.5772194008669045,
+      "visual_score": 0.7789441119082071,
+      "action_score": 2.037756681811961,
+      "joint_score": 0.5947601105417675
+    },
+    {
+      "episode_id": 107,
+      "step": 11,
+      "selected_region_id": 35,
+      "region_priority": 0.576715790995009,
+      "visual_score": 0.8912651996931402,
+      "action_score": 2.6678880393359434,
+      "joint_score": 0.8389605068839592
+    },
+    {
+      "episode_id": 274,
+      "step": 12,
+      "selected_region_id": 19,
+      "region_priority": 0.5750003338682843,
+      "visual_score": 0.9073729719435527,
+      "action_score": 2.728574259759157,
+      "joint_score": 0.7558068623343368
+    },
+    {
+      "episode_id": 314,
+      "step": 13,
+      "selected_region_id": 14,
+      "region_priority": 0.5737560417111003,
+      "visual_score": 0.9010747922563382,
+      "action_score": 2.4959568207794978,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 93,
+      "step": 14,
+      "selected_region_id": 22,
+      "region_priority": 0.5732901846437257,
+      "visual_score": 0.9796056491646914,
+      "action_score": 1.708977521012274,
+      "joint_score": 0.8957294966943162
+    },
+    {
+      "episode_id": 364,
+      "step": 15,
+      "selected_region_id": 39,
+      "region_priority": 0.5713829503349899,
+      "visual_score": 0.9016711976054455,
+      "action_score": 1.6913738277439658,
+      "joint_score": 0.778077973458454
+    },
+    {
+      "episode_id": 336,
+      "step": 16,
+      "selected_region_id": 27,
+      "region_priority": 0.5711175755226128,
+      "visual_score": 0.8916892445704863,
+      "action_score": 1.7971231321502439,
+      "joint_score": 0.9751639527415388
+    },
+    {
+      "episode_id": 52,
+      "step": 17,
+      "selected_region_id": 28,
+      "region_priority": 0.5698499223304059,
+      "visual_score": 0.7588835760604241,
+      "action_score": 2.119140692677241,
+      "joint_score": 0.7139222776250731
+    },
+    {
+      "episode_id": 45,
+      "step": 18,
+      "selected_region_id": 33,
+      "region_priority": 0.5696160523592021,
+      "visual_score": 0.9440120381861231,
+      "action_score": 2.7860681677709103,
+      "joint_score": 0.8636776918986815
+    },
+    {
+      "episode_id": 212,
+      "step": 19,
+      "selected_region_id": 17,
+      "region_priority": 0.5694527632098162,
+      "visual_score": 0.938982726768149,
+      "action_score": 2.134461175176604,
+      "joint_score": 1.0
+    },
+    {
+      "episode_id": 143,
+      "step": 20,
+      "selected_region_id": 10,
+      "region_priority": 0.5693140014133878,
+      "visual_score": 0.9243789766977403,
+      "action_score": 2.5569894373135167,
+      "joint_score": 1.0
+    }
+  ],
+  "dataset_statistics": {
+    "selected_count": 28,
+    "total_count": 400,
+    "full_count": 372,
+    "selected_visual_score": {
+      "mean": 0.0035237390733309213,
+      "std": 0.011696464530743817
+    },
+    "full_visual_score": {
+      "mean": -0.00026522767218615785,
+      "std": 0.011999031678462183
+    },
+    "selected_action_score": {
+      "mean": 0.37642480875392986,
+      "std": 0.0658235736922514
+    },
+    "full_action_score": {
+      "mean": 0.3732590268754289,
+      "std": 0.06512509648404564
+    }
+  },
+  "action_coverage_analysis": {
+    "selected_action_distribution_distance": {
+      "mean_l2_distance": 4.114745322851972,
+      "mean_cosine_distance": 0.07587629386194482
+    },
+    "n_comparisons": 28
+  },
+  "rand_vec_coverage_statistics": {
+    "selected_region_count": 28,
+    "total_region_count": 40,
+    "region_coverage_ratio": 0.7,
+    "region_selection_distribution": [
+      {
+        "region_id": 0,
+        "total_episodes": 18,
+        "selected_episodes": 1,
+        "selection_ratio": 0.05555555555555555
+      },
+      {
+        "region_id": 1,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 2,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 3,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 4,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 5,
+        "total_episodes": 12,
+        "selected_episodes": 1,
+        "selection_ratio": 0.08333333333333333
+      },
+      {
+        "region_id": 6,
+        "total_episodes": 12,
+        "selected_episodes": 1,
+        "selection_ratio": 0.08333333333333333
+      },
+      {
+        "region_id": 7,
+        "total_episodes": 14,
+        "selected_episodes": 1,
+        "selection_ratio": 0.07142857142857142
+      },
+      {
+        "region_id": 8,
+        "total_episodes": 12,
+        "selected_episodes": 1,
+        "selection_ratio": 0.08333333333333333
+      },
+      {
+        "region_id": 9,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 10,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 11,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 12,
+        "total_episodes": 11,
+        "selected_episodes": 1,
+        "selection_ratio": 0.09090909090909091
+      },
+      {
+        "region_id": 13,
+        "total_episodes": 10,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 14,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 15,
+        "total_episodes": 15,
+        "selected_episodes": 1,
+        "selection_ratio": 0.06666666666666667
+      },
+      {
+        "region_id": 16,
+        "total_episodes": 11,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 17,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 18,
+        "total_episodes": 8,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 19,
+        "total_episodes": 14,
+        "selected_episodes": 1,
+        "selection_ratio": 0.07142857142857142
+      },
+      {
+        "region_id": 20,
+        "total_episodes": 12,
+        "selected_episodes": 1,
+        "selection_ratio": 0.08333333333333333
+      },
+      {
+        "region_id": 21,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 22,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 23,
+        "total_episodes": 11,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 24,
+        "total_episodes": 6,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 25,
+        "total_episodes": 7,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 26,
+        "total_episodes": 10,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1
+      },
+      {
+        "region_id": 27,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      },
+      {
+        "region_id": 28,
+        "total_episodes": 11,
+        "selected_episodes": 1,
+        "selection_ratio": 0.09090909090909091
+      },
+      {
+        "region_id": 29,
+        "total_episodes": 9,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 30,
+        "total_episodes": 8,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 31,
+        "total_episodes": 7,
+        "selected_episodes": 1,
+        "selection_ratio": 0.14285714285714285
+      },
+      {
+        "region_id": 32,
+        "total_episodes": 8,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 33,
+        "total_episodes": 6,
+        "selected_episodes": 1,
+        "selection_ratio": 0.16666666666666666
+      },
+      {
+        "region_id": 34,
+        "total_episodes": 12,
+        "selected_episodes": 1,
+        "selection_ratio": 0.08333333333333333
+      },
+      {
+        "region_id": 35,
+        "total_episodes": 9,
+        "selected_episodes": 1,
+        "selection_ratio": 0.1111111111111111
+      },
+      {
+        "region_id": 36,
+        "total_episodes": 6,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 37,
+        "total_episodes": 10,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 38,
+        "total_episodes": 14,
+        "selected_episodes": 0,
+        "selection_ratio": 0.0
+      },
+      {
+        "region_id": 39,
+        "total_episodes": 8,
+        "selected_episodes": 1,
+        "selection_ratio": 0.125
+      }
+    ],
+    "average_region_coverage_gap": 1.0,
+    "average_region_visual_uncertainty": 0.09981816560668515,
+    "average_region_action_uncertainty": 0.23683243018899583,
+    "selected_rand_vec_distribution": [
+      [
+        -0.045893434435129166,
+        0.6691041588783264,
+        0.019999999552965164,
+        0.06239018589258194,
+        0.8010526895523071,
+        0.19030092656612396
+      ],
+      [
+        -0.09029559791088104,
+        0.616332471370697,
+        0.019999999552965164,
+        0.025478336960077286,
+        0.8856182098388672,
+        0.2125256061553955
+      ],
+      [
+        -0.08922195434570312,
+        0.6960654258728027,
+        0.019999999552965164,
+        0.004225530195981264,
+        0.8636553287506104,
+        0.24118924140930176
+      ],
+      [
+        0.06624697893857956,
+        0.6246567368507385,
+        0.019999999552965164,
+        -0.002513643354177475,
+        0.8650237917900085,
+        0.28024470806121826
+      ],
+      [
+        0.099875308573246,
+        0.6750984191894531,
+        0.019999999552965164,
+        0.0491010919213295,
+        0.8235598206520081,
+        0.1540876179933548
+      ],
+      [
+        -0.03096175752580166,
+        0.6041674613952637,
+        0.019999999552965164,
+        0.019954562187194824,
+        0.8970971703529358,
+        0.22551597654819489
+      ],
+      [
+        -0.008166475221514702,
+        0.6018205285072327,
+        0.019999999552965164,
+        -0.037840478122234344,
+        0.8841599822044373,
+        0.055599335581064224
+      ],
+      [
+        0.07779786735773087,
+        0.6097392439842224,
+        0.019999999552965164,
+        -0.09631482511758804,
+        0.8784254193305969,
+        0.055548522621393204
+      ],
+      [
+        0.04233401641249657,
+        0.6665271520614624,
+        0.019999999552965164,
+        -0.0922873318195343,
+        0.8208292126655579,
+        0.11671492457389832
+      ],
+      [
+        -0.09337111562490463,
+        0.6008784174919128,
+        0.019999999552965164,
+        -0.0665462389588356,
+        0.8968991041183472,
+        0.06414259970188141
+      ]
+    ],
+    "full_rand_vec_distribution": [
+      [
+        -0.012482557445764542,
+        0.6891772747039795,
+        0.019999999552965164,
+        -0.02331169694662094,
+        0.8791725039482117,
+        0.18222373723983765
+      ],
+      [
+        -0.05910954996943474,
+        0.6878117322921753,
+        0.019999999552965164,
+        0.034093502908945084,
+        0.8417304754257202,
+        0.18967245519161224
+      ],
+      [
+        -0.059070274233818054,
+        0.6619271039962769,
+        0.019999999552965164,
+        -0.04663454368710518,
+        0.862113356590271,
+        0.18228551745414734
+      ],
+      [
+        -0.07488293945789337,
+        0.6207242608070374,
+        0.019999999552965164,
+        -0.011838031001389027,
+        0.8029876351356506,
+        0.1642083078622818
+      ],
+      [
+        0.09525489062070847,
+        0.6006230115890503,
+        0.019999999552965164,
+        -0.013041693717241287,
+        0.8779382705688477,
+        0.09942127019166946
+      ],
+      [
+        0.053181570023298264,
+        0.6518418192863464,
+        0.019999999552965164,
+        -0.06245575472712517,
+        0.8080741167068481,
+        0.23461008071899414
+      ],
+      [
+        0.0059634726494550705,
+        0.6418807506561279,
+        0.019999999552965164,
+        0.024503886699676514,
+        0.8438141345977783,
+        0.2339705228805542
+      ],
+      [
+        0.00022409272787626833,
+        0.6072050929069519,
+        0.019999999552965164,
+        -2.3499835151596926e-05,
+        0.8679230213165283,
+        0.25093474984169006
+      ],
+      [
+        0.05217911675572395,
+        0.6712374687194824,
+        0.019999999552965164,
+        -0.014781645499169827,
+        0.8289074897766113,
+        0.293463796377182
+      ],
+      [
+        -0.016298362985253334,
+        0.6248100996017456,
+        0.019999999552965164,
+        -0.030900271609425545,
+        0.8166776299476624,
+        0.2696397602558136
+      ]
+    ]
+  }
+}

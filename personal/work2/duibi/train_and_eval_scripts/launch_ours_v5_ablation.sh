@@ -243,16 +243,16 @@ if [ "\$RESUME_FLAG" = true ] && [ -n "\$LATEST_CHECKPOINT" ]; then
         --eval.n_episodes=50 \\
         --policy.device=cuda \\
         --policy.use_amp=true \\
-        --rename_map='{"observation.images.camera1":"observation.images.top","observation.images.camera2":"observation.images.wrist"}' \\
+        --rename_map='{"observation.images.top":"observation.images.camera1","observation.images.wrist":"observation.images.camera2"}' \\
         --output_dir="\$EVAL_TEST_DIR" \\
         2>&1 | tee "\$EVAL_TEST_DIR/eval_test.log"
 
-    EVAL_TEST_EXIT_code=\${PIPESTATUS[0]}
-    if [ \$EVAL_TEST_exit_code -eq 0 ]; then
+    EVAL_TEST_EXIT_CODE=\${PIPESTATUS[0]}
+    if [ \$EVAL_TEST_EXIT_CODE -eq 0 ]; then
         echo "=== Pre-flight eval test PASSED ==="
         echo "Eval configuration is correct. Proceeding with training resume."
     else
-        echo "=== WARNING: Pre-flight eval test FAILED (exit code: \$EVAL_TEST_exit_code) ==="
+        echo "=== WARNING: Pre-flight eval test FAILED (exit code: \$EVAL_TEST_EXIT_CODE) ==="
         echo "Check the eval test log: \$EVAL_TEST_DIR/eval_test.log"
         echo "Training will still resume, but eval may fail again."
         echo "Waiting 10 seconds before continuing..."

@@ -1,0 +1,20 @@
+{
+  "experiment": "our_v5_multi_84_seed42",
+  "num_episodes_per_dataset": 28,
+  "total_episodes": 84,
+  "seed": 42,
+  "gpu_id": 1,
+  "datasets": [
+    "coffee-button-v3_corner",
+    "disassemble-v3_corner",
+    "pick_place-v3_corner"
+  ],
+  "success_rates": [],
+  "grasp_success_rates": [],
+  "final_success_rate": null,
+  "final_grasp_success_rate": null,
+  "max_success_rate": null,
+  "avg_success_rate": null,
+  "eval_details": [],
+  "n_eval_runs": 0
+}

@@ -17,3 +17,22 @@ nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
   --output-dir personal/work2/dataset_view_robomme/MoveCube_easy \
   --repo-id work2/robomme_MoveCube_easy \
   > logs/movecube_easy.log 2>&1 &
+
+再采集两个数据集
+nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
+  --task PatternLock \
+  --difficulty medium \
+  --num-random-episodes 300 \
+  --num-uniform-episodes 100 \
+  --output-dir personal/work2/dataset_view_robomme/PatternLock_medium \
+  --repo-id work2/robomme_PatternLock_medium \
+  > logs_patternlock_medium.log 2>&1 &
+
+nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
+  --task RouteStick \
+  --difficulty hard \
+  --num-random-episodes 300 \
+  --num-uniform-episodes 100 \
+  --output-dir personal/work2/dataset_view_robomme/RouteStick_hard \
+  --repo-id work2/robomme_RouteStick_hard \
+  > logs_routestick_hard.log 2>&1 &
