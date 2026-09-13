@@ -88,6 +88,27 @@ def _find_latest_checkpoint_step(output_dir: Path) -> tuple[str, int] | None:
     return latest, int(latest)
 
 
+def _resolve_to_canonical(checkpoint_path: str) -> str:
+    """
+    Resolve checkpoint path to canonical absolute path for comparison.
+    Handles both HF model names and local .pt paths.
+    """
+    if not checkpoint_path:
+        return ""
+    
+    # If it's already a .pt path, resolve to absolute
+    if checkpoint_path.endswith(".pt"):
+        return str(Path(checkpoint_path).resolve())
+    
+    # Try to resolve HF model name to actual .pt path
+    resolved = _resolve_hf_checkpoint_path(checkpoint_path)
+    if resolved:
+        return str(Path(resolved).resolve())
+    
+    # Fallback: return as-is
+    return checkpoint_path
+
+
 def _check_resume_compatible(output_dir: Path, cfg) -> tuple[bool, str]:
     """
     Check if existing checkpoints are compatible with current training configuration.
@@ -131,14 +152,20 @@ def _check_resume_compatible(output_dir: Path, cfg) -> tuple[bool, str]:
         )
 
     # Check 3: Official pretrained checkpoint path (if using backbone_only mode)
+    # Use canonical path comparison to handle HF model names vs resolved .pt paths
     if cfg.official_init_mode == "backbone_only":
         old_checkpoint = policy_cfg.get("official_pretrained_checkpoint", "")
-        if old_checkpoint and old_checkpoint != cfg.official_pretrained_checkpoint:
-            return False, (
-                f"Official pretrained checkpoint changed: "
-                f"old='{old_checkpoint}', new='{cfg.official_pretrained_checkpoint}'. "
-                f"Use --restart to start fresh training with new checkpoint."
-            )
+        if old_checkpoint:
+            # Resolve both to canonical paths for fair comparison
+            old_canonical = _resolve_to_canonical(old_checkpoint)
+            new_canonical = _resolve_to_canonical(cfg.official_pretrained_checkpoint)
+            if old_canonical != new_canonical:
+                return False, (
+                    f"Official pretrained checkpoint changed: "
+                    f"old='{old_checkpoint}' (resolved: {old_canonical}), "
+                    f"new='{cfg.official_pretrained_checkpoint}' (resolved: {new_canonical}). "
+                    f"Use --restart to start fresh training with new checkpoint."
+                )
 
     return True, "Checkpoint is compatible with current configuration"
 
@@ -303,6 +330,7 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         f"--policy.type={cfg.policy_type}",
         "--policy.device=cuda",
         "--policy.push_to_hub=false",
+        "--policy.use_amp=true",
         "--dataset.repo_id=lerobot/metaworld_pick_place",
         f"--dataset.root={cfg.dataset_root}",
         f"--dataset.episodes={episodes_str}",

@@ -39,16 +39,17 @@ DATASET_CONFIGS = {
         "primary_image_key": "observation.images.top",
         "wrist_image_key": "observation.images.wrist",
         "eval_camera": "corner",
-        "eval_camera_names": "top,wrist",
+        "eval_camera_names": "corner,gripperPOV",
     },
 }
 
-SELECTION_NUM_EPISODES = 112
+SELECTION_NUM_EPISODES = 200
 SELECTION_SEED = 42
 
 TRAIN_STEPS = 50000
 TRAIN_SAVE_FREQ = 2000
 TRAIN_BATCH_SIZE = 2
+TRAIN_GRADIENT_ACCUMULATION_STEPS = 16  # Effective batch = 2 * 16 = 32 (align with official per_device_batch_size)
 TRAIN_NUM_WORKERS = 16
 
 # Action tokenizer: MetaWorld uses extra_action_tokenizer (non-VQ, supports 4D natively)

@@ -594,7 +594,7 @@ def main():
                        help="Only evaluate the latest checkpoint (default: evaluate all)")
     
     # Training parameters
-    parser.add_argument("--train-steps", type=int, default=20000, help="Total training steps")
+    parser.add_argument("--train-steps", type=int, default=50000, help="Total training steps (default: 50000 for official)")
     parser.add_argument("--train-save-freq", type=int, default=2000, help="Checkpoint save frequency")
     parser.add_argument("--env-eval-freq", type=int, default=0,
                        help="Environment eval frequency during training (0=disabled, >0=eval every N steps)")

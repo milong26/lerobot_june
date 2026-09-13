@@ -28,6 +28,7 @@ nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
   --repo-id work2/robomme_PatternLock_medium \
   > logs_patternlock_medium.log 2>&1 &
 
+
 nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
   --task RouteStick \
   --difficulty hard \
