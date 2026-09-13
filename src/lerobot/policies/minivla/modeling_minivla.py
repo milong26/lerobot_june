@@ -804,6 +804,16 @@ class MiniVLACore(nn.Module):
         logits = outputs.logits[batch_indices, multimodal_last_index]  # [B, vocab_size]
         past_key_values = outputs.past_key_values
 
+        # CRITICAL FIX: Extend attention_mask to include vision patches after first forward.
+        # The VLM internally inserts num_patches vision tokens after the first text token,
+        # so the actual sequence length in KV-cache is: original_text_len + num_patches.
+        # We must update attention_mask here to match the cache before generating subsequent tokens.
+        vision_mask = torch.ones(batch_size, num_patches, dtype=attention_mask.dtype, device=attention_mask.device)
+        attention_mask = torch.cat(
+            [attention_mask[:, :1], vision_mask, attention_mask[:, 1:]],
+            dim=1,
+        )
+
         generated_token_ids = []
 
         for step in range(max_new_tokens):
@@ -816,8 +826,16 @@ class MiniVLACore(nn.Module):
             generated_token_ids.append(next_token)
 
             if step < max_new_tokens - 1:
+                # CRITICAL FIX: Extend attention_mask BEFORE calling VLM, not after.
+                # The KV-cache contains (original_text + vision_patches + generated_tokens) positions.
+                # The attention_mask must match this length for correct attention computation.
+                # We append 1 for the token we just generated, so the mask is ready for the NEXT step.
+                attention_mask = torch.cat(
+                    [attention_mask, torch.ones(batch_size, 1, dtype=attention_mask.dtype, device=attention_mask.device)],
+                    dim=1,
+                )
+
                 # Feed single token + past_key_values back to VLM with cached forward
-                # Build multimodal attention mask: append 1 for each generated token
                 outputs = self.vlm(
                     input_ids=next_token,
                     attention_mask=attention_mask,
@@ -826,11 +844,6 @@ class MiniVLACore(nn.Module):
                 )
                 logits = outputs.logits[:, -1, :]
                 past_key_values = outputs.past_key_values
-                # Extend attention_mask for the new token
-                attention_mask = torch.cat(
-                    [attention_mask, torch.ones(batch_size, 1, dtype=attention_mask.dtype, device=attention_mask.device)],
-                    dim=1,
-                )
 
         # === Extract action token IDs ===
         action_token_ids = torch.cat(generated_token_ids, dim=1)  # [B, num_tokens]

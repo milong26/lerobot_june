@@ -88,11 +88,65 @@ def _find_latest_checkpoint_step(output_dir: Path) -> tuple[str, int] | None:
     return latest, int(latest)
 
 
+def _check_resume_compatible(output_dir: Path, cfg) -> tuple[bool, str]:
+    """
+    Check if existing checkpoints are compatible with current training configuration.
+    Returns (compatible: bool, reason: str).
+    
+    Checks:
+    1. Action tokenizer type (e.g., 7D VQ -> 4D non-VQ is incompatible)
+    2. Official init mode (random-init -> official-backbone-init is incompatible)
+    3. Official pretrained checkpoint path (different checkpoints are incompatible)
+    """
+    latest_info = _find_latest_checkpoint_step(output_dir)
+    if latest_info is None:
+        return True, "No existing checkpoints found"
+
+    step_dir, _ = latest_info
+    train_config_path = output_dir / "checkpoints" / step_dir / "pretrained_model" / "train_config.json"
+    if not train_config_path.exists():
+        return True, "No train_config.json found in latest checkpoint"
+
+    with open(train_config_path, "r") as f:
+        train_cfg = json.load(f)
+
+    policy_cfg = train_cfg.get("policy", {})
+    
+    # Check 1: Action tokenizer type
+    old_tokenizer_type = policy_cfg.get("action_tokenizer_type", "")
+    if old_tokenizer_type and old_tokenizer_type != cfg.action_tokenizer_type:
+        return False, (
+            f"Action tokenizer type changed: old='{old_tokenizer_type}', new='{cfg.action_tokenizer_type}'. "
+            f"Training target has changed, cannot resume."
+        )
+
+    # Check 2: Official init mode compatibility
+    old_init_mode = policy_cfg.get("official_init_mode", "none")
+    if old_init_mode != cfg.official_init_mode:
+        return False, (
+            f"Official init mode changed: old='{old_init_mode}', new='{cfg.official_init_mode}'. "
+            f"Old checkpoint was trained with '{old_init_mode}' initialization, "
+            f"but current config requests '{cfg.official_init_mode}'. "
+            f"Use --restart to start fresh training with new init mode."
+        )
+
+    # Check 3: Official pretrained checkpoint path (if using backbone_only mode)
+    if cfg.official_init_mode == "backbone_only":
+        old_checkpoint = policy_cfg.get("official_pretrained_checkpoint", "")
+        if old_checkpoint and old_checkpoint != cfg.official_pretrained_checkpoint:
+            return False, (
+                f"Official pretrained checkpoint changed: "
+                f"old='{old_checkpoint}', new='{cfg.official_pretrained_checkpoint}'. "
+                f"Use --restart to start fresh training with new checkpoint."
+            )
+
+    return True, "Checkpoint is compatible with current configuration"
+
+
 def _check_action_tokenizer_compatible(output_dir: Path, new_tokenizer_type: str) -> bool:
     """
-    Check if the action tokenizer type matches the one used in existing checkpoints.
-    If the tokenizer type changed (e.g., 7D VQ -> 4D non-VQ), training target has changed
-    and old checkpoints cannot be reused.
+    Legacy compatibility check (kept for backward compatibility).
+    Use _check_resume_compatible() for full compatibility checking.
     """
     latest_info = _find_latest_checkpoint_step(output_dir)
     if latest_info is None:
@@ -145,18 +199,17 @@ def run_minivla_training(cfg: MiniVLAExperimentConfig, subset_file: str) -> str:
         step_dir, last_step = latest_step_info
         print(f"Found existing checkpoint: {step_dir} (step {last_step})")
 
-        # Check action tokenizer compatibility
-        if not _check_action_tokenizer_compatible(output_dir, cfg.action_tokenizer_type):
+        # Check full resume compatibility (tokenizer + init mode + checkpoint path)
+        is_compatible, compat_reason = _check_resume_compatible(output_dir, cfg)
+        if not is_compatible:
             print(
-                f"[WARNING] Action tokenizer type changed! "
-                f"Old checkpoint used a different tokenizer. "
-                f"Training target has changed, cannot resume from old checkpoints. "
+                f"[WARNING] Checkpoint incompatible: {compat_reason} "
                 f"Please use a new output_dir or set restart=true."
             )
             if not cfg.restart:
                 raise RuntimeError(
-                    f"Action tokenizer mismatch: cannot resume old checkpoints with new tokenizer "
-                    f"{cfg.action_tokenizer_type}. Use restart=true to start fresh or change output_dir."
+                    f"Checkpoint incompatible: {compat_reason} "
+                    f"Use restart=true to start fresh training."
                 )
 
         if last_step >= cfg.train_steps:

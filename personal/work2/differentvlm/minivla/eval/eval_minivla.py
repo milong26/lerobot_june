@@ -84,7 +84,7 @@ def run_eval_for_checkpoint(
         f"--policy.path={checkpoint_path}",
         "--env.type=metaworld",
         f"--env.task={task_name}",
-        f"--env.camera_name={cfg.camera_names}",
+        f"--env.camera_name={cfg.eval_camera_names}",
         "--env.use_self_mw=true",
         f"--eval.batch_size={cfg.eval_batch_size}",
         f"--eval.n_episodes={eval_n_episodes}",
