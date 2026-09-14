@@ -10,8 +10,8 @@ Supported methods:
 
 RoboMME datasets store task-specific reset metadata under
 ``initial_configuration`` rather than MetaWorld's ``rand_vec``. This module
-turns the numeric reset metadata into a stable per-episode configuration vector
-without reading trajectory observations or actions.
+turns the task-relevant numeric reset metadata into a stable per-episode
+configuration vector without reading trajectory observations or actions.
 """
 
 from __future__ import annotations
@@ -28,6 +28,13 @@ import numpy as np
 WORK2_ROOT = Path(__file__).resolve().parents[1]
 if str(WORK2_ROOT) not in sys.path:
     sys.path.insert(0, str(WORK2_ROOT))
+
+CONFIG_FIELDS = (
+    "movable_objects",
+    "randomized_targets",
+    "articulations",
+    "task_config",
+)
 
 
 def _numeric_leaves(value, prefix: str = "") -> Dict[str, float]:
@@ -52,8 +59,17 @@ def _numeric_leaves(value, prefix: str = "") -> Dict[str, float]:
     return out
 
 
+def _selection_configuration(initial_configuration: dict) -> dict:
+    """Keep task-level reset factors and explicitly exclude full scene_state."""
+    return {
+        key: initial_configuration.get(key)
+        for key in CONFIG_FIELDS
+        if key in initial_configuration
+    }
+
+
 def load_configuration_metadata(dataset_root: str) -> Tuple[List[int], np.ndarray, List[str]]:
-    """Load RoboMME initial_configuration and build a stable numeric matrix."""
+    """Load RoboMME task configuration and build a stable numeric matrix."""
     path = Path(dataset_root) / "episode_initial_states.json"
     if not path.exists():
         raise FileNotFoundError(f"Missing RoboMME metadata: {path}")
@@ -67,9 +83,9 @@ def load_configuration_metadata(dataset_root: str) -> Tuple[List[int], np.ndarra
     for item in episodes:
         ep = item.get("episode_index")
         cfg = item.get("initial_configuration")
-        if ep is None or cfg is None:
+        if ep is None or not isinstance(cfg, dict):
             continue
-        flat = _numeric_leaves(cfg)
+        flat = _numeric_leaves(_selection_configuration(cfg))
         if not flat:
             continue
         rows.append((int(ep), flat))
@@ -77,7 +93,7 @@ def load_configuration_metadata(dataset_root: str) -> Tuple[List[int], np.ndarra
 
     if not rows:
         raise ValueError(
-            f"No numeric initial_configuration found in {path}; configuration-based selection cannot run"
+            f"No numeric task configuration found in {path}; configuration-based selection cannot run"
         )
 
     rows.sort(key=lambda x: x[0])
@@ -88,18 +104,14 @@ def load_configuration_metadata(dataset_root: str) -> Tuple[List[int], np.ndarra
             if key in flat:
                 matrix[r, c] = flat[key]
 
-    # Missing task-specific leaves are metadata absence, not trajectory content.
-    # Fill each column with the observed median; fully-missing columns cannot occur.
     med = np.nanmedian(matrix, axis=0)
     inds = np.where(~np.isfinite(matrix))
     matrix[inds] = med[inds[1]]
 
-    # Drop constant dimensions. They carry no configuration information and can
-    # otherwise create numerical noise in normalization / clustering.
     span = matrix.max(axis=0) - matrix.min(axis=0)
     active = span > 1e-8
     if not np.any(active):
-        raise ValueError("All numeric initial_configuration dimensions are constant")
+        raise ValueError("All task configuration dimensions are constant")
     matrix = matrix[:, active]
     keys = [k for k, keep in zip(keys, active, strict=True) if bool(keep)]
     ids = [ep for ep, _ in rows]
@@ -269,15 +281,13 @@ def main() -> None:
     parser.add_argument("--output-file", required=True)
     args = parser.parse_args()
 
-    ids, configs, config_keys = load_configuration_metadata(args.dataset_root)
     if args.method == "random":
-        # Random selection should use every dataset episode, including a rare
-        # episode whose configuration metadata may be non-numeric.
         dataset = _load_dataset(args.dataset_root, args.dataset_name)
         all_ids = list(range(dataset.num_episodes))
         selected = select_random(all_ids, args.num_episodes, args.seed)
         details = {"available_episodes": len(all_ids)}
     elif args.method == "grid_uniform":
+        ids, configs, config_keys = load_configuration_metadata(args.dataset_root)
         selected = select_grid_uniform(ids, configs, args.num_episodes)
         details = {"configuration_dim": int(configs.shape[1]), "configuration_keys": config_keys}
     elif args.method == "fps":
