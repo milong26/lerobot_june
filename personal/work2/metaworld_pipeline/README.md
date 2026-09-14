@@ -35,27 +35,37 @@ Each method selects episodes separately inside each task. Episode indices from d
 - `tinyvla_b`: TinyVLA-B.
 - `tinyvla` and `tinyvla-s` are aliases of `tinyvla_s`; `tinyvla-b` is an alias of `tinyvla_b`.
 
-Training-time environment evaluation is disabled (`env_eval_freq=0`) because the merged training dataset contains three task instructions while a single `env.task` can name only one MetaWorld environment. Evaluation of the three tasks should be run after training with the existing evaluation pipeline/task loop.
+All training commands explicitly use `--env.use_self_mw=true`, matching the project's self-collected MetaWorld format. Training-time environment evaluation is disabled (`env_eval_freq=0`) because the merged training dataset contains three task instructions while a single `env.task` can name only one MetaWorld environment. Evaluate the three tasks after training with the existing evaluation task loop.
 
 ## Recommended command
 
 ```bash
 bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
-  our_v6 smovla 112 0 42 l2 full
+  our_v6 smovla 112 0 42 l2 full full
 ```
 
 Arguments are:
 
 ```text
-METHOD MODEL EPISODES_PER_TASK GPU_ID SEED VISUAL_VARIANT MODE
+METHOD MODEL EPISODES_PER_TASK GPU_ID SEED VISUAL_VARIANT MODE OUR_V6_ABLATION
 ```
+
+`OUR_V6_ABLATION` defaults to `full` and is ignored by non-`our_v6` methods.
 
 For example:
 
 ```bash
 # Our-V6 + SmolVLA, 112 demonstrations per task, 336 total
 bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
-  our_v6 smovla 112 0 42 l2 full
+  our_v6 smovla 112 0 42 l2 full full
+
+# Our-V6 acquired-only online PCA
+bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
+  our_v6 smovla 112 0 42 online_pca full full
+
+# Our-V6 w/o Action ablation
+bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
+  our_v6 smovla 112 0 42 l2 full wo_action
 
 # Random + MiniVLA, 100 demonstrations per task
 bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
@@ -64,6 +74,10 @@ bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
 # Grid-Uniform + TinyVLA-S
 bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
   grid_uniform tinyvla_s 112 0 42 l2 full
+
+# The common typo gird_uniform is also accepted
+bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
+  gird_uniform smolvla 112 0 42 l2 full
 
 # DemInf + SmolVLA
 bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
