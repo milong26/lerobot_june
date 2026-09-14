@@ -1,466 +1,428 @@
-"""
-Planner Module for V6
+"""Causal V6 planner: V5 configuration hierarchy + V4 information boundary.
 
-Implements the full adaptive collection pipeline combining V4's from-scratch acquisition
-with V5's action descriptor approach:
-- Stage 1: coarse uniform coverage (one episode per coarse cell)
-- Stage 2: adaptive acquisition based on spatial need + visual disagreement + action disagreement
-
-Action descriptors use V5's pre-computed cache (causal access maintained).
+Before acquisition, the planner may inspect only initial-configuration metadata
+(rand_vec). Visual observations and actions are revealed only after an episode
+has been committed to the acquired set.
 """
 
-import sys
+from __future__ import annotations
+
 import time
-import numpy as np
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Optional, Sequence, Tuple
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+import numpy as np
+from sklearn.cluster import KMeans
 
-from our_v6.core.adaptive_grid import (
-    AdaptiveCell, build_initial_grid, cell_center, contains,
-    split_cell, get_leaf_cells, get_neighbor_cells,
-    compute_cell_area, pick_next_target_in_cell,
-)
-from our_v6.core.pool_adapter import (
-    AcquisitionState, load_episode_positions, find_nearest_unselected_episode,
-    acquire_episode,
-)
-from our_v6.core.visual_embedding import (
-    load_acquired_visual_embedding, build_combined_embedding,
-)
-from our_v6.core.action_embedding import (
-    load_acquired_action_descriptor, build_action_embedding_for_acquired_episode,
-)
-from our_v6.core.scoring import (
-    compute_spatial_need, compute_visual_disagreement, compute_action_disagreement,
-    normalize_scores, compute_cell_priority as _compute_cell_priority,
-)
 from our_v6.config import (
-    TOTAL_BUDGET, INITIAL_GRID_X, INITIAL_GRID_Y, INITIAL_BUDGET,
-    SPLIT_X, SPLIT_Y, MAX_DEPTH, SPATIAL_WEIGHT, VISUAL_WEIGHT, ACTION_WEIGHT,
-    MIN_MAPPING_TOLERANCE, SEED,
+    B0_REGION_RATIO,
+    COVERAGE_WEIGHT,
+    DEFAULT_VISUAL_VARIANT,
+    MAX_REGIONS,
+    MIN_REGIONS,
+    PCA_DIM,
+    REGION_ACTION_WEIGHT,
+    REGION_RATIO,
+    REGION_VISUAL_WEIGHT,
+    SEED,
+    TOTAL_BUDGET,
 )
+from our_v6.core.action_embedding import reveal_action_embedding
+from our_v6.core.visual_embedding import CausalVisualProjector, FrozenVLMEpisodeEncoder
+
+
+@dataclass
+class RegionInfo:
+    region_id: int
+    member_ids: List[int]
+    centroid: np.ndarray
 
 
 class V6Planner:
-    """Adaptive grid-based episode selection planner with V5 action descriptors."""
+    """Strictly causal adaptive demonstration acquisition.
+
+    The archive exposes rand_vec for every candidate before acquisition. Hidden
+    trajectory content (images/actions) is accessed only after commit.
+    """
 
     def __init__(
         self,
         dataset_root: str,
-        embedding_dir: str,
-        action_descriptor_dir: str,
-        grid_x: int = INITIAL_GRID_X,
-        grid_y: int = INITIAL_GRID_Y,
+        dataset_name: str,
         total_budget: int = TOTAL_BUDGET,
-        initial_budget: int = INITIAL_BUDGET,
-        max_depth: int = MAX_DEPTH,
-        spatial_weight: float = SPATIAL_WEIGHT,
-        visual_weight: float = VISUAL_WEIGHT,
-        action_weight: float = ACTION_WEIGHT,
+        visual_variant: str = DEFAULT_VISUAL_VARIANT,
+        device: str = "cuda",
         seed: int = SEED,
-    ):
-        self.dataset_root = dataset_root
-        self.embedding_dir = Path(embedding_dir)
-        self.action_descriptor_dir = Path(action_descriptor_dir)
-        self.grid_x = grid_x
-        self.grid_y = grid_y
-        self.total_budget = total_budget
-        self.initial_budget = initial_budget
-        self.max_depth = max_depth
-        self.spatial_weight = spatial_weight
-        self.visual_weight = visual_weight
-        self.action_weight = action_weight
-        self.seed = seed
-
-        self.rng = np.random.RandomState(seed)
-
-        self.ep_indices, self.ep_positions = load_episode_positions(dataset_root)
-        self.all_positions_dict = {
-            idx: (float(self.ep_positions[i][0]),
-                  float(self.ep_positions[i][1]),
-                  float(self.ep_positions[i][2]))
-            for i, idx in enumerate(self.ep_indices)
-        }
-
-        x_min = float(self.ep_positions[:, 0].min())
-        x_max = float(self.ep_positions[:, 0].max())
-        y_min = float(self.ep_positions[:, 1].min())
-        y_max = float(self.ep_positions[:, 1].max())
-        self.workspace_bounds = {
-            "x": (x_min, x_max),
-            "y": (y_min, y_max),
-        }
-
-        initial_cells = build_initial_grid(self.workspace_bounds, grid_x, grid_y)
-        self.cells: Dict[str, AdaptiveCell] = {c.cell_id: c for c in initial_cells}
-
-        self.state = AcquisitionState()
-
-        self.initial_stage_indices: List[int] = []
-        self.adaptive_stage_indices: List[int] = []
-
-    def _all_selected_positions(self) -> List[Tuple[float, float, float]]:
-        """Get all positions of acquired episodes."""
-        return list(self.state.acquired_positions.values())
-
-    def _update_cell_membership(self):
-        """Update which acquired episodes belong to which cells."""
-        for cell in self.cells.values():
-            cell.sample_episode_indices = []
-            cell.sample_positions = []
-
-        for ep_idx, pos in self.state.acquired_positions.items():
-            for cell in get_leaf_cells(self.cells):
-                if contains(cell, pos):
-                    cell.sample_episode_indices.append(ep_idx)
-                    cell.sample_positions.append(pos)
-                    break
-
-    def compute_all_cell_priorities(self):
-        """
-        Compute priorities for all active leaf cells in a unified manner:
-        1. Calculate raw spatial, visual, action scores for each leaf cell
-        2. Min-max normalize each score type across all cells
-        3. Compute final_priority = spatial_w * norm_spatial + visual_w * norm_visual + action_w * norm_action
-        4. Store final priority and normalized components on each cell
-        """
-        self._update_cell_membership()
-
-        leaf_cells = get_leaf_cells(self.cells)
-        if not leaf_cells:
-            return
-
-        raw_spatial_scores = []
-        raw_visual_scores = []
-        raw_action_scores = []
-
-        for cell in leaf_cells:
-            raw_s, raw_v, raw_a, _ = _compute_cell_priority(
-                cell, self.cells, self.state.acquired_positions,
-                self.state.visual_embeddings,
-                self.state.action_embeddings,
-                spatial_weight=self.spatial_weight,
-                visual_weight=self.visual_weight,
-                action_weight=self.action_weight,
+        region_ratio: float = REGION_RATIO,
+        min_regions: int = MIN_REGIONS,
+        max_regions: int = MAX_REGIONS,
+        b0_region_ratio: float = B0_REGION_RATIO,
+        coverage_weight: float = COVERAGE_WEIGHT,
+        visual_weight: float = REGION_VISUAL_WEIGHT,
+        action_weight: float = REGION_ACTION_WEIGHT,
+        ablation: str = "full",
+    ) -> None:
+        if ablation not in {"full", "wo_action", "wo_adaptive_priority"}:
+            raise ValueError(
+                "ablation must be one of: full, wo_action, wo_adaptive_priority"
             )
-            raw_spatial_scores.append(raw_s)
-            raw_visual_scores.append(raw_v)
-            raw_action_scores.append(raw_a)
+        self.dataset_root = Path(dataset_root)
+        self.dataset_name = dataset_name
+        self.total_budget = int(total_budget)
+        self.visual_variant = visual_variant
+        self.device = device
+        self.seed = int(seed)
+        self.region_ratio = float(region_ratio)
+        self.min_regions = int(min_regions)
+        self.max_regions = int(max_regions)
+        self.b0_region_ratio = float(b0_region_ratio)
+        self.coverage_weight = float(coverage_weight)
+        self.visual_weight = float(visual_weight)
+        self.action_weight = 0.0 if ablation == "wo_action" else float(action_weight)
+        self.ablation = ablation
 
-        norm_spatial = normalize_scores(raw_spatial_scores)
-        norm_visual = normalize_scores(raw_visual_scores)
-        norm_action = normalize_scores(raw_action_scores)
-
-        for i, cell in enumerate(leaf_cells):
-            cell.priority = (
-                self.spatial_weight * norm_spatial[i] +
-                self.visual_weight * norm_visual[i] +
-                self.action_weight * norm_action[i]
-            )
-            cell._norm_spatial = norm_spatial[i]
-            cell._norm_visual = norm_visual[i]
-            cell._norm_action = norm_action[i]
-            cell._raw_spatial = raw_spatial_scores[i]
-            cell._raw_visual = raw_visual_scores[i]
-            cell._raw_action = raw_action_scores[i]
-
-    def initialize_uniform_collection(self):
-        """
-        Stage 1: Coarse uniform coverage.
-        Iterate over all coarse cells, use cell_center as target,
-        map to nearest unused episode, and acquire.
-        NO random selection.
-        """
-        print(f"\n{'='*60}")
-        print(f"Stage 1: Coarse Uniform Collection ({self.initial_budget} episodes)")
-        print(f"Grid: {self.grid_x} x {self.grid_y} = {self.grid_x * self.grid_y} cells")
-        print(f"{'='*60}")
-
-        coarse_cells = [c for c in self.cells.values() if c.depth == 0]
-
-        for cell in coarse_cells:
-            target_pos = cell_center(cell)
-
-            ep_idx, actual_pos, mapping_dist, fallback = acquire_episode(
-                target_pos,
-                self.ep_indices,
-                self.ep_positions,
-                self.state,
-                mapping_tolerance=MIN_MAPPING_TOLERANCE,
+        self.episode_ids, self.raw_configs = self._load_configuration_metadata()
+        self.configs = self._minmax_normalize(self.raw_configs)
+        if self.total_budget < 1:
+            raise ValueError("total_budget must be >= 1")
+        if self.total_budget > len(self.episode_ids):
+            raise ValueError(
+                f"budget={self.total_budget} exceeds archive size={len(self.episode_ids)}"
             )
 
-            log_entry = {
-                "step": self.state.step + 1,
-                "stage": "initial",
-                "episode_index": ep_idx,
-                "selected_cell_id": cell.cell_id,
-                "cell_depth": cell.depth,
-                "target_init_pos": list(target_pos),
-                "actual_init_pos": list(actual_pos),
-                "mapping_distance": mapping_dist,
-                "mapping_fallback": fallback,
-                "raw_spatial_score": 0.0,
-                "raw_visual_score": 0.0,
-                "raw_action_score": 0.0,
-                "normalized_spatial_score": 0.0,
-                "normalized_visual_score": 0.0,
-                "normalized_action_score": 0.0,
-                "spatial_score": 0.0,
-                "visual_score": 0.0,
-                "action_score": 0.0,
-                "final_priority": 0.0,
-                "split": False,
-                "split_parent_id": None,
-                "created_child_ids": [],
-                "n_acquired": self.state.n_acquired() + 1,
+        self.id_to_row = {ep: i for i, ep in enumerate(self.episode_ids)}
+        self.regions, self.episode_to_region = self._build_regions()
+        self.num_regions = len(self.regions)
+
+        self.acquired: List[int] = []
+        self.acquired_set = set()
+        self.visual_embeddings: Dict[int, np.ndarray] = {}
+        self.action_embeddings: Dict[int, np.ndarray] = {}
+        self.history: List[Dict] = []
+        self._rr_cursor = 0
+
+        self.dataset = self._load_dataset()
+        self.visual_encoder = FrozenVLMEpisodeEncoder(
+            self.dataset, dataset_name=self.dataset_name, device=self.device
+        )
+        self.visual_projector = CausalVisualProjector(
+            variant=self.visual_variant, pca_dim=PCA_DIM
+        )
+
+    def _load_dataset(self):
+        from lerobot.datasets.lerobot_dataset import LeRobotDataset
+
+        dataset = LeRobotDataset(
+            repo_id="work2/metaworld_pick_place",
+            root=str(self.dataset_root),
+        )
+        bad = [ep for ep in self.episode_ids if ep < 0 or ep >= dataset.num_episodes]
+        if bad:
+            raise ValueError(
+                f"episode_initial_states.json contains indices outside dataset: {bad[:10]}"
+            )
+        return dataset
+
+    def _load_configuration_metadata(self) -> Tuple[List[int], np.ndarray]:
+        import json
+
+        path = self.dataset_root / "episode_initial_states.json"
+        if not path.exists():
+            raise FileNotFoundError(f"Missing configuration metadata: {path}")
+        with path.open("r") as f:
+            payload = json.load(f)
+
+        ids: List[int] = []
+        configs: List[np.ndarray] = []
+        for item in payload.get("episodes", []):
+            ep = item.get("episode_index")
+            rv = item.get("rand_vec")
+            if ep is None or rv is None:
+                continue
+            arr = np.asarray(rv, dtype=np.float32).reshape(-1)
+            if not np.all(np.isfinite(arr)):
+                raise ValueError(f"Non-finite rand_vec for episode {ep}")
+            ids.append(int(ep))
+            configs.append(arr)
+
+        if not ids:
+            raise ValueError(
+                f"No rand_vec metadata found in {path}; V6 does not fall back to hidden trajectory content"
+            )
+        dims = {x.shape[0] for x in configs}
+        if len(dims) != 1:
+            raise ValueError(f"Inconsistent rand_vec dimensions: {sorted(dims)}")
+
+        order = np.argsort(np.asarray(ids))
+        ids = [ids[int(i)] for i in order]
+        matrix = np.stack([configs[int(i)] for i in order], axis=0)
+        return ids, matrix
+
+    @staticmethod
+    def _minmax_normalize(matrix: np.ndarray) -> np.ndarray:
+        lo = matrix.min(axis=0)
+        hi = matrix.max(axis=0)
+        span = hi - lo
+        span = np.where(span < 1e-12, 1.0, span)
+        return ((matrix - lo) / span).astype(np.float32)
+
+    def _build_regions(self) -> Tuple[Dict[int, RegionInfo], Dict[int, int]]:
+        n = len(self.episode_ids)
+        k = max(self.min_regions, min(self.max_regions, int(np.floor(self.region_ratio * n))))
+        k = max(1, min(k, n))
+
+        # Fixed clustering seed: B0/region structure is deterministic and does not
+        # depend on the experimental selection seed.
+        km = KMeans(n_clusters=k, random_state=0, n_init=10)
+        labels = km.fit_predict(self.configs)
+
+        regions: Dict[int, RegionInfo] = {}
+        ep_to_region: Dict[int, int] = {}
+        for rid in range(k):
+            members = [
+                self.episode_ids[i] for i, lab in enumerate(labels) if int(lab) == rid
+            ]
+            regions[rid] = RegionInfo(
+                region_id=rid,
+                member_ids=sorted(members),
+                centroid=km.cluster_centers_[rid].astype(np.float32),
+            )
+            for ep in members:
+                ep_to_region[ep] = rid
+        return regions, ep_to_region
+
+    def _config(self, ep: int) -> np.ndarray:
+        return self.configs[self.id_to_row[ep]]
+
+    def _unused_in_region(self, rid: int) -> List[int]:
+        return [ep for ep in self.regions[rid].member_ids if ep not in self.acquired_set]
+
+    @staticmethod
+    def _mean_pairwise(vectors: Sequence[np.ndarray]) -> float:
+        if len(vectors) < 2:
+            return 0.0
+        arr = np.stack(vectors, axis=0)
+        total = 0.0
+        count = 0
+        for i in range(arr.shape[0]):
+            d = np.linalg.norm(arr[i + 1 :] - arr[i], axis=1)
+            total += float(d.sum())
+            count += int(d.size)
+        return total / count if count else 0.0
+
+    @staticmethod
+    def _minmax(values: Dict[int, float]) -> Dict[int, float]:
+        if not values:
+            return {}
+        vals = np.asarray(list(values.values()), dtype=np.float32)
+        lo, hi = float(vals.min()), float(vals.max())
+        if hi - lo < 1e-12:
+            return {k: 0.0 for k in values}
+        return {k: (float(v) - lo) / (hi - lo) for k, v in values.items()}
+
+    def _active_regions(self) -> List[int]:
+        return [rid for rid in sorted(self.regions) if self._unused_in_region(rid)]
+
+    def _region_scores(self) -> Dict[int, Dict[str, float]]:
+        active = self._active_regions()
+        coverage: Dict[int, float] = {}
+        visual: Dict[int, float] = {}
+        action: Dict[int, float] = {}
+
+        for rid in active:
+            region = self.regions[rid]
+            acquired_here = [ep for ep in region.member_ids if ep in self.acquired_set]
+            coverage[rid] = 1.0 - len(acquired_here) / max(1, len(region.member_ids))
+            visual[rid] = self._mean_pairwise(
+                [self.visual_embeddings[ep] for ep in acquired_here if ep in self.visual_embeddings]
+            )
+            action[rid] = self._mean_pairwise(
+                [self.action_embeddings[ep] for ep in acquired_here if ep in self.action_embeddings]
+            )
+
+        nc = self._minmax(coverage)
+        nv = self._minmax(visual)
+        na = self._minmax(action)
+        result: Dict[int, Dict[str, float]] = {}
+        for rid in active:
+            priority = (
+                self.coverage_weight * nc[rid]
+                + self.visual_weight * nv[rid]
+                + self.action_weight * na[rid]
+            )
+            result[rid] = {
+                "coverage_gap": coverage[rid],
+                "visual_heterogeneity": visual[rid],
+                "action_heterogeneity": action[rid],
+                "coverage_norm": nc[rid],
+                "visual_norm": nv[rid],
+                "action_norm": na[rid],
+                "priority": priority,
             }
+        return result
 
-            self.state.acquire(ep_idx, actual_pos, log_entry)
-            self.initial_stage_indices.append(ep_idx)
+    def _select_region(self) -> Tuple[int, Dict[str, float]]:
+        scores = self._region_scores()
+        if not scores:
+            raise RuntimeError("No non-exhausted region remains")
 
-            emb = load_acquired_visual_embedding(
-                ep_idx, self.embedding_dir, self.state.acquired_indices
-            )
-            self.state.visual_embeddings[ep_idx] = emb
+        if self.ablation == "wo_adaptive_priority":
+            active = sorted(scores)
+            for _ in range(len(self.regions) + 1):
+                rid = self._rr_cursor % self.num_regions
+                self._rr_cursor += 1
+                if rid in scores:
+                    return rid, scores[rid]
+            return active[0], scores[active[0]]
 
-            action_desc = load_acquired_action_descriptor(
-                ep_idx, self.action_descriptor_dir, self.state.acquired_indices
-            )
-            action_emb = build_action_embedding_for_acquired_episode(action_desc)
-            self.state.action_embeddings[ep_idx] = action_emb
+        rid = max(scores, key=lambda r: (scores[r]["priority"], -r))
+        return rid, scores[rid]
 
-            self._update_cell_membership()
-
-            print(f"  Step {self.state.step}: cell={cell.cell_id}, "
-                  f"ep={ep_idx}, dist={mapping_dist:.4f}, fallback={fallback}")
-
-        print(f"\nStage 1 complete: {self.state.n_acquired()} episodes acquired")
-        print(f"  Initial episodes: {sorted(self.initial_stage_indices)}")
-
-    def select_highest_priority_cell(self) -> Optional[AdaptiveCell]:
-        """Select the active leaf cell with highest priority."""
-        leaf_cells = get_leaf_cells(self.cells)
-        if not leaf_cells:
-            return None
-
-        best_cell = max(leaf_cells, key=lambda c: c.priority)
-        return best_cell
-
-    def maybe_split_cell(self, cell: AdaptiveCell) -> Tuple[bool, Optional[str], List[str]]:
-        """
-        Split a cell if it is high-value and depth < MAX_DEPTH.
-        Split decision is based on pre-acquisition information (n_samples >= 2).
-        After split, reassign historical samples to child leaf cells.
-        """
-        if cell.depth >= self.max_depth:
-            return False, None, []
-
-        if cell.n_samples >= 2:
-            parent_id = cell.cell_id
-            children = split_cell(cell, SPLIT_X, SPLIT_Y)
-            child_ids = [c.cell_id for c in children]
-            for child in children:
-                self.cells[child.cell_id] = child
-
-            self._update_cell_membership()
-
-            return True, parent_id, child_ids
-
-        return False, None, []
-
-    def collect_one_step(self) -> Dict:
-        """
-        Execute one adaptive acquisition step:
-        1. Update cell statistics (compute priorities)
-        2. Select highest priority cell
-        3. Generate new target init_pos
-        4. Map to nearest unused episode
-        5. Acquire episode
-        6. Load visual embedding
-        7. Load action descriptor and build action embedding
-        8. Maybe split cell
-        """
-        self.compute_all_cell_priorities()
-
-        best_cell = self.select_highest_priority_cell()
-        if best_cell is None:
-            raise RuntimeError("No available cells for collection")
-
-        cell_sample_positions = list(best_cell.sample_positions)
-        if not cell_sample_positions:
-            cell_sample_positions = [cell_center(best_cell)]
-
-        target_pos = pick_next_target_in_cell(
-            best_cell, cell_sample_positions, SPLIT_X, SPLIT_Y, rng=self.rng
+    def _representative_episode(self, rid: int) -> int:
+        region = self.regions[rid]
+        candidates = self._unused_in_region(rid)
+        return min(
+            candidates,
+            key=lambda ep: (float(np.linalg.norm(self._config(ep) - region.centroid)), ep),
         )
 
-        ep_idx, actual_pos, mapping_dist, fallback = acquire_episode(
-            target_pos,
-            self.ep_indices,
-            self.ep_positions,
-            self.state,
-            mapping_tolerance=MIN_MAPPING_TOLERANCE,
+    def _target_episode_maximin(self, rid: int) -> int:
+        """Configuration-only target proposal within the selected region.
+
+        The proposal set is the unused configuration metadata in that region.
+        No unseen visual/action feature participates in this decision.
+        """
+        candidates = self._unused_in_region(rid)
+        if not candidates:
+            raise RuntimeError(f"Region {rid} exhausted")
+        acquired_configs = [self._config(ep) for ep in self.acquired]
+        if not acquired_configs:
+            return self._representative_episode(rid)
+        acquired_matrix = np.stack(acquired_configs, axis=0)
+
+        best_ep: Optional[int] = None
+        best_score = -1.0
+        for ep in candidates:
+            score = float(np.linalg.norm(acquired_matrix - self._config(ep), axis=1).min())
+            if score > best_score + 1e-12 or (
+                abs(score - best_score) <= 1e-12 and (best_ep is None or ep < best_ep)
+            ):
+                best_score = score
+                best_ep = ep
+        assert best_ep is not None
+        return best_ep
+
+    def _refresh_visual_dict(self) -> None:
+        self.visual_embeddings = self.visual_projector.as_dict()
+
+    def _commit_and_reveal(
+        self,
+        ep: int,
+        stage: str,
+        rid: int,
+        region_score: Optional[Dict[str, float]] = None,
+    ) -> None:
+        if ep in self.acquired_set:
+            raise RuntimeError(f"Duplicate acquisition attempted for episode {ep}")
+
+        # Commit first. Only after this point may trajectory content be read.
+        self.acquired.append(ep)
+        self.acquired_set.add(ep)
+
+        raw_visual = self.visual_encoder.extract(ep, self.acquired_set)
+        self.visual_projector.add(ep, raw_visual)
+        self._refresh_visual_dict()
+        self.action_embeddings[ep] = reveal_action_embedding(
+            self.dataset, ep, self.acquired_set
         )
 
-        raw_spatial, raw_visual, raw_action, _ = _compute_cell_priority(
-            best_cell, self.cells, self.state.acquired_positions,
-            self.state.visual_embeddings,
-            self.state.action_embeddings,
-            spatial_weight=self.spatial_weight,
-            visual_weight=self.visual_weight,
-            action_weight=self.action_weight,
-        )
-
-        did_split, split_parent_id, created_child_ids = self.maybe_split_cell(best_cell)
-
-        final_priority = best_cell.priority
-
-        log_entry = {
-            "step": self.state.step + 1,
-            "stage": "adaptive",
-            "episode_index": ep_idx,
-            "selected_cell_id": best_cell.cell_id,
-            "cell_depth": best_cell.depth,
-            "target_init_pos": list(target_pos),
-            "actual_init_pos": list(actual_pos),
-            "mapping_distance": mapping_dist,
-            "mapping_fallback": fallback,
-            "raw_spatial_score": float(raw_spatial),
-            "raw_visual_score": float(raw_visual),
-            "raw_action_score": float(raw_action),
-            "normalized_spatial_score": float(getattr(best_cell, '_norm_spatial', 0.0)),
-            "normalized_visual_score": float(getattr(best_cell, '_norm_visual', 0.0)),
-            "normalized_action_score": float(getattr(best_cell, '_norm_action', 0.0)),
-            "spatial_score": float(getattr(best_cell, '_norm_spatial', 0.0)),
-            "visual_score": float(getattr(best_cell, '_norm_visual', 0.0)),
-            "action_score": float(getattr(best_cell, '_norm_action', 0.0)),
-            "final_priority": float(final_priority),
-            "split": did_split,
-            "split_parent_id": split_parent_id,
-            "created_child_ids": created_child_ids,
-            "n_acquired": self.state.n_acquired() + 1,
+        entry = {
+            "step": len(self.acquired),
+            "stage": stage,
+            "episode_index": ep,
+            "region_id": rid,
+            "target_config": self._config(ep).tolist(),
+            "visual_variant": self.visual_variant,
+            "pca_components": dict(self.visual_projector.last_pca_components),
+            "ablation": self.ablation,
         }
-
-        self.state.acquire(ep_idx, actual_pos, log_entry)
-        self.adaptive_stage_indices.append(ep_idx)
-
-        emb = load_acquired_visual_embedding(
-            ep_idx, self.embedding_dir, self.state.acquired_indices
+        if region_score is not None:
+            entry.update(region_score)
+        self.history.append(entry)
+        print(
+            f"[{len(self.acquired):03d}/{self.total_budget}] {stage}: "
+            f"region={rid}, ep={ep}, variant={self.visual_variant}"
         )
-        self.state.visual_embeddings[ep_idx] = emb
 
-        action_desc = load_acquired_action_descriptor(
-            ep_idx, self.action_descriptor_dir, self.state.acquired_indices
+    def _initial_region_order(self, b0_size: int) -> List[int]:
+        ordered = sorted(
+            self.regions,
+            key=lambda rid: (tuple(self.regions[rid].centroid.tolist()), rid),
         )
-        action_emb = build_action_embedding_for_acquired_episode(action_desc)
-        self.state.action_embeddings[ep_idx] = action_emb
+        if b0_size >= len(ordered):
+            return ordered
+        # Deterministic spread across the ordered configuration regions.
+        positions = np.linspace(0, len(ordered) - 1, b0_size)
+        chosen_positions: List[int] = []
+        for x in positions:
+            p = int(round(float(x)))
+            if p not in chosen_positions:
+                chosen_positions.append(p)
+        for p in range(len(ordered)):
+            if len(chosen_positions) >= b0_size:
+                break
+            if p not in chosen_positions:
+                chosen_positions.append(p)
+        return [ordered[p] for p in chosen_positions[:b0_size]]
 
-        self._update_cell_membership()
+    def initialize(self) -> None:
+        b0_size = max(1, int(np.floor(self.b0_region_ratio * self.num_regions)))
+        b0_size = min(b0_size, self.total_budget, self.num_regions)
+        print(
+            f"V6 initialization: regions={self.num_regions}, B0={b0_size}, "
+            f"variant={self.visual_variant}, ablation={self.ablation}"
+        )
+        for rid in self._initial_region_order(b0_size):
+            ep = self._representative_episode(rid)
+            self._commit_and_reveal(ep, stage="initial", rid=rid)
 
-        print(f"  Step {self.state.step}: cell={best_cell.cell_id}(d={best_cell.depth}), "
-              f"ep={ep_idx}, dist={mapping_dist:.4f}, fallback={fallback}, "
-              f"raw_spatial={raw_spatial:.4f}, raw_visual={raw_visual:.4f}, "
-              f"raw_action={raw_action:.4f}, priority={final_priority:.4f}, split={did_split}")
-
-        return log_entry
-
-    def run_adaptive_collection(self, total_budget: int = TOTAL_BUDGET) -> Dict:
-        """
-        Run the full adaptive collection pipeline.
-        Stage 1: coarse uniform (initial_budget episodes)
-        Stage 2: adaptive acquisition until total_budget reached.
-        """
-        start_time = time.time()
-
-        self.initialize_uniform_collection()
-
-        print(f"\n{'='*60}")
-        print(f"Stage 2: Adaptive Collection")
-        print(f"Target: {total_budget} total episodes")
-        print(f"Remaining: {total_budget - self.state.n_acquired()} episodes")
-        print(f"{'='*60}")
-
-        while self.state.n_acquired() < total_budget:
-            self.collect_one_step()
-
-        elapsed = time.time() - start_time
-
-        print(f"\n{'='*60}")
-        print(f"Collection complete!")
-        print(f"Total episodes: {self.state.n_acquired()}")
-        print(f"Initial stage: {len(self.initial_stage_indices)}")
-        print(f"Adaptive stage: {len(self.adaptive_stage_indices)}")
-        print(f"Total time: {elapsed:.2f}s")
-        print(f"{'='*60}")
-
-        return self._build_result()
-
-    def _build_result(self) -> Dict:
-        """Build the final result dictionary."""
-        mapping_fallbacks = [h.get("mapping_fallback", False) for h in self.state.history]
-
-        mapping_distances = [h["mapping_distance"] for h in self.state.history]
-        fallback_count = sum(1 for f in mapping_fallbacks if f)
-        fallback_ratio = fallback_count / len(mapping_fallbacks) if mapping_fallbacks else 0.0
-        mean_mapping_dist = float(np.mean(mapping_distances)) if mapping_distances else 0.0
-        max_mapping_dist = float(np.max(mapping_distances)) if mapping_distances else 0.0
-
-        selected_episode_indices = [h["episode_index"] for h in self.state.history]
-        initial_stage_indices = [h["episode_index"] for h in self.state.history if h["stage"] == "initial"]
-        adaptive_stage_indices = [h["episode_index"] for h in self.state.history if h["stage"] == "adaptive"]
+    def run(self) -> Dict:
+        start = time.time()
+        self.initialize()
+        while len(self.acquired) < self.total_budget:
+            rid, score = self._select_region()
+            ep = self._target_episode_maximin(rid)
+            self._commit_and_reveal(ep, stage="adaptive", rid=rid, region_score=score)
 
         return {
-            "selected_episode_indices": selected_episode_indices,
-            "target_init_positions": [
-                list(h["target_init_pos"]) for h in self.state.history
-            ],
-            "actual_init_positions": [
-                list(h["actual_init_pos"]) for h in self.state.history
-            ],
-            "mapping_distances": mapping_distances,
-            "mapping_fallbacks": mapping_fallbacks,
-            "initial_stage_indices": initial_stage_indices,
-            "adaptive_stage_indices": adaptive_stage_indices,
-            "selection_method": "dynamicgrid_v6_v5action",
-            "parameters": {
-                "total_budget": self.total_budget,
-                "initial_grid_x": self.grid_x,
-                "initial_grid_y": self.grid_y,
-                "initial_budget": self.initial_budget,
-                "max_depth": self.max_depth,
-                "spatial_weight": self.spatial_weight,
-                "visual_weight": self.visual_weight,
-                "action_weight": self.action_weight,
-                "seed": self.seed,
-            },
-            "acquisition_log": self.state.history,
-            "mapping_stats": {
-                "fallback_count": fallback_count,
-                "fallback_ratio": fallback_ratio,
-                "mean_mapping_distance": mean_mapping_dist,
-                "max_mapping_distance": max_mapping_dist,
+            "method": "our_v6",
+            "causal": True,
+            "dataset_name": self.dataset_name,
+            "dataset_root": str(self.dataset_root),
+            "visual_variant": self.visual_variant,
+            "ablation": self.ablation,
+            "seed": self.seed,
+            "num_regions": self.num_regions,
+            "num_selected": len(self.acquired),
+            "selected_episode_indices": list(self.acquired),
+            "initial_episode_indices": [h["episode_index"] for h in self.history if h["stage"] == "initial"],
+            "adaptive_episode_indices": [h["episode_index"] for h in self.history if h["stage"] == "adaptive"],
+            "history": self.history,
+            "elapsed_seconds": time.time() - start,
+            "information_boundary": {
+                "pre_acquisition": ["episode_index", "rand_vec"],
+                "post_acquisition": ["visual_observations", "actions"],
+                "online_pca_fit_scope": "acquired_only",
             },
         }
 
-    def validate_causal_access(self) -> bool:
-        """
-        Validate that no unacquired episode embeddings were accessed.
-        Checks both visual_embeddings and action_embeddings.
-        """
-        for ep_idx in self.state.visual_embeddings:
-            if ep_idx not in self.state.acquired_indices:
-                raise RuntimeError(
-                    f"CAUSAL VIOLATION: Episode {ep_idx} has visual embedding "
-                    f"but was never acquired!"
-                )
-        for ep_idx in self.state.action_embeddings:
-            if ep_idx not in self.state.acquired_indices:
-                raise RuntimeError(
-                    f"CAUSAL VIOLATION: Episode {ep_idx} has action embedding "
-                    f"but was never acquired!"
-                )
-        return True
+    def validate_causal_access(self) -> None:
+        if set(self.visual_encoder._raw_cache) - self.acquired_set:
+            raise AssertionError("Visual cache contains an unacquired episode")
+        if set(self.visual_projector.raw) - self.acquired_set:
+            raise AssertionError("Visual projector contains an unacquired episode")
+        if set(self.action_embeddings) - self.acquired_set:
+            raise AssertionError("Action cache contains an unacquired episode")
+        if len(self.acquired) != len(self.acquired_set):
+            raise AssertionError("Duplicate selected episode")
