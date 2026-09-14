@@ -82,6 +82,31 @@ Monitor with: tmux attach -t minivla_random_ep336_s42_merged_disassemble-v3_corn
 Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_336_seed42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42_minivla_random/logs/random_336_seed42_merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42_minivla_random.log
 
 
+eval:
+
+
+
+export CUDA_VISIBLE_DEVICES=0
+export MUJOCO_GL=egl
+export PYOPENGL_PLATFORM=egl
+export MUJOCO_EGL_DEVICE_ID=0
+
+lerobot-eval \
+    --policy.path=personal/work2/differentvlm/minivla/experiments/random_336_seed42_mergeddisassemblev3corner+pickplacev3corner+coffeebuttonv3corner112x112x112random42_minivla_random/checkpoints/checkpoints/038000/pretrained_model \
+    --env.type=metaworld \
+    --env.task=disassemble-v3 \
+    --env.camera_name=corner,gripperPOV \
+    --env.use_self_mw=true \
+    --eval.batch_size=8 \
+    --eval.n_episodes=200 \
+    --policy.device=cuda \
+    --rename_map='{"observation.images.camera1": "observation.images.top", "observation.images.camera2": "observation.images.wrist"}' \
+    2>&1 | tee personal/work2/eval_model/eval_mw_miniall_disassemble-v3_corner_200ep_38kcp.log
+
+
+
+
+
 our方法的话
 
 python personal/work2/duibi/train_and_eval_scripts/merge_selected_episodes.py \
@@ -92,3 +117,5 @@ python personal/work2/duibi/train_and_eval_scripts/merge_selected_episodes.py \
     --seed 42 \
     --v5-output-dir personal/work2/duibi/our_v5_multi_336_seed42/subsets \
     --output-dir personal/work2/dataset_view/merged_3tasks_v5_336_seed42
+
+

@@ -1,0 +1,12 @@
+{
+    "session": "our_v5_real_20260914_093240",
+    "mode": "full",
+    "num_episodes_per_dataset": 20,
+    "gpu_id": 0,
+    "seed": 42,
+    "dataset_roots": "/data/zhonglinye/jun/ep10_30episodes_standing40/ep10_30episodes_standing40",
+    "dataset_names": "ep10_30episodes_standing40",
+    "output_dir": "/data/zhonglinye/jun/lerobot/personal/work1/our_v5_real_results/our_v5_real_20260914_093240",
+    "runner_script": "/data/zhonglinye/jun/lerobot/personal/work1/our_v5_real_results/our_v5_real_20260914_093240/runner.sh",
+    "timestamp": "20260914_093240"
+}

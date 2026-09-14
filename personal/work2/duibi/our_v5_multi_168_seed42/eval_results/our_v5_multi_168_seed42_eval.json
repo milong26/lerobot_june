@@ -1,9 +1,9 @@
 {
-  "experiment": "our_v5_multi_84_seed42",
-  "num_episodes_per_dataset": 28,
-  "total_episodes": 84,
+  "experiment": "our_v5_multi_168_seed42",
+  "num_episodes_per_dataset": 56,
+  "total_episodes": 168,
   "seed": 42,
-  "gpu_id": 2,
+  "gpu_id": 3,
   "datasets": [
     "coffee-button-v3_corner",
     "disassemble-v3_corner",
