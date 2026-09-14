@@ -313,6 +313,7 @@ def common_train_args(
         "--env.type=metaworld",
         "--env.task=disassemble-v3",
         "--env.camera_name=corner,gripperPOV",
+        "--env.use_self_mw=true",
         "--env_eval_freq=0",
         f"--steps={steps}",
         "--save_freq=2000",
@@ -424,7 +425,6 @@ def train_tinyvla(
         f"--policy.scheduler_warmup_steps={warmup_steps}",
         f"--policy.scheduler_decay_steps={steps}",
         "--policy.scheduler_decay_lr=2.5e-6",
-        "--env.use_self_mw=true",
         *common_train_args(merged_root, output_dir, seed, steps, batch_size, num_workers),
         f"--job_name={job_name}",
     ]
