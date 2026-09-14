@@ -38,5 +38,6 @@ fi
 export CUDA_VISIBLE_DEVICES="$GPU_ID"
 export SAPIEN_VULKAN_DEVICE_INDEX="$GPU_ID"
 export PYTHONUNBUFFERED=1
+export PYTHONPATH="$REPO_ROOT/personal/work2:${PYTHONPATH:-}"
 
 python personal/work2/robomme_pipeline/run_robomme_all.py "${ARGS[@]}"
