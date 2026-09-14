@@ -1,86 +1,104 @@
-"""
-Select Episodes using V6: Adaptive Grid with V5 Action Descriptors
+#!/usr/bin/env python
+"""Run causal Our-V6 demonstration acquisition on one LeRobot dataset."""
 
-Combines V4's from-scratch acquisition strategy with V5's action descriptor approach.
-- Stage 1: coarse uniform coverage (one episode per coarse cell)
-- Stage 2: adaptive acquisition based on spatial need + visual disagreement + action disagreement
-- Action descriptors use V5's pre-computed cache (causal access maintained)
-"""
+from __future__ import annotations
 
-import sys
-import json
 import argparse
+import json
+import sys
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).parent.parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+WORK2_ROOT = Path(__file__).resolve().parents[2]
+if str(WORK2_ROOT) not in sys.path:
+    sys.path.insert(0, str(WORK2_ROOT))
 
+from our_v6.config import (
+    B0_REGION_RATIO,
+    COVERAGE_WEIGHT,
+    DEFAULT_VISUAL_VARIANT,
+    MAX_REGIONS,
+    MIN_REGIONS,
+    REGION_ACTION_WEIGHT,
+    REGION_RATIO,
+    REGION_VISUAL_WEIGHT,
+    SEED,
+    TOTAL_BUDGET,
+    VISUAL_VARIANTS,
+)
 from our_v6.core.planner import V6Planner
 
 
-def main():
-    parser = argparse.ArgumentParser(description="Select episodes using V6 (AdaptiveGrid + V5 Action)")
-    parser.add_argument("--dataset_root", type=str, required=True, help="Path to LeRobot dataset root")
-    parser.add_argument("--embedding_dir", type=str, required=True, help="Path to visual embedding cache directory")
-    parser.add_argument("--action_descriptor_dir", type=str, required=True, help="Path to V5 action descriptor directory")
-    parser.add_argument("--total_budget", type=int, default=112, help="Total number of episodes to select")
-    parser.add_argument("--initial_grid_x", type=int, default=7, help="Initial grid X resolution")
-    parser.add_argument("--initial_grid_y", type=int, default=4, help="Initial grid Y resolution")
-    parser.add_argument("--max_depth", type=int, default=3, help="Maximum cell splitting depth")
-    parser.add_argument("--spatial_weight", type=float, default=1.0, help="Weight for spatial need")
-    parser.add_argument("--visual_weight", type=float, default=1.0, help="Weight for visual disagreement")
-    parser.add_argument("--action_weight", type=float, default=0.5, help="Weight for action disagreement")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed")
-    parser.add_argument("--output_dir", type=str, default="output_v6", help="Output directory for results")
-
-    args = parser.parse_args()
-
-    print("="*60)
-    print("V6 Episode Selection: AdaptiveGrid + V5 Action Descriptors")
-    print("="*60)
-    print(f"Dataset: {args.dataset_root}")
-    print(f"Visual embeddings: {args.embedding_dir}")
-    print(f"Action descriptors: {args.action_descriptor_dir}")
-    print(f"Budget: {args.total_budget}")
-    print(f"Grid: {args.initial_grid_x}x{args.initial_grid_y}")
-    print(f"Weights: spatial={args.spatial_weight}, visual={args.visual_weight}, action={args.action_weight}")
-    print(f"Seed: {args.seed}")
-    print("="*60)
-
-    planner = V6Planner(
-        dataset_root=args.dataset_root,
-        embedding_dir=args.embedding_dir,
-        action_descriptor_dir=args.action_descriptor_dir,
-        grid_x=args.initial_grid_x,
-        grid_y=args.initial_grid_y,
-        total_budget=args.total_budget,
-        initial_budget=args.initial_grid_x * args.initial_grid_y,
-        max_depth=args.max_depth,
-        spatial_weight=args.spatial_weight,
-        visual_weight=args.visual_weight,
-        action_weight=args.action_weight,
-        seed=args.seed,
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Our-V6 causal acquisition: configuration regions + acquired-only multimodal feedback"
     )
+    parser.add_argument("--dataset-root", required=True)
+    parser.add_argument("--dataset-name", required=True)
+    parser.add_argument("--output-dir", required=True)
+    parser.add_argument("--total-budget", type=int, default=TOTAL_BUDGET)
+    parser.add_argument("--visual-variant", choices=VISUAL_VARIANTS, default=DEFAULT_VISUAL_VARIANT)
+    parser.add_argument("--device", default="cuda")
+    parser.add_argument("--seed", type=int, default=SEED)
+    parser.add_argument("--region-ratio", type=float, default=REGION_RATIO)
+    parser.add_argument("--min-regions", type=int, default=MIN_REGIONS)
+    parser.add_argument("--max-regions", type=int, default=MAX_REGIONS)
+    parser.add_argument("--b0-region-ratio", type=float, default=B0_REGION_RATIO)
+    parser.add_argument("--coverage-weight", type=float, default=COVERAGE_WEIGHT)
+    parser.add_argument("--visual-weight", type=float, default=REGION_VISUAL_WEIGHT)
+    parser.add_argument("--action-weight", type=float, default=REGION_ACTION_WEIGHT)
+    parser.add_argument(
+        "--ablation",
+        choices=("full", "wo_action", "wo_adaptive_priority"),
+        default="full",
+    )
+    return parser.parse_args()
 
-    result = planner.run_adaptive_collection(total_budget=args.total_budget)
 
-    planner.validate_causal_access()
-
+def main() -> None:
+    args = parse_args()
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    print("=" * 72)
+    print("Our-V6 causal demonstration acquisition")
+    print(f"dataset={args.dataset_name}")
+    print(f"budget={args.total_budget}")
+    print(f"visual_variant={args.visual_variant}")
+    print(f"ablation={args.ablation}")
+    print("pre-acquisition information: episode_index + rand_vec only")
+    print("=" * 72)
+
+    planner = V6Planner(
+        dataset_root=args.dataset_root,
+        dataset_name=args.dataset_name,
+        total_budget=args.total_budget,
+        visual_variant=args.visual_variant,
+        device=args.device,
+        seed=args.seed,
+        region_ratio=args.region_ratio,
+        min_regions=args.min_regions,
+        max_regions=args.max_regions,
+        b0_region_ratio=args.b0_region_ratio,
+        coverage_weight=args.coverage_weight,
+        visual_weight=args.visual_weight,
+        action_weight=args.action_weight,
+        ablation=args.ablation,
+    )
+    result = planner.run()
+    planner.validate_causal_access()
+
     output_file = output_dir / "selected_episodes_v6.json"
-    with open(output_file, "w") as f:
+    with output_file.open("w") as f:
         json.dump(result, f, indent=2)
 
-    print(f"\nResults saved to: {output_file}")
-    print(f"Selected {len(result['selected_episode_indices'])} episodes")
-    print(f"  Initial stage: {len(result['initial_stage_indices'])} episodes")
-    print(f"  Adaptive stage: {len(result['adaptive_stage_indices'])} episodes")
-    print(f"  Mapping fallback ratio: {result['mapping_stats']['fallback_ratio']:.2%}")
-
-    return result
+    print("=" * 72)
+    print(f"selection written to: {output_file}")
+    print(f"selected={result['num_selected']}")
+    print(f"regions={result['num_regions']}")
+    print(f"initial={len(result['initial_episode_indices'])}")
+    print(f"adaptive={len(result['adaptive_episode_indices'])}")
+    print("causal validation: PASS")
+    print("=" * 72)
 
 
 if __name__ == "__main__":
