@@ -3,7 +3,7 @@
 #
 # Usage:
 #   bash personal/work2/metaworld_pipeline/run_metaworld_all.sh \
-#     METHOD MODEL [EPISODES_PER_TASK] [GPU] [SEED] [VISUAL_VARIANT] [MODE]
+#     METHOD MODEL [EPISODES_PER_TASK] [GPU] [SEED] [VISUAL_VARIANT] [MODE] [OUR_V6_ABLATION]
 #
 # METHOD:
 #   our_v6 | random | grid_uniform | deminf | fps
@@ -11,9 +11,11 @@
 #   smovla | smolvla | minivla | tinyvla_s | tinyvla_b
 # MODE:
 #   full | selection-only
+# OUR_V6_ABLATION:
+#   full | wo_action | wo_adaptive_priority
 #
 # Examples:
-#   bash personal/work2/metaworld_pipeline/run_metaworld_all.sh our_v6 smovla 112 0 42 l2 full
+#   bash personal/work2/metaworld_pipeline/run_metaworld_all.sh our_v6 smovla 112 0 42 l2 full full
 #   bash personal/work2/metaworld_pipeline/run_metaworld_all.sh random minivla 100 0 42 l2 full
 #   bash personal/work2/metaworld_pipeline/run_metaworld_all.sh grid_uniform tinyvla_s 112 0 42 l2 full
 #   bash personal/work2/metaworld_pipeline/run_metaworld_all.sh fps smolvla 112 0 42 l2 selection-only
@@ -27,6 +29,7 @@ GPU_ID=${4:-0}
 SEED=${5:-42}
 VISUAL_VARIANT=${6:-l2}
 MODE=${7:-full}
+OUR_V6_ABLATION=${8:-full}
 
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$REPO_ROOT"
@@ -57,6 +60,7 @@ ARGS=(
   --gpu-id "$GPU_ID"
   --seed "$SEED"
   --visual-variant "$VISUAL_VARIANT"
+  --our-v6-ablation "$OUR_V6_ABLATION"
 )
 
 if [[ "$MODE" == "selection-only" ]]; then
