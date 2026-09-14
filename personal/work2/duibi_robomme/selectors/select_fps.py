@@ -3,8 +3,9 @@
 Visual-FPS (Farthest Point Sampling) for Robomme pipeline.
 
 Adapted from personal/work2/duibi/fps/select_visual_fps.py
-For Robomme, we extract state/action features from the LeRobotDataset
-since visual embedding cache may not exist.
+
+For Robomme, we use real visual embeddings (phi_global + phi_wrist) from
+the shared embedding cache. This is the same cache used by Ours-v5.
 
 Algorithm (standard greedy Farthest Point Sampling):
   1. Randomly select first point from ALL candidates using np.random.RandomState(seed)
@@ -13,13 +14,18 @@ Algorithm (standard greedy Farthest Point Sampling):
   4. Incrementally update: min_dist[i] = min(min_dist[i], ||v_i - v_new||_2)
   5. Tie-break: smaller episode index wins (deterministic)
 
-Feature definition: state/action features extracted from LeRobotDataset
-  - state_mean, state_std, action_mean, action_std per episode
+Feature definition: visual_feature = np.concatenate([phi_global, phi_wrist])
+  - Same as Ours-v5's visual representation
+  - No L2 normalization, standardization, whitening, re-PCA, or cosine normalization
   - Euclidean L2 distance
+
+FPS does NOT use: configuration feature, action descriptor, observation.state,
+reward, success, or any other data.
 
 Usage:
     python select_fps.py \
         --dataset-root /path/to/dataset \
+        --task-name MoveCube_easy \
         --num-episodes 28 \
         --seed 42 \
         --output-dir /path/to/output
@@ -35,6 +41,13 @@ import numpy as np
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
+# Allow direct execution (python script.py) to find sibling modules
+_selectors_dir = Path(__file__).resolve().parent
+if str(_selectors_dir) not in sys.path:
+    sys.path.insert(0, str(_selectors_dir))
+
+from robomme_embeddings import load_cached_visual_embeddings
+
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -45,23 +58,6 @@ class NumpyEncoder(json.JSONEncoder):
         if isinstance(obj, np.ndarray):
             return obj.tolist()
         return super().default(obj)
-
-
-def extract_episode_features(dataset, episode_idx):
-    """Extract state and action features for an episode."""
-    ep_data = dataset.hf_dataset.filter(lambda x: x["episode_index"] == episode_idx)
-    if len(ep_data) == 0:
-        return None
-
-    states = np.array([frame["observation.state"] for frame in ep_data], dtype=np.float32)
-    actions = np.array([frame["action"] for frame in ep_data], dtype=np.float32)
-
-    state_mean = np.mean(states, axis=0)
-    state_std = np.std(states, axis=0)
-    action_mean = np.mean(actions, axis=0)
-    action_std = np.std(actions, axis=0)
-
-    return np.concatenate([state_mean, state_std, action_mean, action_std])
 
 
 def farthest_point_sampling(
@@ -167,8 +163,14 @@ def farthest_point_sampling(
     }
 
 
-def select_fps_episodes(num_episodes, seed, dataset_root, output_dir=None):
-    """Main entry point for FPS selection on Robomme datasets."""
+def select_fps_episodes(
+    num_episodes: int,
+    seed: int,
+    dataset_root: str,
+    task_name: str,
+    output_dir: Optional[str] = None,
+) -> List[int]:
+    """Main entry point for Visual-FPS selection on Robomme datasets."""
     print(f"Loading LeRobotDataset from {dataset_root}")
     dataset = LeRobotDataset(repo_id="1/2", root=dataset_root)
 
@@ -177,29 +179,38 @@ def select_fps_episodes(num_episodes, seed, dataset_root, output_dir=None):
 
     candidate_ids = list(range(total_episodes))
 
-    print(f"\nExtracting episode features...")
-    features = {}
-    for ep_idx in candidate_ids:
-        feat = extract_episode_features(dataset, ep_idx)
-        if feat is not None:
-            features[ep_idx] = feat
+    # Load visual embeddings from cache (auto-extract if missing)
+    print(f"\nLoading visual embeddings from cache...")
+    visual_embeddings = load_cached_visual_embeddings(dataset_root, task_name)
+    if visual_embeddings is None:
+        print(f"Visual embeddings not found in cache. Extracting now...")
+        print(f"This requires loading the SmolVLM model and may take a while.")
+        import torch
+        from robomme_embeddings import ensure_visual_embeddings, load_smolvla_feature_extractor
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model, processor = load_smolvla_feature_extractor(device)
+        visual_embeddings = ensure_visual_embeddings(
+            dataset_root, task_name, model, processor, device
+        )
+        print(f"Extracted {len(visual_embeddings)} visual embeddings")
+    else:
+        print(f"Loaded {len(visual_embeddings)} visual embeddings from cache")
 
-    print(f"Extracted features for {len(features)} episodes")
+    # Filter candidates to those with valid visual embeddings
+    valid_candidates = [ep for ep in candidate_ids if ep in visual_embeddings]
+    print(f"Valid candidates with visual embeddings: {len(valid_candidates)}")
 
-    if len(features) == 0:
-        raise RuntimeError("No valid features extracted")
-
-    feature_dim = next(iter(features.values())).shape[0]
-    print(f"Feature dimension: {feature_dim}")
+    if len(valid_candidates) == 0:
+        raise RuntimeError("No valid visual embeddings found for any episode")
 
     print(f"\n{'='*60}")
-    print(f"Running Farthest Point Sampling...")
+    print(f"Running Visual Farthest Point Sampling...")
     print(f"{'='*60}")
     start_time = time.time()
 
     result = farthest_point_sampling(
-        candidate_ids=candidate_ids,
-        features=features,
+        candidate_ids=valid_candidates,
+        features=visual_embeddings,
         num_selected=num_episodes,
         seed=seed,
     )
@@ -208,6 +219,12 @@ def select_fps_episodes(num_episodes, seed, dataset_root, output_dir=None):
     print(f"\nFPS completed in {elapsed_time:.2f}s")
 
     selected_episode_indices = result["selected_episode_indices"]
+
+    # Verify we got exactly K distinct episodes
+    assert len(selected_episode_indices) == num_episodes, (
+        f"Selected {len(selected_episode_indices)} episodes, expected {num_episodes}"
+    )
+    assert len(set(selected_episode_indices)) == num_episodes, "Duplicate episodes selected"
 
     if output_dir is not None:
         output_path = Path(output_dir)
@@ -219,10 +236,10 @@ def select_fps_episodes(num_episodes, seed, dataset_root, output_dir=None):
             "selection_method": "visual_farthest_point_sampling",
             "num_episodes": num_episodes,
             "seed": seed,
-            "candidate_count": len(candidate_ids),
-            "feature_definition": "concat(state_mean, state_std, action_mean, action_std)",
+            "candidate_count": len(valid_candidates),
+            "feature_definition": "concat(phi_global, phi_wrist)",
             "distance_metric": "euclidean",
-            "feature_dim": feature_dim,
+            "feature_dim": next(iter(visual_embeddings.values())).shape[0],
             "initial_episode": int(result["selection_order"][0]),
             "selection_order": result["selection_order"],
             "selected_episode_indices": selected_episode_indices,
@@ -239,6 +256,8 @@ if __name__ == "__main__":
     parser.add_argument("--num-episodes", type=int, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--dataset-root", type=str, required=True)
+    parser.add_argument("--task-name", type=str, required=True,
+                       choices=["MoveCube_easy", "PatternLock_medium", "RouteStick_hard"])
     parser.add_argument("--output-dir", type=str, required=True)
     args = parser.parse_args()
 
@@ -246,5 +265,6 @@ if __name__ == "__main__":
         num_episodes=args.num_episodes,
         seed=args.seed,
         dataset_root=args.dataset_root,
+        task_name=args.task_name,
         output_dir=args.output_dir,
     )

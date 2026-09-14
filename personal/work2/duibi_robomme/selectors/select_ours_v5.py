@@ -1,14 +1,20 @@
 #!/usr/bin/env python
 """
 Ours-v5 episode selector for Robomme pipeline.
+
 Adapted from personal/work2/our_v5/select_our_v5.py
 
-For Robomme, we use rand_vec from episode_initial_states.json and
-state/action features extracted from the LeRobotDataset.
+For Robomme:
+- Configuration-space coverage uses initial-configuration features (not rand_vec)
+- Visual embeddings use real phi_global + phi_wrist from SmolVLM
+- Action descriptors use the same V5 definition as original Ours-v5
+- Region priority, coverage gap, visual uncertainty, action uncertainty,
+  and region-internal visual+action novelty selection follow the original logic
 
 Usage:
     python select_ours_v5.py \
         --dataset-root /path/to/dataset \
+        --task-name MoveCube_easy \
         --num-episodes 28 \
         --seed 42 \
         --output-dir /path/to/output
@@ -25,6 +31,20 @@ from sklearn.cluster import KMeans
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
 
+# Allow direct execution (python script.py) to find sibling modules
+_selectors_dir = Path(__file__).resolve().parent
+if str(_selectors_dir) not in sys.path:
+    sys.path.insert(0, str(_selectors_dir))
+
+from configuration_features import (
+    load_configuration_features,
+    TASK_FEATURE_DIMS,
+)
+from robomme_embeddings import (
+    load_cached_visual_embeddings,
+    load_cached_action_descriptors,
+)
+
 
 class NumpyEncoder(json.JSONEncoder):
     def default(self, obj):
@@ -37,61 +57,41 @@ class NumpyEncoder(json.JSONEncoder):
         return super().default(obj)
 
 
-def load_rand_vecs(dataset_root: Path, all_episode_ids: List[int]) -> Dict[int, np.ndarray]:
-    """Load rand_vec for each episode from episode_initial_states.json."""
-    rand_vecs = {}
-    metadata_file = dataset_root / "episode_initial_states.json"
-    if metadata_file.exists():
-        print(f"Loading rand_vecs from: {metadata_file}")
-        try:
-            with open(metadata_file, "r") as f:
-                metadata = json.load(f)
-            episodes = metadata.get("episodes", [])
-            for ep_info in episodes:
-                ep_idx = ep_info.get("episode_index")
-                if ep_idx is None:
-                    continue
-                rv = ep_info.get("rand_vec")
-                if rv is not None:
-                    rand_vecs[int(ep_idx)] = np.array(rv, dtype=np.float32)
-            print(f"Loaded {len(rand_vecs)} rand_vecs")
-        except Exception as e:
-            print(f"Failed to load rand_vecs: {e}")
-    else:
-        print(f"WARNING: episode_initial_states.json not found at {metadata_file}")
-    return rand_vecs
+# ---------------------------------------------------------------------------
+# Configuration-based region building (replaces rand_vec regions)
+# ---------------------------------------------------------------------------
 
+def build_configuration_regions(
+    config_features: Dict[int, np.ndarray],
+    region_ratio: float = 0.1,
+    min_regions: int = 16,
+    max_regions: int = 128,
+    seed: int = 42,
+) -> Tuple[Dict[int, int], int]:
+    """
+    Build configuration-space regions by partitioning the configuration feature space.
 
-def extract_episode_features(dataset, episode_idx):
-    """Extract state and action features for an episode."""
-    ep_data = dataset.hf_dataset.filter(lambda x: x["episode_index"] == episode_idx)
-    if len(ep_data) == 0:
-        return None, None
+    Replaces the old build_rand_vec_regions() but keeps the same interface.
 
-    states = np.array([frame["observation.state"] for frame in ep_data], dtype=np.float32)
-    actions = np.array([frame["action"] for frame in ep_data], dtype=np.float32)
+    Args:
+        config_features: dict mapping episode_index -> configuration feature array
+        region_ratio: ratio of episodes to regions
+        min_regions: minimum number of regions
+        max_regions: maximum number of regions
+        seed: random seed for KMeans
 
-    state_mean = np.mean(states, axis=0)
-    state_std = np.std(states, axis=0)
-    action_mean = np.mean(actions, axis=0)
-    action_std = np.std(actions, axis=0)
-
-    visual_feature = np.concatenate([state_mean, state_std])
-    action_descriptor = np.concatenate([action_mean, action_std])
-    return visual_feature, action_descriptor
-
-
-def build_rand_vec_regions(episode_data, region_ratio=0.1, min_regions=16, max_regions=128, seed=42):
-    """Build rand_vec regions by partitioning the rand_vec space."""
+    Returns:
+        (episode_to_region, num_regions)
+    """
     print(f"\n{'='*60}")
-    print(f"Building rand_vec regions...")
+    print(f"Building configuration regions...")
     print(f"{'='*60}")
 
-    valid_episodes = sorted(episode_data.keys())
+    valid_episodes = sorted(config_features.keys())
     n_episodes = len(valid_episodes)
 
     if n_episodes == 0:
-        raise ValueError("No valid episodes with rand_vec data")
+        raise ValueError("No valid episodes with configuration features")
 
     num_regions = max(min_regions, min(max_regions, int(n_episodes * region_ratio)))
     num_regions = min(num_regions, n_episodes)
@@ -99,17 +99,19 @@ def build_rand_vec_regions(episode_data, region_ratio=0.1, min_regions=16, max_r
     print(f"  Episodes: {n_episodes}")
     print(f"  Computed regions: {num_regions}")
 
-    rand_vec_list = []
+    config_list = []
     for ep_idx in valid_episodes:
-        rand_vec_list.append(episode_data[ep_idx]["rand_vec"])
+        config_list.append(config_features[ep_idx])
 
-    rand_vecs = np.array(rand_vec_list)
-    norms = np.linalg.norm(rand_vecs, axis=1, keepdims=True)
+    config_array = np.array(config_list)
+
+    # L2 normalize configuration features for clustering
+    norms = np.linalg.norm(config_array, axis=1, keepdims=True)
     norms = np.where(norms < 1e-10, 1.0, norms)
-    rand_vecs_normalized = rand_vecs / norms
+    config_normalized = config_array / norms
 
     kmeans = KMeans(n_clusters=num_regions, random_state=seed, n_init=10)
-    region_ids = kmeans.fit_predict(rand_vecs_normalized)
+    region_ids = kmeans.fit_predict(config_normalized)
 
     episode_to_region = {}
     for i, ep_idx in enumerate(valid_episodes):
@@ -126,8 +128,18 @@ def build_rand_vec_regions(episode_data, region_ratio=0.1, min_regions=16, max_r
     return episode_to_region, num_regions
 
 
-def select_initial_b0(episode_to_region, episode_data, num_regions, b0_region_ratio=0.2, seed=42):
-    """Select initial B0 episodes using rand_vec region coverage."""
+# ---------------------------------------------------------------------------
+# Initial B0 selection
+# ---------------------------------------------------------------------------
+
+def select_initial_b0(
+    episode_to_region: Dict[int, int],
+    episode_data: Dict[int, Dict],
+    num_regions: int,
+    b0_region_ratio: float = 0.2,
+    seed: int = 42,
+) -> List[int]:
+    """Select initial B0 episodes using configuration region coverage."""
     rng = np.random.RandomState(seed)
     b0_size = max(1, int(num_regions * b0_region_ratio))
 
@@ -158,9 +170,20 @@ def select_initial_b0(episode_to_region, episode_data, num_regions, b0_region_ra
     return selected
 
 
-def compute_region_priority(region_id, episode_to_region, selected_ids, episode_data,
-                           coverage_weight=0.5, visual_weight=0.3, action_weight=0.2):
-    """Compute priority for a rand_vec region."""
+# ---------------------------------------------------------------------------
+# Region priority computation
+# ---------------------------------------------------------------------------
+
+def compute_region_priority(
+    region_id: int,
+    episode_to_region: Dict[int, int],
+    selected_ids: List[int],
+    episode_data: Dict[int, Dict],
+    coverage_weight: float = 0.5,
+    visual_weight: float = 0.3,
+    action_weight: float = 0.2,
+) -> Dict:
+    """Compute priority for a configuration region."""
     region_episodes = [ep for ep, rid in episode_to_region.items() if rid == region_id]
     total_in_region = len(region_episodes)
 
@@ -171,6 +194,7 @@ def compute_region_priority(region_id, episode_to_region, selected_ids, episode_
     n_selected_in_region = len(selected_in_region)
     coverage_gap = 1.0 - (n_selected_in_region / total_in_region)
 
+    # Visual uncertainty: pairwise distance of visual embeddings in region
     visual_uncertainty = 0.0
     region_visual_embs = []
     for ep in region_episodes:
@@ -190,6 +214,7 @@ def compute_region_priority(region_id, episode_to_region, selected_ids, episode_
     elif len(region_visual_embs) == 1:
         visual_uncertainty = np.linalg.norm(region_visual_embs[0])
 
+    # Action uncertainty: pairwise distance of action descriptors in region
     action_uncertainty = 0.0
     region_action_embs = []
     for ep in region_episodes:
@@ -209,6 +234,7 @@ def compute_region_priority(region_id, episode_to_region, selected_ids, episode_
     elif len(region_action_embs) == 1:
         action_uncertainty = np.linalg.norm(region_action_embs[0])
 
+    # Normalize
     visual_uncertainty_norm = min(visual_uncertainty / 10.0, 1.0)
     action_uncertainty_norm = min(action_uncertainty / 10.0, 1.0)
 
@@ -224,9 +250,19 @@ def compute_region_priority(region_id, episode_to_region, selected_ids, episode_
     }
 
 
-def select_best_episode_from_region(region_id, episode_to_region, selected_ids, episode_data,
-                                   visual_weight=0.5, action_weight=0.5):
-    """Select the best episode from a specific region."""
+# ---------------------------------------------------------------------------
+# Episode selection within a region
+# ---------------------------------------------------------------------------
+
+def select_best_episode_from_region(
+    region_id: int,
+    episode_to_region: Dict[int, int],
+    selected_ids: List[int],
+    episode_data: Dict[int, Dict],
+    visual_weight: float = 0.5,
+    action_weight: float = 0.5,
+) -> Optional[Tuple[int, Dict]]:
+    """Select the best episode from a specific region based on visual+action novelty."""
     candidates = [ep for ep, rid in episode_to_region.items() if rid == region_id and ep not in selected_ids]
 
     if not candidates:
@@ -305,17 +341,33 @@ def select_best_episode_from_region(region_id, episode_to_region, selected_ids, 
     return None
 
 
-def select_episodes_v5(all_episode_ids, visual_embeddings, action_descriptors, rand_vecs,
-                      num_select, region_ratio=0.1, min_regions=16, max_regions=128,
-                      b0_region_ratio=0.2, coverage_weight=0.5, region_visual_weight=0.3,
-                      region_action_weight=0.2, episode_visual_weight=0.5, episode_action_weight=0.5,
-                      seed=42):
-    """Execute rand_vec-aware adaptive coverage selection."""
+# ---------------------------------------------------------------------------
+# Main selection loop
+# ---------------------------------------------------------------------------
+
+def select_episodes_v5(
+    all_episode_ids: List[int],
+    visual_embeddings: Dict[int, np.ndarray],
+    action_descriptors: Dict[int, np.ndarray],
+    config_features: Dict[int, np.ndarray],
+    num_select: int,
+    region_ratio: float = 0.1,
+    min_regions: int = 16,
+    max_regions: int = 128,
+    b0_region_ratio: float = 0.2,
+    coverage_weight: float = 0.5,
+    region_visual_weight: float = 0.3,
+    region_action_weight: float = 0.2,
+    episode_visual_weight: float = 0.5,
+    episode_action_weight: float = 0.5,
+    seed: int = 42,
+) -> Dict:
+    """Execute configuration-aware adaptive coverage selection."""
     episode_data = {}
     for ep_idx in all_episode_ids:
-        if ep_idx in rand_vecs and ep_idx in visual_embeddings and ep_idx in action_descriptors:
+        if ep_idx in config_features and ep_idx in visual_embeddings and ep_idx in action_descriptors:
             episode_data[ep_idx] = {
-                "rand_vec": rand_vecs[ep_idx],
+                "config_feature": config_features[ep_idx],
                 "visual_embedding": visual_embeddings[ep_idx],
                 "action_descriptor": action_descriptors[ep_idx],
             }
@@ -323,15 +375,15 @@ def select_episodes_v5(all_episode_ids, visual_embeddings, action_descriptors, r
     valid_ids = sorted(episode_data.keys())
 
     print(f"\n{'='*60}")
-    print(f"V5 Rand Vec Aware Adaptive Coverage Episode Selection")
+    print(f"V5 Configuration-Aware Adaptive Coverage Episode Selection")
     print(f"{'='*60}")
     print(f"Total episodes: {len(all_episode_ids)}")
     print(f"Valid episodes: {len(valid_ids)}")
     print(f"Target selection: {num_select}")
     print(f"Seed: {seed}")
 
-    episode_to_region, num_regions = build_rand_vec_regions(
-        episode_data, region_ratio, min_regions, max_regions, seed
+    episode_to_region, num_regions = build_configuration_regions(
+        config_features, region_ratio, min_regions, max_regions, seed
     )
 
     b0_episodes = select_initial_b0(
@@ -415,7 +467,17 @@ def select_episodes_v5(all_episode_ids, visual_embeddings, action_descriptors, r
     }
 
 
-def select_ours_v5_episodes(num_episodes, seed, dataset_root, output_dir=None):
+# ---------------------------------------------------------------------------
+# Main entry point
+# ---------------------------------------------------------------------------
+
+def select_ours_v5_episodes(
+    num_episodes: int,
+    seed: int,
+    dataset_root: str,
+    task_name: str,
+    output_dir: Optional[str] = None,
+) -> List[int]:
     """Main entry point for Ours-v5 selection on Robomme datasets."""
     print(f"Loading LeRobotDataset from {dataset_root}")
     dataset = LeRobotDataset(repo_id="1/2", root=dataset_root)
@@ -425,41 +487,52 @@ def select_ours_v5_episodes(num_episodes, seed, dataset_root, output_dir=None):
 
     all_episode_ids = list(range(total_episodes))
 
-    print(f"\nLoading rand_vecs from: {dataset_root}")
-    rand_vecs = load_rand_vecs(Path(dataset_root), all_episode_ids)
+    # Load configuration features
+    print(f"\nLoading configuration features...")
+    config_features = load_configuration_features(dataset_root, task_name)
 
-    print(f"\nExtracting episode features...")
-    visual_embeddings = {}
-    action_descriptors = {}
-    for ep_idx in all_episode_ids:
-        vis_feat, act_feat = extract_episode_features(dataset, ep_idx)
-        if vis_feat is not None:
-            visual_embeddings[ep_idx] = vis_feat
-        if act_feat is not None:
-            action_descriptors[ep_idx] = act_feat
+    # Load visual embeddings from cache (auto-extract if missing)
+    print(f"\nLoading visual embeddings from cache...")
+    visual_embeddings = load_cached_visual_embeddings(dataset_root, task_name)
+    if visual_embeddings is None:
+        print(f"Visual embeddings not found in cache. Extracting now...")
+        print(f"This requires loading the SmolVLM model and may take a while.")
+        import torch
+        from robomme_embeddings import ensure_visual_embeddings, load_smolvla_feature_extractor
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        model, processor = load_smolvla_feature_extractor(device)
+        visual_embeddings = ensure_visual_embeddings(
+            dataset_root, task_name, model, processor, device
+        )
+        print(f"Extracted {len(visual_embeddings)} visual embeddings")
+    else:
+        print(f"Loaded {len(visual_embeddings)} visual embeddings from cache")
+
+    # Load action descriptors from cache (auto-extract if missing)
+    print(f"\nLoading action descriptors from cache...")
+    action_descriptors = load_cached_action_descriptors(dataset_root, task_name)
+    if action_descriptors is None:
+        print(f"Action descriptors not found in cache. Extracting now...")
+        from robomme_embeddings import ensure_action_descriptors
+        action_descriptors = ensure_action_descriptors(dataset_root, task_name)
+        print(f"Extracted {len(action_descriptors)} action descriptors")
+    else:
+        print(f"Loaded {len(action_descriptors)} action descriptors from cache")
 
     valid_ids = [
         ep_idx for ep_idx in all_episode_ids
-        if ep_idx in rand_vecs and ep_idx in visual_embeddings and ep_idx in action_descriptors
+        if ep_idx in config_features and ep_idx in visual_embeddings and ep_idx in action_descriptors
     ]
     print(f"Episodes with all data: {len(valid_ids)}")
 
     if len(valid_ids) == 0:
-        raise RuntimeError("No episodes with all required data (rand_vec+visual+action)")
-
-    episode_data = {}
-    for ep_idx in valid_ids:
-        episode_data[ep_idx] = {
-            "rand_vec": rand_vecs[ep_idx],
-            "visual_embedding": visual_embeddings[ep_idx],
-            "action_descriptor": action_descriptors[ep_idx],
-        }
+        raise RuntimeError("No episodes with all required data (config+visual+action)")
 
     result = select_episodes_v5(
         all_episode_ids=all_episode_ids,
         visual_embeddings=visual_embeddings,
         action_descriptors=action_descriptors,
-        rand_vecs=rand_vecs,
+        config_features=config_features,
         num_select=num_episodes,
         seed=seed,
     )
@@ -470,10 +543,10 @@ def select_ours_v5_episodes(num_episodes, seed, dataset_root, output_dir=None):
         output_path = Path(output_dir)
         output_path.mkdir(parents=True, exist_ok=True)
 
-        subset_file = output_path / f"our_v5_{num_episodes}_seed{seed}.json"
+        subset_file = output_path / f"ours_v5_{num_episodes}_seed{seed}.json"
         subset_data = {
-            "method": "our_v5",
-            "selection_method": "our_v5_rand_vec_adaptive_coverage",
+            "method": "ours_v5",
+            "selection_method": "ours_v5_configuration_adaptive_coverage",
             "num_episodes": len(selected_ids),
             "selected_episode_indices": selected_ids,
             "parameters": {
@@ -484,16 +557,18 @@ def select_ours_v5_episodes(num_episodes, seed, dataset_root, output_dir=None):
         }
         with open(subset_file, "w") as f:
             json.dump(subset_data, f, indent=2, cls=NumpyEncoder)
-        print(f"Saved {len(selected_ids)} our_v5 episodes (seed={seed}) to {subset_file}")
+        print(f"Saved {len(selected_ids)} ours_v5 episodes (seed={seed}) to {subset_file}")
 
     return selected_ids
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="V5 Rand Vec Aware Adaptive Coverage Episode Selection")
+    parser = argparse.ArgumentParser(description="V5 Configuration-Aware Adaptive Coverage Episode Selection")
     parser.add_argument("--num-episodes", type=int, default=28)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--dataset-root", type=str, required=True)
+    parser.add_argument("--task-name", type=str, required=True,
+                       choices=["MoveCube_easy", "PatternLock_medium", "RouteStick_hard"])
     parser.add_argument("--output-dir", type=str, required=True)
     parser.add_argument("--region-ratio", type=float, default=0.1)
     parser.add_argument("--min-regions", type=int, default=16)
@@ -510,5 +585,6 @@ if __name__ == "__main__":
         num_episodes=args.num_episodes,
         seed=args.seed,
         dataset_root=args.dataset_root,
+        task_name=args.task_name,
         output_dir=args.output_dir,
     )

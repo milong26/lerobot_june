@@ -3,9 +3,20 @@
 DemInf episode selector wrapper for Robomme pipeline.
 Adapted from personal/work2/deminf/run_deminf.py
 
-DemInf requires observation.environment_state which Robomme datasets may not have.
-This wrapper attempts to run DemInf selection, and if it fails due to missing
-state source, falls back to a state-based FPS using observation.state.
+DemInf's original algorithm:
+  1. Fit normalization on state/action data
+  2. Train state VAE (BetaVAE) for N steps
+  3. Train action VAE (BetaVAE) for N steps
+  4. Encode all timesteps through both VAEs -> latent z_s, z_a
+  5. Score latents using KSG mutual information estimator
+  6. Aggregate scores per episode
+  7. Rank and select top-K episodes
+
+For Robomme:
+  - state_source is mapped from observation.environment_state -> observation.state
+  - state_dim=8, action_dim=8 (Robomme joint_angle)
+  - VAE latent dims and training steps preserved from original DemInf
+  - KSG estimator and episode ranking preserved
 
 Usage:
     python select_deminf.py \

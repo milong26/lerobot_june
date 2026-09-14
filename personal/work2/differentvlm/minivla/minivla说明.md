@@ -105,10 +105,15 @@ lerobot-eval \
 
 
 
+minivla在disassemble-v3 成功率 11.5%
+pp：
+cb：
+
+
 
 
 our方法的话
-
+先
 python personal/work2/duibi/train_and_eval_scripts/merge_selected_episodes.py \
     --dataset-root personal/work2/dataset_view \
     --dataset-names disassemble-v3_corner pick_place-v3_corner coffee-button-v3_corner \
@@ -119,3 +124,23 @@ python personal/work2/duibi/train_and_eval_scripts/merge_selected_episodes.py \
     --output-dir personal/work2/dataset_view/merged_3tasks_v5_336_seed42
 
 
+our
+cd /data/zhonglinye/jun/lerobot && bash personal/work2/differentvlm/minivla/scripts/launch_minivla.sh \
+    --gpu-id 1 \
+    --num-episodes 112 \
+    --dataset-name disassemble-v3_corner \
+    --seed 42 \
+    --selection-mode our_v5
+bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
+tmux: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by tmux)
+Launched MiniVLA experiment: our_v5_112_seed42_disassemble-v3_corner_minivla_our_v5
+tmux session: minivla_our_v5_ep112_s42_disassemble-v3_corner
+Output dir: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/our_v5_112_seed42_disassemble-v3_corner_minivla_our_v5
+Dataset: disassemble-v3_corner
+Dataset root: /data/zhonglinye/jun/lerobot/personal/work2/dataset_view/disassemble-v3_corner
+GPU: 1
+Episodes: 112
+Selection mode: our_v5
+
+Monitor with: tmux attach -t minivla_our_v5_ep112_s42_disassemble-v3_corner
+Check logs: tail -f /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/our_v5_112_seed42_disassemble-v3_corner_minivla_our_v5/logs/our_v5_112_seed42_disassemble-v3_corner_minivla_our_v5.log

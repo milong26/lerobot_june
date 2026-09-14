@@ -12,7 +12,9 @@ Usage:
         --seed 42 \
         --k 28 \
         --output-dir /path/to/output \
-        --global-results /path/to/all_results.csv
+        --global-results /path/to/all_results.csv \
+        --merged-dataset-path /path/to/merged_dataset \
+        --checkpoint-path /path/to/checkpoint
 """
 
 import argparse
@@ -38,7 +40,8 @@ def load_task_eval(eval_dir, task_name):
     return data
 
 
-def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path=None):
+def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path=None,
+                      merged_dataset_path="", checkpoint_path=""):
     """Aggregate results from all three tasks."""
     print(f"\n{'='*60}")
     print(f"Aggregating results for method={method}, seed={seed}, k={k}")
@@ -46,6 +49,7 @@ def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path
 
     task_results = {}
     success_rates = {}
+    eval_episodes_per_task = {}
 
     for task_name in ROBOMME_TASKS:
         data = load_task_eval(eval_dir, task_name)
@@ -56,6 +60,7 @@ def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path
         success_rate = data.get("success_rate", 0.0)
 
         success_rates[task_name] = success_rate
+        eval_episodes_per_task[task_name] = num_episodes
         print(f"  {task_name}: {num_success}/{num_episodes} = {success_rate:.4f}")
 
     mean_success_rate = sum(success_rates.values()) / len(success_rates) if success_rates else 0.0
@@ -70,6 +75,8 @@ def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path
         "PatternLock_medium_success_rate": success_rates.get("PatternLock_medium", 0.0),
         "RouteStick_hard_success_rate": success_rates.get("RouteStick_hard", 0.0),
         "mean_success_rate": mean_success_rate,
+        "merged_dataset_path": merged_dataset_path,
+        "checkpoint_path": checkpoint_path,
         "status": "completed",
         "task_details": {},
     }
@@ -97,14 +104,16 @@ def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path
         writer.writerow([
             "method", "seed", "k_per_task", "total_selected",
             "MoveCube_easy_success_rate", "PatternLock_medium_success_rate",
-            "RouteStick_hard_success_rate", "mean_success_rate", "status"
+            "RouteStick_hard_success_rate", "mean_success_rate",
+            "merged_dataset_path", "checkpoint_path", "status"
         ])
         writer.writerow([
             method, seed, k, k * len(ROBOMME_TASKS),
             success_rates.get("MoveCube_easy", 0.0),
             success_rates.get("PatternLock_medium", 0.0),
             success_rates.get("RouteStick_hard", 0.0),
-            mean_success_rate, "completed"
+            mean_success_rate,
+            merged_dataset_path, checkpoint_path, "completed"
         ])
     print(f"  Summary CSV saved to: {summary_csv_path}")
 
@@ -123,7 +132,8 @@ def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path
             existing_rows = []
             fieldnames = [
                 "method", "seed", "k_per_task", "total_selected",
-                "MoveCube_easy_episodes", "PatternLock_medium_episodes", "RouteStick_hard_episodes",
+                "selected_episodes_per_task",
+                "eval_episodes_MoveCube_easy", "eval_episodes_PatternLock_medium", "eval_episodes_RouteStick_hard",
                 "MoveCube_easy_success_rate", "PatternLock_medium_success_rate",
                 "RouteStick_hard_success_rate", "mean_success_rate",
                 "merged_dataset_path", "checkpoint_path",
@@ -135,15 +145,16 @@ def aggregate_results(eval_dir, method, seed, k, output_dir, global_results_path
             "seed": seed,
             "k_per_task": k,
             "total_selected": k * len(ROBOMME_TASKS),
-            "MoveCube_easy_episodes": task_results["MoveCube_easy"].get("num_episodes", 0),
-            "PatternLock_medium_episodes": task_results["PatternLock_medium"].get("num_episodes", 0),
-            "RouteStick_hard_episodes": task_results["RouteStick_hard"].get("num_episodes", 0),
+            "selected_episodes_per_task": k,
+            "eval_episodes_MoveCube_easy": eval_episodes_per_task.get("MoveCube_easy", 0),
+            "eval_episodes_PatternLock_medium": eval_episodes_per_task.get("PatternLock_medium", 0),
+            "eval_episodes_RouteStick_hard": eval_episodes_per_task.get("RouteStick_hard", 0),
             "MoveCube_easy_success_rate": success_rates.get("MoveCube_easy", 0.0),
             "PatternLock_medium_success_rate": success_rates.get("PatternLock_medium", 0.0),
             "RouteStick_hard_success_rate": success_rates.get("RouteStick_hard", 0.0),
             "mean_success_rate": mean_success_rate,
-            "merged_dataset_path": "",
-            "checkpoint_path": "",
+            "merged_dataset_path": merged_dataset_path,
+            "checkpoint_path": checkpoint_path,
             "status": "completed",
             "run_key": run_key,
         }
@@ -195,6 +206,8 @@ def main():
         k=args.k,
         output_dir=args.output_dir,
         global_results_path=args.global_results,
+        merged_dataset_path=args.merged_dataset_path,
+        checkpoint_path=args.checkpoint_path,
     )
 
     print(f"\nAggregation complete!")

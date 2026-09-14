@@ -28,7 +28,8 @@ FORCE=0
 MAX_STEPS=300
 
 # ─── Resolve repo root ──────────────────────────────────────────────
-REPO_ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 cd "$REPO_ROOT"
 
 # ─── Parse named arguments ──────────────────────────────────────────
@@ -118,11 +119,32 @@ GLOBAL_RESULTS_JSON="$RESULTS_DIR/all_results.json"
 
 mkdir -p "$SELECT_DIR" "$MERGED_DIR" "$TRAIN_DIR" "$EVAL_DIR" "$LOG_DIR" "$RESULTS_DIR"
 
-TASKS=("MoveCube_easy" "PatternLock_medium" "RouteStick_hard")
-TASK_DATASET_DIRS=()
+# Initialize dataset dir variables from parsed arguments (avoid set -u errors)
+MOVE_CUBE_DIR="${MOVE_CUBE_DATASET_DIR:-}"
+PATTERN_LOCK_DIR="${PATTERN_LOCK_DATASET_DIR:-}"
+ROUTE_STICK_DIR="${ROUTE_STICK_DATASET_DIR:-}"
+
+# Build TASKS list from available datasets only
+TASKS=()
+if [ -n "$MOVE_CUBE_DIR" ] && [ -d "$MOVE_CUBE_DIR" ]; then
+    TASKS+=("MoveCube_easy")
+fi
+if [ -n "$PATTERN_LOCK_DIR" ] && [ -d "$PATTERN_LOCK_DIR" ]; then
+    TASKS+=("PatternLock_medium")
+fi
+if [ -n "$ROUTE_STICK_DIR" ] && [ -d "$ROUTE_STICK_DIR" ]; then
+    TASKS+=("RouteStick_hard")
+fi
+
+if [ ${#TASKS[@]} -eq 0 ]; then
+    echo "Error: No valid dataset directories found"
+    exit 1
+fi
+
+echo "Active tasks: ${TASKS[*]}"
+echo "Total tasks: ${#TASKS[@]}"
 
 # Resolve dataset directories
-# Prefer explicit --*-dataset-dir, then try to resolve from repo_id
 resolve_dataset_dir() {
     local task_name="$1"
     local repo_id="${2:-}"
@@ -161,8 +183,6 @@ for task_dir_pair in "MoveCube_easy:$MOVE_CUBE_DIR" "PatternLock_medium:$PATTERN
     if [ -z "$task_dir" ] || [ ! -d "$task_dir" ]; then
         echo "Error: Dataset directory for $task_name not found."
         echo "  Please provide --${task_name,,}-dataset-dir or ensure the dataset exists."
-        echo "  Expected locations:"
-        echo "    $REPO_ROOT/personal/work2/dataset_view_robomme/${task_name}"
         exit 1
     fi
 done
@@ -183,11 +203,67 @@ echo "========================================"
 MARKER_DIR="$OUTPUT_BASE/.markers"
 mkdir -p "$MARKER_DIR"
 
+# FORCE_ARGS: only add --force when FORCE==1
+FORCE_ARGS=()
+if [ "$FORCE" -eq 1 ]; then
+    FORCE_ARGS+=(--force)
+fi
+
 check_stage() {
     local stage="$1"
     local marker="$MARKER_DIR/${stage}.done"
-    if [ -f "$marker" ] && [ "${FORCE:-0}" != "1" ]; then
-        return 0
+    if [ -f "$marker" ] && [ "${FORCE}" != "1" ]; then
+        # Verify key artifact exists
+        case "$stage" in
+            select_MoveCube_easy|select_PatternLock_medium|select_RouteStick_hard)
+                local task_name="${stage#select_}"
+                local expected_file="$SELECT_DIR/$task_name/${METHOD}_${K}_seed${SEED}.json"
+                if [ -f "$expected_file" ]; then
+                    return 0
+                fi
+                echo "  [RE-EXEC] Selection marker exists but subset JSON missing for $task_name"
+                ;;
+            merge)
+                if [ -d "$MERGED_DIR" ]; then
+                    local ep_count
+                    ep_count=$(python -c "
+from lerobot.datasets.lerobot_dataset import LeRobotDataset
+ds = LeRobotDataset(repo_id='1/2', root='$MERGED_DIR')
+print(ds.num_episodes)
+" 2>/dev/null || echo "0")
+                    local expected_total=$((K * 3))
+                    if [ "$ep_count" -eq "$expected_total" ]; then
+                        return 0
+                    fi
+                    echo "  [RE-EXEC] Merge marker exists but episode count mismatch: got $ep_count, expected $expected_total"
+                else
+                    echo "  [RE-EXEC] Merge marker exists but merged dataset directory missing"
+                fi
+                ;;
+            train)
+                if [ -f "$TRAIN_DIR/final_checkpoint.txt" ]; then
+                    local ckpt_path
+                    ckpt_path=$(cat "$TRAIN_DIR/final_checkpoint.txt" 2>/dev/null || echo "")
+                    if [ -n "$ckpt_path" ] && [ -d "$ckpt_path" ]; then
+                        return 0
+                    fi
+                    echo "  [RE-EXEC] Train marker exists but checkpoint directory missing"
+                else
+                    echo "  [RE-EXEC] Train marker exists but final_checkpoint.txt missing"
+                fi
+                ;;
+            eval_MoveCube_easy|eval_PatternLock_medium|eval_RouteStick_hard)
+                local task_name="${stage#eval_}"
+                local result_file="$EVAL_DIR/$task_name/eval_result.json"
+                if [ -f "$result_file" ]; then
+                    return 0
+                fi
+                echo "  [RE-EXEC] Eval marker exists but eval_result.json missing for $task_name"
+                ;;
+            *)
+                return 0
+                ;;
+        esac
     fi
     return 1
 }
@@ -229,14 +305,26 @@ for task_name in "${TASKS[@]}"; do
             --num-episodes "$K" \
             --seed "$SEED" \
             --dataset-root "$DATASET_DIR" \
+            --task-name "$task_name" \
             --output-dir "$TASK_SELECT_DIR"
 
-        # Verify selection
-        SUBSET_FILE=$(ls "$TASK_SELECT_DIR"/*_${K}_seed${SEED}.json 2>/dev/null | head -1 || true)
-        if [ -z "$SUBSET_FILE" ]; then
-            echo "Error: No subset file generated for $task_name"
+        # Verify selection using exact filename
+        SUBSET_FILE="$TASK_SELECT_DIR/${METHOD}_${K}_seed${SEED}.json"
+        if [ ! -f "$SUBSET_FILE" ]; then
+            echo "Error: Expected subset file not found: $SUBSET_FILE"
             exit 1
         fi
+
+        # Validate metadata matches current run
+        python -c "
+import json, sys
+with open('$SUBSET_FILE') as f:
+    data = json.load(f)
+assert data.get('method') == '$METHOD', f\"method mismatch: {data.get('method')}\"
+assert data.get('seed') == $SEED, f\"seed mismatch: {data.get('seed')}\"
+assert data.get('num_episodes') == $K, f\"num_episodes mismatch: {data.get('num_episodes')}\"
+assert len(data['selected_episode_indices']) == $K, f\"selected count mismatch\"
+" || { echo "Error: Subset file metadata validation failed for $task_name"; exit 1; }
 
         N_SELECTED=$(python -c "import json; print(len(json.load(open('$SUBSET_FILE'))['selected_episode_indices']))")
         if [ "$N_SELECTED" -ne "$K" ]; then
@@ -247,7 +335,7 @@ for task_name in "${TASKS[@]}"; do
         mark_stage "$STAGE_KEY"
     fi
 
-    SUBSET_FILE=$(ls "$TASK_SELECT_DIR"/*_${K}_seed${SEED}.json 2>/dev/null | head -1)
+    SUBSET_FILE="$TASK_SELECT_DIR/${METHOD}_${K}_seed${SEED}.json"
     SELECTED_FILES+=("$SUBSET_FILE")
 done
 
@@ -293,9 +381,9 @@ from lerobot.datasets.lerobot_dataset import LeRobotDataset
 ds = LeRobotDataset(repo_id='1/2', root='$MERGED_DIR')
 print(ds.num_episodes)
 ")
-    EXPECTED_TOTAL=$((K * 3))
+    EXPECTED_TOTAL=$((K * ${#TASKS[@]}))
     if [ "$MERGED_EP_COUNT" -ne "$EXPECTED_TOTAL" ]; then
-        echo "Error: Merged dataset has $MERGED_EP_COUNT episodes, expected $EXPECTED_TOTAL"
+        echo "Error: Merged dataset has $MERGED_EP_COUNT episodes, expected $EXPECTED_TOTAL (${#TASKS[@]} tasks * $K)"
         exit 1
     fi
     echo "  Merged dataset: $MERGED_EP_COUNT episodes (expected $EXPECTED_TOTAL)"
@@ -324,7 +412,7 @@ else
         --lr "$LEARNING_RATE" \
         --save-freq "$SAVE_FREQ" \
         --wandb-enable "$WANDB_ENABLE" \
-        ${FORCE:+--force}
+        "${FORCE_ARGS[@]}"
 
     if [ ! -f "$TRAIN_DIR/final_checkpoint.txt" ]; then
         echo "Error: Training did not produce final checkpoint"
@@ -363,11 +451,10 @@ for task_name in "${TASKS[@]}"; do
         python "$EVAL_SCRIPT" \
             --checkpoint-path "$CHECKPOINT_PATH/pretrained_model" \
             --task "$task_name" \
-            --n-episodes "$N_EVAL_EPISODES" \
             --eval-seeds "$EVAL_SEEDS" \
             --output-dir "$TASK_EVAL_DIR" \
             --gpu-id "$GPU_ID" \
-            --max-steps "$MAX_STEPS"
+            --episode-length "$MAX_STEPS"
 
         if [ ! -f "$TASK_EVAL_DIR/eval_result.json" ]; then
             echo "Error: Evaluation result not found for $task_name"

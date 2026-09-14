@@ -1,9 +1,9 @@
 {
   "exp_name": "random_336_seed42_mergeddisassemblev3corner+pickplacev3corner+coffeebuttonv3corner112x112x112random42_minivla_random",
   "dataset_name": "merged_disassemble-v3_corner+pick_place-v3_corner+coffee-button-v3_corner_112x112x112_random42",
-  "gpu_id": 0,
-  "start_time": "2026-09-14 00:37:28",
-  "end_time": "2026-09-14 00:43:03",
+  "gpu_id": 4,
+  "start_time": "2026-09-14 01:41:06",
+  "end_time": "2026-09-14 13:09:43",
   "current_stage": "training",
   "failed_stage": "training",
   "config": {
@@ -26,10 +26,10 @@
     "episode_selection": {
       "status": "success",
       "subset_file": "/data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_336_seed42_mergeddisassemblev3corner+pickplacev3corner+coffeebuttonv3corner112x112x112random42_minivla_random/subsets/random_336_seed42.json",
-      "time_seconds": 8.6
+      "time_seconds": 0.0
     }
   },
   "final_metrics": {},
-  "total_time_seconds": 335.7,
+  "total_time_seconds": 41317.9,
   "error": "Training failed with exit code 1. Check log: /data/zhonglinye/jun/lerobot/personal/work2/differentvlm/minivla/experiments/random_336_seed42_mergeddisassemblev3corner+pickplacev3corner+coffeebuttonv3corner112x112x112random42_minivla_random/logs/random_336_seed42_mergeddisassemblev3corner+pickplacev3corner+coffeebuttonv3corner112x112x112random42_minivla_random_training.log"
 }

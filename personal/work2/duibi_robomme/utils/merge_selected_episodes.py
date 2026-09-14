@@ -230,6 +230,46 @@ def merge_selected_datasets(source_datasets_dict, output_dir, method, seed, k):
         )
     print(f"  Total episodes: {merged_dataset.meta.total_episodes} == expected {expected_total} OK")
 
+    # Validate task instructions: must have distinct tasks matching the number of source datasets
+    n_source_tasks = len(source_datasets)
+    if "task" in merged_dataset.hf_dataset.column_names:
+        task_values = merged_dataset.hf_dataset["task"]
+        unique_tasks = sorted(set(str(t) for t in task_values))
+        print(f"  Task column unique values: {unique_tasks}")
+
+        if len(unique_tasks) < n_source_tasks:
+            raise ValueError(
+                f"Merged dataset only has {len(unique_tasks)} distinct task(s): {unique_tasks}. "
+                f"Expected at least {n_source_tasks} tasks from {n_source_tasks} source datasets. "
+                f"Task instructions may have been incorrectly merged."
+            )
+
+        task_counts = {}
+        for t in task_values:
+            task_str = str(t)
+            task_counts[task_str] = task_counts.get(task_str, 0) + 1
+        for task_str, count in sorted(task_counts.items()):
+            print(f"    Task '{task_str}': {count} frames")
+
+        print(f"  Task instructions preserved: OK ({len(unique_tasks)} distinct tasks)")
+    else:
+        print(f"  WARNING: No 'task' column in merged dataset. Cannot validate task instructions.")
+
+    if "task_index" in merged_dataset.hf_dataset.column_names:
+        task_index_values = merged_dataset.hf_dataset["task_index"]
+        unique_task_indices = sorted(set(int(x) if hasattr(x, 'item') else x for x in task_index_values))
+        print(f"  task_index unique values: {unique_task_indices}")
+        if len(unique_task_indices) < n_source_tasks:
+            raise ValueError(
+                f"Merged dataset has only {len(unique_task_indices)} distinct task_index value(s). "
+                f"Expected at least {n_source_tasks} for {n_source_tasks} source datasets."
+            )
+        print(f"  task_index diversity: OK")
+
+    if "tasks" in merged_dataset.hf_dataset.features:
+        tasks_feature = merged_dataset.hf_dataset.features["tasks"]
+        print(f"  tasks feature: {tasks_feature}")
+
     manifest_file = output_dir / "provenance_manifest.json"
     with open(manifest_file, "w") as f:
         json.dump({

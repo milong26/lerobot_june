@@ -155,7 +155,8 @@ def extract_frame_embeddings(
             
             # 提取嵌入
             hidden_states = outputs.hidden_states[-1]
-            batch_embeddings = hidden_states.mean(dim=1).cpu().numpy()
+            # 转换为float32再转numpy，避免BFloat16不支持的问题
+            batch_embeddings = hidden_states.mean(dim=1).cpu().float().numpy()
             embeddings.append(batch_embeddings)
             
             batch_time = time.time() - batch_start

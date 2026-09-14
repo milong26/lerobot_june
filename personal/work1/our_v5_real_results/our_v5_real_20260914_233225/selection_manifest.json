@@ -1,0 +1,16 @@
+{
+  "datasets": [
+    {
+      "name": "ep10_30episodes_standing40",
+      "root": "/data/zhonglinye/jun/ep10_30episodes_standing40/ep10_30episodes_standing40",
+      "selected_episode_indices": [
+        145,
+        185,
+        249,
+        299
+      ],
+      "num_selected": 4,
+      "subset_file": "/data/zhonglinye/jun/lerobot/personal/work1/our_v5_real_results/our_v5_real_20260914_233225/subsets/ep10_30episodes_standing40_selected.json"
+    }
+  ]
+}

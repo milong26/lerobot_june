@@ -181,8 +181,14 @@ EOF
 export CUDA_VISIBLE_DEVICES=$GPU_ID
 export MUJOCO_GL=egl
 export PYOPENGL_PLATFORM=egl
-export LD_LIBRARY_PATH=$CONDA_PREFIX/lib:$LD_LIBRARY_PATH
-export LD_PRELOAD=$CONDA_PREFIX/lib/libstdc++.so.6
+
+# Safe environment variable handling (avoid set -u errors)
+_CONDA_PREFIX="${CONDA_PREFIX:-}"
+_LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+if [ -n "$_CONDA_PREFIX" ]; then
+    export LD_LIBRARY_PATH="${_CONDA_PREFIX}/lib:${_LD_LIBRARY_PATH}"
+    export LD_PRELOAD="${_CONDA_PREFIX}/lib/libstdc++.so.6"
+fi
 
 # Run training
 echo ""

@@ -22,8 +22,8 @@ nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
 nohup python personal/work2/collect_dataset/robomme/collect_robomme_bytask.py \
   --task PatternLock \
   --difficulty medium \
-  --num-random-episodes 300 \
-  --num-uniform-episodes 100 \
+  --num-random-episodes 100 \
+  --num-uniform-episodes 0 \
   --output-dir personal/work2/dataset_view_robomme/PatternLock_medium \
   --repo-id work2/robomme_PatternLock_medium \
   > logs_patternlock_medium.log 2>&1 &

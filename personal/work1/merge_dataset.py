@@ -24,7 +24,7 @@ PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from lerobot.datasets.lerobot_dataset import LeRobotDataset
-from lerobot.datasets.utils import merge_datasets
+from lerobot.datasets.dataset_tools import merge_datasets
 
 
 def validate_datasets_compatibility(datasets_info):
