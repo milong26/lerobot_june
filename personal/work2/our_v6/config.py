@@ -1,39 +1,41 @@
-"""
-V6 AdaptiveGrid with V5 Action Descriptor Configuration
+"""Configuration for our_v6 causal hierarchical demonstration acquisition.
 
-Combines V4's from-scratch acquisition strategy with V5's action descriptor approach.
-- Stage 1: coarse uniform coverage (one episode per coarse cell)
-- Stage 2: adaptive acquisition based on spatial need + visual disagreement + action disagreement
-- Action embeddings use V5's pre-computed action descriptors (causal access maintained)
+V6 keeps V5's configuration-region allocation idea, but restores the strict
+causal information boundary of V4: before an episode is acquired, only reset
+configuration metadata may be inspected. Visual/action content is revealed
+only after acquisition.
 """
 
-# Total collection budget (total episodes to collect)
 TOTAL_BUDGET = 112
-
-# Initial coarse grid resolution
-INITIAL_GRID_X = 7
-INITIAL_GRID_Y = 4
-
-# Stage 1 budget (coarse uniform coverage: one episode per coarse cell)
-INITIAL_BUDGET = 28  # = 7 * 4
-
-# Cell splitting parameters
-SPLIT_X = 2
-SPLIT_Y = 2
-MAX_DEPTH = 3
-
-# Scoring weights
-VISUAL_GLOBAL_WEIGHT = 1.0
-VISUAL_WRIST_WEIGHT = 1.0
-VISUAL_WEIGHT = 1.0
-SPATIAL_WEIGHT = 1.0
-ACTION_WEIGHT = 0.5
-
-# Minimum mapping tolerance for episode-to-target matching (meters)
-MIN_MAPPING_TOLERANCE = 0.1
-
-# Random seed
 SEED = 42
 
-# Normalization flags
-VISUAL_NORMALIZE = True
+# Configuration-space partitioning (same dynamic-K idea as V5).
+REGION_RATIO = 0.10
+MIN_REGIONS = 16
+MAX_REGIONS = 128
+B0_REGION_RATIO = 0.20
+
+# Acquired-only region priority.
+COVERAGE_WEIGHT = 0.50
+REGION_VISUAL_WEIGHT = 0.30
+REGION_ACTION_WEIGHT = 0.20
+
+# V4-style target-configuration proposal inside the selected V5-style region.
+TARGET_PROPOSALS = 64
+MAPPING_TOLERANCE = 0.25  # normalized configuration-space distance
+
+# Visual representation variants.
+VISUAL_VARIANTS = ("l2", "online_pca")
+DEFAULT_VISUAL_VARIANT = "l2"
+PCA_DIM = 32
+VISUAL_GLOBAL_WEIGHT = 1.0
+VISUAL_WRIST_WEIGHT = 1.0
+
+# V5 action descriptor content with V4-style group normalization/weighting.
+ACTION_STEPS = 16
+ACTION_TEMPORAL_WEIGHT = 1.0
+ACTION_STATS_WEIGHT = 0.25
+ACTION_PATH_WEIGHT = 0.10
+ACTION_FINAL_L2 = True
+
+EPS = 1e-8
