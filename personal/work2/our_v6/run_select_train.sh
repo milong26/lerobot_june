@@ -82,6 +82,8 @@ echo "============================================================"
 for DATASET_NAME in "${DATASETS[@]}"; do
     DATASET_ROOT="$DATASET_BASE/$DATASET_NAME"
     OUT="$SELECTION_DIR/$DATASET_NAME"
+    SELECTION_FILE="$OUT/selected_episodes_v6.json"
+
     if [[ ! -d "$DATASET_ROOT" ]]; then
         echo "ERROR: dataset not found: $DATASET_ROOT"
         exit 1
@@ -91,18 +93,47 @@ for DATASET_NAME in "${DATASETS[@]}"; do
         exit 1
     fi
 
-    echo ""
-    echo "=== Selecting $DATASET_NAME ==="
-    python "$WORK2_ROOT/our_v6/experiments/select_episodes_v6.py" \
-        --dataset-root "$DATASET_ROOT" \
-        --dataset-name "$DATASET_NAME" \
-        --output-dir "$OUT" \
-        --total-budget "$NUM_EPISODES" \
-        --visual-variant "$VISUAL_VARIANT" \
-        --device cuda \
-        --seed "$SEED" \
-        --ablation "$ABLATION"
+    REUSE_SELECTION=false
+    if [[ -f "$SELECTION_FILE" ]]; then
+        if python - "$SELECTION_FILE" "$NUM_EPISODES" "$VISUAL_VARIANT" "$ABLATION" <<'PYCHECK'
+import json
+import sys
+path, expected_n, expected_variant, expected_ablation = sys.argv[1:]
+try:
+    data = json.load(open(path, "r"))
+    ids = data.get("selected_episode_indices", [])
+    ok = (
+        len(ids) == int(expected_n)
+        and len(ids) == len(set(ids))
+        and data.get("visual_variant") == expected_variant
+        and data.get("ablation") == expected_ablation
+    )
+except Exception:
+    ok = False
+sys.exit(0 if ok else 1)
+PYCHECK
+        then
+            REUSE_SELECTION=true
+        fi
+    fi
 
+    echo ""
+    if [[ "$REUSE_SELECTION" == true ]]; then
+        echo "=== Reusing cached selection for $DATASET_NAME ==="
+        echo "Selection file: $SELECTION_FILE"
+    else
+        echo "=== Selecting $DATASET_NAME ==="
+        rm -f "$SELECTION_FILE"
+        python "$WORK2_ROOT/our_v6/experiments/select_episodes_v6.py" \
+            --dataset-root "$DATASET_ROOT" \
+            --dataset-name "$DATASET_NAME" \
+            --output-dir "$OUT" \
+            --total-budget "$NUM_EPISODES" \
+            --visual-variant "$VISUAL_VARIANT" \
+            --device cuda \
+            --seed "$SEED" \
+            --ablation "$ABLATION"
+    fi
 done
 
 MERGED_SUBSET_FILE="$SUBSET_DIR/${EXP_TAG}.json"
@@ -126,6 +157,10 @@ for ds in datasets:
         raise RuntimeError(f"{ds}: selected {len(indices)} != requested {expected}")
     if len(indices) != len(set(indices)):
         raise RuntimeError(f"{ds}: duplicate selected episode")
+    if result.get("visual_variant") != os.environ["VISUAL_VARIANT"]:
+        raise RuntimeError(f"{ds}: cached visual_variant mismatch")
+    if result.get("ablation") != os.environ["ABLATION"]:
+        raise RuntimeError(f"{ds}: cached ablation mismatch")
     all_indices.extend(indices)
     per_dataset[ds] = indices
 
@@ -178,6 +213,7 @@ lerobot-train \
     --env.type=metaworld \
     --env.task=disassemble-v3 \
     --env.camera_name="corner,gripperPOV" \
+    --env.use_self_mw=true \
     --policy.vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct \
     --policy.freeze_vision_encoder=true \
     --policy.train_expert_only=true \
