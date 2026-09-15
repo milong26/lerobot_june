@@ -2,10 +2,11 @@
 
 RoboMME does not expose MetaWorld ``rand_vec``. Its local datasets store reset
 metadata in ``episode_initial_states.json -> episodes[*].initial_configuration``.
-The shared RoboMME adapter builds a semantic configuration vector from task-level
-reset information only: named movable objects/targets/articulations plus
-``task_config``. Full ``scene_state`` and dynamic velocity/qvel terms are
-excluded. Categorical task variables are deterministically one-hot encoded.
+Our-V7 converts only that reset-time task configuration into a semantic
+configuration vector. Full ``scene_state`` and dynamic velocity/qvel terms are
+excluded. Named entities are keyed by semantic name, categorical task factors
+are deterministically one-hot encoded, and ordered task sequences keep explicit
+slot semantics.
 
 The causal acquisition logic (deterministic KMeans, B0 farthest traversal,
 acquired-only visual/action priority, maximin target, and region-restricted
@@ -30,19 +31,19 @@ from our_v7.config import (
     TOTAL_BUDGET,
 )
 from our_v7.core.planner import V7Planner
+from our_v7.core.robomme_configuration import load_v7_robomme_configuration_metadata
 from our_v7.core.visual_embedding import CachedFrozenVLMEpisodeEncoder, CausalVisualProjector
-from robomme_pipeline.select_robomme_episodes import load_configuration_metadata
 
 
 class RoboMMEV7Planner(V7Planner):
     """V7 with a RoboMME reset-configuration/dataset adapter.
 
-    The local RoboMME metadata exposes the admissible archive support but not a
-    separate analytic Bounds object analogous to MetaWorld's
-    ``_random_reset_space``. After semantic feature construction, each active
-    configuration dimension is normalized with the low/high values of this
-    globally visible reset support. This remains causal because no trajectory
-    image/action/state/reward is used before acquisition.
+    RoboMME does not currently expose a separate analytic Bounds object analogous
+    to MetaWorld's ``_random_reset_space``. After semantic reset-configuration
+    construction, each active dimension is normalized with the low/high values
+    of the globally visible reset-metadata support. This remains within the V7
+    causal boundary because no trajectory image/action/state/reward is used
+    before acquisition.
     """
 
     def __init__(
@@ -75,10 +76,13 @@ class RoboMMEV7Planner(V7Planner):
         self.b0_region_ratio = float(b0_region_ratio)
         self.ablation = ablation
 
-        ids, raw_configs, config_keys = load_configuration_metadata(str(self.dataset_root))
+        ids, raw_configs, config_keys, config_schema = load_v7_robomme_configuration_metadata(
+            str(self.dataset_root)
+        )
         self.episode_ids = ids
         self.raw_configs = np.asarray(raw_configs, dtype=np.float32)
         self.configuration_keys = list(config_keys)
+        self.configuration_schema = dict(config_schema)
 
         if self.raw_configs.ndim != 2 or self.raw_configs.shape[0] != len(self.episode_ids):
             raise ValueError(
@@ -97,13 +101,11 @@ class RoboMMEV7Planner(V7Planner):
         self.config_high = self.raw_configs.max(axis=0).astype(np.float32)
         spans = self.config_high - self.config_low
         if np.any(spans <= 1e-12):
-            # load_configuration_metadata removes constant dimensions. Reaching
-            # this branch means the adapter returned a malformed feature matrix.
+            # The V7 parser removes constant columns before returning.
             bad = np.where(spans <= 1e-12)[0].tolist()
             raise ValueError(f"Constant RoboMME configuration dimensions remain after filtering: {bad}")
         self.config_bounds_source = (
-            "RoboMME:episode_initial_states.json/initial_configuration "
-            "semantic admissible-support bounds"
+            "RoboMME:episode_initial_states.json/initial_configuration semantic admissible-support bounds"
         )
         self.configs = self._normalize_with_predefined_bounds(self.raw_configs)
 
@@ -160,12 +162,14 @@ class RoboMMEV7Planner(V7Planner):
             "task_config",
         ]
         result["configuration_encoding"] = {
-            "entities": "semantic-name keyed",
-            "poses": "position + canonicalized quaternion",
+            "entities": "semantic-name keyed; list order ignored; duplicate names rejected",
+            "poses": "semantic x/y/z + canonicalized qw/qx/qy/qz",
             "articulation_state": "qpos only",
             "task_categorical": "deterministic one-hot",
-            "excluded": ["scene_state", "velocity", "qvel"],
+            "ordered_task_sequences": "slot_XX categorical one-hot",
+            "excluded": ["scene_state", "velocity", "linear_velocity", "angular_velocity", "qvel"],
         }
+        result["configuration_schema"] = self.configuration_schema
         result["configuration_keys"] = self.configuration_keys
         result["scene_state_used_for_selection"] = False
         return result
