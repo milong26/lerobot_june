@@ -74,9 +74,23 @@ def _predefined_metaworld_bounds(dataset_name: str, expected_dim: int) -> Tuple[
         )
     if not np.all(np.isfinite(low)) or not np.all(np.isfinite(high)):
         raise ValueError(f"Non-finite predefined reset bounds for {task_name}")
-    if np.any(high <= low):
-        bad = np.where(high <= low)[0].tolist()
-        raise ValueError(f"Invalid predefined reset bounds for {task_name}, non-positive spans at dims {bad}")
+    span = high - low
+    fixed_dims = np.where(span <= 0)[0]
+
+    if len(fixed_dims) > 0:
+        eps = 1e-6
+        low = low.copy()
+        high = high.copy()
+
+        for d in fixed_dims:
+            low[d] -= eps
+            high[d] += eps
+
+        print(
+            f"[WARNING] {task_name}: "
+            f"fixed reset dimensions {fixed_dims.tolist()} "
+            f"expanded with epsilon={eps}"
+        )
     return low, high, f"MetaWorld:{task_name}._random_reset_space"
 
 
