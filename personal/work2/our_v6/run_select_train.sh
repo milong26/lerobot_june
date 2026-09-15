@@ -34,7 +34,7 @@ fi
 REPO_ROOT="$(cd "$(dirname "$0")/../../.." && pwd)"
 WORK2_ROOT="$REPO_ROOT/personal/work2"
 DATASET_BASE="$WORK2_ROOT/dataset_view"
-MERGE_SCRIPT="$WORK2_ROOT/duibi/train_and_eval_scripts/merge_selected_episodes.py"
+MERGE_SCRIPT="$WORK2_ROOT/duibi/train_and_eval_scripts/merge_selected_episodes_safe.py"
 DATASETS=("coffee-button-v3_corner" "disassemble-v3_corner" "pick_place-v3_corner")
 TOTAL_EPISODES=$((NUM_EPISODES * ${#DATASETS[@]}))
 EXP_TAG="our_v6_${VISUAL_VARIANT}_${ABLATION}_${NUM_EPISODES}x3_seed${SEED}"
