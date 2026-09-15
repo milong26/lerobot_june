@@ -1,15 +1,11 @@
 """RoboMME adapter for the paper-faithful Our-V7 planner.
 
-RoboMME does not expose MetaWorld ``rand_vec``. Its local datasets store reset
+RoboMME does not expose MetaWorld ``rand_vec``.  Its local datasets store reset
 metadata in ``episode_initial_states.json -> episodes[*].initial_configuration``.
-The shared RoboMME adapter builds a semantic configuration vector from task-level
-reset information only: named movable objects/targets/articulations plus
-``task_config``. Full ``scene_state`` and dynamic velocity/qvel terms are
-excluded. Categorical task variables are deterministically one-hot encoded.
-
-The causal acquisition logic (deterministic KMeans, B0 farthest traversal,
-acquired-only visual/action priority, maximin target, and region-restricted
-archive mapping) is inherited unchanged from :class:`V7Planner`.
+We flatten only task-relevant configuration fields and explicitly exclude the
+low-level ``scene_state``.  The causal acquisition logic (deterministic KMeans,
+B0 farthest traversal, acquired-only visual/action priority, maximin target and
+region-restricted archive mapping) is inherited unchanged from :class:`V7Planner`.
 """
 
 from __future__ import annotations
@@ -35,14 +31,14 @@ from robomme_pipeline.select_robomme_episodes import load_configuration_metadata
 
 
 class RoboMMEV7Planner(V7Planner):
-    """V7 with a RoboMME reset-configuration/dataset adapter.
+    """V7 with a RoboMME configuration/dataset adapter.
 
-    The local RoboMME metadata exposes the admissible archive support but not a
-    separate analytic Bounds object analogous to MetaWorld's
-    ``_random_reset_space``. After semantic feature construction, each active
-    configuration dimension is normalized with the low/high values of this
-    globally visible reset support. This remains causal because no trajectory
-    image/action/state/reward is used before acquisition.
+    The local RoboMME JSON currently provides the admissible configuration
+    support itself but not separate analytic low/high bounds.  Therefore the
+    per-dimension bounds of that globally visible support are used as the
+    archive-backed feasible bounds.  This remains causal because only reset
+    metadata is read before acquisition; no trajectory image/action/state is
+    used to construct the configuration space.
     """
 
     def __init__(
@@ -93,17 +89,21 @@ class RoboMMEV7Planner(V7Planner):
         if not np.all(np.isfinite(self.raw_configs)):
             raise ValueError("RoboMME configuration matrix contains non-finite values")
 
+        # The JSON contains the globally visible admissible archive support. It
+        # does not contain a separate task-space Bounds object analogous to
+        # MetaWorld's _random_reset_space, so its per-dimension support bounds
+        # are the reproducible archive-backed feasible bounds used here.
         self.config_low = self.raw_configs.min(axis=0).astype(np.float32)
         self.config_high = self.raw_configs.max(axis=0).astype(np.float32)
         spans = self.config_high - self.config_low
         if np.any(spans <= 1e-12):
-            # load_configuration_metadata removes constant dimensions. Reaching
-            # this branch means the adapter returned a malformed feature matrix.
+            # load_configuration_metadata already removes constant dimensions;
+            # reaching this branch indicates a malformed adapter result.
             bad = np.where(spans <= 1e-12)[0].tolist()
             raise ValueError(f"Constant RoboMME configuration dimensions remain after filtering: {bad}")
         self.config_bounds_source = (
             "RoboMME:episode_initial_states.json/initial_configuration "
-            "semantic admissible-support bounds"
+            "task-relevant admissible-support bounds"
         )
         self.configs = self._normalize_with_predefined_bounds(self.raw_configs)
 
@@ -159,13 +159,6 @@ class RoboMMEV7Planner(V7Planner):
             "articulations",
             "task_config",
         ]
-        result["configuration_encoding"] = {
-            "entities": "semantic-name keyed",
-            "poses": "position + canonicalized quaternion",
-            "articulation_state": "qpos only",
-            "task_categorical": "deterministic one-hot",
-            "excluded": ["scene_state", "velocity", "qvel"],
-        }
         result["configuration_keys"] = self.configuration_keys
         result["scene_state_used_for_selection"] = False
         return result

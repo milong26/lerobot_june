@@ -230,9 +230,9 @@ vlabench/*
 # Ignore local RoboMME datasets but allow small reset-configuration metadata JSONs
 # to be versioned for selector/schema validation.
 personal/work2/dataset_view_robomme/*
-!personal/work2/dataset_view_robomme/*/
+# !personal/work2/dataset_view_robomme/*/
 personal/work2/dataset_view_robomme/*/*
-!personal/work2/dataset_view_robomme/*/episode_initial_states.json
+# !personal/work2/dataset_view_robomme/*/episode_initial_states.json
 personal/work2/dataset_view_vlabench/*
 personal/work2/collect_dataset/vlabench/*personal/work2/duibi/**/videos/
 *.mp4

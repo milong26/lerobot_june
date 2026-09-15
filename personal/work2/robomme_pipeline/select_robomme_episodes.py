@@ -8,17 +8,10 @@ Supported methods:
   our_v6       - causal V6 using initial configuration metadata globally and
                  visual/action content only after acquisition.
 
-RoboMME datasets do not use MetaWorld ``rand_vec``. They store the reset-time
-configuration in ``episode_initial_states.json -> episodes[*].initial_configuration``.
-This module converts that task-specific structure into a stable configuration
-matrix without reading trajectory observations/actions/rewards.
-
-Important semantics:
-- ``scene_state`` is never used for configuration-space selection.
-- dynamic reset quantities such as actor velocity/qvel are excluded.
-- entity lists are keyed by semantic ``name`` rather than list position.
-- task-level categorical values (for example ``way`` or selected button names)
-  are retained through deterministic one-hot encoding.
+RoboMME datasets store task-specific reset metadata under
+``initial_configuration`` rather than MetaWorld's ``rand_vec``. This module
+turns the task-relevant numeric reset metadata into a stable per-episode
+configuration vector without reading trajectory observations or actions.
 """
 
 from __future__ import annotations
@@ -26,7 +19,6 @@ from __future__ import annotations
 import argparse
 import json
 import random
-import re
 import sys
 from pathlib import Path
 from typing import Dict, Iterable, List, Tuple
@@ -43,133 +35,32 @@ CONFIG_FIELDS = (
     "articulations",
     "task_config",
 )
-ENTITY_FIELDS = ("movable_objects", "randomized_targets", "articulations")
-DYNAMIC_ENTITY_KEYS = {
-    "velocity",
-    "linear_velocity",
-    "angular_velocity",
-    "qvel",
-}
-MISSING_CATEGORY = "<MISSING>"
 
 
-def _safe_token(value: object) -> str:
-    text = str(value).strip() or "unnamed"
-    return re.sub(r"[^A-Za-z0-9_.:-]+", "_", text)
-
-
-def _canonicalize_quaternion(value) -> np.ndarray | None:
-    """Canonicalize q and -q to one representation before using them as features."""
-    try:
-        q = np.asarray(value, dtype=np.float32).reshape(-1)
-    except Exception:
-        return None
-    if q.size != 4 or not np.all(np.isfinite(q)):
-        return None
-    norm = float(np.linalg.norm(q))
-    if norm <= 1e-12:
-        return None
-    q = q / norm
-    # Sapien quaternions are normally wxyz. More generally, choosing the sign
-    # of the first non-zero component removes the q/-q ambiguity deterministically.
-    for component in q:
-        if abs(float(component)) > 1e-8:
-            if component < 0:
-                q = -q
-            break
-    return q.astype(np.float32)
-
-
-def _flatten_mixed_leaves(
-    value,
-    prefix: str,
-    numeric: Dict[str, float],
-    categorical: Dict[str, str],
-) -> None:
-    """Flatten task-level config leaves while preserving categorical reset factors."""
-    if value is None:
-        return
-    if isinstance(value, bool):
-        numeric[prefix] = float(value)
-        return
+def _numeric_leaves(value, prefix: str = "") -> Dict[str, float]:
+    """Flatten numeric leaves from nested task configuration metadata."""
+    out: Dict[str, float] = {}
+    if isinstance(value, bool) or value is None:
+        return out
     if isinstance(value, (int, float, np.integer, np.floating)):
         v = float(value)
         if np.isfinite(v):
-            numeric[prefix] = v
-        return
-    if isinstance(value, str):
-        categorical[prefix] = value
-        return
+            out[prefix or "value"] = v
+        return out
     if isinstance(value, dict):
         for key in sorted(value):
-            if key in DYNAMIC_ENTITY_KEYS:
-                continue
             child = f"{prefix}.{key}" if prefix else str(key)
-            _flatten_mixed_leaves(value[key], child, numeric, categorical)
-        return
+            out.update(_numeric_leaves(value[key], child))
+        return out
     if isinstance(value, (list, tuple)):
         for i, item in enumerate(value):
-            child = f"{prefix}[{i}]"
-            _flatten_mixed_leaves(item, child, numeric, categorical)
-
-
-def _flatten_pose(
-    pose: object,
-    prefix: str,
-    numeric: Dict[str, float],
-) -> None:
-    if not isinstance(pose, dict):
-        return
-    position = pose.get("position")
-    if position is not None:
-        try:
-            p = np.asarray(position, dtype=np.float32).reshape(-1)
-        except Exception:
-            p = np.asarray([], dtype=np.float32)
-        if p.size and np.all(np.isfinite(p)):
-            for i, value in enumerate(p):
-                numeric[f"{prefix}.position[{i}]"] = float(value)
-    quaternion = _canonicalize_quaternion(pose.get("quaternion"))
-    if quaternion is not None:
-        for i, value in enumerate(quaternion):
-            numeric[f"{prefix}.quaternion[{i}]"] = float(value)
-
-
-def _flatten_named_entities(
-    field_name: str,
-    entities: object,
-    numeric: Dict[str, float],
-    categorical: Dict[str, str],
-) -> None:
-    if not isinstance(entities, list):
-        return
-    seen: Dict[str, int] = {}
-    for index, entity in enumerate(entities):
-        if not isinstance(entity, dict):
-            continue
-        base_name = _safe_token(entity.get("name") or f"item_{index}")
-        occurrence = seen.get(base_name, 0)
-        seen[base_name] = occurrence + 1
-        entity_name = base_name if occurrence == 0 else f"{base_name}#{occurrence}"
-        prefix = f"{field_name}.{entity_name}"
-
-        _flatten_pose(entity.get("pose"), f"{prefix}.pose", numeric)
-
-        # qpos is a reset-time articulation configuration; qvel/velocities are
-        # state derivatives rather than the task configuration and stay hidden.
-        if "qpos" in entity:
-            _flatten_mixed_leaves(entity.get("qpos"), f"{prefix}.qpos", numeric, categorical)
-
-        # Preserve any additional static/reset attributes without depending on
-        # list order. Name/pose/dynamic derivatives are handled above.
-        for key in sorted(entity):
-            if key in {"name", "pose", "qpos"} or key in DYNAMIC_ENTITY_KEYS:
-                continue
-            _flatten_mixed_leaves(entity[key], f"{prefix}.{key}", numeric, categorical)
+            child = f"{prefix}[{i}]" if prefix else f"[{i}]"
+            out.update(_numeric_leaves(item, child))
+    return out
 
 
 def _selection_configuration(initial_configuration: dict) -> dict:
-    """Keep only pre-execution task configuration; explicitly exclude scene_state."""
+    """Keep task-level reset factors and explicitly exclude full scene_state."""
     return {
         key: initial_configuration.get(key)
         for key in CONFIG_FIELDS
@@ -177,29 +68,8 @@ def _selection_configuration(initial_configuration: dict) -> dict:
     }
 
 
-def _semantic_configuration_features(initial_configuration: dict) -> Tuple[Dict[str, float], Dict[str, str]]:
-    cfg = _selection_configuration(initial_configuration)
-    numeric: Dict[str, float] = {}
-    categorical: Dict[str, str] = {}
-
-    for field in ENTITY_FIELDS:
-        _flatten_named_entities(field, cfg.get(field), numeric, categorical)
-
-    task_config = cfg.get("task_config")
-    if isinstance(task_config, dict):
-        _flatten_mixed_leaves(task_config, "task_config", numeric, categorical)
-
-    return numeric, categorical
-
-
 def load_configuration_metadata(dataset_root: str) -> Tuple[List[int], np.ndarray, List[str]]:
-    """Load RoboMME reset metadata and build a stable mixed-type feature matrix.
-
-    Numeric reset quantities are kept directly. Categorical task configuration
-    values are one-hot encoded over the globally visible admissible archive
-    support. Numeric missingness receives a separate indicator when it varies.
-    Constant columns are removed. All operations use only reset-time metadata.
-    """
+    """Load RoboMME task configuration and build a stable numeric matrix."""
     path = Path(dataset_root) / "episode_initial_states.json"
     if not path.exists():
         raise FileNotFoundError(f"Missing RoboMME metadata: {path}")
@@ -208,95 +78,44 @@ def load_configuration_metadata(dataset_root: str) -> Tuple[List[int], np.ndarra
     if not episodes:
         raise ValueError(f"No episodes in {path}")
 
-    records: List[Tuple[int, Dict[str, float], Dict[str, str]]] = []
-    numeric_keys: set[str] = set()
-    categorical_values: Dict[str, set[str]] = {}
-
+    rows: List[Tuple[int, Dict[str, float]]] = []
+    all_keys = set()
     for item in episodes:
         ep = item.get("episode_index")
         cfg = item.get("initial_configuration")
         if ep is None or not isinstance(cfg, dict):
             continue
-        numeric, categorical = _semantic_configuration_features(cfg)
-        if not numeric and not categorical:
+        flat = _numeric_leaves(_selection_configuration(cfg))
+        if not flat:
             continue
-        ep_i = int(ep)
-        records.append((ep_i, numeric, categorical))
-        numeric_keys.update(numeric)
-        for key, value in categorical.items():
-            categorical_values.setdefault(key, set()).add(str(value))
+        rows.append((int(ep), flat))
+        all_keys.update(flat)
 
-    if not records:
+    if not rows:
         raise ValueError(
-            f"No task-relevant initial_configuration found in {path}; "
-            "configuration-based selection cannot run"
+            f"No numeric task configuration found in {path}; configuration-based selection cannot run"
         )
 
-    records.sort(key=lambda x: x[0])
-    ids = [ep for ep, _, _ in records]
-    if len(ids) != len(set(ids)):
-        raise ValueError(f"Duplicate episode_index values in {path}")
+    rows.sort(key=lambda x: x[0])
+    keys = sorted(all_keys)
+    matrix = np.full((len(rows), len(keys)), np.nan, dtype=np.float32)
+    for r, (_, flat) in enumerate(rows):
+        for c, key in enumerate(keys):
+            if key in flat:
+                matrix[r, c] = flat[key]
 
-    columns: List[np.ndarray] = []
-    feature_names: List[str] = []
-    n = len(records)
+    med = np.nanmedian(matrix, axis=0)
+    inds = np.where(~np.isfinite(matrix))
+    matrix[inds] = med[inds[1]]
 
-    # Numeric features + missingness indicators when the field is not present
-    # for every admissible configuration.
-    for key in sorted(numeric_keys):
-        values = np.full(n, np.nan, dtype=np.float32)
-        present = np.zeros(n, dtype=np.float32)
-        for row, (_, numeric, _) in enumerate(records):
-            if key in numeric and np.isfinite(numeric[key]):
-                values[row] = float(numeric[key])
-                present[row] = 1.0
-        finite = np.isfinite(values)
-        if not np.any(finite):
-            continue
-        median = float(np.median(values[finite]))
-        values[~finite] = median
-        columns.append(values)
-        feature_names.append(f"num:{key}")
-        if np.any(present == 0.0) and np.any(present == 1.0):
-            columns.append(present)
-            feature_names.append(f"present:{key}")
-
-    # Categorical task variables are part of the reset configuration too. Use
-    # deterministic archive-support one-hot encoding, including missingness.
-    all_cat_keys = sorted(categorical_values)
-    for key in all_cat_keys:
-        observed = set(categorical_values[key])
-        if any(key not in categorical for _, _, categorical in records):
-            observed.add(MISSING_CATEGORY)
-        for category in sorted(observed):
-            values = np.zeros(n, dtype=np.float32)
-            for row, (_, _, categorical) in enumerate(records):
-                current = str(categorical[key]) if key in categorical else MISSING_CATEGORY
-                values[row] = 1.0 if current == category else 0.0
-            columns.append(values)
-            feature_names.append(f"cat:{key}={category}")
-
-    if not columns:
-        raise ValueError(f"No usable configuration features could be built from {path}")
-
-    matrix = np.stack(columns, axis=1).astype(np.float32)
     span = matrix.max(axis=0) - matrix.min(axis=0)
     active = span > 1e-8
     if not np.any(active):
-        raise ValueError(
-            f"All task-relevant configuration features are constant in {path}; "
-            "cannot define a configuration-space selector"
-        )
+        raise ValueError("All task configuration dimensions are constant")
     matrix = matrix[:, active]
-    keys = [name for name, keep in zip(feature_names, active, strict=True) if bool(keep)]
-
-    task_name = payload.get("task", "unknown")
-    print(
-        f"[RoboMME config] task={task_name}, episodes={len(ids)}, "
-        f"active_dim={matrix.shape[1]}, numeric/categorical reset metadata only"
-    )
-    print("[RoboMME config] scene_state/velocity/qvel excluded; entities keyed by semantic name")
-    return ids, matrix, keys
+    keys = [k for k, keep in zip(keys, active, strict=True) if bool(keep)]
+    ids = [ep for ep, _ in rows]
+    return ids, matrix.astype(np.float32), keys
 
 
 def minmax(matrix: np.ndarray) -> np.ndarray:
