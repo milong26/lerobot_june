@@ -82,7 +82,11 @@ def main() -> None:
             "configuration fields: movable_objects/randomized_targets/articulations/task_config "
             "(scene_state excluded)"
         )
-        print("configuration normalization: task-relevant admissible-support bounds")
+        print("entity identity: semantic name; input list order ignored")
+        print("pose schema: position x/y/z + canonicalized quaternion qw/qx/qy/qz")
+        print("categorical task factors: deterministic one-hot; ordered lists use slot semantics")
+        print("dynamic fields excluded: velocity/linear_velocity/angular_velocity/qvel")
+        print("configuration normalization: reset-metadata admissible-support bounds")
         planner_cls = RoboMMEV7Planner
     print("KMeans init: deterministic centroid-nearest + farthest-point traversal")
     print("B0 init: deterministic centroid-nearest + farthest-point traversal")
