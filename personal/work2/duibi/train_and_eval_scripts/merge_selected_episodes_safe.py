@@ -3,12 +3,12 @@
 
 Some locally collected LeRobot datasets contain a one-frame discrepancy between
 an episode's discrete ``length`` and the frame span reconstructed from video
-``from_timestamp``/``to_timestamp``.  At high FPS this can be caused by floating
-point timestamp serialization.  Upstream ``split_dataset`` intentionally asserts
+``from_timestamp``/``to_timestamp``. At high FPS this can be caused by floating
+point timestamp serialization. Upstream ``split_dataset`` intentionally asserts
 exact equality and therefore aborts before subset merging.
 
 This wrapper repairs only a +/-1 frame timestamp-rounding discrepancy in memory
-for the episodes being split.  The source dataset on disk is never modified.
+for the episodes being split. The source dataset on disk is never modified.
 Larger discrepancies, or a mismatch between parquet frame indices and episode
 length, remain hard errors so real data corruption is not hidden.
 """
@@ -31,12 +31,7 @@ import merge_selected_episodes as _merge_impl
 
 
 def _selected_episode_ids(splits: dict, total_episodes: int) -> set[int]:
-    """Return explicit episode ids for list-based splits.
-
-    The merge pipeline always passes explicit episode lists.  Fractional splits
-    are delegated unchanged because this wrapper is intended only for subset
-    merging.
-    """
+    """Return explicit episode ids for list-based splits."""
     selected: set[int] = set()
     for value in splits.values():
         if isinstance(value, float):
@@ -48,19 +43,36 @@ def _selected_episode_ids(splits: dict, total_episodes: int) -> set[int]:
     return selected
 
 
+def _materialize_episode_metadata(dataset) -> None:
+    """Convert HF Dataset episode metadata to a mutable list of dicts.
+
+    ``load_episodes`` returns a Hugging Face Dataset. Indexing it returns a dict
+    copy, so mutating ``dataset.meta.episodes[i]`` would not persist. The dataset
+    tools only require list-style indexing/iteration for this path, therefore a
+    materialized list is safe and makes the in-memory correction visible to the
+    subsequent ``split_dataset`` call.
+    """
+    episodes = dataset.meta.episodes
+    if episodes is None:
+        episodes = load_episodes(dataset.meta.root)
+    if not isinstance(episodes, list):
+        episodes = [dict(episodes[i]) for i in range(len(episodes))]
+    else:
+        episodes = [dict(ep) for ep in episodes]
+    dataset.meta.episodes = episodes
+
+
 def _repair_one_frame_video_timestamp_drift(dataset, episode_ids: set[int]) -> int:
     """Repair +/-1 frame timestamp rounding errors for selected episodes.
 
     ``episode['length']`` and the parquet index span are treated as the discrete
-    source of truth.  Timestamps are used to locate the start frame, and the end
-    timestamp is corrected so the half-open video frame range has exactly the
-    declared episode length.
+    source of truth. Timestamps locate the start frame, and the end timestamp is
+    corrected so the half-open video range has exactly the declared length.
     """
     if not episode_ids or not dataset.meta.video_keys:
         return 0
 
-    if dataset.meta.episodes is None:
-        dataset.meta.episodes = load_episodes(dataset.meta.root)
+    _materialize_episode_metadata(dataset)
 
     fps = float(dataset.meta.fps)
     if fps <= 0:
@@ -71,7 +83,8 @@ def _repair_one_frame_video_timestamp_drift(dataset, episode_ids: set[int]) -> i
         ep = dataset.meta.episodes[ep_idx]
         declared_length = int(ep["length"])
 
-        # Parquet/data indexing is discrete and should agree exactly with length.
+        # The discrete parquet/data span must agree exactly with the episode
+        # length. If it does not, this is not merely a timestamp-rounding issue.
         if "dataset_from_index" in ep and "dataset_to_index" in ep:
             data_length = int(ep["dataset_to_index"]) - int(ep["dataset_from_index"])
             if data_length != declared_length:
