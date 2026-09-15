@@ -203,9 +203,6 @@ personal/work2/dataset_view/*
 # personal/work2/duibi/uniform_42_corner2/*
 # personal/work2/duibi/random_42_wrongdataset/*
 # personal/work2/duibi/uniform_42_wrongdataset/*
-# personal/work2/tanzhen/results/*
-# personal/work2/duibi/uniform_42_corner3/*
-# personal/work2/duibi/random_42_corner3/*
 # personal/work2/duibi/ours_0_seed42/embeddings/*
 # personal/work2/duibi/ours_112_seed42/embeddings/*
 # 所有checkpoint和wandb目录
@@ -230,7 +227,12 @@ personal/work2/differentvlm/embeddings/*
 personal/work2/dai/*
 daishuheng/*
 vlabench/*
+# Ignore local RoboMME datasets but allow small reset-configuration metadata JSONs
+# to be versioned for selector/schema validation.
 personal/work2/dataset_view_robomme/*
+!personal/work2/dataset_view_robomme/*/
+personal/work2/dataset_view_robomme/*/*
+!personal/work2/dataset_view_robomme/*/episode_initial_states.json
 personal/work2/dataset_view_vlabench/*
 personal/work2/collect_dataset/vlabench/*personal/work2/duibi/**/videos/
 *.mp4
