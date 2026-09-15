@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Run paper-faithful causal Our-V7 acquisition on one MetaWorld dataset."""
+"""Run paper-faithful causal Our-V7 acquisition on one benchmark dataset."""
 
 from __future__ import annotations
 
@@ -23,6 +23,7 @@ from our_v7.config import (
     VISUAL_VARIANTS,
 )
 from our_v7.core.planner import V7Planner
+from our_v7.core.robomme_planner import RoboMMEV7Planner
 
 
 def parse_args() -> argparse.Namespace:
@@ -32,6 +33,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-root", required=True)
     parser.add_argument("--dataset-name", required=True)
     parser.add_argument("--output-dir", required=True)
+    parser.add_argument(
+        "--benchmark",
+        choices=("metaworld", "robomme"),
+        default="metaworld",
+        help="Configuration/dataset adapter. Default keeps the original MetaWorld behavior.",
+    )
     parser.add_argument("--total-budget", type=int, default=TOTAL_BUDGET)
     parser.add_argument("--visual-variant", choices=VISUAL_VARIANTS, default=DEFAULT_VISUAL_VARIANT)
     parser.add_argument("--device", default="cuda")
@@ -60,17 +67,29 @@ def main() -> None:
 
     print("=" * 76)
     print("Our-V7 paper-faithful causal demonstration acquisition")
+    print(f"benchmark={args.benchmark}")
     print(f"dataset={args.dataset_name}")
     print(f"budget={args.total_budget}")
     print(f"visual_variant={args.visual_variant}")
     print(f"ablation={args.ablation}")
-    print("configuration normalization: predefined MetaWorld reset bounds")
+    if args.benchmark == "metaworld":
+        print("configuration source: episode_initial_states.json -> rand_vec")
+        print("configuration normalization: predefined MetaWorld reset bounds")
+        planner_cls = V7Planner
+    else:
+        print("configuration source: episode_initial_states.json -> initial_configuration")
+        print(
+            "configuration fields: movable_objects/randomized_targets/articulations/task_config "
+            "(scene_state excluded)"
+        )
+        print("configuration normalization: task-relevant admissible-support bounds")
+        planner_cls = RoboMMEV7Planner
     print("KMeans init: deterministic centroid-nearest + farthest-point traversal")
     print("B0 init: deterministic centroid-nearest + farthest-point traversal")
     print("priority: g_k + minmax(u_visual) + minmax(u_action)")
     print("=" * 76)
 
-    planner = V7Planner(
+    planner = planner_cls(
         dataset_root=args.dataset_root,
         dataset_name=args.dataset_name,
         total_budget=args.total_budget,
@@ -86,6 +105,7 @@ def main() -> None:
     )
     result = planner.run()
     planner.validate_causal_access()
+    result["benchmark"] = args.benchmark
 
     output_file = output_dir / "selected_episodes_v7.json"
     output_file.write_text(json.dumps(result, indent=2), encoding="utf-8")
