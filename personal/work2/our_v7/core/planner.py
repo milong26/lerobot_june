@@ -255,7 +255,30 @@ class V7Planner:
 
     def _build_regions(self) -> Tuple[Dict[int, RegionInfo], Dict[int, int], List[int]]:
         m = len(self.episode_ids)
-        k = min(m, max(self.min_regions, min(self.max_regions, int(np.floor(self.region_ratio * m)))))
+        k_requested = max(
+            self.min_regions,
+            min(
+                self.max_regions,
+                int(np.floor(self.region_ratio * m))
+            )
+        )
+
+        unique_points = np.unique(
+            self.configs,
+            axis=0
+        ).shape[0]
+
+        k = min(
+            k_requested,
+            unique_points,
+            m
+        )
+        if k < k_requested:
+            print(
+                f"[WARNING] Requested {k_requested} regions but only "
+                f"{unique_points} unique configuration points exist. "
+                f"Reducing KMeans clusters to {k}."
+            )
         k = max(1, k)
 
         init_rows = self._deterministic_farthest_support_indices(k)

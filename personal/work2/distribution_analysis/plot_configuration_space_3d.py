@@ -457,24 +457,38 @@ def main():
     for idx, method in enumerate(method_order):
         row = idx // 2
         col = idx % 2
+
         ax = fig.add_subplot(2, 2, idx + 1, projection="3d")
+
         ax.set_facecolor("white")
         ax.xaxis.pane.fill = False
         ax.yaxis.pane.fill = False
         ax.zaxis.pane.fill = False
+
         ax.xaxis.pane.set_edgecolor("gray")
         ax.yaxis.pane.set_edgecolor("gray")
         ax.zaxis.pane.set_edgecolor("gray")
+
         ax.grid(True, alpha=0.15)
 
         color = METHOD_COLORS[method]
         selected = method_coords_main[method]
 
-        method_voxel_grid = compute_occupied_voxels(selected, bins=VOXEL_BINS)
+        method_voxel_grid = compute_occupied_voxels(
+            selected,
+            bins=VOXEL_BINS
+        )
+
         method_voxel_results[method] = method_voxel_grid
 
-        draw_occupied_voxels(ax, method_voxel_grid, color=color, alpha=0.08)
+        draw_occupied_voxels(
+            ax,
+            method_voxel_grid,
+            color=color,
+            alpha=0.08
+        )
 
+        # Scatter points: keep original coordinates unchanged
         ax.scatter(
             selected[:, 0],
             selected[:, 1],
@@ -488,28 +502,96 @@ def main():
             linewidths=0.4,
         )
 
+        # Original coordinate range
         x_min_r, x_max_r = shared_ranges[0]
         y_min_r, y_max_r = shared_ranges[1]
         z_min_r, z_max_r = shared_ranges[2]
+
+        # Keep original point positions
         ax.set_xlim(x_min_r, x_max_r)
         ax.set_ylim(y_min_r, y_max_r)
         ax.set_zlim(z_min_r, z_max_r)
 
+
+        # Only change displayed tick labels to 0~1
+        num_ticks = 6
+
+        x_ticks = np.linspace(x_min_r, x_max_r, num_ticks)
+        y_ticks = np.linspace(y_min_r, y_max_r, num_ticks)
+        z_ticks = np.linspace(z_min_r, z_max_r, num_ticks)
+
+        normalized_labels = [
+            f"{v:.1f}"
+            for v in np.linspace(0.0, 1.0, num_ticks)
+        ]
+
+        ax.set_xticks(x_ticks)
+        ax.set_yticks(y_ticks)
+        ax.set_zticks(z_ticks)
+
+        ax.set_xticklabels(normalized_labels)
+        ax.set_yticklabels(normalized_labels)
+        ax.set_zticklabels(normalized_labels)
+
+
         ax.set_box_aspect([1, 1, 1])
 
-        ax.view_init(elev=25, azim=45)
+        ax.view_init(
+            elev=25,
+            azim=45
+        )
 
-        ax.set_xlabel(axis_labels[0], fontsize=9, labelpad=5)
-        ax.set_ylabel(axis_labels[1], fontsize=9, labelpad=5)
-        ax.set_zlabel(z_label_override, fontsize=9, labelpad=5)
+        ax.set_xlabel(
+            axis_labels[0],
+            fontsize=9,
+            labelpad=5
+        )
 
-        ax.tick_params(axis="both", which="major", labelsize=7)
-        ax.tick_params(axis="z", which="major", labelsize=7)
+        ax.set_ylabel(
+            axis_labels[1],
+            fontsize=9,
+            labelpad=5
+        )
 
-        title = f"{METHOD_SUBPLOT_LETTERS[method]} {METHOD_LABELS[method]}"
-        ax.set_title(title, fontsize=11, fontweight="bold", pad=8)
+        # Keep z-axis name as Rotation
+        ax.set_zlabel(
+            "Rotation",
+            fontsize=9,
+            labelpad=5
+        )
 
-        inset_ax = ax.inset_axes([0.55, 0.55, 0.40, 0.40])
+
+        ax.tick_params(
+            axis="both",
+            which="major",
+            labelsize=7
+        )
+
+        ax.tick_params(
+            axis="z",
+            which="major",
+            labelsize=7
+        )
+
+
+        title = (
+            f"{METHOD_SUBPLOT_LETTERS[method]} "
+            f"{METHOD_LABELS[method]}"
+        )
+
+        ax.set_title(
+            title,
+            fontsize=11,
+            fontweight="bold",
+            pad=8
+        )
+
+
+        # Object 2 XY inset
+        inset_ax = ax.inset_axes(
+            [0.55, 0.55, 0.40, 0.40]
+        )
+
         inset_selected = method_coords_inset[method]
 
         inset_ax.scatter(
@@ -522,11 +604,25 @@ def main():
             zorder=3,
             edgecolors="none",
         )
-        inset_ax.set_xlim(inset_x_min, inset_x_max)
-        inset_ax.set_ylim(inset_y_min, inset_y_max)
+
+        inset_ax.set_xlim(
+            inset_x_min,
+            inset_x_max
+        )
+
+        inset_ax.set_ylim(
+            inset_y_min,
+            inset_y_max
+        )
+
         inset_ax.set_xticks([])
         inset_ax.set_yticks([])
-        inset_ax.set_title("Object 2 XY", fontsize=6, pad=2)
+
+        inset_ax.set_title(
+            "Object 2 XY",
+            fontsize=6,
+            pad=2
+        )
 
     fig.tight_layout(pad=2.0)
 

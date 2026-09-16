@@ -1,0 +1,278 @@
+nohup: 忽略输入
+bash: /data/zhonglinye/application/miniconda3/envs/lb_server/lib/libtinfo.so.6: no version information available (required by bash)
+============================================================
+Random multi-task SmolVLA training
+episodes/dataset:  50
+total episodes:    150
+gpu:               1
+seed:              42
+train steps:       10000
+datasets:          coffee-button-v3_corner disassemble-v3_corner pick_place-v3_corner
+output:            /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_multi_50x3_seed42_steps10000
+============================================================
+=== Reusing cached Random selection for coffee-button-v3_corner ===
+=== Reusing cached Random selection for disassemble-v3_corner ===
+=== Reusing cached Random selection for pick_place-v3_corner ===
+coffee-button-v3_corner: 50 episodes
+disassemble-v3_corner: 50 episodes
+pick_place-v3_corner: 50 episodes
+Merged Random manifest: /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_multi_50x3_seed42_steps10000/subsets/random_multi_50x3_seed42_steps10000.json
+Total selected episodes: 150
+=== Reusing existing merged dataset: /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_multi_50x3_seed42_steps10000/merged_dataset ===
+=== Training SmolVLA on 150 Random demonstrations ===
+[DEBUG] All overrides: ['--device=cuda', '--push_to_hub=false', '--vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct', '--freeze_vision_encoder=true', '--train_expert_only=true', '--train_state_proj=false', '--optimizer_lr=1e-4']
+[DEBUG] policy_type to pass: None
+[DEBUG] filtered_overrides: ['--device=cuda', '--push_to_hub=false', '--vlm_model_name=HuggingFaceTB/SmolVLM2-500M-Video-Instruct', '--freeze_vision_encoder=true', '--train_expert_only=true', '--train_state_proj=false', '--optimizer_lr=1e-4']
+[DEBUG] Loaded config from: /data/zhonglinye/hfdata/hub/models--lerobot--smolvla_base/snapshots/c83c3163b8ca9b7e67c509fffd9121e66cb96205/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: smolvla
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period']
+[DEBUG] Removed invalid keys: set()
+INFO 2026-09-16 02:03:17 ot_train.py:274 {'batch_size': 64,
+ 'checkpoint_path': None,
+ 'cudnn_deterministic': False,
+ 'dataloader_multiprocessing_context': 'spawn',
+ 'dataset': {'depth_output_unit': 'mm',
+             'episodes': None,
+             'eval_split': 0.0,
+             'image_transforms': {'enable': False,
+                                  'max_num_transforms': 3,
+                                  'random_order': False,
+                                  'tfs': {'affine': {'kwargs': {'degrees': [-5.0,
+                                                                            5.0],
+                                                                'translate': [0.05,
+                                                                              0.05]},
+                                                     'type': 'RandomAffine',
+                                                     'weight': 1.0},
+                                          'brightness': {'kwargs': {'brightness': [0.8,
+                                                                                   1.2]},
+                                                         'type': 'ColorJitter',
+                                                         'weight': 1.0},
+                                          'contrast': {'kwargs': {'contrast': [0.8,
+                                                                               1.2]},
+                                                       'type': 'ColorJitter',
+                                                       'weight': 1.0},
+                                          'hue': {'kwargs': {'hue': [-0.05,
+                                                                     0.05]},
+                                                  'type': 'ColorJitter',
+                                                  'weight': 1.0},
+                                          'saturation': {'kwargs': {'saturation': [0.5,
+                                                                                   1.5]},
+                                                         'type': 'ColorJitter',
+                                                         'weight': 1.0},
+                                          'sharpness': {'kwargs': {'sharpness': [0.5,
+                                                                                 1.5]},
+                                                        'type': 'SharpnessJitter',
+                                                        'weight': 1.0}}},
+             'repo_id': 'lerobot/metaworld_three_tasks_random',
+             'return_uint8': False,
+             'revision': None,
+             'root': '/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_multi_50x3_seed42_steps10000/merged_dataset',
+             'streaming': False,
+             'use_imagenet_stats': True,
+             'video_backend': 'torchcodec'},
+ 'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': [4],
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': [3, 480, 480],
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': [3, 480, 480],
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': [4],
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'disassemble-v3',
+         'type': 'metaworld',
+         'use_self_mw': True},
+ 'env_eval_freq': 0,
+ 'eval': {'batch_size': 44,
+          'n_episodes': 50,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'eval_steps': 0,
+ 'half_img_resolu': False,
+ 'job': {'detach': False,
+         'image': 'huggingface/lerobot-gpu:latest',
+         'tags': [],
+         'target': None,
+         'timeout': '2d'},
+ 'job_name': 'smolvla_random_multi_50x3_seed42_steps10000',
+ 'log_freq': 200,
+ 'max_eval_samples': 0,
+ 'num_workers': 16,
+ 'optimizer': {'betas': [0.9, 0.95],
+               'eps': 1e-08,
+               'grad_clip_norm': 10.0,
+               'lr': 0.0001,
+               'type': 'adamw',
+               'weight_decay': 1e-10},
+ 'output_dir': '/data/zhonglinye/jun/lerobot/personal/work2/duibi/random_multi_50x3_seed42_steps10000/train',
+ 'peft': None,
+ 'persistent_workers': True,
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': [3,
+                                                                        256,
+                                                                        256],
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': [3,
+                                                                        256,
+                                                                        256],
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': [3,
+                                                                        256,
+                                                                        256],
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': [6],
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': [0.9, 0.95],
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': [6],
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': 'lerobot/smolvla_base',
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': [512, 512],
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'type': 'smolvla',
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'prefetch_factor': 4,
+ 'remove_features': ['observation.environment_state'],
+ 'rename_map': {'observation.images.top': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'resume': False,
+ 'reward_model': None,
+ 'sample_weighting': None,
+ 'save_checkpoint': True,
+ 'save_checkpoint_to_hub': False,
+ 'save_freq': 2000,
+ 'scheduler': {'decay_lr': 2.5e-06,
+               'num_decay_steps': 30000,
+               'num_warmup_steps': 1000,
+               'peak_lr': 0.0001,
+               'type': 'cosine_decay_with_warmup'},
+ 'seed': 42,
+ 'steps': 10000,
+ 'tolerance_s': 0.0001,
+ 'use_policy_training_preset': True,
+ 'wandb': {'add_tags': True,
+           'disable_artifact': False,
+           'enable': True,
+           'entity': None,
+           'mode': None,
+           'notes': None,
+           'project': 'lerobot',
+           'run_id': None}}
+INFO 2026-09-16 02:03:19 db_utils.py:121 Logs will be synced with wandb.
+INFO 2026-09-16 02:03:19 db_utils.py:122 Track this run --> https://wandb.ai/myfishwaken-self/lerobot/runs/oafajqfs
+INFO 2026-09-16 02:03:19 ot_train.py:300 Creating dataset
+INFO 2026-09-16 02:03:20 ot_train.py:326 Creating policy
+[DEBUG factory] policy_cls: <class 'lerobot.policies.smolvla.modeling_smolvla.SmolVLAPolicy'>
+[DEBUG factory] policy_cls.__init__ signature: <function SmolVLAPolicy.__init__ at 0x7eede8fe47c0>
+[DEBUG factory] kwargs keys: ['config', 'dataset_stats', 'dataset_meta', 'pretrained_name_or_path', 'revision']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+`torch_dtype` is deprecated! Use `dtype` instead!
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  63%|██████▎   | 307/489 [00:00<00:00, 3058.84it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 3439.39it/s]
+Reducing the number of VLM layers to 16 ...
+INFO 2026-09-16 02:03:43 ot_train.py:410 Creating optimizer and scheduler
+[Optimizer DEBUG] params type: <class 'generator'>
+INFO 2026-09-16 02:03:43 hedulers.py:155 Auto-scaling LR scheduler: num_training_steps (10000) < num_decay_steps (30000). Scaling warmup: 1000 → 333, decay: 30000 → 10000 (scale factor: 0.333)
+INFO 2026-09-16 02:03:43 ot_train.py:442 Output dir: /data/zhonglinye/jun/lerobot/personal/work2/duibi/random_multi_50x3_seed42_steps10000/train
+INFO 2026-09-16 02:03:43 ot_train.py:444 cfg.env.task='disassemble-v3'
+INFO 2026-09-16 02:03:43 ot_train.py:445 Creating environment processors
+INFO 2026-09-16 02:03:43 ot_train.py:449 cfg.steps=10000 (10K)
+INFO 2026-09-16 02:03:43 ot_train.py:450 dataset.num_frames=12221 (12K)
+INFO 2026-09-16 02:03:43 ot_train.py:451 dataset.num_episodes=150
+INFO 2026-09-16 02:03:43 ot_train.py:454 Effective batch size: 64 x 1 = 64
+INFO 2026-09-16 02:03:43 ot_train.py:455 num_learnable_params=99849312 (100M)
+INFO 2026-09-16 02:03:43 ot_train.py:456 num_total_params=450046176 (450M)
+Training:   0%|          | 0/10000 [00:00<?, ?step/s]INFO 2026-09-16 02:03:43 ot_train.py:624 Start offline training on a fixed dataset, with effective batch size: 64
+Traceback (most recent call last):
+  File "/data/zhonglinye/application/miniconda3/envs/lb_server/bin/lerobot-train", line 6, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 842, in main
+    train()
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/configs/parser.py", line 320, in wrapper_inner
+    response = fn(cfg, *args, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 639, in train
+    train_tracker, _ = update_policy(
+                       ^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/scripts/lerobot_train.py", line 170, in update_policy
+    loss, output_dict = policy.forward(batch)
+                        ^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/smolvla/modeling_smolvla.py", line 301, in forward
+    losses = self.model.forward(images, img_masks, lang_tokens, lang_masks, state, actions, noise, time)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/smolvla/modeling_smolvla.py", line 712, in forward
+    (_, suffix_out), _ = self.vlm_with_expert.forward(
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/smolvla/smolvlm_with_expert.py", line 444, in forward
+    att_outputs, past_key_values = self.forward_attn_layer(
+                                   ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/smolvla/smolvlm_with_expert.py", line 285, in forward_attn_layer
+    att_output = attention_interface(
+                 ^^^^^^^^^^^^^^^^^^^^
+  File "/data/zhonglinye/jun/lerobot/src/lerobot/policies/smolvla/smolvlm_with_expert.py", line 545, in eager_attention_forward
+    att_weights = torch.matmul(query_states, key_states.transpose(2, 3))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+torch.OutOfMemoryError: CUDA out of memory. Tried to allocate 190.00 MiB. GPU 0 has a total capacity of 23.56 GiB of which 15.25 MiB is free. Process 1385361 has 14.94 GiB memory in use. Including non-PyTorch memory, this process has 8.56 GiB memory in use. Of the allocated memory 8.08 GiB is allocated by PyTorch, and 168.03 MiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.  See documentation for Memory Management  (https://docs.pytorch.org/docs/stable/notes/cuda.html#optimizing-memory-usage-with-pytorch-cuda-alloc-conf)

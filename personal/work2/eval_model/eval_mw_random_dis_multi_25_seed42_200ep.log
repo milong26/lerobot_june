@@ -1,0 +1,142 @@
+WARNING 2026-09-16 02:50:10 figs/eval.py:69 No job name provided, using 'metaworld_smolvla' as job name.
+INFO 2026-09-16 02:50:10 ot_eval.py:1146 {'env': {'camera_name': 'corner,gripperPOV',
+         'disable_env_checker': True,
+         'episode_length': 400,
+         'features': {'action': {'shape': (4,),
+                                 'type': <FeatureType.ACTION: 'ACTION'>},
+                      'observation.images.camera1': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.images.camera2': {'shape': (3, 480, 480),
+                                                     'type': <FeatureType.VISUAL: 'VISUAL'>},
+                      'observation.state': {'shape': (4,),
+                                            'type': <FeatureType.STATE: 'STATE'>}},
+         'features_map': {'action': 'action',
+                          'agent_pos': 'observation.state',
+                          'observation.images.camera1': 'observation.images.camera1',
+                          'observation.images.camera2': 'observation.images.camera2',
+                          'observation.state': 'observation.state',
+                          'pixels/top': 'observation.images.top',
+                          'top': 'observation.image'},
+         'fps': 80,
+         'max_parallel_tasks': 1,
+         'multitask_eval': True,
+         'obs_type': 'pixels_agent_pos',
+         'render_mode': 'rgb_array',
+         'task': 'disassemble-v3',
+         'use_self_mw': True},
+ 'eval': {'batch_size': 8,
+          'n_episodes': 200,
+          'recording': False,
+          'recording_private': False,
+          'recording_repo_id': None,
+          'save_dataset': False,
+          'use_async_envs': True},
+ 'job_name': 'metaworld_smolvla',
+ 'output_dir': PosixPath('outputs/eval/2026-09-16/02-50-10_metaworld_smolvla'),
+ 'policy': {'adapt_to_pi_aloha': False,
+            'add_image_special_tokens': False,
+            'attention_mode': 'cross_attn',
+            'chunk_size': 50,
+            'compile_mode': 'max-autotune',
+            'compile_model': False,
+            'device': 'cuda',
+            'empty_cameras': 0,
+            'expert_width_multiplier': 0.75,
+            'freeze_vision_encoder': True,
+            'input_features': {'observation.images.camera1': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera2': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.images.camera3': {'shape': (3,
+                                                                        256,
+                                                                        256),
+                                                              'type': <FeatureType.VISUAL: 'VISUAL'>},
+                               'observation.state': {'shape': (6,),
+                                                     'type': <FeatureType.STATE: 'STATE'>}},
+            'license': None,
+            'load_vlm_weights': True,
+            'max_action_dim': 32,
+            'max_period': 4.0,
+            'max_state_dim': 32,
+            'min_period': 0.004,
+            'n_action_steps': 50,
+            'n_obs_steps': 1,
+            'normalization_mapping': {'ACTION': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'STATE': <NormalizationMode.MEAN_STD: 'MEAN_STD'>,
+                                      'VISUAL': <NormalizationMode.IDENTITY: 'IDENTITY'>},
+            'num_expert_layers': 0,
+            'num_steps': 10,
+            'num_vlm_layers': 16,
+            'optimizer_betas': (0.9, 0.95),
+            'optimizer_eps': 1e-08,
+            'optimizer_grad_clip_norm': 10.0,
+            'optimizer_lr': 0.0001,
+            'optimizer_weight_decay': 1e-10,
+            'output_features': {'action': {'shape': (4,),
+                                           'type': <FeatureType.ACTION: 'ACTION'>}},
+            'pad_language_to': 'max_length',
+            'prefix_length': 0,
+            'pretrained_path': PosixPath('personal/work2/duibi/random_multi_25x3_seed42_steps10000/train/checkpoints/010000/pretrained_model'),
+            'pretrained_revision': None,
+            'private': None,
+            'push_to_hub': False,
+            'repo_id': None,
+            'resize_imgs_with_padding': (512, 512),
+            'rtc_config': None,
+            'scheduler_decay_lr': 2.5e-06,
+            'scheduler_decay_steps': 30000,
+            'scheduler_warmup_steps': 1000,
+            'self_attn_every_n_layers': 2,
+            'tags': None,
+            'tokenizer_max_length': 48,
+            'train_expert_only': True,
+            'train_state_proj': False,
+            'use_amp': False,
+            'use_cache': True,
+            'use_delta_joint_actions_aloha': False,
+            'use_peft': False,
+            'vlm_model_name': 'HuggingFaceTB/SmolVLM2-500M-Video-Instruct'},
+ 'rename_map': {'observation.images.top': 'observation.images.camera1',
+                'observation.images.wrist': 'observation.images.camera2'},
+ 'seed': 1000,
+ 'trust_remote_code': False}
+INFO 2026-09-16 02:50:10 ot_eval.py:1157 Set CUDA_VISIBLE_DEVICES=0 for policy and environment subprocesses
+INFO 2026-09-16 02:50:10 ot_eval.py:1166 Output dir: outputs/eval/2026-09-16/02-50-10_metaworld_smolvla
+INFO 2026-09-16 02:50:10 ot_eval.py:1168 Making environment (batch_size=8, async=True).
+INFO 2026-09-16 02:50:11 ot_eval.py:1176 Making policy.
+`torch_dtype` is deprecated! Use `dtype` instead!
+[DEBUG] Loaded config from: personal/work2/duibi/random_multi_25x3_seed42_steps10000/train/checkpoints/010000/pretrained_model/config.json
+[DEBUG] Config keys: ['type', 'n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period', 'rtc_config', 'compile_model', 'compile_mode']
+[DEBUG] policy_type parameter: None
+[DEBUG] Extracted policy_type from config: smolvla
+[DEBUG] Filtered config keys: ['n_obs_steps', 'input_features', 'output_features', 'device', 'use_amp', 'use_peft', 'push_to_hub', 'repo_id', 'private', 'tags', 'license', 'pretrained_path', 'pretrained_revision', 'chunk_size', 'n_action_steps', 'normalization_mapping', 'max_state_dim', 'max_action_dim', 'resize_imgs_with_padding', 'empty_cameras', 'adapt_to_pi_aloha', 'use_delta_joint_actions_aloha', 'tokenizer_max_length', 'num_steps', 'use_cache', 'freeze_vision_encoder', 'train_expert_only', 'train_state_proj', 'optimizer_lr', 'optimizer_betas', 'optimizer_eps', 'optimizer_weight_decay', 'optimizer_grad_clip_norm', 'scheduler_warmup_steps', 'scheduler_decay_steps', 'scheduler_decay_lr', 'vlm_model_name', 'load_vlm_weights', 'add_image_special_tokens', 'attention_mode', 'prefix_length', 'pad_language_to', 'num_expert_layers', 'num_vlm_layers', 'self_attn_every_n_layers', 'expert_width_multiplier', 'min_period', 'max_period', 'rtc_config', 'compile_model', 'compile_mode']
+[DEBUG] Removed invalid keys: set()
+Creating Meta-World envs | task_groups=['disassemble-v3'] | n_envs(per task)=8
+Building vec env | group=disassemble-v3 | task_id=0 | task=disassemble-v3
+[DEBUG factory] policy_cls: <class 'lerobot.policies.smolvla.modeling_smolvla.SmolVLAPolicy'>
+[DEBUG factory] policy_cls.__init__ signature: <function SmolVLAPolicy.__init__ at 0x778862fb40e0>
+[DEBUG factory] kwargs keys: ['config', 'pretrained_name_or_path', 'revision']
+Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  34%|███▎      | 164/489 [00:00<00:00, 1600.66it/s]Loading weights:  66%|██████▋   | 325/489 [00:00<00:00, 1593.94it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 1791.60it/s]
+Reducing the number of VLM layers to 16 ...
+Loading weights from local directory
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/200 episodes):   0%|          | 0/25 [00:00<?, ?it/s]Evaluating (8/200 episodes, success: 6/8, rate: 75.0%):   0%|          | 0/25 [01:09<?, ?it/s]Evaluating (8/200 episodes, success: 6/8, rate: 75.0%):   4%|▍         | 1/25 [01:09<27:55, 69.81s/it]Evaluating (16/200 episodes, success: 13/16, rate: 81.2%):   4%|▍         | 1/25 [01:57<27:55, 69.81s/it]Evaluating (16/200 episodes, success: 13/16, rate: 81.2%):   8%|▊         | 2/25 [01:57<21:52, 57.05s/it]Evaluating (24/200 episodes, success: 21/24, rate: 87.5%):   8%|▊         | 2/25 [02:08<21:52, 57.05s/it]Evaluating (24/200 episodes, success: 21/24, rate: 87.5%):  12%|█▏        | 3/25 [02:08<13:09, 35.90s/it]Evaluating (32/200 episodes, success: 28/32, rate: 87.5%):  12%|█▏        | 3/25 [02:54<13:09, 35.90s/it]Evaluating (32/200 episodes, success: 28/32, rate: 87.5%):  16%|█▌        | 4/25 [02:54<13:53, 39.67s/it]Evaluating (40/200 episodes, success: 36/40, rate: 90.0%):  16%|█▌        | 4/25 [03:06<13:53, 39.67s/it]Evaluating (40/200 episodes, success: 36/40, rate: 90.0%):  20%|██        | 5/25 [03:06<09:58, 29.94s/it]Evaluating (48/200 episodes, success: 42/48, rate: 87.5%):  20%|██        | 5/25 [03:57<09:58, 29.94s/it]Evaluating (48/200 episodes, success: 42/48, rate: 87.5%):  24%|██▍       | 6/25 [03:57<11:43, 37.00s/it]Evaluating (56/200 episodes, success: 49/56, rate: 87.5%):  24%|██▍       | 6/25 [04:51<11:43, 37.00s/it]Evaluating (56/200 episodes, success: 49/56, rate: 87.5%):  28%|██▊       | 7/25 [04:51<12:45, 42.53s/it]Evaluating (64/200 episodes, success: 56/64, rate: 87.5%):  28%|██▊       | 7/25 [05:47<12:45, 42.53s/it]Evaluating (64/200 episodes, success: 56/64, rate: 87.5%):  32%|███▏      | 8/25 [05:47<13:17, 46.93s/it]Evaluating (72/200 episodes, success: 63/72, rate: 87.5%):  32%|███▏      | 8/25 [06:41<13:17, 46.93s/it]Evaluating (72/200 episodes, success: 63/72, rate: 87.5%):  36%|███▌      | 9/25 [06:41<13:05, 49.11s/it]Evaluating (80/200 episodes, success: 70/80, rate: 87.5%):  36%|███▌      | 9/25 [07:31<13:05, 49.11s/it]Evaluating (80/200 episodes, success: 70/80, rate: 87.5%):  40%|████      | 10/25 [07:31<12:18, 49.25s/it]Evaluating (88/200 episodes, success: 76/88, rate: 86.4%):  40%|████      | 10/25 [08:19<12:18, 49.25s/it]Evaluating (88/200 episodes, success: 76/88, rate: 86.4%):  44%|████▍     | 11/25 [08:19<11:25, 48.94s/it]Evaluating (96/200 episodes, success: 82/96, rate: 85.4%):  44%|████▍     | 11/25 [09:12<11:25, 48.94s/it]Evaluating (96/200 episodes, success: 82/96, rate: 85.4%):  48%|████▊     | 12/25 [09:12<10:51, 50.12s/it]Evaluating (104/200 episodes, success: 88/104, rate: 84.6%):  48%|████▊     | 12/25 [10:02<10:51, 50.12s/it]Evaluating (104/200 episodes, success: 88/104, rate: 84.6%):  52%|█████▏    | 13/25 [10:02<10:00, 50.07s/it]Evaluating (112/200 episodes, success: 94/112, rate: 83.9%):  52%|█████▏    | 13/25 [10:52<10:00, 50.07s/it]Evaluating (112/200 episodes, success: 94/112, rate: 83.9%):  56%|█████▌    | 14/25 [10:52<09:10, 50.07s/it]Evaluating (120/200 episodes, success: 101/120, rate: 84.2%):  56%|█████▌    | 14/25 [11:41<09:10, 50.07s/it]Evaluating (120/200 episodes, success: 101/120, rate: 84.2%):  60%|██████    | 15/25 [11:41<08:17, 49.73s/it]Evaluating (128/200 episodes, success: 105/128, rate: 82.0%):  60%|██████    | 15/25 [12:31<08:17, 49.73s/it]Evaluating (128/200 episodes, success: 105/128, rate: 82.0%):  64%|██████▍   | 16/25 [12:31<07:29, 49.96s/it]Evaluating (136/200 episodes, success: 111/136, rate: 81.6%):  64%|██████▍   | 16/25 [13:25<07:29, 49.96s/it]Evaluating (136/200 episodes, success: 111/136, rate: 81.6%):  68%|██████▊   | 17/25 [13:25<06:48, 51.10s/it]Evaluating (144/200 episodes, success: 119/144, rate: 82.6%):  68%|██████▊   | 17/25 [13:41<06:48, 51.10s/it]Evaluating (144/200 episodes, success: 119/144, rate: 82.6%):  72%|███████▏  | 18/25 [13:41<04:44, 40.62s/it]Evaluating (152/200 episodes, success: 127/152, rate: 83.6%):  72%|███████▏  | 18/25 [13:57<04:44, 40.62s/it]Evaluating (152/200 episodes, success: 127/152, rate: 83.6%):  76%|███████▌  | 19/25 [13:57<03:18, 33.15s/it]Evaluating (160/200 episodes, success: 135/160, rate: 84.4%):  76%|███████▌  | 19/25 [14:15<03:18, 33.15s/it]Evaluating (160/200 episodes, success: 135/160, rate: 84.4%):  80%|████████  | 20/25 [14:15<02:23, 28.65s/it]Evaluating (168/200 episodes, success: 140/168, rate: 83.3%):  80%|████████  | 20/25 [15:04<02:23, 28.65s/it]Evaluating (168/200 episodes, success: 140/168, rate: 83.3%):  84%|████████▍ | 21/25 [15:04<02:18, 34.58s/it]Evaluating (176/200 episodes, success: 147/176, rate: 83.5%):  84%|████████▍ | 21/25 [15:43<02:18, 34.58s/it]Evaluating (176/200 episodes, success: 147/176, rate: 83.5%):  88%|████████▊ | 22/25 [15:43<01:47, 36.00s/it]Evaluating (184/200 episodes, success: 154/184, rate: 83.7%):  88%|████████▊ | 22/25 [16:20<01:47, 36.00s/it]Evaluating (184/200 episodes, success: 154/184, rate: 83.7%):  92%|█████████▏| 23/25 [16:20<01:12, 36.31s/it]Evaluating (192/200 episodes, success: 159/192, rate: 82.8%):  92%|█████████▏| 23/25 [16:53<01:12, 36.31s/it]Evaluating (192/200 episodes, success: 159/192, rate: 82.8%):  96%|█████████▌| 24/25 [16:53<00:35, 35.40s/it]Evaluating (200/200 episodes, success: 165/200, rate: 82.5%):  96%|█████████▌| 24/25 [17:27<00:35, 35.40s/it]Evaluating (200/200 episodes, success: 165/200, rate: 82.5%): 100%|██████████| 25/25 [17:27<00:00, 35.07s/it]Evaluating (200/200 episodes, success: 165/200, rate: 82.5%): 100%|██████████| 25/25 [17:27<00:00, 41.92s/it]
+INFO 2026-09-16 03:08:04 ot_eval.py:1092 Saved per-episode eval results to outputs/eval/2026-09-16/02-50-10_metaworld_smolvla/eval_results/disassemble-v3_0/eval_episode_results.json
+Task 1/1: disassemble-v3 (episodes: 200, success: 165):   0%|          | 0/1 [17:28<?, ?it/s]Task 1/1: disassemble-v3 (episodes: 200, success: 165): 100%|██████████| 1/1 [17:28<00:00, 1048.00s/it]Task 1/1: disassemble-v3 (episodes: 200, success: 165): 100%|██████████| 1/1 [17:28<00:00, 1048.68s/it]
+INFO 2026-09-16 03:08:04 ot_eval.py:1655 Saved per-episode eval results to outputs/eval/2026-09-16/02-50-10_metaworld_smolvla/eval_results/eval_episode_results.json
+INFO 2026-09-16 03:08:04 ot_eval.py:1240 Overall Aggregated Metrics:
+INFO 2026-09-16 03:08:04 ot_eval.py:1241 {'avg_sum_reward': 122.44288795807849, 'avg_max_reward': 8.414324454718798, 'pc_success': 82.5, 'pc_grasp_success': 22.5, 'success@5mm': None, 'coffee_success_5mm_count': None, 'n_episodes': 200, 'eval_s': 1048.6775076389313, 'eval_ep_s': 5.243387541770935, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-09-16 03:08:04 ot_eval.py:1245 
+Aggregated Metrics for per_task:
+INFO 2026-09-16 03:08:04 ot_eval.py:1246 [{'task_group': 'disassemble-v3', 'task_id': 0, 'metrics': {'sum_rewards': [141.5054943400799, 150.7386633615303, 110.52792029313505, 206.65950801825008, 118.21912099431904, 71.37376629137151, 171.08714405006626, 91.27350298076327, 115.26129368260467, 113.05972096171806, 150.75530331871894, 109.93407839402887, 129.81466257620195, 209.56915111003474, 102.49940931982073, 74.22016342078759, 153.2110228243057, 125.76478785645617, 117.34748789649063, 71.5186637597506, 74.03505146036422, 78.44632442412698, 84.94119353181807, 65.94259071262141, 143.4505194904981, 116.6211112637766, 167.94873061008315, 106.10987191494266, 186.14227263372845, 115.99791354570613, 116.79954566102053, 133.23621925273272, 184.43417575651137, 122.28735207548732, 63.27753415978469, 65.4634846156027, 98.9123330469293, 110.9280213787813, 118.83673700756995, 70.48435948520583, 77.77740485209141, 147.37673156914747, 188.32085432761875, 179.99625673567454, 191.5712026216451, 72.16560236259991, 105.58387409657632, 168.2722143388493, 108.39929962979096, 155.76968893705913, 140.048097351283, 116.3591046983558, 93.2402894054819, 55.04676730181458, 137.65560934961226, 115.21692093523994, 140.84816801339622, 98.30714774911459, 61.75862685214803, 81.50025678198043, 207.8698720090416, 132.9611358528743, 141.83183607606387, 114.62481875264146, 217.14256096302256, 126.66767654902901, 191.5775211599066, 173.53850603360308, 93.69653197410183, 146.5166317394959, 86.9275878436647, 66.88918975852745, 190.81628737974808, 177.42804630724743, 142.30847449275967, 119.92644719916302, 136.54005656377342, 123.94868029835258, 153.73833364752204, 152.51669094293587, 155.3636459829299, 70.29552101353772, 171.88961664717402, 70.32628943781663, 156.02536417935474, 113.23830324388044, 72.72932494751798, 140.0460461712107, 65.43341911911554, 139.18914781447083, 136.13283540577845, 141.53928145504, 160.91950788979955, 81.98235077733985, 73.9901298964499, 127.93009473200168, 73.24133426990008, 161.79448482471008, 70.65356549261692, 78.76372922092987, 206.8114093428643, 96.94803498868089, 88.08517808548791, 146.83162499781324, 130.4520913904456, 180.44971995746204, 116.34881675557583, 108.18182674544357, 196.6382530439812, 174.4966635253638, 108.12828178232077, 21.962780536306195, 107.95356743559293, 139.05023217671177, 69.17172024692118, 77.43349436367345, 145.7289500807642, 135.0642884987489, 68.13612255977284, 76.44027899333403, 123.62447047949185, 116.7387195305773, 141.68412474346175, 69.44026235433684, 5.805000018033301, 67.39374114787225, 88.46601482426769, 68.61355633563971, 76.68219803332212, 173.74936644110056, 75.37831349471935, 130.1570824716113, 188.77178499711647, 190.38538392240582, 147.79194409927203, 148.90711995245704, 138.33756242867798, 82.63262462506303, 139.37282760944458, 89.32532965748382, 101.72727215768352, 102.78244324802256, 170.01316750521914, 137.2442337000384, 123.07475746254073, 141.48759472264607, 139.70086949272672, 116.9067161788225, 98.07709876182561, 128.49757466376278, 183.32722147368926, 65.08743193968826, 67.41246083602616, 122.03586252351563, 101.51044554685868, 140.28865456569153, 105.85609406499526, 103.60903671499557, 153.80011702865377, 132.22534946698943, 153.1543841449056, 109.06741052816348, 149.51438594306038, 93.46199259695925, 196.95461321206557, 101.9736297202235, 143.22482739950928, 187.1189667426226, 67.63872980355103, 146.27834674312828, 167.03408910401527, 153.37534383178502, 104.0219750763759, 124.05820072738157, 201.20039587165388, 159.41776518841283, 121.4327142350252, 138.17076251012676, 163.01286862249407, 109.06565321248718, 64.5066892987908, 135.57129580696102, 139.31385391868739, 196.81023934914242, 89.4591670461923, 120.86751855735508, 0.0, 77.485762489758, 102.16656428149946, 64.23160434492034, 190.52068084146097, 76.1907862813182, 74.58068959703512, 114.04726249904114, 110.96893808180653, 121.70479989875696, 132.59574570628607, 134.8759208244884, 129.7954840192537, 178.67116537872965], 'max_rewards': [10.0, 0.7397278590517787, 10.0, 1.4489344145039136, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0709157205496813, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.4284347500790069, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 0.7186485513531988, 10.0, 0.9206359123030415, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 0.30186514441928647, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0274931297132035, 10.0, 10.0, 10.0, 10.0, 10.0, 1.2453064759068244, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.3704998366966719, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 0.9730395686225327, 10.0, 10.0, 10.0, 0.47638494115660823, 10.0, 0.24919666474245453, 1.0375696917022166, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.3345815688201772, 10.0, 0.4223016555716399, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 0.9234057780625555, 10.0, 0.10518437365234441, 1.677903020332212, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 2.510068655014038, 0.5801909763927378, 0.6857480896786875, 10.0, 0.02908726348751261, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.5571479943649291, 10.0, 0.9186414905881465, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0289927521534648, 1.037316918780437, 10.0, 10.0, 1.312087412644622, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.2387779702049107, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 1.0733277183330292, 0.9438380768018774, 10.0, 0.0, 10.0, 10.0, 10.0, 1.239690107772888, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 0.6280459670008269, 0.6099004933022228, 10.0], 'successes': [True, False, True, False, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, True, True, True, True, False, True, False, True, True, True, True, True, True, True, True, True, False, True, True, True, True, True, True, False, True, True, True, True, True, False, True, True, True, True, True, True, True, False, True, True, True, True, True, True, True, False, True, True, True, False, True, False, False, True, True, True, True, True, True, True, True, True, True, False, True, False, True, True, True, True, True, True, False, True, False, False, True, True, True, True, True, True, True, False, False, False, True, False, True, True, True, True, True, True, True, False, True, False, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, True, False, False, True, True, False, True, True, True, True, True, True, False, True, True, True, True, True, True, True, True, False, False, True, False, True, True, True, False, True, True, True, True, True, True, False, False, True], 'grasp_successes': [False, False, False, False, True, False, True, False, False, False, False, False, True, False, False, False, True, True, False, False, False, False, False, False, False, False, True, False, False, False, True, True, True, False, False, False, False, False, True, False, True, False, True, False, True, False, False, True, False, False, False, True, False, False, True, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, True, False, True, True, False, False, False, False, False, True, True, False, False, False, True, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False, False, False, True, False, True, False, False, True, False, False, False, False, False, False, False, True, True, False, False, True, False, False, False, False, False, False, False, False, True, False, False, False, True, False, True, False, False, True, False, False, False, True, True, False, False, True, False, False, False, False, False, False, False, False, False, False, False, True, False, True, False, True, False, False, False, False, False, False, False, False, True, False, False, False, False, True, False, False, False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, True, False, False, True], 'video_paths': [], 'predicted_video_paths': [], 'success_at_5mm': [None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None, None], 'obj_to_targets': [0.0, 0.230468288064003, 0.0, 0.17850902676582336, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.15680457651615143, 0.0, 0.0, 0.23079870641231537, 0.16891348361968994, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.22038540244102478, 0.0, 0.0, 0.0, 0.20089314877986908, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.19347985088825226, 0.0, 0.16474299132823944, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.18356764316558838, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2235671430826187, 0.0, 0.0, 0.0, 0.0, 0.0, 0.16387614607810974, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.1737515926361084, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.19875991344451904, 0.0, 0.0, 0.0, 0.15627117455005646, 0.0, 0.18347850441932678, 0.2016361653804779, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.26271042227745056, 0.0, 0.24146407842636108, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.18219727277755737, 0.0, 0.21886500716209412, 0.23860101401805878, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.21028313040733337, 0.23067139089107513, 0.19262491166591644, 0.0, 0.218379944562912, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.16196618974208832, 0.0, 0.16542275249958038, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.2035369575023651, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.18213346600532532, 0.0, 0.0, 0.0, 0.0, 0.19679446518421173, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.18364264070987701, 0.19826291501522064, 0.0, 0.0, 0.2413773536682129, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.16108621656894684, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.16681796312332153, 0.1705245077610016, 0.0, 0.15533111989498138, 0.0, 0.0, 0.0, 0.17126420140266418, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.21415165066719055, 0.21873809397220612, 0.0]}}]
+INFO 2026-09-16 03:08:04 ot_eval.py:1245 
+Aggregated Metrics for per_group:
+INFO 2026-09-16 03:08:04 ot_eval.py:1246 {'disassemble-v3': {'avg_sum_reward': 122.44288795807849, 'avg_max_reward': 8.414324454718798, 'pc_success': 82.5, 'pc_grasp_success': 22.5, 'success@5mm': None, 'coffee_success_5mm_count': None, 'n_episodes': 200, 'video_paths': [], 'predicted_video_paths': []}}
+INFO 2026-09-16 03:08:04 ot_eval.py:1245 
+Aggregated Metrics for overall:
+INFO 2026-09-16 03:08:04 ot_eval.py:1246 {'avg_sum_reward': 122.44288795807849, 'avg_max_reward': 8.414324454718798, 'pc_success': 82.5, 'pc_grasp_success': 22.5, 'success@5mm': None, 'coffee_success_5mm_count': None, 'n_episodes': 200, 'eval_s': 1048.6775076389313, 'eval_ep_s': 5.243387541770935, 'video_paths': [], 'predicted_video_paths': []}
+INFO 2026-09-16 03:08:04 ot_eval.py:1254 End of eval
