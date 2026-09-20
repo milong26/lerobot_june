@@ -191,3 +191,66 @@ python personal/work2/attention_fig/aggregate_12k_corner.py \
 - **不用于**优化 success 率
 - **不用于** our_v5 设计闭环
 - eval_task_success 和 eval_grasp_success 仅作为 metadata 写入 model_performance_metadata.csv 和最终报告，**不参与**任何模型选择、参数调整或分析输入计算
+
+# 40分钟快速 Surrogate Eval 验证
+
+新版脚本不再只使用 7 个静态 12k 模型。它会在本机运行时扫描：
+
+- `personal/work2/eval_model/**/.tasks.jsonl`
+- 对应的非空 `eval_episode_results.json`
+
+只纳入至少 100 个历史 eval episodes 的 checkpoint，并直接从 episode-level 文件恢复历史 success rate。旧 `summary.csv` 中 `n_episodes=0` 的错误条目不会作为历史成功率依据。
+
+新版同时把 `lerobot-eval` 的 stdout/stderr 实时显示在终端，并每 10 秒输出一次 heartbeat，所以不会再出现“GPU 在跑但终端完全没输出”的情况。
+
+## 两块 GPU 各跑一半
+
+两个终端使用同一个 `--run-name`。脚本会自动把全部发现到的 checkpoint 均分成两个 shard。
+
+终端 1：
+
+```bash
+python -u personal/work2/attention_fig/quick_surrogate_validate.py \
+  --gpu-id 0 \
+  --shard 0/2 \
+  --run-name quick40 \
+  2>&1 | tee personal/work2/attention_fig/quick40_gpu0.log
+```
+
+终端 2：
+
+```bash
+python -u personal/work2/attention_fig/quick_surrogate_validate.py \
+  --gpu-id 1 \
+  --shard 1/2 \
+  --run-name quick40 \
+  2>&1 | tee personal/work2/attention_fig/quick40_gpu1.log
+```
+
+默认参数：
+- quick eval：5 episodes/checkpoint；
+- historical full eval：至少 100 episodes 才进入模型池；
+- 每个 checkpoint 最多 240 秒；
+- 每个 shard 总预算 38 分钟；
+- fixed start seed：1000；
+- 相机根据模型路径自动识别 corner / corner2 / corner3。
+
+每个 shard 输出：
+
+`personal/work2/attention_fig/quick_surrogate_eval/quick40/shard_0_of_2/`
+
+和
+
+`personal/work2/attention_fig/quick_surrogate_eval/quick40/shard_1_of_2/`
+
+当两个 shard 都完成且发现到的是同一个模型池时，后完成的进程会自动生成：
+
+- `COMBINED_results.csv`
+- `COMBINED_correlations.json`
+- `COMBINED_CONCLUSION.md`
+
+位置：
+
+`personal/work2/attention_fig/quick_surrogate_eval/quick40/`
+
+最终重点看 `COMBINED_CONCLUSION.md` 中 quick success 与历史 full success 的 Spearman 相关性。
