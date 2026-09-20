@@ -813,6 +813,12 @@ def main() -> int:
     parser.add_argument("--device", type=str, default="cuda", choices=["cuda", "cpu"])
     parser.add_argument("--episodes", type=int, default=5)
     parser.add_argument(
+        "--task",
+        type=str,
+        default="pick-place-v3",
+        help="Only include historical checkpoints evaluated on this MetaWorld task. Default: pick-place-v3.",
+    )
+    parser.add_argument(
         "--start-seed",
         type=int,
         default=1000,
@@ -865,6 +871,8 @@ def main() -> int:
     out("QUICK SURROGATE VALIDATION - DISCOVERY")
     out("=" * 80)
     pool = discover_historical_pool(EVAL_ROOT, args.min_historical_episodes)
+    pool = [item for item in pool if item.get("task") == args.task]
+    out(f"[DISCOVER] task filter: {args.task} -> {len(pool)} checkpoints")
     if args.max_models is not None:
         pool = pool[: args.max_models]
 
