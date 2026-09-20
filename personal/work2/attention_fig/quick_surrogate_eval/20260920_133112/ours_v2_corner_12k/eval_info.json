@@ -1,0 +1,80 @@
+{
+  "per_task": [
+    {
+      "task_group": "pick-place-v3",
+      "task_id": 0,
+      "metrics": {
+        "sum_rewards": [
+          6.110895789225994,
+          32.39353245217694,
+          59.75802283381468,
+          8.667400756148593,
+          87.26803546897428
+        ],
+        "max_rewards": [
+          0.1259986808840657,
+          2.5236147739877213,
+          6.726944446563721,
+          0.1149683678383643,
+          6.2870069024254045
+        ],
+        "successes": [
+          false,
+          false,
+          true,
+          false,
+          true
+        ],
+        "grasp_successes": [
+          false,
+          true,
+          true,
+          false,
+          true
+        ],
+        "video_paths": [],
+        "predicted_video_paths": [],
+        "success_at_5mm": [
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "obj_to_targets": [
+          0.25768306851387024,
+          0.26148417592048645,
+          0.0,
+          0.25983506441116333,
+          0.0
+        ]
+      }
+    }
+  ],
+  "per_group": {
+    "pick-place-v3": {
+      "avg_sum_reward": 38.8395774600681,
+      "avg_max_reward": 3.155706634339855,
+      "pc_success": 40.0,
+      "pc_grasp_success": 60.0,
+      "success@5mm": null,
+      "coffee_success_5mm_count": null,
+      "n_episodes": 5,
+      "video_paths": [],
+      "predicted_video_paths": []
+    }
+  },
+  "overall": {
+    "avg_sum_reward": 38.8395774600681,
+    "avg_max_reward": 3.155706634339855,
+    "pc_success": 40.0,
+    "pc_grasp_success": 60.0,
+    "success@5mm": null,
+    "coffee_success_5mm_count": null,
+    "n_episodes": 5,
+    "eval_s": 43.62507128715515,
+    "eval_ep_s": 8.725014352798462,
+    "video_paths": [],
+    "predicted_video_paths": []
+  }
+}

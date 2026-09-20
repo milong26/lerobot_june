@@ -1,0 +1,13 @@
+{
+  "created_at": "2026-09-20T13:43:31",
+  "run_name": "quick40_pickplace",
+  "shard_index": 0,
+  "shard_total": 2,
+  "pool_size": 104,
+  "assigned_size": 52,
+  "pool_fingerprint": "67ab2e6180c4cc69",
+  "episodes": 5,
+  "start_seed": 1000,
+  "min_historical_episodes": 100,
+  "gpu_id": "2"
+}
