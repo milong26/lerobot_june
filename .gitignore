@@ -237,3 +237,4 @@ personal/work2/dataset_view_vlabench/*
 personal/work2/collect_dataset/vlabench/*personal/work2/duibi/**/videos/
 *.mp4
 *.parquet
+!*.png

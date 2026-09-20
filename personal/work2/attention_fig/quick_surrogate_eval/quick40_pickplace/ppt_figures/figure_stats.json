@@ -1,0 +1,41 @@
+{
+  "valid_n": 49,
+  "quick_task_vs_full_task": {
+    "n": 49,
+    "pearson": -0.20625639486250605,
+    "spearman": -0.2628887022530469
+  },
+  "quick_grasp_vs_full_task": {
+    "n": 49,
+    "pearson": 0.37921490985244355,
+    "spearman": 0.24627346546384282
+  },
+  "quick_grasp_vs_full_grasp": {
+    "n": 49,
+    "pearson": 0.5434536619698863,
+    "spearman": 0.4353077222843619
+  },
+  "camera_quick_task_vs_full_task": {
+    "corner": {
+      "n": 24,
+      "pearson": -0.09606679484322622,
+      "spearman": 0.11804392307999696
+    },
+    "corner2": {
+      "n": 6,
+      "pearson": 0.18677184190940713,
+      "spearman": -0.13093073414159545
+    },
+    "corner3": {
+      "n": 19,
+      "pearson": 0.5360014250976716,
+      "spearman": 0.4419341926705822
+    }
+  },
+  "status_counts": {
+    "ok": 49,
+    "timeout": 2,
+    "not_run_budget": 31,
+    "checkpoint_missing": 22
+  }
+}

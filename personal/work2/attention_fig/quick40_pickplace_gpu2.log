@@ -4210,3 +4210,34 @@ Loading weights from local directory
 [HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=80s / timeout=149s
 
 [HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=90s / timeout=149s
+
+[HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=100s / timeout=149s
+
+[HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=110s / timeout=149s
+
+[HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=120s / timeout=149s
+
+[HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=130s / timeout=149s
+
+[HEARTBEAT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: child still running, elapsed=140s / timeout=149s
+
+[TIMEOUT] ours_v2_112_seed42_corner/dynamicanchor_v2_112_seed42@006000: terminating child after 149s
+[PROGRESS] shard=0/2 processed=25/52 successful_quick_results=24 global_elapsed=37.8 min
+[BUDGET] global time budget reached; stop launching new models.
+
+================================================================================
+SHARD 0/2 FINISHED
+================================================================================
+Quick results: 24/52 | quick-vs-full Spearman=-0.673
+Runtime: 37.8 min
+Report: /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/shard_0_of_2/CONCLUSION.md
+CSV:    /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/shard_0_of_2/quick_surrogate_results.csv
+================================================================================
+
+================================================================================
+COMBINED RESULT READY
+================================================================================
+Combined models: 49/99 | quick-vs-full Spearman=-0.263
+Report: /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/COMBINED_CONCLUSION.md
+CSV:    /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/COMBINED_results.csv
+================================================================================

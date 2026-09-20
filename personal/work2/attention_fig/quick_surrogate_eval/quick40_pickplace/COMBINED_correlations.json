@@ -1,0 +1,26 @@
+[
+  {
+    "feature": "quick_success",
+    "n": 49,
+    "pearson": -0.20625639486250605,
+    "spearman": -0.2628887022530469
+  },
+  {
+    "feature": "attention_l11_visual",
+    "n": 7,
+    "pearson": 0.7321752578292475,
+    "spearman": 0.5225437283634242
+  },
+  {
+    "feature": "v_t_norm_mean",
+    "n": 7,
+    "pearson": 0.776364672747154,
+    "spearman": 0.6126374746329801
+  },
+  {
+    "feature": "trace_entropy_l11",
+    "n": 7,
+    "pearson": -0.7243131141262394,
+    "spearman": -0.5585812268712466
+  }
+]

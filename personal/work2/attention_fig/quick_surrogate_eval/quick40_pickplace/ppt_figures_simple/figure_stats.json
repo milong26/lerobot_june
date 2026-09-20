@@ -1,0 +1,21 @@
+{
+  "valid_matched_camera_n": 24,
+  "excluded_camera_mismatch_n": 25,
+  "expected_camera": "corner,gripperPOV",
+  "quick_task_vs_full_task": {
+    "n": 24,
+    "pearson": -0.09606679484322622,
+    "spearman": 0.11804392307999696
+  },
+  "quick_grasp_vs_full_grasp": {
+    "n": 24,
+    "pearson": 0.7299758625444659,
+    "spearman": 0.7482933998102467
+  },
+  "status_counts": {
+    "ok": 49,
+    "timeout": 2,
+    "not_run_budget": 31,
+    "checkpoint_missing": 22
+  }
+}

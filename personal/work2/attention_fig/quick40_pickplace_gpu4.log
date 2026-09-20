@@ -4502,3 +4502,44 @@ INFO 2026-09-20 14:20:21 ot_eval.py:1176 Making policy.
 [DEBUG factory] policy_cls.__init__ signature: <function SmolVLAPolicy.__init__ at 0x7cd35c5e7b00>
 [DEBUG factory] kwargs keys: ['config', 'pretrained_name_or_path', 'revision']
 Loading  HuggingFaceTB/SmolVLM2-500M-Video-Instruct weights ...
+
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=20s / timeout=90s
+`torch_dtype` is deprecated! Use `dtype` instead!
+
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=30s / timeout=90s
+Loading weights:   0%|          | 0/489 [00:00<?, ?it/s]Loading weights:  59%|█████▉    | 290/489 [00:00<00:00, 2898.16it/s]Loading weights: 100%|██████████| 489/489 [00:00<00:00, 3333.69it/s]
+
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=40s / timeout=90s
+
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=50s / timeout=90s
+
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=60s / timeout=90s
+Reducing the number of VLM layers to 16 ...
+
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=70s / timeout=90s
+Loading weights from local directory
+Evaluating tasks:   0%|          | 0/1 [00:00<?, ?it/s]Evaluating (0/5 episodes):   0%|          | 0/1 [00:00<?, ?it/s]
+[HEARTBEAT] uniform_42_corner3/uniform_112_seed42@008000: child still running, elapsed=80s / timeout=90s
+
+[TIMEOUT] uniform_42_corner3/uniform_112_seed42@008000: terminating child after 90s
+/data/zhonglinye/application/miniconda3/envs/lb_server/lib/python3.12/multiprocessing/resource_tracker.py:279: UserWarning: resource_tracker: There appear to be 6 leaked semaphore objects to clean up at shutdown
+  warnings.warn('resource_tracker: There appear to be %d '
+[PROGRESS] shard=1/2 processed=48/52 successful_quick_results=25 global_elapsed=37.8 min
+[BUDGET] global time budget reached; stop launching new models.
+
+================================================================================
+SHARD 1/2 FINISHED
+================================================================================
+Quick results: 25/52 | quick-vs-full Spearman=-0.398
+Runtime: 37.8 min
+Report: /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/shard_1_of_2/CONCLUSION.md
+CSV:    /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/shard_1_of_2/quick_surrogate_results.csv
+================================================================================
+
+================================================================================
+COMBINED RESULT READY
+================================================================================
+Combined models: 49/104 | quick-vs-full Spearman=-0.263
+Report: /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/COMBINED_CONCLUSION.md
+CSV:    /data/zhonglinye/jun/lerobot/personal/work2/attention_fig/quick_surrogate_eval/quick40_pickplace/COMBINED_results.csv
+================================================================================
