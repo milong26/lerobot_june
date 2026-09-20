@@ -133,9 +133,11 @@ def examples(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any] | None]:
 
 
 def save(fig: plt.Figure, outdir: Path, stem: str) -> None:
-    fig.savefig(outdir / f"{stem}.png", dpi=300, bbox_inches="tight")
-    fig.savefig(outdir / f"{stem}.pdf", bbox_inches="tight")
-    print(f"[SAVE] {outdir / f'{stem}.png'}")
+    png_path = outdir / f"{stem}.png"
+    pdf_path = outdir / f"{stem}.pdf"
+    fig.savefig(png_path, dpi=300, bbox_inches="tight")
+    fig.savefig(pdf_path, bbox_inches="tight")
+    print(f"[SAVE] {png_path}")
 
 
 def plot_slide1(rows, stats, ex, outdir):
