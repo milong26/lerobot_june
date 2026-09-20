@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Create two PPT-ready figures from current partial quick-eval results."""
+"""Create two simple PPT-ready scatter figures from current quick-eval results.
+
+Important:
+- Historical full evals used camera_name="corner,gripperPOV" for all checkpoints.
+- Older partial quick-eval rows produced with corner2/corner3 cameras are excluded.
+- Only eval_status=="ok" rows with matching camera configuration are plotted.
+"""
 
 from __future__ import annotations
 import argparse
@@ -10,12 +16,12 @@ from pathlib import Path
 from typing import Any
 
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 import numpy as np
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SCRIPT_DIR.parents[2]
 DEFAULT_ROOT = SCRIPT_DIR / "quick_surrogate_eval"
+EXPECTED_CAMERA = "corner,gripperPOV"
 
 
 def sf(v: Any) -> float | None:
@@ -75,17 +81,7 @@ def fmt(v: float | None, d: int = 3) -> str:
     return "NA" if v is None else f"{v:.{d}f}"
 
 
-def camera_group(name: str) -> str:
-    if name.startswith("corner3"):
-        return "corner3"
-    if name.startswith("corner2"):
-        return "corner2"
-    if name.startswith("corner"):
-        return "corner"
-    return name or "unknown"
-
-
-def load_rows(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, int]]:
+def load_rows(run_dir: Path):
     files = sorted(run_dir.glob("shard_*_of_*/quick_surrogate_results.csv"))
     if not files:
         raise FileNotFoundError(f"No shard results found under {run_dir}")
@@ -98,270 +94,183 @@ def load_rows(run_dir: Path) -> tuple[list[dict[str, Any]], dict[str, int]]:
                 by_path[cp] = r
 
     status: dict[str, int] = {}
+    excluded_camera = 0
     valid: list[dict[str, Any]] = []
+
     for r in by_path.values():
         s = r.get("eval_status", "")
         status[s] = status.get(s, 0) + 1
         if s != "ok":
             continue
+
+        if r.get("camera_name", "") != EXPECTED_CAMERA:
+            excluded_camera += 1
+            continue
+
         vals = {}
-        ok = True
+        good = True
         for k in ("quick_success", "quick_grasp_success", "full_success", "full_grasp_success"):
             v = sf(r.get(k))
             if v is None:
-                ok = False
+                good = False
                 break
             vals[k] = v
-        if not ok:
+        if not good:
             continue
-        item: dict[str, Any] = dict(r)
+
+        item = dict(r)
         item.update(vals)
-        item["camera_group"] = camera_group(r.get("camera_name", ""))
         valid.append(item)
 
     valid.sort(key=lambda r: (r.get("model", ""), int(r.get("checkpoint", "0"))))
-    return valid, status
+    return valid, status, excluded_camera
 
 
-def examples(rows: list[dict[str, Any]]) -> dict[str, dict[str, Any] | None]:
-    fn = [r for r in rows if r["quick_success"] == 0 and r["full_success"] >= 20]
-    ov = [r for r in rows if r["quick_success"] >= 40 and r["full_success"] <= 25]
-    return {
-        "false_negative": max(fn, key=lambda r: r["full_success"]) if fn else None,
-        "overestimate": max(ov, key=lambda r: r["quick_success"] - r["full_success"]) if ov else None,
-    }
+def deterministic_jitter(n: int, scale: float = 1.0) -> np.ndarray:
+    pattern = np.array([-2, -1, 0, 1, 2], dtype=float) * scale
+    return np.array([pattern[i % len(pattern)] for i in range(n)])
 
 
-def save(fig: plt.Figure, outdir: Path, stem: str) -> None:
-    png_path = outdir / f"{stem}.png"
-    pdf_path = outdir / f"{stem}.pdf"
-    fig.savefig(png_path, dpi=300, bbox_inches="tight")
-    fig.savefig(pdf_path, bbox_inches="tight")
-    print(f"[SAVE] {png_path}")
+def linear_fit_line(x: np.ndarray, y: np.ndarray):
+    if len(x) < 2 or np.std(x) < 1e-12:
+        return None
+    coef = np.polyfit(x, y, deg=1)
+    xx = np.linspace(float(np.min(x)), float(np.max(x)), 100)
+    yy = coef[0] * xx + coef[1]
+    return xx, yy
 
 
-def plot_slide1(rows, stats, ex, outdir):
-    fig = plt.figure(figsize=(13.333, 7.5))
-    gs = fig.add_gridspec(1, 2, width_ratios=[1.9, 1.0],
-                          left=0.07, right=0.96, top=0.82, bottom=0.13, wspace=0.18)
-    ax = fig.add_subplot(gs[0, 0])
-    tx = fig.add_subplot(gs[0, 1])
-    tx.axis("off")
+def save(fig, outdir: Path, stem: str):
+    png = outdir / f"{stem}.png"
+    pdf = outdir / f"{stem}.pdf"
+    fig.savefig(png, dpi=300, bbox_inches="tight")
+    fig.savefig(pdf, bbox_inches="tight")
+    print(f"[SAVE] {png}")
+    print(f"[SAVE] {pdf}")
 
-    groups = ["corner", "corner2", "corner3"]
-    markers = {"corner": "o", "corner2": "s", "corner3": "^"}
-    colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
-    for gi, g in enumerate(groups):
-        sub = [r for r in rows if r["camera_group"] == g]
-        if not sub:
-            continue
-        x = np.asarray([r["quick_success"] for r in sub])
-        y = np.asarray([r["full_success"] for r in sub])
-        jitter = np.asarray([((i % 5) - 2) * 0.75 for i in range(len(sub))])
-        ax.scatter(x + jitter, y, s=72, alpha=0.82, marker=markers[g],
-                   color=colors[gi], edgecolors="white", linewidths=0.7,
-                   label=f"{g} (n={len(sub)})")
+def plot_task_scatter(rows, stat, outdir):
+    fig, ax = plt.subplots(figsize=(10.8, 6.3))
 
-    ax.plot([0, 100], [0, 100], "--", color="0.55", linewidth=1)
-    ax.set_xlim(-6, 106)
-    ymax = max(40, math.ceil(max(r["full_success"] for r in rows) / 10) * 10 + 5)
+    x = np.asarray([r["quick_success"] for r in rows], dtype=float)
+    y = np.asarray([r["full_success"] for r in rows], dtype=float)
+    xj = x + deterministic_jitter(len(x), scale=0.8)
+
+    ax.scatter(xj, y, s=78, alpha=0.82, edgecolors="white", linewidths=0.7)
+
+    fit = linear_fit_line(x, y)
+    if fit is not None:
+        ax.plot(fit[0], fit[1], linewidth=2, label="Linear trend")
+
+    ax.set_xlim(-7, 107)
+    ymax = max(40, math.ceil(max(y) / 10) * 10 + 5)
     ax.set_ylim(0, ymax)
     ax.set_xticks([0, 20, 40, 60, 80, 100])
-    ax.set_xlabel("Quick task success (5 episodes, %)")
-    ax.set_ylabel("Historical full-eval task success (200 episodes, %)")
+    ax.set_xlabel("5-episode task success (%)")
+    ax.set_ylabel("200-episode task success (%)")
+    ax.set_title("Few-Episode Task Success Is Not a Reliable Checkpoint Ranking Signal",
+                 fontsize=17, fontweight="bold")
     ax.grid(alpha=0.18)
-    ax.legend(frameon=False, loc="upper left")
 
-    s = stats["quick_task_vs_full_task"]
-    ax.text(0.98, 0.96,
-            f"n = {len(rows)}\\nPearson r = {fmt(s['pearson'])}\\nSpearman rho = {fmt(s['spearman'])}",
-            transform=ax.transAxes, ha="right", va="top", fontsize=13,
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="0.8"))
+    ax.text(
+        0.98, 0.96,
+        f"n = {stat['n']}\nPearson r = {fmt(stat['pearson'])}\nSpearman ρ = {fmt(stat['spearman'])}",
+        transform=ax.transAxes, ha="right", va="top", fontsize=12.5,
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="0.8")
+    )
 
-    fig.suptitle("Preliminary Validation: 5-Episode Success Does Not Reliably Rank Checkpoints",
-                 y=0.95, fontsize=21, fontweight="bold")
+    ax.text(
+        0.02, 0.04,
+        "Each point = one checkpoint\nOnly matched camera configuration is included",
+        transform=ax.transAxes, ha="left", va="bottom", fontsize=10.5
+    )
 
-    tx.text(0, 0.96, "What the scatter shows", fontsize=16, fontweight="bold", va="top")
-    tx.text(0, 0.86,
-            "• Five episodes quantize success into\\n"
-            "  20-point steps.\\n\\n"
-            "• Current rank agreement with the\\n"
-            "  200-episode result is weak.\\n\\n"
-            "• The same quick score can map to\\n"
-            "  very different full-eval performance.",
-            fontsize=13, va="top", linespacing=1.35)
-
-    y = 0.48
-    tx.text(0, y, "Concrete failure modes", fontsize=16, fontweight="bold", va="top")
-    y -= 0.09
-    fn = ex["false_negative"]
-    if fn:
-        tx.text(0, y, "False negative", fontsize=13, fontweight="bold", va="top")
-        tx.text(0, y - 0.05,
-                f"Quick {fn['quick_success']:.0f}% vs. full {fn['full_success']:.1f}%\\n"
-                f"{fn['model'].split('/')[0]} @ {fn['checkpoint']}",
-                fontsize=11.3, va="top")
-        y -= 0.16
-    ov = ex["overestimate"]
-    if ov:
-        tx.text(0, y, "Overestimation", fontsize=13, fontweight="bold", va="top")
-        tx.text(0, y - 0.05,
-                f"Quick {ov['quick_success']:.0f}% vs. full {ov['full_success']:.1f}%\\n"
-                f"{ov['model'].split('/')[0]} @ {ov['checkpoint']}",
-                fontsize=11.3, va="top")
-
-    tx.text(0, 0.035,
-            "Preliminary finding:\\nRaw 5-episode task success is too sparse and state-dependent\\n"
-            "to serve as a reliable checkpoint ranking signal.",
-            fontsize=12.2, fontweight="bold", va="bottom",
-            bbox=dict(boxstyle="round,pad=0.45", facecolor="0.96", edgecolor="0.82"))
-
-    save(fig, outdir, "slide1_quick_vs_full")
+    save(fig, outdir, "slide1_task_success_scatter")
     plt.close(fig)
 
 
-def plot_slide2(rows, stats, outdir):
-    fig = plt.figure(figsize=(13.333, 7.5))
-    gs = fig.add_gridspec(2, 2, height_ratios=[1.0, 0.5], width_ratios=[1.35, 1.0],
-                          left=0.07, right=0.96, top=0.82, bottom=0.10,
-                          hspace=0.34, wspace=0.22)
-    ax1 = fig.add_subplot(gs[0, 0])
-    ax2 = fig.add_subplot(gs[0, 1])
-    ax3 = fig.add_subplot(gs[1, :])
-    ax3.axis("off")
+def plot_grasp_scatter(rows, task_stat, grasp_stat, outdir):
+    fig, ax = plt.subplots(figsize=(10.8, 6.3))
 
-    fig.suptitle("Preliminary Direction: Intermediate Grasp Signals Are More Informative",
-                 y=0.95, fontsize=21, fontweight="bold")
+    x = np.asarray([r["quick_grasp_success"] for r in rows], dtype=float)
+    y = np.asarray([r["full_grasp_success"] for r in rows], dtype=float)
+    xj = x + deterministic_jitter(len(x), scale=0.65)
 
-    keys = ["quick_task_vs_full_task", "quick_grasp_vs_full_task", "quick_grasp_vs_full_grasp"]
-    labels = ["Quick task\\n→ Full task", "Quick grasp\\n→ Full task", "Quick grasp\\n→ Full grasp"]
-    p = [stats[k]["pearson"] for k in keys]
-    s = [stats[k]["spearman"] for k in keys]
-    x = np.arange(3)
-    w = 0.34
-    b1 = ax1.bar(x - w/2, p, w, label="Pearson r")
-    b2 = ax1.bar(x + w/2, s, w, label="Spearman rho")
-    ax1.axhline(0, color="0.35", linewidth=1)
-    ax1.set_xticks(x, labels)
-    ax1.set_ylabel("Correlation")
-    ax1.set_ylim(-0.45, 0.8)
-    ax1.set_title("Which cheap signal tracks full evaluation?")
-    ax1.grid(axis="y", alpha=0.18)
-    ax1.legend(frameon=False, loc="upper left")
-    for bars in (b1, b2):
-        for b in bars:
-            h = b.get_height()
-            ax1.text(b.get_x()+b.get_width()/2, h + (0.025 if h >= 0 else -0.04),
-                     f"{h:+.2f}", ha="center",
-                     va="bottom" if h >= 0 else "top", fontsize=10.5)
+    ax.scatter(xj, y, s=78, alpha=0.82, edgecolors="white", linewidths=0.7)
 
-    cstats = stats["camera_quick_task_vs_full_task"]
-    cams = ["corner", "corner2", "corner3"]
-    vals = [cstats.get(c, {}).get("spearman", np.nan) for c in cams]
-    ns = [cstats.get(c, {}).get("n", 0) for c in cams]
-    bars = ax2.bar(cams, vals)
-    ax2.axhline(0, color="0.35", linewidth=1)
-    ax2.set_ylim(-0.45, 0.65)
-    ax2.set_ylabel("Spearman rho")
-    ax2.set_title("Reliability varies across camera settings")
-    ax2.grid(axis="y", alpha=0.18)
-    for b, v, n in zip(bars, vals, ns):
-        if np.isnan(v):
-            continue
-        ax2.text(b.get_x()+b.get_width()/2, v + (0.02 if v >= 0 else -0.035),
-                 f"{v:+.2f}\\nn={n}", ha="center",
-                 va="bottom" if v >= 0 else "top", fontsize=10.5)
+    fit = linear_fit_line(x, y)
+    if fit is not None:
+        ax.plot(fit[0], fit[1], linewidth=2, label="Linear trend")
 
-    stages = [
-        ("Checkpoint", "candidate"),
-        ("Few episodes", "cheap probe"),
-        ("Grasp signal", "intermediate competence"),
-        ("Action / transport", "quality signal"),
-        ("Full eval", "selected only"),
-    ]
-    xs = np.linspace(0.08, 0.92, len(stages))
-    y = 0.48
-    bw, bh = 0.15, 0.42
-    for i, ((title, sub), xp) in enumerate(zip(stages, xs)):
-        box = FancyBboxPatch((xp-bw/2, y-bh/2), bw, bh,
-                             boxstyle="round,pad=0.012,rounding_size=0.018",
-                             edgecolor="0.45", facecolor="0.97", linewidth=1.2,
-                             transform=ax3.transAxes)
-        ax3.add_patch(box)
-        ax3.text(xp, y+0.055, title, transform=ax3.transAxes,
-                 ha="center", va="center", fontsize=11.5, fontweight="bold")
-        ax3.text(xp, y-0.085, sub, transform=ax3.transAxes,
-                 ha="center", va="center", fontsize=9.2)
-        if i < len(stages)-1:
-            ax3.add_patch(FancyArrowPatch((xp+bw/2+0.006, y),
-                                          (xs[i+1]-bw/2-0.006, y),
-                                          arrowstyle="-|>", mutation_scale=14,
-                                          color="0.45", linewidth=1.2,
-                                          transform=ax3.transAxes))
-    ax3.text(0.5, 0.98,
-             "Implication: use stage-wise competence signals for pre-screening instead of raw 5-episode task success.",
-             transform=ax3.transAxes, ha="center", va="top",
-             fontsize=12.5, fontweight="bold")
+    ax.set_xlim(-5, 105)
+    ax.set_ylim(0, 105)
+    ax.set_xticks([0, 20, 40, 60, 80, 100])
+    ax.set_yticks([0, 20, 40, 60, 80, 100])
+    ax.set_xlabel("5-episode grasp success (%)")
+    ax.set_ylabel("200-episode grasp success (%)")
+    ax.set_title("Intermediate Grasp Success Provides a More Informative Early Signal",
+                 fontsize=17, fontweight="bold")
+    ax.grid(alpha=0.18)
 
-    save(fig, outdir, "slide2_surrogate_signals")
+    ax.text(
+        0.98, 0.96,
+        f"n = {grasp_stat['n']}\nPearson r = {fmt(grasp_stat['pearson'])}\nSpearman ρ = {fmt(grasp_stat['spearman'])}",
+        transform=ax.transAxes, ha="right", va="top", fontsize=12.5,
+        bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="0.8")
+    )
+
+    ax.text(
+        0.02, 0.04,
+        f"Task-success ranking: ρ = {fmt(task_stat['spearman'])}\n"
+        f"Grasp-success ranking: ρ = {fmt(grasp_stat['spearman'])}",
+        transform=ax.transAxes, ha="left", va="bottom", fontsize=11.5,
+        bbox=dict(boxstyle="round,pad=0.35", facecolor="0.96", edgecolor="0.82")
+    )
+
+    save(fig, outdir, "slide2_grasp_success_scatter")
     plt.close(fig)
 
 
-def write_summary(rows, status, stats, ex, outdir):
-    s1 = stats["quick_task_vs_full_task"]
-    s2 = stats["quick_grasp_vs_full_task"]
-    s3 = stats["quick_grasp_vs_full_grasp"]
+def write_summary(rows, status, excluded_camera, task_stat, grasp_stat, outdir):
     lines = [
         "# Preliminary PPT summary",
         "",
-        f"Valid completed checkpoints used: {len(rows)}",
+        f"Valid matched-camera checkpoints used: **{len(rows)}**",
+        f"Rows excluded because an older quick run used a mismatched camera: **{excluded_camera}**",
         "",
-        "## Current statistics",
+        "## Slide 1",
         "",
-        "| Comparison | n | Pearson r | Spearman rho |",
-        "|---|---:|---:|---:|",
-        f"| Quick task success -> full task success | {s1['n']} | {fmt(s1['pearson'])} | {fmt(s1['spearman'])} |",
-        f"| Quick grasp -> full task success | {s2['n']} | {fmt(s2['pearson'])} | {fmt(s2['spearman'])} |",
-        f"| Quick grasp -> full grasp | {s3['n']} | {fmt(s3['pearson'])} | {fmt(s3['spearman'])} |",
+        "**Title:** Few-Episode Task Success Is Not a Reliable Checkpoint Ranking Signal",
         "",
-        "## Slide 1 text",
+        f"Across the currently valid {len(rows)} checkpoints, 5-episode task success shows "
+        f"weak agreement with the historical 200-episode task success "
+        f"(Pearson r = {fmt(task_stat['pearson'])}, Spearman rho = {fmt(task_stat['spearman'])}).",
         "",
-        "Title: Preliminary Validation: 5-Episode Success Does Not Reliably Rank Checkpoints",
+        "The five-episode estimate changes in 20-percentage-point increments and is highly sensitive "
+        "to the sampled initial states, so it can mis-rank checkpoints.",
         "",
-        f"Across the {len(rows)} currently completed checkpoints, 5-episode task success shows weak "
-        f"rank agreement with 200-episode task success (Spearman rho = {fmt(s1['spearman'])}). "
-        "The coarse 20% resolution and sensitivity to sampled initial states produce both false negatives "
-        "and overestimation.",
+        "**Takeaway:** Raw 5-episode task success is insufficient as a checkpoint filter.",
         "",
-        "Bottom line: Raw 5-episode task success is too sparse and unstable for checkpoint ranking.",
+        "## Slide 2",
         "",
-        "## Slide 2 text",
+        "**Title:** Intermediate Grasp Success Provides a More Informative Early Signal",
         "",
-        "Title: Preliminary Direction: Intermediate Grasp Signals Are More Informative",
+        f"Using the same matched-camera checkpoints, quick grasp success shows stronger agreement "
+        f"with full-evaluation grasp success "
+        f"(Pearson r = {fmt(grasp_stat['pearson'])}, Spearman rho = {fmt(grasp_stat['spearman'])}).",
         "",
-        f"Quick grasp shows stronger agreement with full grasp (Pearson r = {fmt(s3['pearson'])}, "
-        f"Spearman rho = {fmt(s3['spearman'])}) than raw quick task success does with full task success. "
-        "This motivates a stage-wise surrogate that first evaluates intermediate manipulation competence "
-        "and reserves expensive full-task evaluation for retained checkpoints.",
+        f"For reference, task-success rank correlation is rho = {fmt(task_stat['spearman'])}, "
+        f"whereas grasp-success rank correlation is rho = {fmt(grasp_stat['spearman'])}.",
         "",
-        "Bottom line: Use stage-wise competence signals rather than raw few-episode task success.",
+        "**Takeaway:** A useful low-cost surrogate should use intermediate task competence "
+        "rather than only final success from a few episodes.",
         "",
-        "## Camera-specific quick-task Spearman",
+        "## Current status counts",
         "",
     ]
-    for c, st in stats["camera_quick_task_vs_full_task"].items():
-        lines.append(f"- {c}: n={st['n']}, rho={fmt(st['spearman'])}")
-    lines += ["", "## Current status counts", ""]
     for k, v in sorted(status.items()):
         lines.append(f"- {k}: {v}")
-    fn, ov = ex["false_negative"], ex["overestimate"]
-    lines += ["", "## Examples", ""]
-    if fn:
-        lines.append(f"- False negative: {fn['model_name']}: quick={fn['quick_success']:.0f}%, full={fn['full_success']:.1f}%.")
-    if ov:
-        lines.append(f"- Overestimation: {ov['model_name']}: quick={ov['quick_success']:.0f}%, full={ov['full_success']:.1f}%.")
-    (outdir / "ppt_preliminary_summary.md").write_text("\\n".join(lines) + "\\n", encoding="utf-8")
+    (outdir / "ppt_preliminary_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main():
@@ -375,39 +284,48 @@ def main():
     if not root.is_absolute():
         root = PROJECT_ROOT / root
     run_dir = root / args.run_name
-    outdir = Path(args.output_dir) if args.output_dir else run_dir / "ppt_figures"
+
+    outdir = Path(args.output_dir) if args.output_dir else run_dir / "ppt_figures_simple"
     if not outdir.is_absolute():
         outdir = PROJECT_ROOT / outdir
     outdir.mkdir(parents=True, exist_ok=True)
 
-    rows, status = load_rows(run_dir)
+    rows, status, excluded_camera = load_rows(run_dir)
     if len(rows) < 3:
-        raise RuntimeError(f"Need >=3 valid rows, found {len(rows)}")
+        raise RuntimeError(
+            f"Only {len(rows)} matched-camera valid rows. "
+            "Rerun quick eval after pulling the fixed camera code."
+        )
+
+    task_stat = corr(rows, "quick_success", "full_success")
+    grasp_stat = corr(rows, "quick_grasp_success", "full_grasp_success")
+
+    plt.rcParams.update({
+        "font.family": "DejaVu Sans",
+        "font.size": 12,
+        "axes.spines.top": False,
+        "axes.spines.right": False,
+    })
+
+    plot_task_scatter(rows, task_stat, outdir)
+    plot_grasp_scatter(rows, task_stat, grasp_stat, outdir)
+    write_summary(rows, status, excluded_camera, task_stat, grasp_stat, outdir)
 
     stats = {
-        "valid_n": len(rows),
-        "quick_task_vs_full_task": corr(rows, "quick_success", "full_success"),
-        "quick_grasp_vs_full_task": corr(rows, "quick_grasp_success", "full_success"),
-        "quick_grasp_vs_full_grasp": corr(rows, "quick_grasp_success", "full_grasp_success"),
-        "camera_quick_task_vs_full_task": {},
+        "valid_matched_camera_n": len(rows),
+        "excluded_camera_mismatch_n": excluded_camera,
+        "expected_camera": EXPECTED_CAMERA,
+        "quick_task_vs_full_task": task_stat,
+        "quick_grasp_vs_full_grasp": grasp_stat,
         "status_counts": status,
     }
-    for c in sorted({r["camera_group"] for r in rows}):
-        sub = [r for r in rows if r["camera_group"] == c]
-        stats["camera_quick_task_vs_full_task"][c] = corr(sub, "quick_success", "full_success")
-
-    ex = examples(rows)
-    plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 12,
-                         "axes.spines.top": False, "axes.spines.right": False})
-    plot_slide1(rows, stats, ex, outdir)
-    plot_slide2(rows, stats, outdir)
-    write_summary(rows, status, stats, ex, outdir)
     (outdir / "figure_stats.json").write_text(json.dumps(stats, indent=2), encoding="utf-8")
 
     print("=" * 72)
-    print(f"VALID CHECKPOINTS: {len(rows)}")
-    print(f"Quick task -> full task Spearman: {fmt(stats['quick_task_vs_full_task']['spearman'])}")
-    print(f"Quick grasp -> full grasp Spearman: {fmt(stats['quick_grasp_vs_full_grasp']['spearman'])}")
+    print(f"MATCHED-CAMERA VALID CHECKPOINTS: {len(rows)}")
+    print(f"EXCLUDED CAMERA-MISMATCH ROWS: {excluded_camera}")
+    print(f"Task success Spearman:  {fmt(task_stat['spearman'])}")
+    print(f"Grasp success Spearman: {fmt(grasp_stat['spearman'])}")
     print(f"OUTPUT: {outdir}")
     print("=" * 72)
 
