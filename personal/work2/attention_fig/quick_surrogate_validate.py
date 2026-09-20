@@ -117,11 +117,9 @@ def parse_shard(spec: str) -> tuple[int, int]:
 
 
 def infer_camera(model: str, checkpoint_path: str) -> str:
-    text = f"{model} {checkpoint_path}".lower()
-    if "corner3" in text:
-        return "corner3,gripperPOV"
-    if "corner2" in text:
-        return "corner2,gripperPOV"
+    # All historical pick-place checkpoint sweeps used the same observation
+    # cameras. "corner2"/"corner3" in directory names identify experiment
+    # variants / repeated runs; they are NOT MetaWorld camera names.
     return "corner,gripperPOV"
 
 
