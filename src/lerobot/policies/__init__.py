@@ -24,6 +24,9 @@ from .gaussian_actor.configuration_gaussian_actor import GaussianActorConfig as 
 from .groot.configuration_groot import GrootConfig as GrootConfig
 from .lingbot_va.configuration_lingbot_va import LingBotVAConfig as LingBotVAConfig
 from .minivla.configuration_minivla import MiniVLAConfig as MiniVLAConfig
+from .minivla.configuration_minivla import MiniVLAT2Config as MiniVLAT2Config
+from .minivla.configuration_minivla import MiniVLAWristConfig as MiniVLAWristConfig
+from .minivla.configuration_minivla import MiniVLAWristPretrainedConfig as MiniVLAWristPretrainedConfig
 from .molmoact2.configuration_molmoact2 import MolmoAct2Config as MolmoAct2Config
 from .multi_task_dit.configuration_multi_task_dit import MultiTaskDiTConfig as MultiTaskDiTConfig
 from .pi0.configuration_pi0 import PI0Config as PI0Config
@@ -39,12 +42,10 @@ from .vqbet.configuration_vqbet import VQBeTConfig as VQBeTConfig
 from .wall_x.configuration_wall_x import WallXConfig as WallXConfig
 from .xvla.configuration_xvla import XVLAConfig as XVLAConfig
 
-# NOTE: Policy modeling classes (e.g., GaussianActorPolicy) are intentionally NOT re-exported here.
+# NOTE: Policy modeling classes are intentionally NOT re-exported here.
 # They have heavy optional dependencies and are loaded lazily via get_policy_class().
-# Import directly: ``from lerobot.policies.gaussian_actor.modeling_gaussian_actor import GaussianActorPolicy``
 
 __all__ = [
-    # Configuration classes
     "ACTConfig",
     "DiffusionConfig",
     "EO1Config",
@@ -54,6 +55,9 @@ __all__ = [
     "GrootConfig",
     "LingBotVAConfig",
     "MiniVLAConfig",
+    "MiniVLAT2Config",
+    "MiniVLAWristConfig",
+    "MiniVLAWristPretrainedConfig",
     "MolmoAct2Config",
     "MultiTaskDiTConfig",
     "PI0Config",
@@ -66,14 +70,10 @@ __all__ = [
     "VQBeTConfig",
     "WallXConfig",
     "XVLAConfig",
-    # Base class
     "PreTrainedPolicy",
-    # RTC utilities
     "ActionInterpolator",
-    # Utility functions
     "make_robot_action",
     "prepare_observation_for_inference",
-    # Factory functions
     "get_policy_class",
     "make_policy",
     "make_policy_config",
