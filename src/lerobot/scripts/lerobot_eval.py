@@ -1204,10 +1204,16 @@ def eval_main(cfg: EvalPipelineConfig):
 
     logging.info("Making policy.")
 
+    # Resolve env->policy feature names before policy construction. This is
+    # required for pretrained policies whose checkpoint keeps dataset camera
+    # names (e.g. top/wrist) while self-collected MetaWorld rollout observations
+    # expose camera1/camera2.
+    eval_rename_map = resolve_env_policy_rename_map(cfg.env, cfg.policy, cfg.rename_map)
+
     policy = make_policy(
         cfg=cfg.policy,
         env_cfg=cfg.env,
-        rename_map=cfg.rename_map,
+        rename_map=eval_rename_map,
     )
 
     # Patch MiniVLA's VQ action tokenizer for bfloat16 compatibility
@@ -1228,7 +1234,7 @@ def eval_main(cfg: EvalPipelineConfig):
     # The inference device is automatically set to match the detected hardware, overriding any previous device settings from training to ensure compatibility.
     preprocessor_overrides = {
         "device_processor": {"device": str(policy.config.device)},
-        "rename_observations_processor": {"rename_map": cfg.rename_map},
+        "rename_observations_processor": {"rename_map": eval_rename_map},
     }
 
     preprocessor, postprocessor = make_pre_post_processors(
@@ -1264,7 +1270,7 @@ def eval_main(cfg: EvalPipelineConfig):
             env_features=cfg.env.features if cfg.eval.recording else None,
             recording_repo_id=cfg.eval.recording_repo_id,
             recording_private=cfg.eval.recording_private,
-            env_rename_map=resolve_env_policy_rename_map(cfg.env, cfg.policy, cfg.rename_map),
+            env_rename_map=eval_rename_map,
         )
         logger.info("Overall Aggregated Metrics:")
         logger.info(info["overall"])
