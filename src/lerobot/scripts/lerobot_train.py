@@ -78,6 +78,37 @@ else:
 from .lerobot_eval import eval_policy_all
 
 
+def _get_env_eval_rename_map(cfg: TrainPipelineConfig) -> dict[str, str]:
+    """Build observation-key remapping used only for environment rollouts.
+
+    Self-collected MetaWorld datasets store semantic camera names (for example
+    observation.images.top / observation.images.wrist), while
+    use_self_mw=True deliberately exposes rollout observations as
+    observation.images.camera1 / observation.images.camera2. Fresh policies
+    derive their expected feature names from the dataset, so cfg.rename_map is
+    normally empty. Bridge the two namespaces here without changing the
+    training dataset or saved policy feature names.
+    """
+    rename_map = dict(cfg.rename_map)
+    env_cfg = cfg.env
+    policy_cfg = cfg.policy
+
+    if env_cfg is None or policy_cfg is None:
+        return rename_map
+
+    if env_cfg.type == "metaworld" and getattr(env_cfg, "use_self_mw", False):
+        primary_key = getattr(policy_cfg, "primary_image_key", "")
+        if primary_key and primary_key != "observation.images.camera1":
+            rename_map["observation.images.camera1"] = primary_key
+
+        if getattr(policy_cfg, "use_wrist_image", False):
+            wrist_key = getattr(policy_cfg, "wrist_image_key", "")
+            if wrist_key and wrist_key != "observation.images.camera2":
+                rename_map["observation.images.camera2"] = wrist_key
+
+    return rename_map
+
+
 @contextmanager
 def _make_eval_envs(cfg: TrainPipelineConfig) -> Iterator[dict[str, dict[int, Any]]]:
     """Create evaluation environments for one run and always dispose of them."""
@@ -759,7 +790,7 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                         results_dir=cfg.output_dir / "eval" / f"results_step_{step_id}",
                         start_seed=cfg.seed,
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
-                        env_rename_map=cfg.rename_map,
+                        env_rename_map=_get_env_eval_rename_map(cfg),
                     )
                 # Overall metrics (suite-agnostic) and per-task-group metrics.
                 aggregated = eval_info["overall"]
