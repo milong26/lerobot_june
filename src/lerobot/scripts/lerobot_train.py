@@ -761,12 +761,11 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                         max_parallel_tasks=cfg.env.max_parallel_tasks,
                         env_rename_map=cfg.rename_map,
                     )
-                # overall metrics (suite-agnostic)
+                # Overall metrics (suite-agnostic) and per-task-group metrics.
                 aggregated = eval_info["overall"]
-
-                # optional: per-suite logging
-                for suite, suite_info in eval_info.items():
-                    logging.info("Suite %s aggregated: %s", suite, suite_info)
+                for task_group, group_info in eval_info.get("per_group", {}).items():
+                    logging.info("Eval group %s aggregated: %s", task_group, group_info)
+                logging.info("Eval overall aggregated: %s", aggregated)
 
                 # meters/tracker
                 eval_metrics = {
@@ -782,13 +781,32 @@ def train(cfg: TrainPipelineConfig, accelerator: "Accelerator | None" = None):
                     initial_step=step,
                     accelerator=accelerator,
                 )
-                eval_tracker.eval_s = aggregated.pop("eval_s")
-                eval_tracker.avg_sum_reward = aggregated.pop("avg_sum_reward")
-                eval_tracker.pc_success = aggregated.pop("pc_success")
+                eval_tracker.eval_s = aggregated.get("eval_s", float("nan"))
+                eval_tracker.avg_sum_reward = aggregated.get("avg_sum_reward", float("nan"))
+                eval_tracker.pc_success = aggregated.get("pc_success", float("nan"))
+
                 if wandb_logger:
-                    wandb_log_dict = {**eval_tracker.to_dict(), **eval_info}
+                    # WandBLogger intentionally accepts scalar values only. Flatten the
+                    # multi-task evaluation result so each RoboMME task gets its own curves.
+                    wandb_log_dict = eval_tracker.to_dict()
+                    for key in ("avg_max_reward", "pc_grasp_success", "n_episodes"):
+                        value = aggregated.get(key)
+                        if isinstance(value, (int, float)):
+                            wandb_log_dict[f"overall/{key}"] = value
+                    for task_group, group_info in eval_info.get("per_group", {}).items():
+                        for key in (
+                            "avg_sum_reward",
+                            "avg_max_reward",
+                            "pc_success",
+                            "pc_grasp_success",
+                            "n_episodes",
+                        ):
+                            value = group_info.get(key)
+                            if isinstance(value, (int, float)):
+                                wandb_log_dict[f"{task_group}/{key}"] = value
+
                     wandb_logger.log_dict(wandb_log_dict, step, mode="eval")
-                    video_paths = eval_info["overall"].get("video_paths", [])
+                    video_paths = aggregated.get("video_paths", [])
                     if video_paths:
                         wandb_logger.log_video(video_paths[0], step, mode="eval")
 
