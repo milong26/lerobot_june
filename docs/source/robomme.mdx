@@ -44,6 +44,33 @@ docker build -f docker/Dockerfile.benchmark.robomme -t lerobot-robomme .
 
 The `docker/Dockerfile.benchmark.robomme` image overrides `gymnasium==0.29.1` and `numpy==1.26.4` after lerobot's install. Both versions are runtime-safe for lerobot's actual API usage.
 
+## Fine-tuning SmolVLA with periodic multi-task evaluation
+
+The repository's RoboMME training wrapper fine-tunes `lerobot/smolvla_base` on a merged
+RoboMME dataset and can evaluate several RoboMME tasks during training. By default it
+evaluates `MoveCube,PatternLock,RouteStick` every 2,000 updates on five fixed test
+episodes per task.
+
+```bash
+bash personal/work2/duibi_robomme/train_and_eval_scripts/train_smolvla_robomme.sh \
+  --merged-dataset-dir <MERGED_ROBOMME_DATASET> \
+  --output-dir <OUTPUT_DIR> \
+  --seed 42 \
+  --method random \
+  --k 28 \
+  --gpu-id 0 \
+  --steps 12000 \
+  --env-eval-freq 2000 \
+  --eval-n-episodes 5 \
+  --eval-batch-size 5 \
+  --eval-tasks "MoveCube,PatternLock,RouteStick"
+```
+
+The training dataset cameras are renamed from
+`observation.images.image/wrist_image` to the SmolVLA checkpoint's
+`camera1/camera2` feature names. The same configured rename map is reused by
+training-time environment evaluation.
+
 ## Running Evaluation
 
 ### Default (single task, single episode)

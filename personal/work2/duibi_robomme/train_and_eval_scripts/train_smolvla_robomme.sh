@@ -13,9 +13,16 @@ BATCH_SIZE=64
 NUM_WORKERS=16
 LEARNING_RATE=1e-4
 SAVE_FREQ=2000
-EVAL_N_EPISODES=0
-EVAL_BATCH_SIZE=16
-ENV_EVAL_FREQ=0
+# Periodic RoboMME multi-task evaluation during training.
+# The RoboMME wrapper maps one vector slot to one fixed benchmark episode, so
+# eval_batch_size is kept equal to eval_n_episodes to evaluate IDs 0..N-1 once.
+EVAL_N_EPISODES=5
+EVAL_BATCH_SIZE=5
+ENV_EVAL_FREQ=2000
+EVAL_TASKS="MoveCube,PatternLock,RouteStick"
+EVAL_DATASET_SPLIT="test"
+EVAL_EPISODE_LENGTH=300
+MAX_PARALLEL_EVAL_TASKS=1
 WANDB_ENABLE=true
 RESUME_ARGS=""
 
@@ -78,6 +85,22 @@ while [[ $# -gt 0 ]]; do
             ENV_EVAL_FREQ="$2"
             shift 2
             ;;
+        --eval-tasks)
+            EVAL_TASKS="$2"
+            shift 2
+            ;;
+        --eval-dataset-split)
+            EVAL_DATASET_SPLIT="$2"
+            shift 2
+            ;;
+        --eval-episode-length)
+            EVAL_EPISODE_LENGTH="$2"
+            shift 2
+            ;;
+        --max-parallel-eval-tasks)
+            MAX_PARALLEL_EVAL_TASKS="$2"
+            shift 2
+            ;;
         --wandb-enable)
             WANDB_ENABLE="$2"
             shift 2
@@ -119,6 +142,19 @@ if [ -z "${K:-}" ]; then
     exit 1
 fi
 
+if [ "$ENV_EVAL_FREQ" -gt 0 ]; then
+    if [ "$EVAL_N_EPISODES" -le 0 ]; then
+        echo "Error: --eval-n-episodes must be > 0 when --env-eval-freq > 0"
+        exit 1
+    fi
+    if [ "$EVAL_BATCH_SIZE" -ne "$EVAL_N_EPISODES" ]; then
+        echo "Warning: RoboMME uses fixed benchmark episode IDs per vector slot."
+        echo "         Setting eval batch size from $EVAL_BATCH_SIZE to $EVAL_N_EPISODES"
+        echo "         so each periodic eval covers distinct test episodes 0..$((EVAL_N_EPISODES - 1))."
+        EVAL_BATCH_SIZE="$EVAL_N_EPISODES"
+    fi
+fi
+
 # Resolve repo root
 REPO_ROOT="$(cd "$(dirname "$0")/../../../../.." && pwd)"
 cd "$REPO_ROOT"
@@ -134,6 +170,9 @@ echo "GPU ID: $GPU_ID"
 echo "Steps: $STEPS"
 echo "Batch size: $BATCH_SIZE"
 echo "Learning rate: $LEARNING_RATE"
+echo "Periodic eval frequency: $ENV_EVAL_FREQ"
+echo "Periodic eval tasks: $EVAL_TASKS"
+echo "Periodic eval episodes/task: $EVAL_N_EPISODES"
 echo "Merged dataset: $MERGED_DATASET_DIR"
 echo "Output dir: $OUTPUT_DIR"
 echo "========================================"
@@ -207,6 +246,15 @@ lerobot-train \
     --policy.train_expert_only=true \
     --policy.train_state_proj=false \
     --policy.optimizer_lr=$LEARNING_RATE \
+    --env.type=robomme \
+    --env.task="$EVAL_TASKS" \
+    --env.action_space=joint_angle \
+    --env.dataset_split="$EVAL_DATASET_SPLIT" \
+    --env.episode_length=$EVAL_EPISODE_LENGTH \
+    --env.max_parallel_tasks=$MAX_PARALLEL_EVAL_TASKS \
+    --eval.n_episodes=$EVAL_N_EPISODES \
+    --eval.batch_size=$EVAL_BATCH_SIZE \
+    --env_eval_freq=$ENV_EVAL_FREQ \
     --save_freq=$SAVE_FREQ \
     --steps=$STEPS \
     --batch_size=$BATCH_SIZE \

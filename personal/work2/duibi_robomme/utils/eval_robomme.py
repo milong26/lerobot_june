@@ -53,33 +53,33 @@ def run_lerobot_eval(
     output_dir: str,
     gpu_id: int = 0,
     episode_length: int = 300,
-    n_envs: int = 1,
 ) -> dict:
-    """
-    Run lerobot-eval for a single Robomme task on fixed benchmark episode IDs.
+    """Run current lerobot-eval on exact RoboMME benchmark episode IDs.
 
-    Returns the parsed eval_info.json dict if available, otherwise returns
-    a minimal result dict from stdout parsing.
+    Each explicit task_id is created as a one-environment evaluation target and
+    evaluated exactly once. This avoids repeating fixed RoboMME episodes when
+    eval.n_episodes is larger than the vector size.
     """
-    device = f"cuda:{gpu_id}"
-    task_ids_str = ",".join(str(x) for x in eval_task_ids)
+    task_ids_arg = "[" + ",".join(str(x) for x in eval_task_ids) + "]"
 
     cmd = [
-        sys.executable, "-m", "lerobot.scripts.lerobot_eval",
-        "--config_path", checkpoint_path,
-        "--env.type", "robomme",
-        "--env.task", robomme_task,
-        "--env.action_space", "joint_angle",
-        "--env.dataset_split", "test",
-        "--env.episode_length", str(episode_length),
-        "--env.task_ids", task_ids_str,
-        "--env.n_envs", str(n_envs),
-        "--device", device,
-        "--output_dir", output_dir,
+        "lerobot-eval",
+        f"--policy.path={checkpoint_path}",
+        f"--policy.device=cuda:{gpu_id}",
+        "--policy.use_amp=false",
+        "--env.type=robomme",
+        f"--env.task={robomme_task}",
+        "--env.action_space=joint_angle",
+        "--env.dataset_split=test",
+        f"--env.episode_length={episode_length}",
+        f"--env.task_ids={task_ids_arg}",
+        "--eval.batch_size=1",
+        "--eval.n_episodes=1",
+        f"--output_dir={output_dir}",
     ]
 
-    print(f"Running lerobot-eval:")
-    print(f"  {' '.join(cmd)}")
+    print("Running lerobot-eval:")
+    print("  " + " ".join(cmd))
 
     result = subprocess.run(
         cmd,
@@ -96,64 +96,48 @@ def run_lerobot_eval(
     if result.returncode != 0:
         raise RuntimeError(
             f"lerobot-eval failed with return code {result.returncode}. "
-            f"stderr: {result.stderr[:500]}"
+            f"stderr: {result.stderr[:1000]}"
         )
 
     eval_info_path = Path(output_dir) / "eval_info.json"
-    if eval_info_path.exists():
-        with open(eval_info_path, "r") as f:
-            eval_info = json.load(f)
-        return eval_info
-
-    return {
-        "task": robomme_task,
-        "checkpoint": checkpoint_path,
-        "eval_task_ids": eval_task_ids,
-        "num_episodes": len(eval_task_ids),
-        "output_dir": output_dir,
-        "note": "eval_info.json not found; results may be in stdout",
-    }
-
+    if not eval_info_path.exists():
+        raise FileNotFoundError(
+            f"lerobot-eval completed but did not produce {eval_info_path}"
+        )
+    with open(eval_info_path, "r") as f:
+        return json.load(f)
 
 def parse_eval_result(eval_info: dict, task_name: str, robomme_task: str,
                       eval_task_ids: list[int], checkpoint_path: str) -> dict:
-    """
-    Parse lerobot-eval output into the unified eval_result.json format.
-    Inspects actual fields in eval_info before extracting values.
-    """
-    num_episodes = len(eval_task_ids)
-    num_success = 0
-    success_rate = 0.0
+    """Convert the current eval_policy_all schema to the pipeline result schema."""
+    group_info = eval_info.get("per_group", {}).get(robomme_task, {})
+    per_task = eval_info.get("per_task", [])
+
     episode_results = []
+    num_success = 0
+    for item in per_task:
+        if item.get("task_group") != robomme_task:
+            continue
+        episode_id = int(item.get("task_id", 0))
+        metrics = item.get("metrics", {})
+        successes = metrics.get("successes", [])
+        rewards = metrics.get("sum_rewards", [])
+        success = bool(successes[0]) if successes else False
+        if success:
+            num_success += 1
+        episode_results.append({
+            "episode_index": episode_id,
+            "success": success,
+            "reward": float(rewards[0]) if rewards else 0.0,
+        })
 
-    if "episodes" in eval_info:
-        episodes = eval_info["episodes"]
-        num_episodes = len(episodes)
-        for ep in episodes:
-            is_success = ep.get("is_success", ep.get("success", False))
-            if is_success:
-                num_success += 1
-            episode_results.append({
-                "episode_index": ep.get("episode_index", ep.get("episode_idx", 0)),
-                "success": bool(is_success),
-                "steps": ep.get("steps", ep.get("episode_length", 0)),
-                "reward": ep.get("reward", 0.0),
-            })
-    elif "success_rate" in eval_info:
-        success_rate = float(eval_info["success_rate"])
-        num_success = round(success_rate * num_episodes)
-    elif "metrics" in eval_info:
-        metrics = eval_info["metrics"]
-        if "success_rate" in metrics:
-            success_rate = float(metrics["success_rate"])
-            num_success = round(success_rate * num_episodes)
-        if "num_episodes" in metrics:
-            num_episodes = int(metrics["num_episodes"])
-        if "num_success" in metrics:
-            num_success = int(metrics["num_success"])
+    episode_results.sort(key=lambda x: x["episode_index"])
+    num_episodes = int(group_info.get("n_episodes", len(episode_results)))
+    if not episode_results and num_episodes:
+        pc_success = float(group_info.get("pc_success", 0.0))
+        num_success = round(pc_success * num_episodes / 100.0)
 
-    if num_episodes > 0:
-        success_rate = num_success / num_episodes
+    success_rate = num_success / num_episodes if num_episodes > 0 else 0.0
 
     return {
         "task": task_name,
@@ -164,9 +148,8 @@ def parse_eval_result(eval_info: dict, task_name: str, robomme_task: str,
         "num_success": num_success,
         "success_rate": success_rate,
         "episode_results": episode_results,
-        "raw_eval_info_keys": list(eval_info.keys()),
+        "aggregated": group_info,
     }
-
 
 def evaluate_task(
     checkpoint_path: str,

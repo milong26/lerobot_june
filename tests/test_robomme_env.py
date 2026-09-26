@@ -151,6 +151,20 @@ def test_convert_obs_list_format():
         _uninstall_robomme_stub()
 
 
+def test_task_description_uses_latest_goal():
+    """RoboMME exposes task_goal to VLA policies through env.call('task_description')."""
+    from lerobot.envs.robomme import RoboMMEGymEnv
+
+    env = RoboMMEGymEnv.__new__(RoboMMEGymEnv)
+    env._task = "MoveCube"
+    env._task_goal = "move the highlighted cube to the target"
+    assert env.task_description() == "move the highlighted cube to the target"
+    assert env.task() == "MoveCube"
+
+    env._task_goal = ""
+    assert env.task_description() == "MoveCube"
+
+
 def test_convert_obs_array_format():
     """_convert_obs also handles non-list (direct array) obs."""
     _install_robomme_stub()

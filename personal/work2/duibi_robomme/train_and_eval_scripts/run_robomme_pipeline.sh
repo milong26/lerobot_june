@@ -22,7 +22,8 @@ NUM_WORKERS=16
 LEARNING_RATE=1e-4
 SAVE_FREQ=2000
 N_EVAL_EPISODES=20
-EVAL_SEEDS="0,1,2,3,4"
+TRAIN_EVAL_EPISODES=5
+ENV_EVAL_FREQ=2000
 WANDB_ENABLE=true
 FORCE=0
 MAX_STEPS=300
@@ -67,8 +68,10 @@ while [[ $# -gt 0 ]]; do
             SAVE_FREQ="$2"; shift 2 ;;
         --n-eval-episodes)
             N_EVAL_EPISODES="$2"; shift 2 ;;
-        --eval-seeds)
-            EVAL_SEEDS="$2"; shift 2 ;;
+        --train-eval-episodes)
+            TRAIN_EVAL_EPISODES="$2"; shift 2 ;;
+        --env-eval-freq)
+            ENV_EVAL_FREQ="$2"; shift 2 ;;
         --wandb-enable)
             WANDB_ENABLE="$2"; shift 2 ;;
         --no-wandb)
@@ -411,6 +414,10 @@ else
         --num-workers "$NUM_WORKERS" \
         --lr "$LEARNING_RATE" \
         --save-freq "$SAVE_FREQ" \
+        --env-eval-freq "$ENV_EVAL_FREQ" \
+        --eval-n-episodes "$TRAIN_EVAL_EPISODES" \
+        --eval-batch-size "$TRAIN_EVAL_EPISODES" \
+        --eval-tasks "MoveCube,PatternLock,RouteStick" \
         --wandb-enable "$WANDB_ENABLE" \
         "${FORCE_ARGS[@]}"
 
@@ -439,6 +446,9 @@ echo "========================================"
 
 EVAL_SCRIPT="$REPO_ROOT/personal/work2/duibi_robomme/utils/eval_robomme.py"
 
+# Evaluate the first N fixed benchmark test episodes for every task.
+EVAL_TASK_IDS=$(python -c "print(','.join(str(i) for i in range($N_EVAL_EPISODES)))")
+
 for task_name in "${TASKS[@]}"; do
     TASK_EVAL_DIR="$EVAL_DIR/$task_name"
     mkdir -p "$TASK_EVAL_DIR"
@@ -451,7 +461,7 @@ for task_name in "${TASKS[@]}"; do
         python "$EVAL_SCRIPT" \
             --checkpoint-path "$CHECKPOINT_PATH/pretrained_model" \
             --task "$task_name" \
-            --eval-seeds "$EVAL_SEEDS" \
+            --eval-task-ids "$EVAL_TASK_IDS" \
             --output-dir "$TASK_EVAL_DIR" \
             --gpu-id "$GPU_ID" \
             --episode-length "$MAX_STEPS"

@@ -78,6 +78,7 @@ class RoboMMEGymEnv(gym.Env):
         )
         self._env = None
         self._last_raw_obs: dict | None = None
+        self._task_goal: str = ""
 
         action_dim = 8 if action_space_type == "joint_angle" else 7
         self.action_space = spaces.Box(low=-1.0, high=1.0, shape=(action_dim,), dtype=np.float32)
@@ -105,6 +106,9 @@ class RoboMMEGymEnv(gym.Env):
         )
         obs, info = self._env.reset()
         self._last_raw_obs = obs
+        task_goal = info.get("task_goal", "")
+        if task_goal:
+            self._task_goal = str(task_goal)
         return self._convert_obs(obs), self._convert_info(info)
 
     def step(self, action):
@@ -116,10 +120,21 @@ class RoboMMEGymEnv(gym.Env):
 
         status = info.get("status", "ongoing")
         is_success = status == "success"
+        task_goal = info.get("task_goal", "")
+        if task_goal:
+            self._task_goal = str(task_goal)
         conv_info = self._convert_info(info)
         conv_info["is_success"] = is_success
 
         return self._convert_obs(obs), float(reward), terminated_bool, truncated_bool, conv_info
+
+    def task_description(self) -> str:
+        """Return the natural-language goal used by VLA policies during rollout."""
+        return self._task_goal or self._task
+
+    def task(self) -> str:
+        """Return the canonical RoboMME task name for evaluation bookkeeping."""
+        return self._task
 
     def render(self) -> np.ndarray | None:
         """Return the front camera image from the last observation for video recording."""
