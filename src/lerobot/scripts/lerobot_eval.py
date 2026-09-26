@@ -1141,6 +1141,35 @@ def _compile_episode_data(
     return data_dict
 
 
+def resolve_env_policy_rename_map(
+    env_cfg: Any,
+    policy_cfg: Any,
+    rename_map: dict[str, str] | None = None,
+) -> dict[str, str]:
+    """Resolve observation-key remapping needed between an env and a policy.
+
+    In the project's self-collected MetaWorld mode, rollout observations use
+    camera1/camera2 while datasets can use semantic keys such as top/wrist.
+    Policies initialized from those datasets keep the dataset feature names, so
+    environment evaluation needs an eval-only bridge between the two namespaces.
+    """
+    resolved = dict(rename_map or {})
+    if env_cfg is None or policy_cfg is None:
+        return resolved
+
+    if getattr(env_cfg, "type", None) == "metaworld" and getattr(env_cfg, "use_self_mw", False):
+        primary_key = getattr(policy_cfg, "primary_image_key", "")
+        if primary_key and primary_key != "observation.images.camera1":
+            resolved["observation.images.camera1"] = primary_key
+
+        if getattr(policy_cfg, "use_wrist_image", False):
+            wrist_key = getattr(policy_cfg, "wrist_image_key", "")
+            if wrist_key and wrist_key != "observation.images.camera2":
+                resolved["observation.images.camera2"] = wrist_key
+
+    return resolved
+
+
 @parser.wrap()
 def eval_main(cfg: EvalPipelineConfig):
     logging.info(pformat(asdict(cfg)))
@@ -1235,7 +1264,7 @@ def eval_main(cfg: EvalPipelineConfig):
             env_features=cfg.env.features if cfg.eval.recording else None,
             recording_repo_id=cfg.eval.recording_repo_id,
             recording_private=cfg.eval.recording_private,
-            env_rename_map=cfg.rename_map,
+            env_rename_map=resolve_env_policy_rename_map(cfg.env, cfg.policy, cfg.rename_map),
         )
         logger.info("Overall Aggregated Metrics:")
         logger.info(info["overall"])
