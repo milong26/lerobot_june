@@ -30,7 +30,7 @@ from typing import Any
 
 import torch
 
-from lerobot.configs import NormalizationMode, PipelineFeatureType, PolicyFeature
+from lerobot.configs import FeatureType, NormalizationMode, PipelineFeatureType, PolicyFeature
 from lerobot.processor import (
     EnvTransition,
     PolicyAction,
@@ -325,11 +325,11 @@ class MiniVLAImageProcessorStep(ProcessorStep):
             shape = (self.image_sequence_len, 3, self.image_size, self.image_size)
 
         obs_features["dino"] = PolicyFeature(
-            type=NormalizationMode.IDENTITY,
+            type=FeatureType.VISUAL,
             shape=shape,
         )
         obs_features["siglip"] = PolicyFeature(
-            type=NormalizationMode.IDENTITY,
+            type=FeatureType.VISUAL,
             shape=shape,
         )
         return new_features

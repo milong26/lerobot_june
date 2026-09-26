@@ -542,6 +542,7 @@ def _make_processors_from_policy_config(
     _POLICY_TYPE_TO_PROCESSOR_MODULE = {
         "tinyvla_s": "tinyvla",
         "tinyvla_b": "tinyvla",
+        "minivla_t2": "minivla",
         "minivla_wrist": "minivla",
         "minivla_wrist_pretrained": "minivla",
     }

@@ -160,6 +160,32 @@ class _MiniVLAConfigBase(PreTrainedConfig):
     def __post_init__(self):
         super().__post_init__()
 
+        if self.chunk_size < 1:
+            raise ValueError(f"chunk_size must be >= 1, got {self.chunk_size}.")
+        if self.n_action_steps < 1:
+            raise ValueError(f"n_action_steps must be >= 1, got {self.n_action_steps}.")
+        if self.n_action_steps > self.chunk_size:
+            raise ValueError(
+                f"n_action_steps ({self.n_action_steps}) cannot exceed chunk_size ({self.chunk_size})."
+            )
+        if self.image_sequence_len not in (1, 2):
+            raise ValueError(
+                f"MiniVLA currently supports image_sequence_len 1 or 2, got {self.image_sequence_len}."
+            )
+        if self.official_init_mode not in {"none", "backbone_only"}:
+            raise ValueError(
+                f"official_init_mode must be 'none' or 'backbone_only', got {self.official_init_mode!r}."
+            )
+        if self.dtype not in {"float32", "float16", "bfloat16"}:
+            raise ValueError(
+                f"dtype must be one of float32/float16/bfloat16, got {self.dtype!r}."
+            )
+        if self.action_tokenizer_type not in ACTION_TOKENIZERS:
+            raise ValueError(
+                f"Unsupported action_tokenizer_type {self.action_tokenizer_type!r}. "
+                f"Expected one of {sorted(ACTION_TOKENIZERS)}."
+            )
+
     @property
     def is_vq_mode(self) -> bool:
         tok_type = self._resolved_action_tokenizer_type or self.action_tokenizer_type
@@ -194,32 +220,47 @@ class _MiniVLAConfigBase(PreTrainedConfig):
                 if k.startswith("observation.images."):
                     image_keys.append(k)
 
+        # Resolve only when the mapping is unambiguous. Multi-camera base policies still
+        # require an explicit primary_image_key; wrist policies may infer a wrist camera
+        # from conventional names and then select the only remaining primary camera.
+        if self.use_wrist_image and not self.wrist_image_key and image_keys:
+            wrist_candidates = [
+                key for key in image_keys
+                if any(token in key.lower() for token in ("wrist", "gripper", "hand", "eef"))
+            ]
+            if len(wrist_candidates) == 1:
+                self.wrist_image_key = wrist_candidates[0]
+
         if not self.primary_image_key:
-            if dataset_meta is not None and image_keys:
-                raise ValueError(
-                    f"primary_image_key is not set. Available image keys in dataset: {image_keys}. "
-                    f"MiniVLA requires explicit primary_image_key configuration. "
-                    f"Please set primary_image_key to one of the available keys (e.g., 'observation.images.cam_high')."
-                )
+            primary_candidates = [key for key in image_keys if key != self.wrist_image_key]
+            if len(primary_candidates) == 1:
+                self.primary_image_key = primary_candidates[0]
             else:
                 raise ValueError(
-                    "primary_image_key must be set explicitly. "
+                    "primary_image_key could not be resolved unambiguously. "
                     f"Available image keys: {image_keys}. "
-                    f"e.g. 'observation.images.cam_high'."
+                    "Set --policy.primary_image_key explicitly."
                 )
 
         if self.use_wrist_image and not self.wrist_image_key:
-            if dataset_meta is not None:
-                raise ValueError(
-                    f"use_wrist_image=True but wrist_image_key is not set. "
-                    f"Available image keys: {image_keys}. "
-                    f"Please set wrist_image_key explicitly (e.g., 'observation.images.wrist' or 'observation.images.gripperPOV')."
-                )
+            wrist_candidates = [key for key in image_keys if key != self.primary_image_key]
+            if len(wrist_candidates) == 1:
+                self.wrist_image_key = wrist_candidates[0]
             else:
                 raise ValueError(
-                    "wrist_image_key must be set when use_wrist_image=True. "
+                    "wrist_image_key could not be resolved unambiguously. "
                     f"Available image keys: {image_keys}. "
-                    "e.g. 'observation.images.wrist' or 'observation.images.gripperPOV'."
+                    "Set --policy.wrist_image_key explicitly."
+                )
+
+        if dataset_meta is not None:
+            if self.primary_image_key not in image_keys:
+                raise ValueError(
+                    f"primary_image_key={self.primary_image_key!r} is not present in dataset images {image_keys}."
+                )
+            if self.use_wrist_image and self.wrist_image_key not in image_keys:
+                raise ValueError(
+                    f"wrist_image_key={self.wrist_image_key!r} is not present in dataset images {image_keys}."
                 )
 
     def validate_features(self) -> None:

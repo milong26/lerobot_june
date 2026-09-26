@@ -1,42 +1,37 @@
 # MiniVLA Policy
 
-This directory contains the LeRobot integration of MiniVLA.
+This directory contains the native LeRobot integration of MiniVLA. The policy follows the same lifecycle as built-in policies such as SmolVLA: configuration is registered through PreTrainedConfig, model classes inherit PreTrainedPolicy, preprocessing is provided through the policy processor factory, and LeRobot-format checkpoints use the standard model.safetensors + config.json layout.
 
-## Scope
+## Policy types
 
-The implementation follows the official MiniVLA design:
+- minivla: one current primary image.
+- minivla_t2: two temporal frames from the primary camera.
+- minivla_wrist: current primary image plus current wrist image.
+- minivla_wrist_pretrained: wrist variant initialized from official MiniVLA backbone weights while keeping the LeRobot action interface.
 
-- Vision backbone: DINO/SigLIP visual encoder
-- Language backbone: Qwen2.5-0.5B based VLM
-- Visual-language-action fusion
-- Action tokenizer and VQ action support
+## Dependencies
 
-## Configuration principles
+Install from the repository root:
 
-The policy keeps model-specific configuration inside this directory. External training scripts should only provide dataset paths, devices, and runtime options.
+    pip install -e ".[minivla]"
 
-Default settings:
+The extra includes Transformers, TIMM and the VQ dependencies used by MiniVLA.
 
-- Base learning rate: `2e-5`
-- Optimizer: AdamW
-- Scheduler: constant-with-warmup style configuration
-- Action normalization: quantile normalization
-- Visual input: explicit camera key configuration
+## LeRobot interfaces
 
-## Initialization modes
+- MiniVLAConfig and registered variants with optimizer/scheduler presets and dataset delta indices.
+- MiniVLAPolicy and variant policy classes with forward, predict_action_chunk, select_action, reset, get_optim_params, save_pretrained, and from_pretrained.
+- make_minivla_pre_post_processors for LeRobot dataset/environment preprocessing and action postprocessing.
+- DINO/SigLIP image transforms, Qwen2.5 language backbone, non-VQ action tokenization, and optional compatible VQ action tokenization.
 
-MiniVLA supports:
+## Camera resolution
 
-1. Scratch initialization
-   - initialize policy parameters without official checkpoint weights.
+A single-camera base dataset is resolved automatically. Multi-camera datasets should set primary_image_key explicitly. Wrist variants can infer a uniquely named wrist/gripper/hand/EEF camera; otherwise set both camera keys explicitly. Ambiguous mappings fail early instead of silently choosing the wrong camera.
 
-2. Official backbone initialization
-   - load compatible vision/projector/language backbone weights.
-   - action tokenizer remains dataset compatible.
+## Checkpoints
 
-3. VQ action mode
-   - use compatible VQ action tokenizer checkpoints.
+Standard LeRobot checkpoints can be loaded from either a local directory or a Hugging Face Hub repository through --policy.path, matching other built-in policies. Official MiniVLA .pt artifacts remain supported as an initialization/compatibility path when an explicit LeRobot config is supplied.
 
-## Design goal
+## Action compatibility
 
-This implementation provides a reusable LeRobot policy interface for different robot datasets. Dataset-specific assumptions should not be hard-coded in this directory.
+The policy validates the dataset action dimension against a VQ tokenizer when VQ mode is enabled. It does not hard-code a robot-specific action dimension. For a new embodiment, use a VQ checkpoint trained for that action dimension or use the non-VQ action tokenizer.

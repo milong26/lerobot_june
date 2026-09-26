@@ -980,240 +980,125 @@ class MiniVLAPolicy(PreTrainedPolicy):
     config_class = MiniVLAConfig
     name = "minivla"
 
+    @staticmethod
+    def _disable_official_reinitialization(config: MiniVLAConfig) -> None:
+        """Avoid overwriting a complete LeRobot checkpoint with official initialization weights."""
+        config.official_init_mode = "none"
+        config.official_pretrained_checkpoint = ""
+        config.official_vla_checkpoint = ""
+
     @classmethod
     def from_pretrained(
         cls,
-        pretrained_name_or_path: str,
+        pretrained_name_or_path: str | Path,
         config: MiniVLAConfig | None = None,
         **kwargs,
     ):
-        """
-        Override PreTrainedPolicy.from_pretrained to handle both .pt official checkpoints
-        and LeRobot-format model.safetensors checkpoints.
-        
-        Loading strategy:
-        1. If LeRobot-format checkpoint (model.safetensors) exists, use parent class
-           PreTrainedPolicy.from_pretrained() which properly loads via _load_as_safetensor.
-        2. If .pt official checkpoint exists in checkpoints/, load via MiniVLACore.
-        3. If neither exists, raise an error (no silent random initialization).
-        """
-        import os
-        from pathlib import Path
-        from safetensors.torch import load_file
+        """Load standard LeRobot checkpoints from a local directory or the Hub.
 
-        pretrained_path = Path(pretrained_name_or_path)
-        checkpoints_dir = pretrained_path / "checkpoints"
-        is_lerobot_format = (pretrained_path / "model.safetensors").exists()
+        A local official MiniVLA .pt checkpoint is also accepted when an explicit
+        LeRobot MiniVLA config (including input/output features) is supplied.
+        """
+        source = str(pretrained_name_or_path)
+        local_path = Path(source)
 
-        # Priority 1: LeRobot-format checkpoint (model.safetensors + config.json)
-        if is_lerobot_format:
+        # Standard LeRobot checkpoint: use the base implementation so local and
+        # Hugging Face Hub paths behave exactly like other LeRobot policies.
+        is_local_lerobot = local_path.is_dir() and (local_path / "model.safetensors").exists()
+        is_remote = not local_path.exists()
+        if is_local_lerobot or is_remote:
             if config is None:
-                config = cls.config_class.from_pretrained(
-                    pretrained_name_or_path=pretrained_name_or_path,
-                )
-            
-            # When reloading a LeRobot checkpoint, disable official backbone-only init.
-            # The LeRobot safetensors already contains the fully trained model weights,
-            # so we must NOT re-initialize from the official .pt checkpoint.
-            if hasattr(config, "official_init_mode"):
-                config.official_init_mode = "none"
-            if hasattr(config, "official_pretrained_checkpoint"):
-                config.official_pretrained_checkpoint = ""
-            if hasattr(config, "official_vla_checkpoint"):
-                config.official_vla_checkpoint = ""
-            
-            # Create the policy instance
-            instance = cls(config, **kwargs)
-            
-            # Load model.safetensors using the parent class mechanism
-            model_file = str(pretrained_path / "model.safetensors")
-            logger.info(f"[MiniVLA] Loading LeRobot-format checkpoint: {model_file}")
-            
-            state_dict = load_file(model_file, device="cpu")
-            missing_keys, unexpected_keys = instance.load_state_dict(state_dict, strict=False)
-            
-            # Log loading diagnostics
-            total_loaded = len(state_dict)
-            logger.info(f"[MiniVLA] Checkpoint absolute path: {os.path.abspath(model_file)}")
-            logger.info(f"[MiniVLA] Loaded parameters: {total_loaded}")
-            logger.info(f"[MiniVLA] Missing keys: {len(missing_keys)}")
-            logger.info(f"[MiniVLA] Unexpected keys: {len(unexpected_keys)}")
-            
-            if missing_keys:
-                # Filter out non-parameter buffers (e.g., running_mean, running_var in BatchNorm)
-                param_missing = [k for k in missing_keys if k in dict(instance.named_parameters())]
-                buffer_missing = [k for k in missing_keys if k not in dict(instance.named_parameters())]
-                
-                # Handle tied embedding weights: embed_tokens is often tied to lm_head
-                # and may be saved under a different key or omitted from the checkpoint
-                known_tied_keys = {
-                    "model.vlm.llm.model.embed_tokens.weight",
-                    "vlm.llm.model.embed_tokens.weight",
-                    "llm.model.embed_tokens.weight",
+                hub_config_keys = {
+                    "force_download",
+                    "resume_download",
+                    "proxies",
+                    "token",
+                    "cache_dir",
+                    "local_files_only",
+                    "revision",
                 }
-                actual_param_missing = [
-                    k for k in param_missing
-                    if k not in known_tied_keys
-                ]
-                tied_missing = [
-                    k for k in param_missing
-                    if k in known_tied_keys
-                ]
-                
-                if tied_missing:
-                    logger.warning(
-                        f"[MiniVLA] {len(tied_missing)} tied embedding key(s) missing from checkpoint "
-                        f"(expected if weights are tied to lm_head): {tied_missing}"
-                    )
-                    # Copy from lm_head if available
-                    for tied_key in tied_missing:
-                        # Try to find corresponding lm_head key
-                        lm_head_key = tied_key.replace("embed_tokens.weight", "lm_head.weight")
-                        if lm_head_key in state_dict:
-                            logger.info(
-                                f"[MiniVLA] Copying {lm_head_key} -> {tied_key} (tied weights)"
-                            )
-                            # Find the actual parameter in the model
-                            for name, param in instance.named_parameters():
-                                if name == tied_key:
-                                    param.data.copy_(state_dict[lm_head_key])
-                                    break
-                
-                if actual_param_missing:
-                    logger.error(
-                        f"[MiniVLA] CRITICAL: {len(actual_param_missing)} missing parameter keys: "
-                        f"{actual_param_missing[:20]}{'...' if len(actual_param_missing) > 20 else ''}"
-                    )
-                    raise RuntimeError(
-                        f"MiniVLA checkpoint loading failed: {len(actual_param_missing)} parameter keys "
-                        f"are missing from the loaded state dict. The checkpoint may be incomplete."
-                    )
-                if buffer_missing:
-                    logger.warning(
-                        f"[MiniVLA] {len(buffer_missing)} missing buffer keys (non-trainable, may be OK): "
-                        f"{buffer_missing[:10]}"
-                    )
-            
-            if unexpected_keys:
-                logger.warning(
-                    f"[MiniVLA] {len(unexpected_keys)} unexpected keys in checkpoint: "
-                    f"{unexpected_keys[:10]}{'...' if len(unexpected_keys) > 20 else ''}"
+                config_kwargs = {k: v for k, v in kwargs.items() if k in hub_config_keys}
+                config = cls.config_class.from_pretrained(
+                    pretrained_name_or_path=source,
+                    **config_kwargs,
                 )
-            
-            # Check for shape mismatches
-            shape_mismatches = []
-            for key, param in state_dict.items():
-                if key in dict(instance.named_parameters()):
-                    model_param = dict(instance.named_parameters())[key]
-                    if param.shape != model_param.shape:
-                        shape_mismatches.append((key, tuple(param.shape), tuple(model_param.shape)))
-            
-            if shape_mismatches:
-                logger.error(
-                    f"[MiniVLA] CRITICAL: {len(shape_mismatches)} shape mismatches detected: "
-                    f"{shape_mismatches[:10]}"
+            cls._disable_official_reinitialization(config)
+            return super().from_pretrained(
+                pretrained_name_or_path=source,
+                config=config,
+                **kwargs,
+            )
+
+        # Compatibility path for an official MiniVLA training artifact.
+        official_checkpoint: Path | None = None
+        if local_path.is_file() and local_path.suffix == ".pt":
+            official_checkpoint = local_path
+        elif local_path.is_dir():
+            checkpoints_dir = local_path / "checkpoints"
+            if checkpoints_dir.exists():
+                pt_files = sorted(checkpoints_dir.glob("*.pt"))
+                if pt_files:
+                    official_checkpoint = pt_files[-1]
+
+        if official_checkpoint is not None:
+            if config is None:
+                raise ValueError(
+                    "Loading an official MiniVLA .pt checkpoint requires an explicit "
+                    "MiniVLAConfig with LeRobot input_features/output_features."
                 )
-                raise RuntimeError(
-                    f"MiniVLA checkpoint loading failed: {len(shape_mismatches)} shape mismatches. "
-                    f"First few: {shape_mismatches[:5]}"
-                )
-            
-            # Log key weight summaries for verification
-            key_layers = [
-                "vlm.vision_backbone.dino_model.blocks.0.norm1.weight",
-                "vlm.llm.model.layers.0.self_attn.q_proj.weight",
-                "vlm.projector.linear_1.weight",
-            ]
-            for layer_key in key_layers:
-                if layer_key in state_dict:
-                    w = state_dict[layer_key]
-                    logger.info(
-                        f"[MiniVLA] Weight summary: {layer_key} -> "
-                        f"shape={tuple(w.shape)}, mean={w.float().mean().item():.6f}, "
-                        f"std={w.float().std().item():.6f}"
-                    )
-            
-            if not missing_keys and not unexpected_keys and not shape_mismatches:
-                logger.info("[MiniVLA] All keys matched successfully")
-            
-            # Convert model to float32 for maximum compatibility during inference
-            instance = instance.float()
+            config.official_vla_checkpoint = str(official_checkpoint)
+            instance = cls(config, **kwargs)
             instance.to(config.device)
             instance.eval()
             return instance
 
-        # Priority 2: Official .pt checkpoint in checkpoints/ directory
-        if checkpoints_dir.exists():
-            pt_files = list(checkpoints_dir.glob("*.pt"))
-            if pt_files:
-                pt_files.sort()
-                official_checkpoint = str(pt_files[-1])
-                logger.info(f"[MiniVLA] Loading official .pt checkpoint: {official_checkpoint}")
-                config.official_vla_checkpoint = official_checkpoint
-                
-                # Create the policy instance (MiniVLACore.__init__ will load the .pt checkpoint)
-                instance = cls(config, **kwargs)
-                instance.to(config.device)
-                instance.eval()
-                return instance
-        
-        # No valid checkpoint found - raise error instead of silent random initialization
         raise FileNotFoundError(
-            f"No valid MiniVLA checkpoint found at {pretrained_name_or_path}. "
-            f"Expected either: "
-            f"1) LeRobot-format: model.safetensors + config.json in {pretrained_path}, or "
-            f"2) Official .pt checkpoint in {checkpoints_dir}"
+            f"No MiniVLA checkpoint found at {source}. Expected a standard LeRobot "
+            "model.safetensors checkpoint (local or Hub) or an official MiniVLA .pt file."
         )
 
     def __init__(self, config: MiniVLAConfig, **kwargs):
         super().__init__(config)
+        config.validate_features()
+        config.validate_vla_config()
         self.model = MiniVLACore(config)
         self._action_queue: Optional[torch.Tensor] = None
 
-        # === Startup validation: action dimension and tokenizer ===
+        # Validate the resolved tokenizer against the LeRobot action feature.
         self._validate_action_config()
 
     def _validate_action_config(self):
-        """
-        Validate action configuration before training starts.
-        Checks:
-        - Action dimension matches expected (not 7D LIBERO VQ)
-        - Action tokenizer is not a VQ tokenizer when using non-VQ mode
-        - Policy output shape is correct
-        """
+        """Validate the action feature against the selected MiniVLA action tokenizer."""
         action_dim = self.config.action_feature.shape[0] if self.config.action_feature else None
-        tokenizer_type = self.config._resolved_action_tokenizer_type or self.config.action_tokenizer_type
+        if action_dim is None:
+            raise ValueError("MiniVLA requires a concrete LeRobot action output feature.")
 
-        print(f"\n{'='*60}")
-        print(f"[ACTION CONFIG VALIDATION]")
-        print(f"  action dimension: {action_dim}")
-        print(f"  action tokenizer: {tokenizer_type}")
-        print(f"  is_vq_mode: {self.config.is_vq_mode}")
+        tokenizer_type = (
+            self.config._resolved_action_tokenizer_type or self.config.action_tokenizer_type
+        )
 
-        # Reject 7D VQ tokenizer for MetaWorld 4D actions
-        if action_dim == 7 and self.config.is_vq_mode:
-            raise ValueError(
-                f"CRITICAL: Detected 7D VQ action tokenizer (LIBERO) with 7D actions! "
-                f"MetaWorld requires 4D actions with extra_action_tokenizer. "
-                f"action_tokenizer_type={tokenizer_type}, action_dim={action_dim}. "
-                f"Please set action_tokenizer_type='extra_action_tokenizer' and ensure action_dim=4."
-            )
+        if (
+            self.config.is_vq_mode
+            and hasattr(self.model, "action_tokenizer")
+            and self.model.action_tokenizer is not None
+            and hasattr(self.model.action_tokenizer, "vq_vae")
+            and self.model.action_tokenizer.vq_vae is not None
+        ):
+            vq_input_dim_w = self.model.action_tokenizer.vq_vae.input_dim_w
+            if action_dim != vq_input_dim_w:
+                raise ValueError(
+                    f"VQ action tokenizer input_dim_w ({vq_input_dim_w}) does not match "
+                    f"the LeRobot action dimension ({action_dim}). Use a compatible VQ "
+                    "checkpoint or a non-VQ action tokenizer."
+                )
 
-        # Reject any VQ tokenizer when action_dim != VQ input_dim_w
-        if self.config.is_vq_mode and hasattr(self.model, "action_tokenizer") and self.model.action_tokenizer is not None:
-            if hasattr(self.model.action_tokenizer, "vq_vae") and self.model.action_tokenizer.vq_vae is not None:
-                vq_input_dim_w = self.model.action_tokenizer.vq_vae.input_dim_w
-                if action_dim != vq_input_dim_w:
-                    raise ValueError(
-                        f"CRITICAL: VQ action tokenizer input_dim_w ({vq_input_dim_w}) "
-                        f"does not match action dimension ({action_dim}). "
-                        f"Use a VQ tokenizer compatible with {action_dim}D actions, "
-                        f"or switch to extra_action_tokenizer for non-VQ mode."
-                    )
-
-        print(f"  policy output shape: [B, chunk_size={self.config.chunk_size}, action_dim={action_dim}]")
-        print(f"  Validation PASSED")
-        print(f"{'='*60}\n")
+        logger.info(
+            "MiniVLA action interface ready: tokenizer=%s action_dim=%d chunk_size=%d n_action_steps=%d",
+            tokenizer_type,
+            action_dim,
+            self.config.chunk_size,
+            self.config.n_action_steps,
+        )
 
     def forward(self, batch: dict[str, torch.Tensor]) -> tuple[torch.Tensor, dict | None]:
         pixel_values = self._extract_pixel_values(batch)
@@ -1249,6 +1134,7 @@ class MiniVLAPolicy(PreTrainedPolicy):
 
         return outputs.loss, None
 
+    @torch.no_grad()
     def predict_action_chunk(
         self, batch: dict[str, torch.Tensor], **kwargs: Unpack[ActionSelectKwargs]
     ) -> torch.Tensor:
@@ -1271,6 +1157,7 @@ class MiniVLAPolicy(PreTrainedPolicy):
             **kwargs,
         )
 
+    @torch.no_grad()
     def select_action(
         self, batch: dict[str, torch.Tensor], **kwargs: Unpack[ActionSelectKwargs]
     ) -> torch.Tensor:

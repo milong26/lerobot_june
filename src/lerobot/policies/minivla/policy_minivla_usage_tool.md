@@ -1,55 +1,63 @@
-# minivla的使用说明(人)
+# MiniVLA Usage Guide
 
+Install dependencies:
 
+    pip install -e ".[minivla]"
 
-# # MiniVLA Usage Guide
+## Train through the standard LeRobot CLI
 
-## Import
+Single-camera base MiniVLA:
 
-```python
-from lerobot.policies.minivla import MiniVLAPolicy, MiniVLAConfig
-```
+    lerobot-train \
+      --policy.type=minivla \
+      --dataset.repo_id=<USER>/<DATASET> \
+      --batch_size=8 \
+      --steps=50000
 
-## Configuration
+For a multi-camera dataset, identify the primary camera explicitly:
 
-Configure model behavior through `MiniVLAConfig`.
+    lerobot-train \
+      --policy.type=minivla \
+      --policy.primary_image_key=observation.images.corner \
+      --dataset.repo_id=<USER>/<DATASET> \
+      --batch_size=8 \
+      --steps=50000
 
-Important fields:
+Wrist-camera variant:
 
-- `official_init_mode`: initialization strategy
-  - `none`
-  - `backbone_only`
-- `official_pretrained_checkpoint`: optional official MiniVLA checkpoint path
-- `action_tokenizer_type`: action representation
-- `vq_model_path`: compatible VQ action tokenizer path
-- `primary_image_key`: primary camera input
-- `wrist_image_key`: wrist camera input when enabled
+    lerobot-train \
+      --policy.type=minivla_wrist \
+      --policy.primary_image_key=observation.images.corner \
+      --policy.wrist_image_key=observation.images.gripperPOV \
+      --dataset.repo_id=<USER>/<DATASET> \
+      --batch_size=8 \
+      --steps=50000
 
-## Training defaults
+Temporal two-frame variant uses --policy.type=minivla_t2. Its dataset delta indices are [-1, 0].
 
-The policy provides MiniVLA-oriented defaults:
+## Evaluate a LeRobot checkpoint
 
-- AdamW optimizer
-- learning rate `2e-5`
-- warmup-compatible scheduler configuration
-- quantile action/state normalization
+    lerobot-eval \
+      --policy.path=<LOCAL_CHECKPOINT_OR_HF_REPO> \
+      --env.type=<ENV_TYPE> \
+      --env.task=<TASK>
 
-Training entry points outside this directory should only pass runtime options and dataset-specific information.
+MiniVLAPolicy.from_pretrained supports both local LeRobot checkpoint directories and Hugging Face Hub repositories.
 
-## Dataset adaptation
+## Official MiniVLA initialization
 
-For a new LeRobot dataset:
+For backbone-only initialization:
 
-1. Set camera keys explicitly.
-2. Verify action dimension compatibility.
-3. Use a matching VQ tokenizer if VQ mode is enabled.
-4. Provide dataset statistics for normalization.
+    lerobot-train \
+      --policy.type=minivla_wrist_pretrained \
+      --policy.official_init_mode=backbone_only \
+      --policy.official_pretrained_checkpoint=<OFFICIAL_CHECKPOINT> \
+      --policy.primary_image_key=observation.images.corner \
+      --policy.wrist_image_key=observation.images.gripperPOV \
+      --dataset.repo_id=<USER>/<DATASET>
 
-## Debugging
+This mode imports compatible vision/projector/language weights but keeps the action representation compatible with the current LeRobot dataset.
 
-Common issues:
+## VQ mode
 
-- Action dimension mismatch: use a compatible action tokenizer.
-- Missing camera key: configure `primary_image_key` explicitly.
-- Incorrect checkpoint loading: verify initialization mode and checkpoint type.
-（模）
+When using a VQ action tokenizer, set vq_model_path to a VQ checkpoint whose input_dim_w matches the dataset action dimension. MiniVLA validates this before training.
