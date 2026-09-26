@@ -185,6 +185,18 @@ class MiniVLAVLBackbone(nn.Module, GenerationMixin):
         # === Get LLM embeddings ===
         inputs_embeds = self.llm.get_input_embeddings()(input_ids)
 
+        # The vision/projector path can remain float32 while an official MiniVLA
+        # checkpoint stores the Qwen backbone in bfloat16. torch.cat promotes
+        # mixed floating dtypes, which would turn the multimodal hidden states
+        # into float32 and later fail at Qwen's bfloat16 q_proj when autocast is
+        # disabled during evaluation. Match the projected visual tokens to the
+        # LLM embedding dtype explicitly so inference is correct with or without
+        # AMP and cached generation keeps a single dtype end-to-end.
+        projected_patches = projected_patches.to(
+            device=inputs_embeds.device,
+            dtype=inputs_embeds.dtype,
+        )
+
         # === Insert vision patches after first token ===
         # Use projected_patches.shape[1] for num_patches (not static attribute)
         # Mirrors official: multimodal_embeddings = cat([input_embeddings[:1], projected_patches, input_embeddings[1:]])
